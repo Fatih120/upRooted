@@ -10,8 +10,6 @@ a client mod framework for [root](https://rootapp.com).
 - **plugins** - runtime plugin loader with a simple lifecycle api
 - **bridge api** - typed wrappers around root's internal bridge interfaces
 
-injection is profile-level (html script tags), not binary patching. non-destructive, reversible.
-
 ## policy
 
 uprooted is not affiliated with root communications. this is an independent community project.
