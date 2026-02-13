@@ -1,0 +1,23 @@
+node_modules/
+dist/
+.pnpm-store/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+*.tsbuildinfo
+
+# Astro
+site/.astro/
+
+# Env
+.env
+.env.*
