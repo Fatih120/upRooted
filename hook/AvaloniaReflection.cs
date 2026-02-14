@@ -32,6 +32,10 @@ internal class AvaloniaReflection
     public Type? PointType { get; private set; }
     public Type? RectType { get; private set; }
 
+    // Resource system types
+    public Type? ResourceDictionaryType { get; private set; }
+    public Type? IResourceDictionaryType { get; private set; }
+
     // Value types
     public Type? SolidColorBrushType { get; private set; }
     public Type? ColorType { get; private set; }
@@ -51,11 +55,13 @@ internal class AvaloniaReflection
     public Type? VisualExtensionsType { get; private set; }
     public Type? VisualType { get; private set; }
     public Type? DesktopLifetimeType { get; private set; }
+    public Type? TopLevelType { get; private set; }
 
     // Cached property/method handles
     private PropertyInfo? _appCurrent;
     private PropertyInfo? _appLifetime;
     private PropertyInfo? _lifetimeMainWindow;
+    private PropertyInfo? _lifetimeWindows;
     private PropertyInfo? _dispatcherUIThread;
     private MethodInfo? _dispatcherPost;
     private MethodInfo? _getVisualChildren;
@@ -98,6 +104,10 @@ internal class AvaloniaReflection
     private MethodInfo? _translatePoint;           // Visual.TranslatePoint(Point, Visual) extension
     private PropertyInfo? _controlOpacity;
     private PropertyInfo? _controlIsHitTestVisible;
+
+    // Resource system
+    private PropertyInfo? _appResources;              // Application.Resources
+    private PropertyInfo? _resourcesMergedDicts;       // IResourceDictionary.MergedDictionaries
 
     public bool IsResolved { get; private set; }
 
@@ -179,12 +189,18 @@ internal class AvaloniaReflection
 
         VisualExtensionsType = Find("Avalonia.VisualTree.VisualExtensions");
         VisualType = Find("Avalonia.Visual");
+        TopLevelType = Find("Avalonia.Controls.TopLevel");
 
         // Overlay / Canvas / layout types
         OverlayLayerType = Find("Avalonia.Controls.Primitives.OverlayLayer");
         CanvasType = Find("Avalonia.Controls.Canvas");
         PointType = Find("Avalonia.Point");
         RectType = Find("Avalonia.Rect");
+
+        // Resource system
+        ResourceDictionaryType = Find("Avalonia.Controls.ResourceDictionary");
+        // IResourceDictionary may be in different namespaces
+        IResourceDictionaryType = Find("Avalonia.Controls.IResourceDictionary");
 
         // IClassicDesktopStyleApplicationLifetime - match by suffix
         foreach (var kv in typeMap)
@@ -216,6 +232,7 @@ internal class AvaloniaReflection
 
         // Desktop Lifetime
         _lifetimeMainWindow = DesktopLifetimeType?.GetProperty("MainWindow", pub);
+        _lifetimeWindows = DesktopLifetimeType?.GetProperty("Windows", pub);
 
         // Dispatcher
         _dispatcherUIThread = DispatcherType?.GetProperty("UIThread", stat);
@@ -356,6 +373,17 @@ internal class AvaloniaReflection
             }
         }
 
+        // Resource system
+        _appResources = ApplicationType?.GetProperty("Resources", pub);
+        // MergedDictionaries is on IResourceDictionary or ResourceDictionary
+        if (IResourceDictionaryType != null)
+            _resourcesMergedDicts = IResourceDictionaryType.GetProperty("MergedDictionaries", pub);
+        // Fallback: try on the concrete Resources object type later at runtime
+
+        Logger.Log("Reflection", $"  ResourceDictionary: {(ResourceDictionaryType != null ? "OK" : "MISSING")}");
+        Logger.Log("Reflection", $"  IResourceDictionary: {(IResourceDictionaryType != null ? "OK" : "MISSING")}");
+        Logger.Log("Reflection", $"  App.Resources: {(_appResources != null ? "OK" : "MISSING")}");
+
         // Opacity and IsHitTestVisible
         _controlOpacity = ControlType?.GetProperty("Opacity", pub)
             ?? VisualType?.GetProperty("Opacity", pub);
@@ -378,6 +406,118 @@ internal class AvaloniaReflection
         var lifetime = _appLifetime?.GetValue(app);
         if (lifetime == null) return null;
         return _lifetimeMainWindow?.GetValue(lifetime);
+    }
+
+    /// <summary>
+    /// Returns all open windows (main + popups). Avalonia popups like user profile
+    /// cards and context menus live in separate Window objects, not in MainWindow's tree.
+    /// </summary>
+    public List<object> GetAllWindows()
+    {
+        var result = new List<object>();
+        try
+        {
+            var app = GetAppCurrent();
+            if (app == null) return result;
+            var lifetime = _appLifetime?.GetValue(app);
+            if (lifetime == null) return result;
+            var windows = _lifetimeWindows?.GetValue(lifetime);
+            if (windows is IEnumerable enumerable)
+            {
+                foreach (var w in enumerable)
+                {
+                    if (w != null) result.Add(w);
+                }
+            }
+        }
+        catch { }
+        return result;
+    }
+
+    private Type? _windowImplType;
+    private PropertyInfo? _windowImplOwner;
+    private FieldInfo? _windowImplSInstances;
+    private bool _windowImplResolved;
+
+    /// <summary>
+    /// Returns all open TopLevel instances (MainWindow + PopupRoot + any dialogs).
+    /// Uses Avalonia's internal WindowImpl.s_instances list to find all native windows,
+    /// then gets .Owner (IInputRoot = TopLevel) for each.
+    /// </summary>
+    public List<object> GetAllTopLevels()
+    {
+        if (!_windowImplResolved)
+        {
+            _windowImplResolved = true;
+            ResolveWindowImpl();
+        }
+
+        var result = new List<object>();
+
+        if (_windowImplType == null || _windowImplOwner == null || _windowImplSInstances == null)
+        {
+            // Fallback: just MainWindow
+            var mw = GetMainWindow();
+            if (mw != null) result.Add(mw);
+            return result;
+        }
+
+        try
+        {
+            var instances = _windowImplSInstances.GetValue(null);
+            if (instances is IEnumerable enumerable)
+            {
+                foreach (var impl in enumerable)
+                {
+                    if (impl == null) continue;
+                    try
+                    {
+                        var owner = _windowImplOwner.GetValue(impl);
+                        if (owner != null && !result.Contains(owner))
+                            result.Add(owner);
+                    }
+                    catch { }
+                }
+            }
+        }
+        catch { }
+
+        if (result.Count == 0)
+        {
+            var mw = GetMainWindow();
+            if (mw != null) result.Add(mw);
+        }
+
+        return result;
+    }
+
+    private void ResolveWindowImpl()
+    {
+        try
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (!(asm.FullName?.Contains("Avalonia") == true)) continue;
+                try
+                {
+                    foreach (var type in asm.GetTypes())
+                    {
+                        if (type.Name != "WindowImpl") continue;
+                        _windowImplType = type;
+                        _windowImplOwner = type.GetProperty("Owner",
+                            BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                        _windowImplSInstances = type.GetField("s_instances",
+                            BindingFlags.NonPublic | BindingFlags.Static);
+
+                        Logger.Log("Reflection", "WindowImpl resolved: Owner=" +
+                            (_windowImplOwner != null) + " s_instances=" + (_windowImplSInstances != null));
+                        return;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
     }
 
     public void RunOnUIThread(Action action)
@@ -439,6 +579,31 @@ internal class AvaloniaReflection
 
         object? result;
         try { result = _getVisualChildren.Invoke(null, new[] { visual }); }
+        catch { yield break; }
+
+        if (result is IEnumerable enumerable)
+        {
+            foreach (var child in enumerable)
+            {
+                if (child != null) yield return child;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get logical children of a control. Popup controls are logical children,
+    /// not visual, so we need this to find open popups in the tree.
+    /// Uses ILogical.LogicalChildren or StyledElement.LogicalChildren.
+    /// </summary>
+    public IEnumerable<object> GetLogicalChildren(object control)
+    {
+        // Try LogicalChildren property (available on StyledElement/Control)
+        var prop = control.GetType().GetProperty("LogicalChildren",
+            BindingFlags.Public | BindingFlags.Instance);
+        if (prop == null) yield break;
+
+        object? result;
+        try { result = prop.GetValue(control); }
         catch { yield break; }
 
         if (result is IEnumerable enumerable)
@@ -555,7 +720,11 @@ internal class AvaloniaReflection
         try
         {
             var color = _colorParse.Invoke(null, new object[] { hex });
-            return Activator.CreateInstance(SolidColorBrushType, color);
+            // SolidColorBrush(Color) constructor is trimmed in Root's single-file binary.
+            // Use parameterless constructor + Color property setter instead.
+            var brush = Activator.CreateInstance(SolidColorBrushType);
+            SolidColorBrushType.GetProperty("Color")?.SetValue(brush, color);
+            return brush;
         }
         catch { return null; }
     }
@@ -868,6 +1037,85 @@ internal class AvaloniaReflection
         }
     }
 
+    // ===== SetValue with BindingPriority =====
+
+    private System.Reflection.MethodInfo? _setValueWithPriority;
+    private object? _bindingPriorityStyle;
+    private bool _priorityResolved;
+
+    /// <summary>
+    /// Set an Avalonia property value at Style priority (lower than LocalValue).
+    /// This allows hover/pressed style triggers to override our value,
+    /// then revert back to our themed value when the trigger deactivates.
+    /// propertyFieldName is the static field name (e.g. "BackgroundProperty").
+    /// Returns true if successful, false if fallback to CLR SetValue is needed.
+    /// </summary>
+    public bool SetValueStylePriority(object control, string propertyFieldName, object? value)
+    {
+        try
+        {
+            if (!_priorityResolved)
+            {
+                _priorityResolved = true;
+                // Find BindingPriority enum
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                {
+                    var bpType = asm.GetType("Avalonia.Data.BindingPriority");
+                    if (bpType != null)
+                    {
+                        // BindingPriority.LocalValue = 0 - only priority that reliably overrides
+                        // template and style values on controls.
+                        _bindingPriorityStyle = Enum.ToObject(bpType, 0);
+                        Logger.Log("Reflection", "BindingPriority.LocalValue resolved: " + _bindingPriorityStyle);
+                        break;
+                    }
+                }
+            }
+
+            if (_bindingPriorityStyle == null) return false;
+
+            // Find the static AvaloniaProperty field
+            var field = control.GetType().GetField(propertyFieldName,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+            if (field == null) return false;
+
+            var avaloniaProperty = field.GetValue(null);
+            if (avaloniaProperty == null) return false;
+
+            // Find SetValue(AvaloniaProperty, object, BindingPriority)
+            if (_setValueWithPriority == null)
+            {
+                var methods = control.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                    .Where(m => m.Name == "SetValue" && !m.IsGenericMethod && m.GetParameters().Length == 3);
+                foreach (var method in methods)
+                {
+                    var parms = method.GetParameters();
+                    if (parms[0].ParameterType.IsAssignableFrom(avaloniaProperty.GetType())
+                        && parms[2].ParameterType.Name == "BindingPriority")
+                    {
+                        _setValueWithPriority = method;
+                        break;
+                    }
+                }
+            }
+
+            if (_setValueWithPriority != null)
+            {
+                _setValueWithPriority.Invoke(control, new[] { avaloniaProperty, value, _bindingPriorityStyle });
+                return true;
+            }
+
+            return false;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Map a property name to its Avalonia static property field name.
+    /// E.g. "Background" -> "BackgroundProperty"
+    /// </summary>
+    public static string PropertyToFieldName(string propertyName) => propertyName + "Property";
+
     // ===== MaxHeight helpers =====
 
     public void SetMaxHeight(object? control, double maxHeight)
@@ -1124,5 +1372,175 @@ internal class AvaloniaReflection
     {
         if (CanvasType == null) return null;
         return Activator.CreateInstance(CanvasType);
+    }
+
+    // ===== Resource Dictionary System =====
+
+    /// <summary>
+    /// Gets Application.Current.Resources
+    /// </summary>
+    public object? GetAppResources()
+    {
+        var app = GetAppCurrent();
+        if (app == null || _appResources == null) return null;
+        return _appResources.GetValue(app);
+    }
+
+    /// <summary>
+    /// Gets Application.Styles[index].Resources - where Root's theme colors live.
+    /// Style[0] is SimpleTheme with ThemeAccentColor, ThemeAccentBrush, etc.
+    /// </summary>
+    public object? GetStyleResources(int styleIndex)
+    {
+        var app = GetAppCurrent();
+        if (app == null) return null;
+        try
+        {
+            var stylesProp = app.GetType().GetProperty("Styles");
+            var styles = stylesProp?.GetValue(app);
+            if (styles is IEnumerable styleEnum)
+            {
+                int i = 0;
+                foreach (var style in styleEnum)
+                {
+                    if (i == styleIndex && style != null)
+                    {
+                        var resProp = style.GetType().GetProperty("Resources");
+                        return resProp?.GetValue(style);
+                    }
+                    i++;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", "GetStyleResources error: " + ex.Message);
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets a resource value from a resource dictionary by key.
+    /// </summary>
+    public object? GetResource(object? dict, string key)
+    {
+        if (dict == null) return null;
+        try
+        {
+            // Use TryGetValue or indexer
+            var indexer = dict.GetType().GetProperty("Item",
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
+                null, null, new[] { typeof(object) }, null);
+            if (indexer != null)
+            {
+                return indexer.GetValue(dict, new object[] { key });
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    /// <summary>
+    /// Gets the MergedDictionaries collection from a resource dictionary object.
+    /// </summary>
+    public IList? GetMergedDictionaries(object? resources)
+    {
+        if (resources == null) return null;
+        // Try cached property first
+        if (_resourcesMergedDicts != null)
+        {
+            try { return _resourcesMergedDicts.GetValue(resources) as IList; }
+            catch { }
+        }
+        // Fallback: search on the actual type
+        var prop = resources.GetType().GetProperty("MergedDictionaries",
+            BindingFlags.Public | BindingFlags.Instance);
+        return prop?.GetValue(resources) as IList;
+    }
+
+    /// <summary>
+    /// Creates a new ResourceDictionary instance.
+    /// </summary>
+    public object? CreateResourceDictionary()
+    {
+        if (ResourceDictionaryType == null) return null;
+        return Activator.CreateInstance(ResourceDictionaryType);
+    }
+
+    /// <summary>
+    /// Adds a key-value pair to a ResourceDictionary.
+    /// Uses the IDictionary indexer: dict[key] = value
+    /// </summary>
+    public void AddResource(object? dict, string key, object? value)
+    {
+        if (dict == null || value == null) return;
+        try
+        {
+            // ResourceDictionary implements IDictionary<object, object?>
+            // Use the indexer via reflection
+            var indexer = dict.GetType().GetProperty("Item",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, null, new[] { typeof(object) }, null);
+            if (indexer != null)
+            {
+                indexer.SetValue(dict, value, new object[] { key });
+                return;
+            }
+
+            // Fallback: try Add method
+            var addMethod = dict.GetType().GetMethod("Add",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(object), typeof(object) }, null);
+            addMethod?.Invoke(dict, new[] { (object)key, value });
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddResource({key}) error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Parses a hex color string into an Avalonia Color struct.
+    /// </summary>
+    public object? ParseColor(string hex)
+    {
+        if (_colorParse == null) return null;
+        try
+        {
+            return _colorParse.Invoke(null, new object[] { hex });
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Enumerate all resource keys in a resource dictionary (for diagnostics).
+    /// </summary>
+    public void EnumerateResources(object? resources, Action<string, object?> callback)
+    {
+        if (resources == null) return;
+        try
+        {
+            // Try IEnumerable<KeyValuePair<object, object?>>
+            if (resources is IEnumerable enumerable)
+            {
+                foreach (var item in enumerable)
+                {
+                    if (item == null) continue;
+                    var itemType = item.GetType();
+                    var keyProp = itemType.GetProperty("Key");
+                    var valueProp = itemType.GetProperty("Value");
+                    if (keyProp != null && valueProp != null)
+                    {
+                        var key = keyProp.GetValue(item)?.ToString() ?? "null";
+                        var value = valueProp.GetValue(item);
+                        callback(key, value);
+                    }
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"EnumerateResources error: {ex.Message}");
+        }
     }
 }

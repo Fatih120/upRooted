@@ -73,9 +73,44 @@ internal class StartupHook
             }
             Logger.Log("Startup", $"Phase 3 OK: MainWindow = {mainWindow!.GetType().FullName}");
 
+            // Phase 3.5: Initialize theme engine (actual theme apply deferred to UI thread)
+            Logger.Log("Startup", "Phase 3.5: Initializing theme engine");
+            var themeEngine = new ThemeEngine(resolver);
+            var savedSettings = UprootedSettings.Load();
+
+            // Apply saved theme on UI thread (ResourceDictionary requires Dispatcher access)
+            resolver.RunOnUIThread(() =>
+            {
+                try
+                {
+                    if (savedSettings.ActiveTheme != "default-dark")
+                    {
+                        Logger.Log("Startup", "Applying saved theme: " + savedSettings.ActiveTheme);
+                        themeEngine.ApplyTheme(savedSettings.ActiveTheme);
+                    }
+                    else
+                    {
+                        Logger.Log("Startup", "Using default theme (no override)");
+                    }
+                    // Diagnostics disabled (uncomment for debugging)
+                    // var te = themeEngine;
+                    // System.Threading.ThreadPool.QueueUserWorkItem(_ => {
+                    //     Thread.Sleep(25000);
+                    //     resolver.RunOnUIThread(() => {
+                    //         try { te.DumpVisualTreeColors(); }
+                    //         catch { }
+                    //     });
+                    // });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Startup", "Theme init error: " + ex.Message);
+                }
+            });
+
             // Phase 4: Start the settings page monitor
             Logger.Log("Startup", "Phase 4: Starting settings page monitor");
-            var injector = new SidebarInjector(resolver, mainWindow!);
+            var injector = new SidebarInjector(resolver, mainWindow!, themeEngine);
             injector.StartMonitoring();
 
             Logger.Log("Startup", "========================================");

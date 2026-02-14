@@ -16,6 +16,7 @@ internal class SettingsLayout
     public object? VersionBorder { get; init; }     // NavContainer child[1] (version info)
     public object? SignOutControl { get; init; }    // NavContainer child[2] (sign out)
     public object? SidebarGrid { get; init; }       // Grid parent of NavContainer
+    public object? SaveBar { get; init; }           // Save bar ("You have unsaved changes" + Revert + Save)
     public int AdvancedIndex { get; init; }         // Index of "Advanced" in ListBox (-1 if not found)
 }
 
@@ -155,6 +156,11 @@ internal class VisualTreeWalker
         if (listBox != null)
             advancedIndex = FindAdvancedIndex(listBox);
 
+        // Find save bar in settings Grid
+        object? saveBar = null;
+        if (isGrid && layoutContainer != null)
+            saveBar = FindSaveBar(layoutContainer);
+
         return new SettingsLayout
         {
             NavContainer = navContainer,
@@ -169,6 +175,7 @@ internal class VisualTreeWalker
             VersionBorder = versionBorder,
             SignOutControl = signOutControl,
             SidebarGrid = sidebarGrid,
+            SaveBar = saveBar,
             AdvancedIndex = advancedIndex
         };
     }
@@ -229,6 +236,89 @@ internal class VisualTreeWalker
         }
 
         Logger.Log("TreeWalker", "Back button not found in Row=0");
+        return null;
+    }
+
+    /// <summary>
+    /// Search the main settings Grid for the save bar ("You have unsaved changes" + Revert + Save).
+    /// Looks at Row=2 (Auto row) first, then falls back to searching all children for "Revert" text.
+    /// </summary>
+    public object? FindSaveBar(object settingsGrid)
+    {
+        var children = new List<object>(_r.GetVisualChildren(settingsGrid));
+
+        // Strategy 1: Check children at Grid.Row=2 (the Auto-height row used for save bar)
+        foreach (var child in children)
+        {
+            int row = _r.GetGridRow(child);
+            if (row != 2) continue;
+
+            // Verify this contains save-bar-like content (text with "unsaved" or "Revert")
+            var unsavedText = FindFirstTextBlockContaining(child, "unsaved");
+            var revertText = FindFirstTextBlock(child, "Revert");
+            if (unsavedText != null || revertText != null)
+            {
+                Logger.Log("TreeWalker", $"Save bar found at Row=2: {child.GetType().Name}");
+                return child;
+            }
+
+            // Row=2 child exists but may not have save bar text yet (bar appears dynamically)
+            // Still return it as the save bar container
+            var bounds = _r.GetBounds(child);
+            if (bounds != null)
+            {
+                Logger.Log("TreeWalker", $"Save bar candidate at Row=2: {child.GetType().Name} Bounds=({bounds.Value.W:F0}x{bounds.Value.H:F0})");
+                return child;
+            }
+        }
+
+        // Strategy 2: Search all Grid children for one containing "Revert" text
+        foreach (var child in children)
+        {
+            var revertText = FindFirstTextBlock(child, "Revert");
+            if (revertText != null)
+            {
+                Logger.Log("TreeWalker", $"Save bar found via 'Revert' text: {child.GetType().Name} at Row={_r.GetGridRow(child)}");
+                return child;
+            }
+        }
+
+        Logger.Log("TreeWalker", "Save bar not found in settings Grid");
+        return null;
+    }
+
+    /// <summary>
+    /// Find the Revert button inside a save bar container.
+    /// Returns the Button (or clickable ancestor) containing "Revert" text.
+    /// </summary>
+    public object? FindRevertButton(object saveBar)
+    {
+        foreach (var node in DescendantsDepthFirst(saveBar))
+        {
+            if (!_r.IsTextBlock(node)) continue;
+            if (_r.GetText(node) != "Revert") continue;
+
+            // Walk up to find Button ancestor
+            var current = _r.GetParent(node);
+            for (int d = 0; d < 5 && current != null; d++)
+            {
+                var typeName = current.GetType().Name;
+                if (typeName == "Button" || typeName.Contains("Button"))
+                {
+                    Logger.Log("TreeWalker", $"Revert button found: {typeName}");
+                    return current;
+                }
+                current = _r.GetParent(current);
+            }
+
+            // Fallback: use parent of text
+            var textParent = _r.GetParent(node);
+            if (textParent != null)
+            {
+                Logger.Log("TreeWalker", $"Revert button fallback: {textParent.GetType().Name}");
+                return textParent;
+            }
+        }
         return null;
     }
 

@@ -10,13 +10,14 @@ import Layout from "../layouts/Layout.astro";
   <div class="page">
     <div class="columns">
       <div class="left">
-        <h1>uprooted</h1>
+        <h1>uprooted <span class="version">0.1.2 beta</span></h1>
         <p class="sub">a client mod framework for root communications.</p>
 
         <ul class="features">
-          <li>themes</li>
+          <li>custom themes <span class="tag">working</span></li>
           <li>plugins</li>
           <li>bridge api</li>
+          <li>settings injection</li>
         </ul>
 
         <nav>
@@ -28,7 +29,7 @@ import Layout from "../layouts/Layout.astro";
 
       <div class="right">
         <div class="policy">
-          <p>uprooted is currently in <strong>early planning stages</strong>. nothing is available for download yet.</p>
+          <p>uprooted is a <strong>working beta</strong>. custom themes ship with the framework and can be switched at runtime from within Root's native settings panel. nothing is available for download yet.</p>
           <p>root's <a href="https://root.gg/terms">terms</a> prohibit reverse engineering and modification of the service. we believe cosmetic client mods can coexist with that policy, but we won't ship anything without explicit approval from root's team.</p>
           <p class="interested">if you're interested, reach out:</p>
           <ul class="contact">
@@ -100,6 +101,22 @@ import Layout from "../layouts/Layout.astro";
     letter-spacing: 0.04em;
     margin-bottom: 6px;
     color: var(--text);
+  }
+
+  .version {
+    font-size: 12px;
+    font-weight: 400;
+    color: var(--dim);
+    letter-spacing: 0.02em;
+  }
+
+  .tag {
+    font-size: 10px;
+    color: var(--green);
+    border: 1px solid rgba(106, 154, 110, 0.3);
+    padding: 1px 6px;
+    margin-left: 6px;
+    letter-spacing: 0.04em;
   }
 
   .sub {
