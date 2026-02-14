@@ -70,6 +70,15 @@
   white-space: nowrap;
 }
 
+.status-note {
+  font-size: 12px;
+  padding: 4px 0 0 14px;
+  color: var(--dim);
+}
+.status-note.success {
+  color: var(--green);
+}
+
 /* Action buttons */
 .actions {
   display: flex;

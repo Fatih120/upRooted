@@ -2,11 +2,14 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod detection;
+mod embedded;
+mod hook;
 mod patcher;
 mod settings;
 mod themes;
 
 use detection::DetectionResult;
+use hook::HookStatus;
 use patcher::PatchResult;
 use settings::UprootedSettings;
 use themes::ThemeDefinition;
@@ -17,17 +20,86 @@ fn detect_root() -> DetectionResult {
 }
 
 #[tauri::command]
+fn check_hook_status() -> HookStatus {
+    hook::check_hook_status()
+}
+
+#[tauri::command]
+fn check_root_running() -> bool {
+    hook::check_root_running()
+}
+
+#[tauri::command]
 fn install_uprooted() -> PatchResult {
+    // Step 1: Deploy embedded files
+    if let Err(e) = hook::deploy_files() {
+        return PatchResult {
+            success: false,
+            message: format!("Failed to deploy files: {}", e),
+            files_patched: vec![],
+        };
+    }
+
+    // Step 2: Set environment variables
+    if let Err(e) = hook::set_env_vars() {
+        return PatchResult {
+            success: false,
+            message: format!("Failed to set env vars: {}", e),
+            files_patched: vec![],
+        };
+    }
+
+    // Step 3: Patch HTML files
     patcher::install()
 }
 
 #[tauri::command]
 fn uninstall_uprooted() -> PatchResult {
-    patcher::uninstall()
+    // Step 1: Remove environment variables
+    if let Err(e) = hook::remove_env_vars() {
+        return PatchResult {
+            success: false,
+            message: format!("Failed to remove env vars: {}", e),
+            files_patched: vec![],
+        };
+    }
+
+    // Step 2: Restore HTML files
+    let result = patcher::uninstall();
+
+    // Step 3: Remove deployed files
+    if let Err(e) = hook::remove_files() {
+        return PatchResult {
+            success: false,
+            message: format!("HTML restored but failed to remove files: {}", e),
+            files_patched: result.files_patched,
+        };
+    }
+
+    result
 }
 
 #[tauri::command]
 fn repair_uprooted() -> PatchResult {
+    // Re-deploy files (overwrite)
+    if let Err(e) = hook::deploy_files() {
+        return PatchResult {
+            success: false,
+            message: format!("Failed to deploy files: {}", e),
+            files_patched: vec![],
+        };
+    }
+
+    // Re-set env vars
+    if let Err(e) = hook::set_env_vars() {
+        return PatchResult {
+            success: false,
+            message: format!("Failed to set env vars: {}", e),
+            files_patched: vec![],
+        };
+    }
+
+    // Re-patch HTML
     patcher::repair()
 }
 
@@ -81,6 +153,8 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .invoke_handler(tauri::generate_handler![
             detect_root,
+            check_hook_status,
+            check_root_running,
             install_uprooted,
             uninstall_uprooted,
             repair_uprooted,

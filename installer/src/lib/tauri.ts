@@ -1,11 +1,26 @@
 const { invoke } = (window as any).__TAURI__.core;
 
+export interface HookStatus {
+  profiler_dll: boolean;
+  hook_dll: boolean;
+  hook_deps: boolean;
+  preload_js: boolean;
+  theme_css: boolean;
+  env_enable_profiling: boolean;
+  env_profiler_guid: boolean;
+  env_profiler_path: boolean;
+  env_ready_to_run: boolean;
+  files_ok: boolean;
+  env_ok: boolean;
+}
+
 export interface DetectionResult {
   root_found: boolean;
   root_path: string;
   profile_dir: string;
   html_files: string[];
   is_installed: boolean;
+  hook_status: HookStatus;
 }
 
 export interface PatchResult {
@@ -79,4 +94,12 @@ export async function getUprootedVersion(): Promise<string> {
 
 export async function openProfileDir(): Promise<void> {
   return invoke("open_profile_dir");
+}
+
+export async function checkHookStatus(): Promise<HookStatus> {
+  return invoke("check_hook_status");
+}
+
+export async function checkRootRunning(): Promise<boolean> {
+  return invoke("check_root_running");
 }

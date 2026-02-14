@@ -20,22 +20,40 @@
  * recursively during Assembly.LoadFrom, causing stack overflow.
  *
  * Build: cl.exe /LD /O2 /Fe:uprooted_profiler.dll uprooted_profiler.c
- *        /link ole32.lib kernel32.lib /DEF:uprooted_profiler.def
+ *        /link ole32.lib kernel32.lib shell32.lib /DEF:uprooted_profiler.def
  */
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <shlobj.h>
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "kernel32.lib")
+#pragma comment(lib, "shell32.lib")
 
 /* ---- Configuration ---- */
 
-#define HOOK_DLL_PATH  L"C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook\\bin\\Release\\net10.0\\UprootedHook.dll"
 #define HOOK_ENTRY_TYPE L"UprootedHook.Entry"
+
+/* Runtime-resolved paths (populated in DllMain) */
+static WCHAR g_hookDllPath[MAX_PATH];
+static WCHAR g_logFilePath[MAX_PATH];
+
+static void InitPaths(void) {
+    PWSTR localAppData = NULL;
+    if (SUCCEEDED(SHGetKnownFolderPath(&FOLDERID_LocalAppData, 0, NULL, &localAppData))) {
+        _snwprintf(g_hookDllPath, MAX_PATH, L"%s\\Root\\uprooted\\UprootedHook.dll", localAppData);
+        _snwprintf(g_logFilePath, MAX_PATH, L"%s\\Root\\uprooted\\profiler.log", localAppData);
+        CoTaskMemFree(localAppData);
+    } else {
+        /* Fallback if SHGetKnownFolderPath fails */
+        wcscpy(g_hookDllPath, L"C:\\UprootedHook.dll");
+        wcscpy(g_logFilePath, L"C:\\profiler.log");
+    }
+}
 
 /* ---- Minimal COM types ---- */
 
@@ -142,7 +160,9 @@ static FILE* g_logFile = NULL;
 
 static void PLog(const char* msg) {
     if (!g_logFile) {
-        g_logFile = fopen("C:\\Users\\bash\\PROFILER_LOG.txt", "a");
+        char narrowPath[MAX_PATH];
+        WideCharToMultiByte(CP_UTF8, 0, g_logFilePath, -1, narrowPath, MAX_PATH, NULL, NULL);
+        g_logFile = fopen(narrowPath, "a");
     }
     if (g_logFile) {
         SYSTEMTIME st;
@@ -501,7 +521,7 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
             unsigned int* pstk);
         DefineUserStringFn defineStr = (DefineUserStringFn)emitVt[VT_ME_DefineUserString];
 
-        hr = defineStr(pEmit, HOOK_DLL_PATH, (ULONG)wcslen(HOOK_DLL_PATH), &g_tokPathString);
+        hr = defineStr(pEmit, g_hookDllPath, (ULONG)wcslen(g_hookDllPath), &g_tokPathString);
         PLogFmt("  PathString hr=0x%08X token=0x%08X", hr, g_tokPathString);
         if (hr != 0) goto fail;
 
@@ -1105,6 +1125,7 @@ HRESULT __stdcall UprootedDllCanUnloadNow(void) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
+        InitPaths();
         PLog("=== Uprooted Profiler DllMain ===");
     }
     return TRUE;

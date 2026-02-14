@@ -1,6 +1,6 @@
 [package]
 name = "uprooted-installer"
-version = "0.1.0"
+version = "0.1.2"
 edition = "2021"
 
 [dependencies]
@@ -10,6 +10,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 glob = "0.3"
 opener = "0.7"
+winreg = "0.55"
+windows-sys = { version = "0.59", default-features = false, features = [
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_Foundation",
+    "Win32_System_Diagnostics_ToolHelp",
+] }
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

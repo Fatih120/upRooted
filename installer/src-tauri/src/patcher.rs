@@ -1,4 +1,5 @@
-use crate::detection::{find_target_html_files, get_profile_dir};
+use crate::detection::find_target_html_files;
+use crate::hook;
 use crate::settings::load_settings;
 use serde::Serialize;
 use std::fs;
@@ -15,17 +16,7 @@ pub struct PatchResult {
 }
 
 pub fn install() -> PatchResult {
-    let profile = get_profile_dir();
-    let uprooted_dir = profile.join("uprooted");
-
-    // Ensure uprooted dir exists
-    if let Err(e) = fs::create_dir_all(&uprooted_dir) {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to create uprooted directory: {}", e),
-            files_patched: vec![],
-        };
-    }
+    let uprooted_dir = hook::get_uprooted_dir();
 
     // Build paths to dist files in the uprooted dir
     let preload_path = uprooted_dir

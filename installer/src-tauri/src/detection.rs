@@ -1,3 +1,4 @@
+use crate::hook::{self, HookStatus};
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
@@ -11,6 +12,7 @@ pub struct DetectionResult {
     pub profile_dir: String,
     pub html_files: Vec<String>,
     pub is_installed: bool,
+    pub hook_status: HookStatus,
 }
 
 pub fn get_profile_dir() -> PathBuf {
@@ -74,6 +76,7 @@ pub fn detect() -> DetectionResult {
     let profile = get_profile_dir();
     let html_files = find_target_html_files();
     let is_installed = check_is_installed(&html_files);
+    let hook_status = hook::check_hook_status();
 
     DetectionResult {
         root_found: root_exe.exists(),
@@ -84,5 +87,6 @@ pub fn detect() -> DetectionResult {
             .map(|p| p.to_string_lossy().to_string())
             .collect(),
         is_installed,
+        hook_status,
     }
 }
