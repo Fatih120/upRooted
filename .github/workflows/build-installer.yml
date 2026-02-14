@@ -65,12 +65,12 @@ jobs:
           Copy-Item dist\uprooted.css installer\src-tauri\artifacts\
 
       - name: Build UprootedHook.dll
-        run: dotnet build hook -c Release
+        run: dotnet build hook -c Release -o hook/_out
 
       - name: Stage Hook DLL + deps
         run: |
-          Copy-Item hook\bin\Release\net10.0\UprootedHook.dll installer\src-tauri\artifacts\
-          Copy-Item hook\bin\Release\net10.0\UprootedHook.deps.json installer\src-tauri\artifacts\
+          Copy-Item hook\_out\UprootedHook.dll installer\src-tauri\artifacts\
+          Copy-Item hook\_out\UprootedHook.deps.json installer\src-tauri\artifacts\
 
       - name: Compile profiler DLL
         run: cl.exe /LD /O2 /Fe:installer\src-tauri\artifacts\uprooted_profiler.dll tools\uprooted_profiler.c /link ole32.lib kernel32.lib shell32.lib /DEF:tools\uprooted_profiler.def
