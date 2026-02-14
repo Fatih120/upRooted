@@ -38,7 +38,7 @@
 
 #define HOOK_ENTRY_TYPE L"UprootedHook.Entry"
 
-/* Runtime-resolved paths (populated in DllMain) */
+/* Runtime-resolved paths (lazily initialized on first use) */
 static WCHAR g_hookDllPath[MAX_PATH];
 static WCHAR g_logFilePath[MAX_PATH];
 
@@ -154,11 +154,23 @@ static const MYGUID IID_IMetaDataEmit =
 #define CorILMethod_Sect_EHTable   0x01
 #define CorILMethod_Sect_FatFormat 0x40
 
+/* ---- Lazy path initialization ---- */
+
+static volatile LONG g_pathsInitialized = 0;
+
+/* Called from PLog on first use (NOT from DllMain loader lock) */
+static void EnsurePathsInitialized(void) {
+    if (InterlockedCompareExchange(&g_pathsInitialized, 1, 0) == 0) {
+        InitPaths();
+    }
+}
+
 /* ---- Logging ---- */
 
 static FILE* g_logFile = NULL;
 
 static void PLog(const char* msg) {
+    EnsurePathsInitialized();
     if (!g_logFile) {
         char narrowPath[MAX_PATH];
         WideCharToMultiByte(CP_UTF8, 0, g_logFilePath, -1, narrowPath, MAX_PATH, NULL, NULL);
@@ -1125,8 +1137,9 @@ HRESULT __stdcall UprootedDllCanUnloadNow(void) {
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD reason, LPVOID reserved) {
     if (reason == DLL_PROCESS_ATTACH) {
         DisableThreadLibraryCalls(hModule);
-        InitPaths();
-        PLog("=== Uprooted Profiler DllMain ===");
+        /* DO NOT call InitPaths() here - SHGetKnownFolderPath is unsafe
+         * inside the loader lock and can deadlock the process.
+         * Paths are lazily initialized in Prof_Initialize instead. */
     }
     return TRUE;
 }

@@ -5,7 +5,10 @@ use serde::Serialize;
 use std::fs;
 use std::path::Path;
 
-const INJECTION_MARKER: &str = "<!-- uprooted -->";
+const MARKER_START: &str = "<!-- uprooted:start -->";
+const MARKER_END: &str = "<!-- uprooted:end -->";
+/// Legacy marker for detection of older installs
+const LEGACY_MARKER: &str = "<!-- uprooted -->";
 const BACKUP_SUFFIX: &str = ".uprooted.bak";
 
 #[derive(Serialize)]
@@ -15,10 +18,14 @@ pub struct PatchResult {
     pub files_patched: Vec<String>,
 }
 
+/// Check whether a file contains any uprooted injection.
+pub fn is_patched(content: &str) -> bool {
+    content.contains(MARKER_START) || content.contains(LEGACY_MARKER)
+}
+
 pub fn install() -> PatchResult {
     let uprooted_dir = hook::get_uprooted_dir();
 
-    // Build paths to dist files in the uprooted dir
     let preload_path = uprooted_dir
         .join("uprooted-preload.js")
         .to_string_lossy()
@@ -31,20 +38,14 @@ pub fn install() -> PatchResult {
     let settings = load_settings();
     let settings_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
 
-    let settings_tag = format!(
-        "<script>{}window.__UPROOTED_SETTINGS__={};</script>",
-        INJECTION_MARKER, settings_json
+    let injection = format!(
+        "{start}\n    <script>window.__UPROOTED_SETTINGS__={settings};</script>\n    <script src=\"file:///{preload}\"></script>\n    <link rel=\"stylesheet\" href=\"file:///{css}\">\n    {end}",
+        start = MARKER_START,
+        end = MARKER_END,
+        settings = settings_json,
+        preload = preload_path,
+        css = css_path,
     );
-    let script_tag = format!(
-        "<script src=\"file:///{}\">{}</script>",
-        preload_path, INJECTION_MARKER
-    );
-    let link_tag = format!(
-        "<link rel=\"stylesheet\" href=\"file:///{}\">{}",
-        css_path, INJECTION_MARKER
-    );
-
-    let injection = format!("{}\n    {}\n    {}", settings_tag, script_tag, link_tag);
 
     let targets = find_target_html_files();
     if targets.is_empty() {
@@ -68,8 +69,8 @@ pub fn install() -> PatchResult {
             }
         };
 
-        if content.contains(INJECTION_MARKER) {
-            continue; // Already injected
+        if is_patched(&content) {
+            continue;
         }
 
         // Backup original
@@ -124,14 +125,10 @@ pub fn uninstall() -> PatchResult {
             let _ = fs::remove_file(backup_path);
             restored.push(file.to_string_lossy().to_string());
         } else {
-            // Fallback: strip injection markers
+            // Fallback: strip injected block
             if let Ok(content) = fs::read_to_string(file) {
-                if content.contains(INJECTION_MARKER) {
-                    let cleaned: String = content
-                        .lines()
-                        .filter(|line| !line.contains(INJECTION_MARKER))
-                        .collect::<Vec<_>>()
-                        .join("\n");
+                if is_patched(&content) {
+                    let cleaned = strip_injection(&content);
                     let _ = fs::write(file, &cleaned);
                     restored.push(file.to_string_lossy().to_string());
                 }
@@ -147,6 +144,33 @@ pub fn uninstall() -> PatchResult {
         ),
         files_patched: restored,
     }
+}
+
+/// Strip injected content between start/end markers, or legacy marker lines.
+fn strip_injection(content: &str) -> String {
+    let mut result = Vec::new();
+    let mut inside_block = false;
+
+    for line in content.lines() {
+        if line.contains(MARKER_START) {
+            inside_block = true;
+            continue;
+        }
+        if line.contains(MARKER_END) {
+            inside_block = false;
+            continue;
+        }
+        if inside_block {
+            continue;
+        }
+        // Legacy: strip lines with old marker or uprooted references
+        if line.contains(LEGACY_MARKER) {
+            continue;
+        }
+        result.push(line);
+    }
+
+    result.join("\n")
 }
 
 pub fn repair() -> PatchResult {

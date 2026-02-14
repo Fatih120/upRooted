@@ -205,11 +205,12 @@ pub fn check_root_running() -> bool {
     #[cfg(windows)]
     {
         use std::mem::MaybeUninit;
+        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
         use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
 
         unsafe {
             let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if snapshot.is_null() {
+            if snapshot == INVALID_HANDLE_VALUE {
                 return false;
             }
 
