@@ -19,6 +19,9 @@ jobs:
 
       # ── Toolchains ──
 
+      - name: Setup MSVC developer environment
+        uses: ilammy/msvc-dev-cmd@v1
+
       - name: Setup .NET 10 Preview
         uses: actions/setup-dotnet@v4
         with:
@@ -70,10 +73,7 @@ jobs:
           Copy-Item hook\bin\Release\net10.0\UprootedHook.deps.json installer\src-tauri\artifacts\
 
       - name: Compile profiler DLL
-        shell: cmd
-        run: |
-          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
-          cl.exe /LD /O2 /Fe:installer\src-tauri\artifacts\uprooted_profiler.dll tools\uprooted_profiler.c /link ole32.lib kernel32.lib shell32.lib /DEF:tools\uprooted_profiler.def
+        run: cl.exe /LD /O2 /Fe:installer\src-tauri\artifacts\uprooted_profiler.dll tools\uprooted_profiler.c /link ole32.lib kernel32.lib shell32.lib /DEF:tools\uprooted_profiler.def
 
       - name: Verify staged artifacts
         run: |
