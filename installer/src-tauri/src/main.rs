@@ -30,6 +30,11 @@ fn check_root_running() -> bool {
 }
 
 #[tauri::command]
+fn kill_root() -> u32 {
+    hook::kill_root_processes()
+}
+
+#[tauri::command]
 fn install_uprooted() -> PatchResult {
     // Step 1: Deploy embedded files
     if let Err(e) = hook::deploy_files() {
@@ -155,6 +160,7 @@ fn main() {
             detect_root,
             check_hook_status,
             check_root_running,
+            kill_root,
             install_uprooted,
             uninstall_uprooted,
             repair_uprooted,
