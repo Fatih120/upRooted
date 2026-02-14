@@ -3,7 +3,7 @@ use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
 
-const INJECTION_MARKER: &str = "<!-- uprooted -->";
+use crate::patcher;
 
 #[derive(Serialize, Clone)]
 pub struct DetectionResult {
@@ -63,7 +63,7 @@ pub fn find_target_html_files() -> Vec<PathBuf> {
 pub fn check_is_installed(html_files: &[PathBuf]) -> bool {
     for file in html_files {
         if let Ok(content) = fs::read_to_string(file) {
-            if content.contains(INJECTION_MARKER) {
+            if patcher::is_patched(&content) {
                 return true;
             }
         }

@@ -11,12 +11,21 @@ import {
 let logEl: HTMLDivElement;
 let detection: DetectionResult | null = null;
 
-function log(text: string, type: "info" | "success" | "error" | "" = ""): void {
+// ── Logging ──
+
+function log(text: string, type: "info" | "success" | "error" | "warn" | "" = ""): void {
   const line = document.createElement("div");
   line.className = `log-line ${type}`;
   line.innerHTML = `<span class="prefix">&gt;</span>${escapeHtml(text)}`;
   logEl.appendChild(line);
   logEl.scrollTop = logEl.scrollHeight;
+}
+
+function logBlank(): void {
+  const line = document.createElement("div");
+  line.className = "log-line";
+  line.innerHTML = "&nbsp;";
+  logEl.appendChild(line);
 }
 
 function escapeHtml(s: string): string {
@@ -32,45 +41,146 @@ function truncatePath(p: string, maxLen = 45): string {
   return "..." + p.slice(p.length - maxLen + 3);
 }
 
+function fileName(p: string): string {
+  const parts = p.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || p;
+}
+
+// ── Detection ──
+
 async function runDetection(): Promise<void> {
-  log("detecting root installation...");
+  log("scanning system...");
   try {
     detection = await detectRoot();
-
-    if (detection.root_found) {
-      log(`found Root.exe at ${detection.root_path}`, "success");
-    } else {
-      log("Root.exe not found", "error");
-    }
-
-    log(`profile: ${detection.profile_dir}`);
-    log(`${detection.html_files.length} HTML files detected`);
-
-    const hs = detection.hook_status;
-    if (hs.files_ok) {
-      log("hook files deployed", "success");
-    } else {
-      log("hook files not deployed");
-    }
-
-    if (hs.env_ok) {
-      log("environment variables set", "success");
-    } else {
-      log("environment variables not set");
-    }
-
-    if (detection.is_installed) {
-      log("HTML patches applied", "success");
-    } else {
-      log("HTML not patched");
-    }
-
-    updateStatusDisplay();
-    updateButtons();
   } catch (err) {
     log(`detection failed: ${err}`, "error");
+    return;
+  }
+
+  logBlank();
+
+  // Root.exe
+  if (detection.root_found) {
+    log(`root.exe found`, "success");
+    log(`  path: ${detection.root_path}`);
+  } else {
+    log("root.exe not found", "error");
+    log("  is Root Communications installed?", "warn");
+  }
+
+  // Profile directory
+  log(`profile: ${detection.profile_dir}`);
+
+  // HTML files
+  if (detection.html_files.length > 0) {
+    log(`${detection.html_files.length} html target${detection.html_files.length > 1 ? "s" : ""} found`, "success");
+    for (const f of detection.html_files) {
+      log(`  ${fileName(f)}`);
+    }
+  } else {
+    log("no html targets found", "warn");
+    log("  root may need to be launched once to generate profile files", "warn");
+  }
+
+  logBlank();
+
+  // Hook files
+  const hs = detection.hook_status;
+  if (hs.files_ok) {
+    log("hook files: all deployed", "success");
+  } else {
+    const missing: string[] = [];
+    if (!hs.profiler_dll) missing.push("profiler dll");
+    if (!hs.hook_dll) missing.push("hook dll");
+    if (!hs.hook_deps) missing.push("hook deps");
+    if (!hs.preload_js) missing.push("preload.js");
+    if (!hs.theme_css) missing.push("theme css");
+    if (missing.length === 5) {
+      log("hook files: not deployed");
+    } else {
+      log(`hook files: partial (missing: ${missing.join(", ")})`, "warn");
+    }
+  }
+
+  // Environment variables
+  if (hs.env_ok) {
+    log("env vars: configured", "success");
+  } else {
+    const missing: string[] = [];
+    if (!hs.env_enable_profiling) missing.push("CORECLR_ENABLE_PROFILING");
+    if (!hs.env_profiler_guid) missing.push("CORECLR_PROFILER");
+    if (!hs.env_profiler_path) missing.push("CORECLR_PROFILER_PATH");
+    if (!hs.env_ready_to_run) missing.push("DOTNET_ReadyToRun");
+    if (missing.length === 4) {
+      log("env vars: not configured");
+    } else {
+      log(`env vars: partial (missing: ${missing.join(", ")})`, "warn");
+    }
+  }
+
+  // HTML patches
+  if (detection.is_installed) {
+    log("html patches: applied", "success");
+  } else {
+    log("html patches: not applied");
+  }
+
+  logBlank();
+
+  // Smart scenario analysis
+  analyzeScenario();
+
+  updateStatusDisplay();
+  updateButtons();
+}
+
+function analyzeScenario(): void {
+  if (!detection) return;
+  const hs = detection.hook_status;
+  const allGood = detection.root_found && hs.files_ok && hs.env_ok && detection.is_installed;
+
+  if (allGood) {
+    log("status: fully installed", "success");
+    log("  restart root to activate uprooted", "success");
+    return;
+  }
+
+  if (!detection.root_found) {
+    log("recommendation: install root communications first", "warn");
+    return;
+  }
+
+  if (detection.html_files.length === 0) {
+    log("recommendation: launch root once to generate profile, then install", "warn");
+    return;
+  }
+
+  // Partial install scenarios
+  const hasAnyFiles = hs.profiler_dll || hs.hook_dll || hs.hook_deps || hs.preload_js || hs.theme_css;
+  const hasAnyEnv = hs.env_enable_profiling || hs.env_profiler_guid || hs.env_profiler_path;
+
+  if (hasAnyFiles && !hs.files_ok) {
+    log("warning: hook files are partially deployed — try repair", "warn");
+  }
+
+  if (hasAnyEnv && !hs.env_ok) {
+    log("warning: environment variables are partially configured — try repair", "warn");
+  }
+
+  if (hs.files_ok && hs.env_ok && !detection.is_installed) {
+    log("hook is deployed but html is not patched — try repair", "warn");
+  }
+
+  if (detection.is_installed && (!hs.files_ok || !hs.env_ok)) {
+    log("html is patched but hook deployment is incomplete — try repair", "warn");
+  }
+
+  if (!hasAnyFiles && !hasAnyEnv && !detection.is_installed) {
+    log("ready to install", "info");
   }
 }
+
+// ── Status display ──
 
 function updateStatusDisplay(): void {
   const el = document.getElementById("status-rows");
@@ -88,15 +198,15 @@ function updateStatusDisplay(): void {
     <div class="status-row">
       ${statusDot(detection.html_files.length > 0 ? "green" : "yellow")}
       <span class="status-label">Profile</span>
-      <span class="status-value">${detection.html_files.length} HTML files detected</span>
+      <span class="status-value">${detection.html_files.length} HTML target${detection.html_files.length !== 1 ? "s" : ""}</span>
     </div>
     <div class="status-row">
-      ${statusDot(hs.files_ok ? "green" : "red")}
+      ${statusDot(hs.files_ok ? "green" : (hs.profiler_dll || hs.hook_dll ? "yellow" : "red"))}
       <span class="status-label">Hook DLLs</span>
       <span class="status-value">${hs.files_ok ? "deployed" : "not deployed"}</span>
     </div>
     <div class="status-row">
-      ${statusDot(hs.env_ok ? "green" : "red")}
+      ${statusDot(hs.env_ok ? "green" : (hs.env_enable_profiling ? "yellow" : "red"))}
       <span class="status-label">Env Vars</span>
       <span class="status-value">${hs.env_ok ? "configured" : "not set"}</span>
     </div>
@@ -105,9 +215,11 @@ function updateStatusDisplay(): void {
       <span class="status-label">HTML Patch</span>
       <span class="status-value">${detection.is_installed ? "applied" : "not applied"}</span>
     </div>
-    ${allGood ? '<div class="status-note success">restart Root to activate</div>' : ""}
+    ${allGood ? '<div class="status-note success">restart root to activate</div>' : ""}
   `;
 }
+
+// ── Button state ──
 
 function updateButtons(): void {
   const installBtn = document.getElementById("btn-install") as HTMLButtonElement | null;
@@ -118,9 +230,26 @@ function updateButtons(): void {
 
   const isInstalled = detection.is_installed || detection.hook_status.files_ok || detection.hook_status.env_ok;
 
-  if (installBtn) installBtn.disabled = !detection.root_found || isInstalled;
-  if (uninstallBtn) uninstallBtn.disabled = !isInstalled;
-  if (repairBtn) repairBtn.disabled = !isInstalled;
+  if (installBtn) {
+    installBtn.disabled = !detection.root_found || isInstalled;
+    installBtn.classList.remove("loading");
+  }
+  if (uninstallBtn) {
+    uninstallBtn.disabled = !isInstalled;
+    uninstallBtn.classList.remove("loading");
+  }
+  if (repairBtn) {
+    repairBtn.disabled = !isInstalled;
+    repairBtn.classList.remove("loading");
+  }
+}
+
+function setButtonLoading(btnId: string): void {
+  const btn = document.getElementById(btnId) as HTMLButtonElement | null;
+  if (btn) {
+    btn.disabled = true;
+    btn.classList.add("loading");
+  }
 }
 
 function setButtonsDisabled(disabled: boolean): void {
@@ -130,62 +259,87 @@ function setButtonsDisabled(disabled: boolean): void {
   }
 }
 
+// ── Actions ──
+
 async function handleInstall(): Promise<void> {
+  setButtonLoading("btn-install");
   setButtonsDisabled(true);
 
-  // Check if Root is running
   try {
     const running = await checkRootRunning();
     if (running) {
-      log("Root.exe is currently running. Please close it before installing.", "error");
-      setButtonsDisabled(false);
+      log("root.exe is running — close it before installing", "error");
+      updateButtons();
       return;
     }
   } catch {
-    // If check fails, proceed anyway
+    // proceed
   }
 
-  log("installing uprooted...");
+  log("installing uprooted...", "info");
+  log("  deploying hook files...");
+  log("  setting environment variables...");
+  log("  patching html files...");
+
   try {
     const result = await installUprooted();
+    logBlank();
     if (result.success) {
       log(result.message, "success");
       for (const f of result.files_patched) {
-        log(`  patched: ${f}`, "success");
+        log(`  patched: ${fileName(f)}`, "success");
       }
-      log("restart Root to activate uprooted", "success");
+      logBlank();
+      log("restart root to activate uprooted", "success");
     } else {
       log(result.message, "error");
     }
     await runDetection();
   } catch (err) {
     log(`install failed: ${err}`, "error");
-    setButtonsDisabled(false);
+    updateButtons();
   }
 }
 
 async function handleUninstall(): Promise<void> {
+  setButtonLoading("btn-uninstall");
   setButtonsDisabled(true);
-  log("uninstalling uprooted...");
+
+  log("uninstalling uprooted...", "info");
+  log("  removing environment variables...");
+  log("  restoring html files...");
+  log("  removing hook files...");
+
   try {
     const result = await uninstallUprooted();
+    logBlank();
     if (result.success) {
       log(result.message, "success");
+      for (const f of result.files_patched) {
+        log(`  restored: ${fileName(f)}`, "success");
+      }
     } else {
       log(result.message, "error");
     }
     await runDetection();
   } catch (err) {
     log(`uninstall failed: ${err}`, "error");
-    setButtonsDisabled(false);
+    updateButtons();
   }
 }
 
 async function handleRepair(): Promise<void> {
+  setButtonLoading("btn-repair");
   setButtonsDisabled(true);
-  log("repairing uprooted...");
+
+  log("repairing uprooted...", "info");
+  log("  re-deploying hook files...");
+  log("  re-setting environment variables...");
+  log("  re-patching html files...");
+
   try {
     const result = await repairUprooted();
+    logBlank();
     if (result.success) {
       log(result.message, "success");
     } else {
@@ -194,9 +348,30 @@ async function handleRepair(): Promise<void> {
     await runDetection();
   } catch (err) {
     log(`repair failed: ${err}`, "error");
-    setButtonsDisabled(false);
+    updateButtons();
   }
 }
+
+// ── Copy logs ──
+
+function copyLogs(): void {
+  if (!logEl) return;
+  const text = Array.from(logEl.querySelectorAll(".log-line"))
+    .map((el) => (el as HTMLElement).textContent?.replace(/^>/, "").trim() ?? "")
+    .filter((l) => l.length > 0)
+    .join("\n");
+
+  navigator.clipboard.writeText(text).then(() => {
+    const badge = document.getElementById("copy-badge");
+    if (badge) {
+      badge.textContent = "copied";
+      badge.classList.add("show");
+      setTimeout(() => badge.classList.remove("show"), 1500);
+    }
+  });
+}
+
+// ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
   let version = "0.1.2";
@@ -229,7 +404,11 @@ export async function init(container: HTMLElement): Promise<void> {
     </div>
 
     <div class="log-section">
-      <div class="log-header">-- log --</div>
+      <div class="log-toolbar">
+        <span class="log-header">-- log --</span>
+        <button id="btn-copy-log" class="log-copy-btn" title="Copy log to clipboard">copy</button>
+        <span id="copy-badge" class="copy-badge"></span>
+      </div>
       <div id="log" class="log"></div>
     </div>
   `;
@@ -239,6 +418,7 @@ export async function init(container: HTMLElement): Promise<void> {
   document.getElementById("btn-install")!.addEventListener("click", handleInstall);
   document.getElementById("btn-uninstall")!.addEventListener("click", handleUninstall);
   document.getElementById("btn-repair")!.addEventListener("click", handleRepair);
+  document.getElementById("btn-copy-log")!.addEventListener("click", copyLogs);
 
   await runDetection();
 }
