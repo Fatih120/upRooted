@@ -294,29 +294,36 @@ internal class SidebarInjector
     {
         if (_navContainer == null) return;
 
+        // Wrap all our items in a single Spacing=0 StackPanel.
+        // The NavContainer StackPanel may have non-zero Spacing that adds gaps
+        // between its direct children. By wrapping, only one gap applies (before
+        // our container), not between each individual nav item.
+        var container = _r.CreateStackPanel(vertical: true, spacing: 0);
+        if (container == null) return;
+        _r.SetTag(container, InjectedTag);
+
         // Get styling info from the "APP SETTINGS" header
         var headerFontSize = _r.GetFontSize(layout.AppSettingsText) ?? 11;
         var headerFontWeight = _r.GetFontWeight(layout.AppSettingsText);
         var headerForeground = _r.GetForeground(layout.AppSettingsText);
+        var nativeFontFamily = _r.GetFontFamily(layout.AppSettingsText);
 
         // 1. UPROOTED section header (matching "APP SETTINGS" style)
-        var sectionHeader = BuildSectionHeader("UPROOTED", headerFontSize, headerFontWeight, headerForeground);
+        var sectionHeader = BuildSectionHeader("UPROOTED", headerFontSize, headerFontWeight, headerForeground, nativeFontFamily);
         if (sectionHeader != null)
-        {
-            _r.AddChild(_navContainer, sectionHeader);
-            _injectedControls.Add(sectionHeader);
-        }
+            _r.AddChild(container, sectionHeader);
 
         // 2. Nav items: Uprooted, Plugins, Themes
         foreach (var (label, page) in new[] { ("Uprooted", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
         {
-            var item = BuildNavItem(label, page);
+            var item = BuildNavItem(label, page, nativeFontFamily);
             if (item != null)
-            {
-                _r.AddChild(_navContainer, item);
-                _injectedControls.Add(item);
-            }
+                _r.AddChild(container, item);
         }
+
+        // Add the container as a single child of NavContainer
+        _r.AddChild(_navContainer, container);
+        _injectedControls.Add(container);
 
         // 3. Re-add original version Border
         if (_originalVersionBorder != null)
@@ -333,7 +340,7 @@ internal class SidebarInjector
         }
     }
 
-    private object? BuildSectionHeader(string text, double fontSize, object? fontWeight, object? foreground)
+    private object? BuildSectionHeader(string text, double fontSize, object? fontWeight, object? foreground, object? fontFamily)
     {
         // Match Root's "APP SETTINGS" header: StackPanel M=12,12,12,0 inside a 40px-tall ListBoxItem
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);
@@ -348,30 +355,34 @@ internal class SidebarInjector
                 _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(header, fontWeight);
             if (foreground != null)
                 _r.TextBlockType?.GetProperty("Foreground")?.SetValue(header, foreground);
+            if (fontFamily != null)
+                _r.SetFontFamily(header, fontFamily);
             _r.AddChild(container, header);
         }
 
         return container;
     }
 
-    private object? BuildNavItem(string label, string pageName)
+    private object? BuildNavItem(string label, string pageName, object? fontFamily)
     {
-        // Match Root's ListBoxItem structure exactly:
+        // Match Root's native ListBoxItem structure:
         //   ListBoxItem (250x40)
         //     Panel (M=0,2,0,2, 250x36)
-        //       ContentPresenter (BG=Transparent)  <- hover highlight
-        //       Border (H=36, BG=Transparent, CR=12)
+        //       ContentPresenter > MenuItemPageContainerView > ContentPresenter >
+        //         StackPanel (M=12,8,12,8, 226x20) > TextBlock (FontSize=14, FW=450, VA=Center)
+        //       Border (H=36, BG=Transparent, CR=12)  <- hover/selection highlight
         //
         // Our equivalent:
-        //   outer Panel (tag, cursor)
-        //     inner Panel (M=0,2,0,2)  <- vertical spacing like native
-        //       Border (H=36, BG=transparent, CR=12)  <- highlight
-        //       TextBlock (M=12,0,0,0, VA=Center)  <- content
+        //   Panel (H=40, tag, cursor)
+        //     Panel (M=0,2,0,2)  <- vertical spacing like native
+        //       Border (H=36, CR=12)  <- highlight
+        //       TextBlock (M=12,0,12,0, VA=Center, FW=450)  <- content
 
         var outerPanel = _r.CreatePanel();
         if (outerPanel == null) return null;
         _r.SetTag(outerPanel, $"uprooted-nav-{pageName}");
         _r.SetCursorHand(outerPanel);
+        _r.SetHeight(outerPanel, 40); // Match native ListBoxItem height exactly
 
         // Inner panel with vertical spacing matching native ListBoxItem
         var innerPanel = _r.CreatePanel();
@@ -388,23 +399,15 @@ internal class SidebarInjector
                 _r.AddChild(innerPanel, highlight);
             }
 
-            // Text label - matching native positioning
+            // Text label - matching native font and positioning exactly
             var textBlock = _r.CreateTextBlock(label, 14, "#f2f2f2");
             if (textBlock != null)
             {
-                _r.SetFontWeightNumeric(textBlock, 400);
+                _r.SetFontWeightNumeric(textBlock, 450); // Native uses 450 (between Normal and Medium)
                 _r.SetMargin(textBlock, 12, 0, 12, 0);
-                // Center vertically in the 36px space
-                try
-                {
-                    var vaType = textBlock.GetType().Assembly.GetType("Avalonia.Layout.VerticalAlignment");
-                    if (vaType != null)
-                    {
-                        var centerVal = Enum.Parse(vaType, "Center");
-                        textBlock.GetType().GetProperty("VerticalAlignment")?.SetValue(textBlock, centerVal);
-                    }
-                }
-                catch { }
+                if (fontFamily != null)
+                    _r.SetFontFamily(textBlock, fontFamily);
+                _r.SetVerticalAlignment(textBlock, "Center");
                 _r.AddChild(innerPanel, textBlock);
             }
 
@@ -702,6 +705,13 @@ internal class SidebarInjector
             p = _r.GetParent(p);
         }
 
+        // 1b. NavContainer StackPanel properties
+        if (layout.NavContainer != null)
+        {
+            var spacingVal = layout.NavContainer.GetType().GetProperty("Spacing")?.GetValue(layout.NavContainer);
+            Logger.Log("Recon", $"NavContainer Spacing: {spacingVal}");
+        }
+
         // 2. First 3 ListBoxItems: full visual tree for style matching
         Logger.Log("Recon", "");
         Logger.Log("Recon", "--- ListBox items (first 3 + selected) ---");
@@ -733,8 +743,8 @@ internal class SidebarInjector
                         Logger.Log("Recon", $"    Padding: {GetPropStr(item, "Padding")}");
                         Logger.Log("Recon", $"    MinHeight: {GetPropStr(item, "MinHeight")}");
                         Logger.Log("Recon", $"    Height: {GetPropStr(item, "Height")}");
-                        // Deep dump visual tree with all style props
-                        DumpTreeDetailed(item, 2, 6);
+                        // Deep dump visual tree with all style props (depth 10 to reach TextBlock)
+                        DumpTreeDetailed(item, 2, 10);
                     }
                     itemIdx++;
                 }
