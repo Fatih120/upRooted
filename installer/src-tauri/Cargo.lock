@@ -3879,7 +3879,7 @@ checksum = "f6ccf251212114b54433ec949fd6a7841275f9ada20dddd2f29e9ceea4501493"
 
 [[package]]
 name = "uprooted-installer"
-version = "0.1.0"
+version = "0.1.2"
 dependencies = [
  "glob",
  "opener",
@@ -3888,6 +3888,8 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-shell",
+ "windows-sys 0.59.0",
+ "winreg",
 ]
 
 [[package]]

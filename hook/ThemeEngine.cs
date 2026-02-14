@@ -1,5 +1,6 @@
 using System.Collections;
 using System.Linq;
+using System.Runtime.InteropServices;
 
 namespace Uprooted;
 
@@ -24,12 +25,74 @@ internal class ThemeEngine
 
     // Saved original values from Styles[0].Resources for revert
     private readonly Dictionary<string, object?> _savedOriginals = new();
+    // Keys that were ADDED to Styles[0] (had no original) - must be removed on revert
+    private readonly HashSet<string> _addedKeys = new();
 
     public string? ActiveThemeName => _activeThemeName;
 
     public ThemeEngine(AvaloniaReflection r)
     {
         _r = r;
+    }
+
+    // ===== DWM title bar color (Windows 11) =====
+
+    [DllImport("dwmapi.dll", PreserveSig = true)]
+    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref uint value, int size);
+
+    private const int DWMWA_CAPTION_COLOR = 35;
+    private const string DefaultDarkBg = "#0D1521"; // Root's default dark background
+
+    /// <summary>
+    /// Set the Windows title bar color to match the active theme's background.
+    /// Uses DwmSetWindowAttribute(DWMWA_CAPTION_COLOR) on Windows 11.
+    /// </summary>
+    private void UpdateTitleBarColor(string hexColor)
+    {
+        try
+        {
+            var hwnd = GetMainWindowHandle();
+            if (hwnd == IntPtr.Zero) return;
+
+            // Parse #RRGGBB or #AARRGGBB to COLORREF (0x00BBGGRR)
+            var hex = hexColor.TrimStart('#');
+            if (hex.Length == 8) hex = hex[2..]; // Strip alpha prefix
+            if (hex.Length != 6) return;
+            byte r = Convert.ToByte(hex[0..2], 16);
+            byte g = Convert.ToByte(hex[2..4], 16);
+            byte b = Convert.ToByte(hex[4..6], 16);
+            uint colorRef = (uint)(r | (g << 8) | (b << 16));
+
+            DwmSetWindowAttribute(hwnd, DWMWA_CAPTION_COLOR, ref colorRef, sizeof(uint));
+            Logger.Log("Theme", "Title bar color set to " + hexColor);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Theme", "Title bar color error: " + ex.Message);
+        }
+    }
+
+    private IntPtr GetMainWindowHandle()
+    {
+        var mainWindow = _r.GetMainWindow();
+        if (mainWindow == null) return IntPtr.Zero;
+        try
+        {
+            // Avalonia 11+: TopLevel.TryGetPlatformHandle()
+            var method = mainWindow.GetType().GetMethod("TryGetPlatformHandle");
+            if (method != null)
+            {
+                var platformHandle = method.Invoke(mainWindow, null);
+                if (platformHandle != null)
+                {
+                    var handleProp = platformHandle.GetType().GetProperty("Handle");
+                    if (handleProp != null)
+                        return (IntPtr)handleProp.GetValue(platformHandle)!;
+                }
+            }
+        }
+        catch { }
+        return IntPtr.Zero;
     }
 
     /// <summary>
@@ -47,6 +110,11 @@ internal class ThemeEngine
 
         Logger.Log("Theme", "Applying theme: " + themeName + " (" + palette.Count + " resource overrides)");
 
+        // Save previous theme's color map BEFORE reverting, so we can build
+        // a combined map that catches controls still showing old theme colors.
+        var previousColorMap = _activeColorMap;
+        var previousThemeName = _activeThemeName;
+
         // Revert any existing theme first
         RevertTheme();
 
@@ -60,16 +128,21 @@ internal class ThemeEngine
             {
                 try
                 {
-                    // Save original value before overriding
-                    if (!_savedOriginals.ContainsKey(key))
+                    // Save original value before overriding (or track as added)
+                    if (!_savedOriginals.ContainsKey(key) && !_addedKeys.Contains(key))
                     {
                         try
                         {
                             var original = _r.GetResource(styleRes, key);
                             if (original != null)
                                 _savedOriginals[key] = original;
+                            else
+                                _addedKeys.Add(key); // Key didn't exist - remove on revert
                         }
-                        catch { }
+                        catch
+                        {
+                            _addedKeys.Add(key); // Assume didn't exist
+                        }
                     }
 
                     // Detect Brush vs Color: keys containing "Brush" or ending in "Fill"
@@ -162,13 +235,43 @@ internal class ThemeEngine
         Logger.Log("Theme", "Theme applied: " + styleOverrides + " style overrides + " + mergedAdded + " merged dict entries");
 
         // === Phase 3: Set up visual tree color maps ===
+        // Build a COMBINED map that includes:
+        //   1. Root original colors -> new theme colors (standard)
+        //   2. Previous theme colors -> new theme colors (for late-loaded controls
+        //      that still show the old theme's colors after the one-shot revert walk)
         if (TreeColorMaps.TryGetValue(themeName, out var colorMap))
         {
-            _activeColorMap = colorMap;
+            // Start with the new theme's standard map (Root originals -> new replacements)
+            var combinedMap = new Dictionary<string, string>(colorMap, StringComparer.OrdinalIgnoreCase);
+            int crossMapped = 0;
+
+            // If switching from a previous theme, add cross-mappings
+            if (previousColorMap != null && previousThemeName != null)
+            {
+                foreach (var (origColor, prevReplacement) in previousColorMap)
+                {
+                    // For each Root original that both themes map:
+                    // add prevTheme's replacement -> newTheme's replacement
+                    // E.g., Onyx #000000 (from #0d1521) -> Crimson #241414 (from #0d1521)
+                    if (colorMap.TryGetValue(origColor, out var newReplacement))
+                    {
+                        if (!combinedMap.ContainsKey(prevReplacement) &&
+                            !string.Equals(prevReplacement, newReplacement, StringComparison.OrdinalIgnoreCase))
+                        {
+                            combinedMap[prevReplacement] = newReplacement;
+                            crossMapped++;
+                        }
+                    }
+                }
+                if (crossMapped > 0)
+                    Logger.Log("Theme", "Cross-mapped " + crossMapped + " colors from " + previousThemeName + " -> " + themeName);
+            }
+
+            _activeColorMap = combinedMap;
             _reverseColorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            foreach (var (orig, repl) in colorMap)
+            foreach (var (orig, repl) in combinedMap)
                 _reverseColorMap[repl] = orig;
-            Logger.Log("Theme", "Color map loaded: " + colorMap.Count + " mappings for visual tree walk");
+            Logger.Log("Theme", "Color map loaded: " + combinedMap.Count + " mappings (" + colorMap.Count + " base + " + crossMapped + " cross-mapped)");
         }
 
         // === Phase 4: Schedule delayed visual tree walks ===
@@ -177,6 +280,10 @@ internal class ThemeEngine
 
         // Install layout interceptor for near-instant recoloring on navigation
         InstallLayoutInterceptor();
+
+        // === Phase 5: Update DWM title bar color ===
+        if (palette.TryGetValue("SolidBackgroundFillColorBase", out var bgHex))
+            UpdateTitleBarColor(bgHex);
 
         return true;
     }
@@ -372,6 +479,11 @@ internal class ThemeEngine
 
     private static readonly Dictionary<string, Dictionary<string, string>> TreeColorMaps = new()
     {
+        // IMPORTANT: Every replacement value must be UNIQUE within its theme map.
+        // The reverse map (for revert) maps replacement -> original. If two originals
+        // share a replacement, only one survives and the other can't be reverted.
+        // Use +-1 RGB values to make visually identical but unique replacements.
+
         ["crimson"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // Blue accents -> crimson
@@ -380,10 +492,13 @@ internal class ThemeEngine
             ["#ff2e59d1"] = "#ffa32417",
             ["#ff2148af"] = "#ff821d12",
             ["#ff5b88ff"] = "#ffe06b60",
-            ["#ff3366ff"] = "#ffd94a3d",
+            ["#ff3366ff"] = "#ffda4b3e",    // unique (not #ffd94a3d)
             ["#663b6af8"] = "#66c42b1c",
             ["#333b6af8"] = "#33c42b1c",
             ["#193b6af8"] = "#19c42b1c",
+
+            // ContentPages card background
+            ["#ff0f1923"] = "#ff2a1818",    // CardBg -> warm card
 
             // Structural dark backgrounds -> clearly warm/red tinted
             ["#ff0d1521"] = "#ff241414",    // Main dark bg -> warm dark
@@ -420,10 +535,13 @@ internal class ThemeEngine
             ["#ff2e59d1"] = "#ff1e402f",    // Pine
             ["#ff2148af"] = "#ff112318",    // Shadow
             ["#ff5b88ff"] = "#ff508a62",    // bright moss
-            ["#ff3366ff"] = "#ff3d7050",    // lighter moss
+            ["#ff3366ff"] = "#ff3e7151",    // unique (not #ff3d7050)
             ["#663b6af8"] = "#662a5a40",
             ["#333b6af8"] = "#332a5a40",
             ["#193b6af8"] = "#192a5a40",
+
+            // ContentPages card background
+            ["#ff0f1923"] = "#ff171c17",    // CardBg -> trestle card
 
             // Structural dark backgrounds -> trestle dark palette
             ["#ff0d1521"] = "#ff0f1210",    // Main dark bg -> trestle bg dark
@@ -439,7 +557,7 @@ internal class ThemeEngine
             // Dark borders -> trestle border colors
             ["#ff242c36"] = "#ff3d4a35",    // Border -> trestle primary border
             ["#ff1a2230"] = "#ff2a3528",    // Darker border -> trestle header
-            ["#ff505050"] = "#ff3d4a35",    // Gray border -> trestle border
+            ["#ff505050"] = "#ff3e4b36",    // Gray border -> unique (not #ff3d4a35)
 
             // Text: semi-transparent variants (warm tint)
             ["#a3f2f2f2"] = "#a3f0ece0",
@@ -460,15 +578,19 @@ internal class ThemeEngine
             ["#ff2e59d1"] = "#ff8890a0",
             ["#ff2148af"] = "#ff707888",
             ["#ff5b88ff"] = "#ffc0c8d0",
-            ["#ff3366ff"] = "#ffb0b8c0",
+            ["#ff3366ff"] = "#ffb1b9c1",    // unique (not #ffb0b8c0)
             ["#663b6af8"] = "#66a0a8b0",
             ["#333b6af8"] = "#33a0a8b0",
             ["#193b6af8"] = "#19a0a8b0",
 
+            // ContentPages card background
+            ["#ff0f1923"] = "#ff060606",    // CardBg -> near-black card
+
             // Structural dark backgrounds -> pure OLED black
+            // Each must be UNIQUE for reverse map (visually identical)
             ["#ff0d1521"] = "#ff000000",    // Main dark bg -> pure black
-            ["#ff07101b"] = "#ff000000",    // Darker bg -> pure black
-            ["#ff090e13"] = "#ff000000",    // Near-black bg -> pure black
+            ["#ff07101b"] = "#ff010101",    // Darker bg -> near-black (unique)
+            ["#ff090e13"] = "#ff020202",    // Near-black bg -> near-black (unique)
             ["#ff0a1a2e"] = "#ff050505",    // Another dark bg
             ["#ff101c2e"] = "#ff0a0a0a",    // Slightly lighter
             ["#ff121a26"] = "#ff080808",    // DM/chat panel bg
@@ -478,7 +600,7 @@ internal class ThemeEngine
 
             // Dark borders -> very dark gray
             ["#ff242c36"] = "#ff222222",
-            ["#ff1a2230"] = "#ff1a1a1a",
+            ["#ff1a2230"] = "#ff1b1b1b",    // unique (not #ff1a1a1a -> was too close to #ff1a2230 original)
             ["#ff505050"] = "#ff2a2a2a",
 
             // Text: slightly dimmer for OLED comfort
@@ -597,7 +719,12 @@ internal class ThemeEngine
     }
 
     /// <summary>
-    /// Walk the tree and restore all theme colors back to originals using the reverse map.
+    /// Walk the tree and restore themed controls to their original colors.
+    /// Hybrid approach: ClearValue first (lets DynamicResource reassert from
+    /// now-restored resources), then check the result. If ClearValue left the
+    /// property null/transparent or still showing the themed color, fall back
+    /// to explicit SetValue with the original color.
+    /// IMPORTANT: Resources must be restored BEFORE calling this method.
     /// </summary>
     private int WalkAndRestore(object visual, int depth)
     {
@@ -619,10 +746,28 @@ internal class ThemeEngine
 
                     if (_reverseColorMap.TryGetValue(colorStr, out var original))
                     {
-                        // On revert, ClearValue to remove our Style-priority override
-                        // and let the original style/template value reassert
                         var fieldName = AvaloniaReflection.PropertyToFieldName(propName);
-                        _r.SetValueStylePriority(visual, fieldName, _r.CreateBrush(original));
+
+                        // Step 1: ClearValue removes our LocalValue override.
+                        // If the control uses DynamicResource, it re-resolves to
+                        // the correct original from the now-restored resources.
+                        _r.ClearValueSilent(visual, fieldName);
+
+                        // Step 2: Verify. Read the property after ClearValue.
+                        // If it's null or still shows the themed color, the control
+                        // didn't have a DynamicResource binding - set explicitly.
+                        var newBrush = prop.GetValue(visual);
+                        var newColor = newBrush != null ? GetBrushColorString(newBrush) : null;
+
+                        if (newColor == null ||
+                            string.Equals(newColor, colorStr, StringComparison.OrdinalIgnoreCase))
+                        {
+                            // ClearValue didn't fix it - set the original explicitly
+                            var originalBrush = _r.CreateBrush(original);
+                            if (originalBrush != null)
+                                _r.SetValueStylePriority(visual, fieldName, originalBrush);
+                        }
+
                         count++;
                     }
                 }
@@ -644,30 +789,18 @@ internal class ThemeEngine
         _walkTimer?.Dispose();
         _walkTimer = null;
 
-        // Walk all windows and restore original colors using reverse map
-        if (_activeThemeName != null && _reverseColorMap != null)
-        {
-            try
-            {
-                int restored = 0;
-                foreach (var window in _r.GetAllWindows())
-                {
-                    try { restored += WalkAndRestore(window, 0); }
-                    catch { }
-                }
-                Logger.Log("Theme", "Revert walk: " + restored + " controls restored to originals");
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Theme", "Revert walk error: " + ex.Message);
-            }
-        }
+        // Disable layout interceptor IMMEDIATELY to prevent re-applying colors during revert.
+        // WalkAndRestore uses _reverseColorMap (not _activeColorMap), so this is safe.
+        _activeColorMap = null;
 
-        // Restore Styles[0].Resources originals
-        if (_savedOriginals.Count > 0)
+        // === Phase 1: Restore all resources FIRST ===
+        // This must happen BEFORE the visual tree walk so that ClearValue
+        // causes DynamicResource bindings to resolve to the correct originals.
+
+        var styleRes = _r.GetStyleResources(0);
+        if (styleRes != null)
         {
-            var styleRes = _r.GetStyleResources(0);
-            if (styleRes != null)
+            if (_savedOriginals.Count > 0)
             {
                 int restored = 0;
                 foreach (var (key, original) in _savedOriginals)
@@ -684,7 +817,22 @@ internal class ThemeEngine
                 }
                 Logger.Log("Theme", "Restored " + restored + " original resources in Styles[0]");
             }
-            _savedOriginals.Clear();
+
+            // Remove keys that were ADDED by us (had no original value)
+            if (_addedKeys.Count > 0)
+            {
+                int removed = 0;
+                foreach (var key in _addedKeys)
+                {
+                    try
+                    {
+                        if (_r.RemoveResource(styleRes, key))
+                            removed++;
+                    }
+                    catch { }
+                }
+                Logger.Log("Theme", "Removed " + removed + "/" + _addedKeys.Count + " added keys from Styles[0]");
+            }
         }
 
         // Remove MergedDictionary
@@ -707,9 +855,134 @@ internal class ThemeEngine
             _injectedDict = null;
         }
 
+        // === Phase 2: Walk visual tree with hybrid ClearValue + SetValue ===
+        // Now that resources are restored, ClearValue lets DynamicResource
+        // bindings re-resolve to the correct originals. For controls without
+        // DynamicResource, the fallback SetValue handles them.
+
+        // Save reverse map for follow-up walks (before clearing state)
+        var savedReverseMap = _reverseColorMap;
+        var savedThemeName = _activeThemeName;
+
+        if (savedThemeName != null && savedReverseMap != null)
+        {
+            try
+            {
+                int restored = 0;
+                foreach (var topLevel in _r.GetAllTopLevels())
+                {
+                    try { restored += WalkAndRestore(topLevel, 0); }
+                    catch { }
+                }
+                Logger.Log("Theme", "Revert walk: " + restored + " controls restored");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Theme", "Revert walk error: " + ex.Message);
+            }
+        }
+
+        _savedOriginals.Clear();
+        _addedKeys.Clear();
+
+        // Restore default DWM title bar color
+        UpdateTitleBarColor(DefaultDarkBg);
+
         _activeThemeName = null;
-        _activeColorMap = null;
         _reverseColorMap = null;
+
+        // === Phase 3: Schedule follow-up revert walks ===
+        // Late-loaded controls (lazy panels, popups) may still show old theme
+        // colors after the one-shot walk. Schedule a few follow-ups.
+        if (savedReverseMap != null)
+        {
+            ScheduleRevertFollowUps(savedReverseMap);
+        }
+    }
+
+    /// <summary>
+    /// Schedule delayed revert walks to catch controls loaded after the initial revert.
+    /// Uses the saved reverse map to find and restore remaining themed controls.
+    /// </summary>
+    private void ScheduleRevertFollowUps(Dictionary<string, string> reverseMap)
+    {
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            foreach (var delayMs in new[] { 500, 1500, 3000 })
+            {
+                Thread.Sleep(delayMs);
+                // Stop if a new theme was applied while we were waiting
+                if (_activeThemeName != null) return;
+
+                _r.RunOnUIThread(() =>
+                {
+                    try
+                    {
+                        int restored = 0;
+                        foreach (var topLevel in _r.GetAllTopLevels())
+                        {
+                            try { restored += WalkAndRestoreWithMap(topLevel, 0, reverseMap); }
+                            catch { }
+                        }
+                        if (restored > 0)
+                            Logger.Log("Theme", "Revert follow-up (+" + delayMs + "ms): " + restored + " restored");
+                    }
+                    catch { }
+                });
+            }
+        });
+    }
+
+    /// <summary>
+    /// Walk and restore using a specific reverse map (for follow-up revert walks).
+    /// Uses ClearValue + SetValue fallback, same as WalkAndRestore.
+    /// </summary>
+    private int WalkAndRestoreWithMap(object visual, int depth, Dictionary<string, string> reverseMap)
+    {
+        if (depth > 50) return 0;
+        int count = 0;
+
+        try
+        {
+            foreach (var propName in new[] { "Background", "Foreground", "BorderBrush", "Fill" })
+            {
+                var prop = visual.GetType().GetProperty(propName);
+                if (prop == null) continue;
+                try
+                {
+                    var brush = prop.GetValue(visual);
+                    if (brush == null) continue;
+                    var colorStr = GetBrushColorString(brush);
+                    if (colorStr == null) continue;
+
+                    if (reverseMap.TryGetValue(colorStr, out var original))
+                    {
+                        var fieldName = AvaloniaReflection.PropertyToFieldName(propName);
+                        _r.ClearValueSilent(visual, fieldName);
+
+                        var newBrush = prop.GetValue(visual);
+                        var newColor = newBrush != null ? GetBrushColorString(newBrush) : null;
+
+                        if (newColor == null ||
+                            string.Equals(newColor, colorStr, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var originalBrush = _r.CreateBrush(original);
+                            if (originalBrush != null)
+                                _r.SetValueStylePriority(visual, fieldName, originalBrush);
+                        }
+                        count++;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+        {
+            count += WalkAndRestoreWithMap(child, depth + 1, reverseMap);
+        }
+        return count;
     }
 
     /// <summary>

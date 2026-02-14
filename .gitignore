@@ -20,14 +20,18 @@ site/.astro/
 
 # Tauri
 installer/src-tauri/target/
+installer/src-tauri/artifacts/
 installer/dist/
 
 # C# build output
 hook/bin/
 hook/obj/
-hook-test/bin/
-hook-test/obj/
+hook-test/**/bin/
+hook-test/**/obj/
 
 # Env
 .env
 .env.*
+
+# Windows junk
+nul

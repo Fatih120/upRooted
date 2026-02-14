@@ -4,6 +4,7 @@ import {
   uninstallUprooted,
   repairUprooted,
   getUprootedVersion,
+  checkRootRunning,
   type DetectionResult,
 } from "../lib/tauri.js";
 
@@ -45,10 +46,23 @@ async function runDetection(): Promise<void> {
     log(`profile: ${detection.profile_dir}`);
     log(`${detection.html_files.length} HTML files detected`);
 
-    if (detection.is_installed) {
-      log("uprooted is currently installed", "success");
+    const hs = detection.hook_status;
+    if (hs.files_ok) {
+      log("hook files deployed", "success");
     } else {
-      log("uprooted is not installed");
+      log("hook files not deployed");
+    }
+
+    if (hs.env_ok) {
+      log("environment variables set", "success");
+    } else {
+      log("environment variables not set");
+    }
+
+    if (detection.is_installed) {
+      log("HTML patches applied", "success");
+    } else {
+      log("HTML not patched");
     }
 
     updateStatusDisplay();
@@ -62,6 +76,9 @@ function updateStatusDisplay(): void {
   const el = document.getElementById("status-rows");
   if (!el || !detection) return;
 
+  const hs = detection.hook_status;
+  const allGood = detection.root_found && hs.files_ok && hs.env_ok && detection.is_installed;
+
   el.innerHTML = `
     <div class="status-row">
       ${statusDot(detection.root_found ? "green" : "red")}
@@ -74,10 +91,21 @@ function updateStatusDisplay(): void {
       <span class="status-value">${detection.html_files.length} HTML files detected</span>
     </div>
     <div class="status-row">
-      ${statusDot(detection.is_installed ? "green" : "red")}
-      <span class="status-label">Uprooted</span>
-      <span class="status-value">${detection.is_installed ? "installed" : "not installed"}</span>
+      ${statusDot(hs.files_ok ? "green" : "red")}
+      <span class="status-label">Hook DLLs</span>
+      <span class="status-value">${hs.files_ok ? "deployed" : "not deployed"}</span>
     </div>
+    <div class="status-row">
+      ${statusDot(hs.env_ok ? "green" : "red")}
+      <span class="status-label">Env Vars</span>
+      <span class="status-value">${hs.env_ok ? "configured" : "not set"}</span>
+    </div>
+    <div class="status-row">
+      ${statusDot(detection.is_installed ? "green" : "red")}
+      <span class="status-label">HTML Patch</span>
+      <span class="status-value">${detection.is_installed ? "applied" : "not applied"}</span>
+    </div>
+    ${allGood ? '<div class="status-note success">restart Root to activate</div>' : ""}
   `;
 }
 
@@ -88,9 +116,11 @@ function updateButtons(): void {
 
   if (!detection) return;
 
-  if (installBtn) installBtn.disabled = !detection.root_found || detection.is_installed;
-  if (uninstallBtn) uninstallBtn.disabled = !detection.is_installed;
-  if (repairBtn) repairBtn.disabled = !detection.is_installed;
+  const isInstalled = detection.is_installed || detection.hook_status.files_ok || detection.hook_status.env_ok;
+
+  if (installBtn) installBtn.disabled = !detection.root_found || isInstalled;
+  if (uninstallBtn) uninstallBtn.disabled = !isInstalled;
+  if (repairBtn) repairBtn.disabled = !isInstalled;
 }
 
 function setButtonsDisabled(disabled: boolean): void {
@@ -102,6 +132,19 @@ function setButtonsDisabled(disabled: boolean): void {
 
 async function handleInstall(): Promise<void> {
   setButtonsDisabled(true);
+
+  // Check if Root is running
+  try {
+    const running = await checkRootRunning();
+    if (running) {
+      log("Root.exe is currently running. Please close it before installing.", "error");
+      setButtonsDisabled(false);
+      return;
+    }
+  } catch {
+    // If check fails, proceed anyway
+  }
+
   log("installing uprooted...");
   try {
     const result = await installUprooted();
@@ -110,6 +153,7 @@ async function handleInstall(): Promise<void> {
       for (const f of result.files_patched) {
         log(`  patched: ${f}`, "success");
       }
+      log("restart Root to activate uprooted", "success");
     } else {
       log(result.message, "error");
     }
@@ -155,7 +199,7 @@ async function handleRepair(): Promise<void> {
 }
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.1.0";
+  let version = "0.1.2";
   try {
     version = await getUprootedVersion();
   } catch {

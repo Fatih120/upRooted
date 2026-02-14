@@ -735,3 +735,65 @@ In order of importance:
 - Root adds integrity checks to its HTML files
 - Root switches from DotNetBrowser to a different embedded browser
 - Root changes bridge global names (`__nativeToWebRtc`, `__webRtcToNative`)
+
+---
+
+## 10. Installer
+
+The Uprooted Installer is a self-contained Tauri v2 application (`Uprooted.exe`) that manages the full install/uninstall lifecycle on Windows.
+
+### What it does
+
+1. **Deploys files** -- Extracts 5 embedded binaries to `%LOCALAPPDATA%\Root\uprooted\`:
+   - `uprooted_profiler.dll` -- CLR profiler (native C DLL)
+   - `UprootedHook.dll` + `UprootedHook.deps.json` -- Managed hook assembly
+   - `uprooted-preload.js` + `uprooted.css` -- TypeScript injection payload
+2. **Sets environment variables** -- Configures user-scoped CLR profiler env vars via the Windows registry:
+   - `CORECLR_ENABLE_PROFILING=1`
+   - `CORECLR_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}`
+   - `CORECLR_PROFILER_PATH=%LOCALAPPDATA%\Root\uprooted\uprooted_profiler.dll`
+   - `DOTNET_ReadyToRun=0`
+   - Broadcasts `WM_SETTINGCHANGE` so new processes see the updated env vars immediately
+3. **Patches HTML** -- Injects `<script>` and `<link>` tags into Root's profile HTML files (WebRtcBundle + RootApps)
+4. **Uninstall** -- Reverses all three steps: removes env vars, restores HTML backups, deletes deployed files
+5. **Repair** -- Re-deploys files, re-sets env vars, re-patches HTML (handles Root updates that overwrite HTML)
+
+### File locations
+
+| Path | Content |
+|------|---------|
+| `%LOCALAPPDATA%\Root\uprooted\` | All deployed binaries (profiler, hook, JS, CSS) |
+| `%LOCALAPPDATA%\Root\uprooted\profiler.log` | Profiler debug log (written at runtime) |
+| `HKCU\Environment` | CLR profiler env vars (user-scoped, persistent) |
+| Root profile `*.html` | Patched HTML files (with `.uprooted.bak` backups) |
+
+### Build command
+
+```powershell
+powershell -File scripts/build_installer.ps1
+```
+
+This pipeline:
+1. `pnpm build` -- TypeScript layer -> `dist/uprooted-preload.js` + `dist/uprooted.css`
+2. `dotnet build hook/ -c Release` -- C# hook -> `UprootedHook.dll`
+3. `cl.exe` via VS Build Tools -- Profiler -> `uprooted_profiler.dll`
+4. Stages all 5 files to `installer/src-tauri/artifacts/`
+5. `pnpm tauri build` -- Tauri app -> `installer/src-tauri/target/release/Uprooted Installer.exe`
+
+### Frontend status display
+
+The installer shows 5 status rows:
+- **Root.exe** -- Whether the Root executable was found
+- **Profile** -- Number of HTML files detected in the profile directory
+- **Hook DLLs** -- Whether all 5 files are deployed to the install directory
+- **Env Vars** -- Whether CLR profiler env vars are correctly set in the registry
+- **HTML Patch** -- Whether the HTML injection markers are present
+
+### Testing
+
+Use `scripts/test_sandbox.wsb` to launch Windows Sandbox with the built .exe mapped in:
+1. Install Root in the sandbox
+2. Run `Uprooted Installer.exe` and click Install
+3. Verify all 5 status rows turn green
+4. Launch Root -- check for profiler log + hook sidebar injection
+5. Click Uninstall -- verify everything reverts

@@ -1037,6 +1037,39 @@ internal class AvaloniaReflection
         }
     }
 
+    /// <summary>
+    /// Silent version of ClearValue for batch operations (e.g. theme revert walk).
+    /// Removes the local value override, letting DynamicResource bindings reassert.
+    /// </summary>
+    public bool ClearValueSilent(object? control, string propertyFieldName)
+    {
+        if (control == null) return false;
+        try
+        {
+            var field = control.GetType().GetField(propertyFieldName,
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+            if (field == null) return false;
+
+            var avaloniaProperty = field.GetValue(null);
+            if (avaloniaProperty == null) return false;
+
+            var clearMethods = control.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.Name == "ClearValue" && !m.IsGenericMethod && m.GetParameters().Length == 1);
+
+            foreach (var method in clearMethods)
+            {
+                var paramType = method.GetParameters()[0].ParameterType;
+                if (paramType.IsAssignableFrom(avaloniaProperty.GetType()))
+                {
+                    method.Invoke(control, new[] { avaloniaProperty });
+                    return true;
+                }
+            }
+            return false;
+        }
+        catch { return false; }
+    }
+
     // ===== SetValue with BindingPriority =====
 
     private System.Reflection.MethodInfo? _setValueWithPriority;
@@ -1497,6 +1530,27 @@ internal class AvaloniaReflection
         {
             Logger.Log("Reflection", $"AddResource({key}) error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Removes a key from a ResourceDictionary.
+    /// </summary>
+    public bool RemoveResource(object? dict, string key)
+    {
+        if (dict == null) return false;
+        try
+        {
+            var removeMethod = dict.GetType().GetMethod("Remove",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(object) }, null);
+            if (removeMethod != null)
+            {
+                removeMethod.Invoke(dict, new object[] { key });
+                return true;
+            }
+        }
+        catch { }
+        return false;
     }
 
     /// <summary>
