@@ -222,7 +222,7 @@ pub fn kill_root_processes() -> u32 {
         for pid in &pids {
             unsafe {
                 let handle = OpenProcess(PROCESS_TERMINATE, 0, *pid);
-                if handle != 0 {
+                if !handle.is_null() {
                     if TerminateProcess(handle, 1) != 0 {
                         killed += 1;
                     }
