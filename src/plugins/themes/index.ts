@@ -41,6 +41,11 @@ export default {
   },
 
   start() {
+    // Flush ALL known variables first so nothing sticks from a previous theme
+    for (const name of allVarNames) {
+      removeCssVariable(name);
+    }
+
     const settings = window.__UPROOTED_SETTINGS__?.plugins?.themes?.config;
     const themeName = (settings?.theme as string) ?? "default";
 
