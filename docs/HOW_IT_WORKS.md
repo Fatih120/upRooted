@@ -174,7 +174,7 @@ src_dump/Libs/JS/rootapp-desktop-webrtc/
         └── permission.js          # 22 channel + 14 community permission enums
 ```
 
-We now had the complete original TypeScript source for the WebRTC layer, full gRPC client definitions for all 27 backend services (163 methods), and every protobuf message schema.
+We now had the complete original TypeScript source for the WebRTC layer, full gRPC client definitions for all 27 backend services (163 methods), and every protobuf message schema. The permission module contains 21 channel and 14 community permission enums.
 
 ---
 
@@ -184,7 +184,7 @@ We now had the complete original TypeScript source for the WebRTC layer, full gR
 
 The extracted `baseWebRtcBridge.ts` revealed two interfaces with 70 combined methods:
 
-**`INativeToWebRtc`** (42 methods) — .NET host controlling the browser:
+**`INativeToWebRtc`** (41 methods) — .NET host controlling the browser:
 ```typescript
 initialize(params: InitializeParams): void     // Start WebRTC session
 kick(userId: string): void                     // Kick user from call
@@ -192,16 +192,16 @@ updateMyPermission(perms: Permissions): void   // Permission escalation
 receiveRawPacket(buffer: ArrayBuffer): void    // Inject signaling packets
 updateProfile(profile: UserProfile): void      // Spoof user profile
 setTheme(theme: ThemeConfig): void             // Set UI theme
-// ... 36 more methods
+// ... 35 more methods
 ```
 
-**`IWebRtcToNative`** (28 methods) — browser notifying .NET host:
+**`IWebRtcToNative`** (29 methods) — browser notifying .NET host:
 ```typescript
 kickPeer(userId: string): void                 // Kick any user
 setAdminMute(deviceId: string, muted: boolean): void
 setAdminDeafen(deviceId: string, deaf: boolean): void
 setSpeaking(speaking: boolean, deviceId: string, userId: string): void
-// ... 24 more methods
+// ... 25 more methods
 ```
 
 Zero authorization checks on any bridge method. Any code running in the DotNetBrowser context has full bridge access.
@@ -681,7 +681,7 @@ When the settings page opens:
 **1. Section header**
 
 We create an `"UPROOTED"` text matching Root's `"APP SETTINGS"` style:
-- FontSize 11, FontWeight 700, color `#66f2f2f2`, margin matching Root's header
+- FontSize 12, FontWeight 500 (Medium), color `#66f2f2f2`, margin matching Root's header
 
 **2. Navigation items**
 
@@ -690,17 +690,17 @@ Three clickable items: "Uprooted", "Plugins", "Themes". Each item is:
 ```
 Border (highlight, CornerRadius=12, transparent background)
   └── StackPanel (horizontal)
-        └── TextBlock ("Uprooted", FontSize=14, color #a3f2f2f2)
+        └── TextBlock ("Uprooted", FontSize=14, color #f2f2f2)
 ```
 
 With event handlers:
-- `PointerEntered` → set highlight background to `#0Cffffff` (subtle hover)
+- `PointerEntered` → set highlight background to `#0Dffffff` (subtle hover)
 - `PointerExited` → set highlight background to transparent
 - `PointerPressed` → show content page, update active highlight
 
 **3. Version text**
 
-Inside Root's existing grey version box, we insert `"Uprooted 0.1.1"` as a TextBlock at index 0, using Root's own styling (FontSize 11, color `#66f2f2f2`).
+Inside Root's existing grey version box, we insert an `"Uprooted {version}"` TextBlock at index 0, using Root's own styling (FontSize 10, color `#66f2f2f2`).
 
 **4. Re-ordering**
 
@@ -749,7 +749,7 @@ foregroundProperty.SetValue(tb, ParseBrush("#fff2f2f2"));
 
 ### What the pages look like
 
-**Uprooted page**: Framework info card with version, description, and status indicators. Matches Root's card styling exactly (background `#081408`, corner radius 12, border `#19ffffff` thickness 0.5, inner padding 24px).
+**Uprooted page**: Framework info card with version, description, and status indicators. Matches Root's card styling exactly (background `#0f1923`, corner radius 12, border `#19ffffff` thickness 0.5, inner padding 24px).
 
 **Plugins page**: Lists registered plugins with name, version, author, and enabled/disabled badges. Currently display-only.
 
