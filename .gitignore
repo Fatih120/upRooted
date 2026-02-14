@@ -18,6 +18,16 @@ Thumbs.db
 # Astro
 site/.astro/
 
+# Tauri
+installer/src-tauri/target/
+installer/dist/
+
+# C# build output
+hook/bin/
+hook/obj/
+hook-test/bin/
+hook-test/obj/
+
 # Env
 .env
 .env.*

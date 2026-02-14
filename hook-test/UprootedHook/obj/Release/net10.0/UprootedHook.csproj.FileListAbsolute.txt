@@ -1,0 +1,14 @@
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\bin\Release\net10.0\UprootedHook.deps.json
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\bin\Release\net10.0\UprootedHook.runtimeconfig.json
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\bin\Release\net10.0\UprootedHook.dll
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\bin\Release\net10.0\UprootedHook.pdb
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.AssemblyInfoInputs.cache
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.AssemblyInfo.cs
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.csproj.CoreCompileInputs.cache
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.sourcelink.json
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.dll
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\refint\UprootedHook.dll
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.pdb
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\UprootedHook.genruntimeconfig.cache
+C:\Users\bash\claude\Root.Dev\uprooted\hook-test\UprootedHook\obj\Release\net10.0\ref\UprootedHook.dll
