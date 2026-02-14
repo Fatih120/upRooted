@@ -2,21 +2,17 @@ namespace Uprooted;
 
 /// <summary>
 /// Timer-based monitor that detects when the settings page is open and injects
-/// UPROOTED UI using Avalonia's OverlayLayer -- a Canvas at the Window level,
-/// completely outside the settings page visual tree.
-///
-/// This avoids the freeze-on-back-button caused by modifying the settings page tree
-/// (OnDetachedFromVisualTreeCore walks all VisualChildren during teardown).
+/// UPROOTED UI directly into Root's visual tree (Vencord-style).
 ///
 /// Architecture:
-///   Window -> VisualLayerManager -> OverlayLayer (Canvas) <- OUR CONTROLS
-///                                -> ContentPresenter (Root's normal UI)
-///                                -> AdornerLayer
+/// - Sidebar items injected into NavContainer StackPanel (below the ListBox)
+/// - Content pages placed directly into Root's content Panel
+/// - Back button PointerPressed intercepted to clean up BEFORE teardown
+///   (prevents the freeze caused by OnDetachedFromVisualTreeCore walking modified tree)
 /// </summary>
 internal class SidebarInjector
 {
     private const string InjectedTag = "uprooted-injected";
-    private const string ContentTag = "uprooted-content";
     private const int PollIntervalMs = 200;
 
     private readonly AvaloniaReflection _r;
@@ -25,28 +21,30 @@ internal class SidebarInjector
     private Timer? _timer;
     private readonly object _window;
 
-    // OverlayLayer state
-    private object? _overlayLayer;        // OverlayLayer canvas (Window-level)
-    private object? _sidebarOverlay;      // Our sidebar panel in OverlayLayer
-    private object? _contentOverlay;      // Our content page in OverlayLayer
-
-    // Anchors for positioning (elements in Root's tree we DON'T modify)
-    private object? _sidebarAnchor;       // navContainer child[1] (version Border) - position reference
-    private object? _contentAnchor;       // layout.ContentArea - position reference
+    // Root's original controls (read + restore references)
     private object? _listBox;
+    private object? _navContainer;
+    private object? _contentPanel;
+    private object? _backButton;
+    private object? _sidebarGrid;
 
-    // Elements we hide (Opacity=0, IsHitTestVisible=false) to make room
-    private object? _hiddenVersion;       // Border (version info)
-    private object? _hiddenSignOut;       // ContentControl (sign out)
+    // Injection state
+    private List<object> _injectedControls = new();   // All controls we added to NavContainer
+    private object? _scrollViewerWrapper;               // ScrollViewer wrapping NavContainer (if added)
+    private object? _originalVersionBorder;              // Saved reference for restoration
+    private object? _originalSignOutControl;             // Saved reference for restoration
+    private int _advancedIndex = -1;                     // "Advanced" position in ListBox (for diagnostics)
 
-    // Navigation state
-    private string? _activePage;
-    private bool _ourItemClicked;
+    // Content state
+    private object? _activeContentPage;                  // Our page currently in content Panel
+    private string? _activePage;                         // "uprooted" | "plugins" | "themes" | null
+    private int _lastListBoxIdx = -1;                    // For selection change detection
+    private bool _injected;                              // Whether we've injected
+    private int _aliveCheckCounter;                      // Throttle alive checks
 
-    // Cached positions for change detection
-    private double _lastSidebarLeft, _lastSidebarTop;
-    private double _lastContentLeft, _lastContentTop;
-    private double _lastContentW, _lastContentH;
+    // Version box injection (grey box at bottom of sidebar)
+    private object? _versionTextBlock;                   // "Uprooted 0.1.1" TextBlock in version box
+    private object? _versionContainer;                   // StackPanel containing version texts
 
     // Thread safety
     private int _injecting;
@@ -62,7 +60,7 @@ internal class SidebarInjector
 
     public void StartMonitoring()
     {
-        Logger.Log("Injector", "Starting settings page monitor (OverlayLayer mode)");
+        Logger.Log("Injector", "Starting settings page monitor (direct injection mode)");
         _timer = new Timer(OnTimerTick, null, PollIntervalMs, PollIntervalMs);
     }
 
@@ -75,7 +73,6 @@ internal class SidebarInjector
     private void OnTimerTick(object? state)
     {
         if (Interlocked.CompareExchange(ref _injecting, 1, 0) != 0) return;
-
         try
         {
             _r.RunOnUIThread(() =>
@@ -85,7 +82,6 @@ internal class SidebarInjector
                 finally { Interlocked.Exchange(ref _injecting, 0); }
             });
 
-            // Safety timeout to prevent deadlock
             Task.Delay(3000).ContinueWith(_ =>
             {
                 Interlocked.CompareExchange(ref _injecting, 0, 1);
@@ -100,418 +96,361 @@ internal class SidebarInjector
 
     private void CheckAndInject()
     {
-        if (_sidebarOverlay != null)
+        if (_injected)
         {
-            // Overlays exist -- check if settings page is still open
-            var layout = _walker.FindSettingsLayout(_window);
-            if (layout == null)
+            // Poll ListBox selection every tick for responsiveness
+            if (_listBox != null)
             {
-                // Settings closed -- clean up overlays
-                Logger.Log("Injector", "Settings page closed, cleaning up overlays");
-                CleanupOverlays();
-                return;
+                int currentIdx = _r.GetSelectedIndex(_listBox);
+                if (currentIdx >= 0 && currentIdx != _lastListBoxIdx)
+                {
+                    Logger.Log("Injector", $"ListBox selection changed {_lastListBoxIdx} -> {currentIdx}");
+                    _lastListBoxIdx = currentIdx;
+                    RemoveContentPage();
+                }
             }
 
-            // Settings still open -- update positions and check navigation
-            UpdateOverlayPositions();
-
-            // Check if user clicked a Root sidebar item (ListBox selection changed)
-            if (_contentOverlay != null && _listBox != null)
+            // Throttled alive check: every 5 ticks (~1 second), verify settings page still open.
+            // Uses lightweight text search instead of full FindSettingsLayout to avoid chatty logs.
+            _aliveCheckCounter++;
+            if (_aliveCheckCounter % 5 == 0)
             {
-                int selectedIdx = _r.GetSelectedIndex(_listBox);
-                if (selectedIdx >= 0)
+                var appSettings = _walker.FindFirstTextBlock(_window, "APP SETTINGS")
+                    ?? _walker.FindFirstTextBlock(_window, "App Settings");
+                if (appSettings == null)
                 {
-                    Logger.Log("Injector", $"ListBox selection changed to {selectedIdx}, removing content overlay");
-                    RemoveContentOverlay();
+                    Logger.Log("Injector", "Settings page closed (not found in tree), nulling state");
+                    NullState();
                 }
             }
             return;
         }
 
-        // No overlays -- check if settings page just opened
+        // Not injected -- check if settings page just opened
         var newLayout = _walker.FindSettingsLayout(_window);
         if (newLayout == null) return;
 
-        Logger.Log("Injector", "Settings page detected, creating overlays via OverlayLayer");
+        Logger.Log("Injector", "Settings page detected, injecting (direct injection mode)");
 
         if (!_diagnosticsDone)
         {
             _diagnosticsDone = true;
-            DumpSidebarStyling(newLayout);
+            try { DumpVersionRecon(newLayout); }
+            catch (Exception ex) { Logger.Log("Recon", $"DumpVersionRecon error: {ex.Message}"); }
         }
 
-        CreateOverlays(newLayout);
+        InjectIntoSettings(newLayout);
     }
 
-    // ===== Overlay lifecycle =====
+    // ===== Core injection =====
 
-    private void CreateOverlays(SettingsLayout layout)
+    private void InjectIntoSettings(SettingsLayout layout)
     {
         try
         {
-            // Step 1: Get the OverlayLayer
-            _overlayLayer = _r.GetOverlayLayer(_window);
-            if (_overlayLayer == null)
+            // Guard: check if we already have injected controls in the tree
+            // (protects against re-injection from false detach detection)
+            if (_walker.HasTaggedDescendant(layout.NavContainer, InjectedTag))
             {
-                Logger.Log("Injector", "OverlayLayer not found on window, skipping injection");
+                Logger.Log("Injector", "Skipping injection: already-injected controls found in NavContainer");
+                // Re-acquire references and mark as injected
+                _navContainer = layout.NavContainer;
+                _listBox = layout.ListBox;
+                _contentPanel = layout.ContentArea;
+                _backButton = layout.BackButton;
+                _sidebarGrid = layout.SidebarGrid;
+                _lastListBoxIdx = _listBox != null ? _r.GetSelectedIndex(_listBox) : -1;
+                _injected = true;
                 return;
             }
-            Logger.Log("Injector", $"OverlayLayer resolved: {_overlayLayer.GetType().Name}");
 
-            // Step 2: Find anchors in Root's tree (we read positions but don't modify)
+            // Store references
             _listBox = layout.ListBox;
-            var navContainer = layout.NavContainer;
-            var navChildCount = _r.GetChildCount(navContainer);
+            _navContainer = layout.NavContainer;
+            _contentPanel = layout.ContentArea;
+            _backButton = layout.BackButton;
+            _sidebarGrid = layout.SidebarGrid;
+            _advancedIndex = layout.AdvancedIndex;
+            _originalVersionBorder = layout.VersionBorder;
+            _originalSignOutControl = layout.SignOutControl;
 
-            // navContainer is a StackPanel with children:
-            //   [0] ListBox (14 items, W=250)
-            //   [1] Border (version info "Root Version 0.9.86")
-            //   [2] ContentControl (sign out)
-            _hiddenVersion = navChildCount > 1 ? _r.GetChild(navContainer, 1) : null;
-            _hiddenSignOut = navChildCount > 2 ? _r.GetChild(navContainer, 2) : null;
-            _sidebarAnchor = _hiddenVersion ?? navContainer;
-            _contentAnchor = layout.ContentArea;
-
-            Logger.Log("Injector", $"NavContainer: {navContainer.GetType().Name}, {navChildCount} children");
-            for (int i = 0; i < navChildCount && i < 5; i++)
+            // Step 1: Subscribe PointerPressed on back button for freeze prevention
+            if (_backButton != null)
             {
-                var child = _r.GetChild(navContainer, i);
-                Logger.Log("Injector", $"  Child[{i}]: {child?.GetType().Name}");
+                _r.SubscribeEvent(_backButton, "PointerPressed", () =>
+                {
+                    Logger.Log("Injector", "Back button pressed -- cleaning up injection BEFORE teardown");
+                    CleanupInjection();
+                });
+                Logger.Log("Injector", $"Back button PointerPressed subscribed: {_backButton.GetType().Name}");
+            }
+            else
+            {
+                Logger.Log("Injector", "WARNING: Back button not found, freeze prevention unavailable");
             }
 
-            // Step 3: Calculate sidebar position
-            var sidebarPos = _r.TranslatePoint(_sidebarAnchor, 0, 0, _overlayLayer);
-            if (sidebarPos == null)
+            // Step 2: Save and remove version Border and sign-out from NavContainer
+            if (_navContainer != null)
             {
-                Logger.Log("Injector", "TranslatePoint failed for sidebar anchor, trying bounds fallback");
-                sidebarPos = GetBoundsPosition(_sidebarAnchor);
-            }
-            if (sidebarPos == null)
-            {
-                Logger.Log("Injector", "Could not determine sidebar position, aborting");
-                _overlayLayer = null;
-                return;
+                if (_originalSignOutControl != null)
+                    _r.RemoveChild(_navContainer, _originalSignOutControl);
+                if (_originalVersionBorder != null)
+                    _r.RemoveChild(_navContainer, _originalVersionBorder);
             }
 
-            var sidebarBounds = _r.GetBounds(_sidebarAnchor);
-            double sidebarWidth = sidebarBounds?.W ?? 250;
+            // Step 3: Build and insert our controls into NavContainer
+            BuildAndInsertNavItems(layout);
 
-            Logger.Log("Injector", $"Sidebar anchor position: ({sidebarPos.Value.X:F0}, {sidebarPos.Value.Y:F0}), width={sidebarWidth:F0}");
+            // Step 4: Wrap NavContainer in ScrollViewer for sidebar scrolling
+            WrapInScrollViewer();
 
-            // Step 4: Build sidebar overlay
-            _sidebarOverlay = BuildSidebarOverlay(layout, sidebarWidth);
-            if (_sidebarOverlay == null)
-            {
-                Logger.Log("Injector", "Failed to build sidebar overlay");
-                _overlayLayer = null;
-                return;
-            }
+            // Step 5: Inject version text into the grey version box
+            InjectVersionText();
 
-            _r.SetTag(_sidebarOverlay, InjectedTag);
-            _r.SetCanvasPosition(_sidebarOverlay, sidebarPos.Value.X, sidebarPos.Value.Y);
-            _lastSidebarLeft = sidebarPos.Value.X;
-            _lastSidebarTop = sidebarPos.Value.Y;
+            // Step 6: Record current ListBox selection
+            _lastListBoxIdx = _listBox != null ? _r.GetSelectedIndex(_listBox) : -1;
 
-            _r.AddToOverlay(_overlayLayer, _sidebarOverlay);
-
-            // Step 5: Hide original version + sign out (preserve layout space with Opacity=0)
-            if (_hiddenVersion != null)
-            {
-                _r.SetOpacity(_hiddenVersion, 0);
-                _r.SetIsHitTestVisible(_hiddenVersion, false);
-            }
-            if (_hiddenSignOut != null)
-            {
-                _r.SetOpacity(_hiddenSignOut, 0);
-                _r.SetIsHitTestVisible(_hiddenSignOut, false);
-            }
-
-            // Step 6: Subscribe to ListBox clicks for navigation
-            SubscribeListBoxSelection();
-
-            Logger.Log("Injector", "Overlays created successfully");
+            _injected = true;
+            Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
+                $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"CreateOverlays error: {ex}");
-            CleanupOverlays();
+            Logger.Log("Injector", $"InjectIntoSettings error: {ex}");
+            CleanupInjection();
         }
     }
 
-    private void CleanupOverlays()
+    private void CleanupInjection()
     {
+        if (!_injected) return;
+        Logger.Log("Injector", "CleanupInjection: removing all injected controls");
+
         try
         {
-            if (_overlayLayer != null)
+            // Step 1: Unwrap ScrollViewer if we added one
+            UnwrapScrollViewer();
+
+            // Step 2: Remove all injected controls from NavContainer
+            if (_navContainer != null)
             {
-                if (_sidebarOverlay != null)
-                    _r.RemoveFromOverlay(_overlayLayer, _sidebarOverlay);
-                if (_contentOverlay != null)
-                    _r.RemoveFromOverlay(_overlayLayer, _contentOverlay);
+                foreach (var ctrl in _injectedControls)
+                {
+                    try { _r.RemoveChild(_navContainer, ctrl); }
+                    catch { }
+                }
             }
 
-            // Restore hidden elements
-            if (_hiddenVersion != null)
+            // Step 3: Re-add original version Border and sign-out to NavContainer
+            if (_navContainer != null)
             {
-                _r.SetOpacity(_hiddenVersion, 1);
-                _r.SetIsHitTestVisible(_hiddenVersion, true);
+                if (_originalVersionBorder != null)
+                    _r.AddChild(_navContainer, _originalVersionBorder);
+                if (_originalSignOutControl != null)
+                    _r.AddChild(_navContainer, _originalSignOutControl);
             }
-            if (_hiddenSignOut != null)
-            {
-                _r.SetOpacity(_hiddenSignOut, 1);
-                _r.SetIsHitTestVisible(_hiddenSignOut, true);
-            }
+
+            // Step 4: Remove version text from grey version box
+            RemoveVersionText();
+
+            // Step 5: Restore back button visibility
+            if (_backButton != null)
+                _r.SetIsVisible(_backButton, true);
+
+            // Step 6: Remove our content from content Panel
+            RemoveContentPage();
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"CleanupOverlays error: {ex.Message}");
+            Logger.Log("Injector", $"CleanupInjection error: {ex.Message}");
         }
 
-        _overlayLayer = null;
-        _sidebarOverlay = null;
-        _contentOverlay = null;
-        _sidebarAnchor = null;
-        _contentAnchor = null;
-        _hiddenVersion = null;
-        _hiddenSignOut = null;
+        NullState();
+    }
+
+    private void NullState()
+    {
+        _injectedControls.Clear();
+        _scrollViewerWrapper = null;
         _listBox = null;
+        _navContainer = null;
+        _contentPanel = null;
+        _backButton = null;
+        _sidebarGrid = null;
+        _originalVersionBorder = null;
+        _originalSignOutControl = null;
+        _activeContentPage = null;
         _activePage = null;
+        _versionTextBlock = null;
+        _versionContainer = null;
+        _lastListBoxIdx = -1;
+        _injected = false;
+        _aliveCheckCounter = 0;
     }
 
-    private void UpdateOverlayPositions()
+    // ===== NavContainer item building =====
+
+    private void BuildAndInsertNavItems(SettingsLayout layout)
     {
-        if (_overlayLayer == null || _sidebarAnchor == null) return;
+        if (_navContainer == null) return;
 
-        try
-        {
-            // Update sidebar position
-            var sidebarPos = _r.TranslatePoint(_sidebarAnchor, 0, 0, _overlayLayer);
-            if (sidebarPos != null && _sidebarOverlay != null)
-            {
-                if (Math.Abs(sidebarPos.Value.X - _lastSidebarLeft) > 0.5 ||
-                    Math.Abs(sidebarPos.Value.Y - _lastSidebarTop) > 0.5)
-                {
-                    _r.SetCanvasPosition(_sidebarOverlay, sidebarPos.Value.X, sidebarPos.Value.Y);
-                    _lastSidebarLeft = sidebarPos.Value.X;
-                    _lastSidebarTop = sidebarPos.Value.Y;
-                }
-            }
-
-            // Update content overlay position
-            if (_contentOverlay != null && _contentAnchor != null)
-            {
-                var contentPos = _r.TranslatePoint(_contentAnchor, 0, 0, _overlayLayer);
-                var contentBounds = _r.GetBounds(_contentAnchor);
-                if (contentPos != null && contentBounds != null)
-                {
-                    bool moved = Math.Abs(contentPos.Value.X - _lastContentLeft) > 0.5 ||
-                                 Math.Abs(contentPos.Value.Y - _lastContentTop) > 0.5;
-                    bool resized = Math.Abs(contentBounds.Value.W - _lastContentW) > 0.5 ||
-                                   Math.Abs(contentBounds.Value.H - _lastContentH) > 0.5;
-
-                    if (moved)
-                    {
-                        _r.SetCanvasPosition(_contentOverlay, contentPos.Value.X, contentPos.Value.Y);
-                        _lastContentLeft = contentPos.Value.X;
-                        _lastContentTop = contentPos.Value.Y;
-                    }
-                    if (resized)
-                    {
-                        _r.SetWidth(_contentOverlay, contentBounds.Value.W);
-                        _r.SetHeight(_contentOverlay, contentBounds.Value.H);
-                        _lastContentW = contentBounds.Value.W;
-                        _lastContentH = contentBounds.Value.H;
-                    }
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("Injector", $"UpdateOverlayPositions error: {ex.Message}");
-        }
-    }
-
-    // ===== Sidebar overlay builder =====
-
-    private object? BuildSidebarOverlay(SettingsLayout layout, double width)
-    {
+        // Get styling info from the "APP SETTINGS" header
         var headerFontSize = _r.GetFontSize(layout.AppSettingsText) ?? 11;
         var headerFontWeight = _r.GetFontWeight(layout.AppSettingsText);
         var headerForeground = _r.GetForeground(layout.AppSettingsText);
 
-        // Calculate height from hidden elements to match exactly
-        double overlayHeight = 0;
-        if (_hiddenVersion != null)
+        // 1. UPROOTED section header (matching "APP SETTINGS" style)
+        var sectionHeader = BuildSectionHeader("UPROOTED", headerFontSize, headerFontWeight, headerForeground);
+        if (sectionHeader != null)
         {
-            var vb = _r.GetBounds(_hiddenVersion);
-            if (vb != null) overlayHeight += vb.Value.H;
-        }
-        if (_hiddenSignOut != null)
-        {
-            var sb = _r.GetBounds(_hiddenSignOut);
-            if (sb != null) overlayHeight += sb.Value.H;
+            _r.AddChild(_navContainer, sectionHeader);
+            _injectedControls.Add(sectionHeader);
         }
 
-        // Outer border matching sidebar background
-        var container = _r.CreateStackPanel(vertical: true, spacing: 0);
-        if (container == null) return null;
-
-        _r.SetWidth(container, width);
-        _r.SetBackground(container, "#ff07101b");
-
-        // Section header: "UPROOTED" with dots
-        var headerContainer = _r.CreateStackPanel(vertical: false, spacing: 0);
-        if (headerContainer != null)
-        {
-            _r.SetMargin(headerContainer, 12, 12, 12, 0);
-
-            var leftDot = _r.CreateEllipse(8, 8);
-            if (leftDot != null)
-            {
-                _r.SetMargin(leftDot, 0, 0, 12, 0);
-                _r.AddChild(headerContainer, leftDot);
-            }
-
-            var header = _r.CreateTextBlock("UPROOTED", headerFontSize);
-            if (header != null)
-            {
-                if (headerFontWeight != null)
-                    _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(header, headerFontWeight);
-                if (headerForeground != null)
-                    _r.TextBlockType?.GetProperty("Foreground")?.SetValue(header, headerForeground);
-                _r.AddChild(headerContainer, header);
-            }
-
-            var rightDot = _r.CreateEllipse(8, 8);
-            if (rightDot != null)
-            {
-                _r.SetMargin(rightDot, 8, 0, 0, 0);
-                _r.AddChild(headerContainer, rightDot);
-            }
-
-            _r.AddChild(container, headerContainer);
-        }
-
-        // Nav items
+        // 2. Nav items: Uprooted, Plugins, Themes
         foreach (var (label, page) in new[] { ("Uprooted", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
         {
-            var item = BuildSidebarItem(label, page, layout);
+            var item = BuildNavItem(label, page);
             if (item != null)
-                _r.AddChild(container, item);
+            {
+                _r.AddChild(_navContainer, item);
+                _injectedControls.Add(item);
+            }
         }
 
-        // Version info replica
-        var versionText = _walker.FindFirstTextBlockContaining(_window, "Root Version");
-        string versionStr = versionText != null ? (_r.GetText(versionText) ?? "Root Version") : "Root Version";
-        var uprootedVersionStr = $"Uprooted {_settings.Version}";
-
-        var versionPanel = _r.CreateStackPanel(vertical: true, spacing: 2);
-        if (versionPanel != null)
+        // 3. Re-add original version Border
+        if (_originalVersionBorder != null)
         {
-            _r.SetMargin(versionPanel, 12, 8, 12, 8);
+            _r.AddChild(_navContainer, _originalVersionBorder);
+            // Don't add to _injectedControls -- it's Root's original control
+        }
 
-            var rootVersionLabel = _r.CreateTextBlock(versionStr, 11, "#66f2f2f2");
-            _r.AddChild(versionPanel, rootVersionLabel);
+        // 4. Re-add original sign-out
+        if (_originalSignOutControl != null)
+        {
+            _r.AddChild(_navContainer, _originalSignOutControl);
+            // Don't add to _injectedControls -- it's Root's original control
+        }
+    }
 
-            var uprootedVersionLabel = _r.CreateTextBlock(uprootedVersionStr, 11, "#66f2f2f2");
-            if (uprootedVersionLabel != null)
-            {
-                _r.SetCursorHand(uprootedVersionLabel);
-                _r.SubscribeEvent(uprootedVersionLabel, "PointerPressed", () =>
-                {
-                    _r.CopyToClipboard(_window, uprootedVersionStr);
-                    Logger.Log("Injector", $"Version copied: {uprootedVersionStr}");
-                });
-            }
-            _r.AddChild(versionPanel, uprootedVersionLabel);
+    private object? BuildSectionHeader(string text, double fontSize, object? fontWeight, object? foreground)
+    {
+        // Match Root's "APP SETTINGS" header: StackPanel M=12,12,12,0 inside a 40px-tall ListBoxItem
+        var container = _r.CreateStackPanel(vertical: false, spacing: 0);
+        if (container == null) return null;
+        _r.SetMargin(container, 12, 12, 12, 0);
+        _r.SetTag(container, InjectedTag);
 
-            _r.AddChild(container, versionPanel);
+        var header = _r.CreateTextBlock(text, fontSize);
+        if (header != null)
+        {
+            if (fontWeight != null)
+                _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(header, fontWeight);
+            if (foreground != null)
+                _r.TextBlockType?.GetProperty("Foreground")?.SetValue(header, foreground);
+            _r.AddChild(container, header);
         }
 
         return container;
     }
 
-    private object? BuildSidebarItem(string label, string pageName, SettingsLayout layout)
+    private object? BuildNavItem(string label, string pageName)
     {
-        var panel = _r.CreatePanel();
-        if (panel == null) return null;
-        _r.SetMargin(panel, 0, 2, 0, 2);
-        _r.SetTag(panel, $"uprooted-item-{pageName}");
-        _r.SetCursorHand(panel);
+        // Match Root's ListBoxItem structure exactly:
+        //   ListBoxItem (250x40)
+        //     Panel (M=0,2,0,2, 250x36)
+        //       ContentPresenter (BG=Transparent)  <- hover highlight
+        //       Border (H=36, BG=Transparent, CR=12)
+        //
+        // Our equivalent:
+        //   outer Panel (tag, cursor)
+        //     inner Panel (M=0,2,0,2)  <- vertical spacing like native
+        //       Border (H=36, BG=transparent, CR=12)  <- highlight
+        //       TextBlock (M=12,0,0,0, VA=Center)  <- content
 
-        var content = _r.CreateStackPanel(vertical: false, spacing: 0);
-        if (content == null) return null;
-        _r.SetMargin(content, 12, 8, 12, 8);
-        _r.SetVerticalAlignment(content, "Center");
+        var outerPanel = _r.CreatePanel();
+        if (outerPanel == null) return null;
+        _r.SetTag(outerPanel, $"uprooted-nav-{pageName}");
+        _r.SetCursorHand(outerPanel);
 
-        var leftDot = _r.CreateEllipse(8, 8);
-        if (leftDot != null)
+        // Inner panel with vertical spacing matching native ListBoxItem
+        var innerPanel = _r.CreatePanel();
+        if (innerPanel != null)
         {
-            _r.SetMargin(leftDot, 0, 0, 12, 0);
-            _r.SetVerticalAlignment(leftDot, "Center");
-            _r.AddChild(content, leftDot);
+            _r.SetMargin(innerPanel, 0, 2, 0, 2);
+
+            // Highlight border (behind content, full width, rounded corners)
+            var highlight = _r.CreateBorder(cornerRadius: 12);
+            if (highlight != null)
+            {
+                _r.SetTag(highlight, $"uprooted-highlight-{pageName}");
+                highlight.GetType().GetProperty("Height")?.SetValue(highlight, 36.0);
+                _r.AddChild(innerPanel, highlight);
+            }
+
+            // Text label - matching native positioning
+            var textBlock = _r.CreateTextBlock(label, 14, "#f2f2f2");
+            if (textBlock != null)
+            {
+                _r.SetFontWeightNumeric(textBlock, 400);
+                _r.SetMargin(textBlock, 12, 0, 12, 0);
+                // Center vertically in the 36px space
+                try
+                {
+                    var vaType = textBlock.GetType().Assembly.GetType("Avalonia.Layout.VerticalAlignment");
+                    if (vaType != null)
+                    {
+                        var centerVal = Enum.Parse(vaType, "Center");
+                        textBlock.GetType().GetProperty("VerticalAlignment")?.SetValue(textBlock, centerVal);
+                    }
+                }
+                catch { }
+                _r.AddChild(innerPanel, textBlock);
+            }
+
+            _r.AddChild(outerPanel, innerPanel);
+
+            // Hover events on the outer panel (captures full area)
+            _r.SubscribeEvent(outerPanel, "PointerEntered", () =>
+            {
+                if (_activePage != pageName && highlight != null)
+                    _r.SetBackground(highlight, "#0Dffffff");
+            });
+
+            _r.SubscribeEvent(outerPanel, "PointerExited", () =>
+            {
+                if (_activePage != pageName && highlight != null)
+                    _r.SetBackground(highlight, (string?)null);
+            });
         }
 
-        var textBlock = _r.CreateTextBlock(label, 14, "#f2f2f2");
-        if (textBlock != null)
+        // Click handler
+        _r.SubscribeEvent(outerPanel, "PointerPressed", () =>
         {
-            _r.SetFontWeightNumeric(textBlock, 450);
-            _r.SetVerticalAlignment(textBlock, "Center");
-            _r.AddChild(content, textBlock);
-        }
-
-        var rightDot = _r.CreateEllipse(8, 8);
-        if (rightDot != null)
-        {
-            _r.SetMargin(rightDot, 8, 0, 0, 0);
-            _r.SetVerticalAlignment(rightDot, "Center");
-            _r.AddChild(content, rightDot);
-        }
-
-        _r.AddChild(panel, content);
-
-        var highlight = _r.CreateBorder(cornerRadius: 12);
-        if (highlight != null)
-        {
-            highlight.GetType().GetProperty("Height")?.SetValue(highlight, 36.0);
-            _r.SetTag(highlight, $"uprooted-highlight-{pageName}");
-            _r.AddChild(panel, highlight);
-        }
-
-        _r.SubscribeEvent(panel, "PointerEntered", () =>
-        {
-            if (_activePage != pageName && highlight != null)
-                _r.SetBackground(highlight, "#0Dffffff");
+            OnNavItemClicked(pageName);
         });
 
-        _r.SubscribeEvent(panel, "PointerExited", () =>
-        {
-            if (_activePage != pageName && highlight != null)
-                _r.SetBackground(highlight, (string?)null);
-        });
-
-        var capturedLayout = layout;
-        _r.SubscribeEvent(panel, "PointerPressed", () =>
-        {
-            OnItemClicked(pageName, capturedLayout);
-        });
-
-        return panel;
+        return outerPanel;
     }
 
-    // ===== Content overlay =====
+    // ===== Content management =====
 
-    private void OnItemClicked(string pageName, SettingsLayout layout)
+    private void OnNavItemClicked(string pageName)
     {
         try
         {
-            Logger.Log("Injector", $"Item clicked: {pageName}");
-            _ourItemClicked = true;
-
+            Logger.Log("Injector", $"Nav item clicked: {pageName}");
             if (_activePage == pageName) return;
 
-            RemoveContentOverlay();
+            // Remove current content (without restoring back button -- we'll keep it hidden)
+            if (_activeContentPage != null && _contentPanel != null)
+            {
+                try { _r.RemoveChild(_contentPanel, _activeContentPage); }
+                catch { }
+            }
+            _activeContentPage = null;
 
+            // Build new page
             var page = ContentPages.BuildPage(pageName, _r, _settings);
             if (page == null)
             {
@@ -519,104 +458,213 @@ internal class SidebarInjector
                 return;
             }
 
-            _r.SetTag(page, ContentTag);
-
-            // Get content area position and size
-            if (_overlayLayer == null || _contentAnchor == null) return;
-
-            var contentPos = _r.TranslatePoint(_contentAnchor, 0, 0, _overlayLayer);
-            var contentBounds = _r.GetBounds(_contentAnchor);
-
-            if (contentPos == null || contentBounds == null)
+            // Add page to content Panel
+            if (_contentPanel != null)
             {
-                Logger.Log("Injector", "Could not determine content area position/bounds");
-                return;
+                ClearPanelChildren(_contentPanel);
+                _r.AddChild(_contentPanel, page);
+                _activeContentPage = page;
             }
 
-            double contentW = contentBounds.Value.W;
-            double contentH = contentBounds.Value.H;
-
-            // Wrap page in a Border with opaque background to cover Root's content
-            var wrapper = _r.CreateBorder("#0D1521", 0, page);
-            if (wrapper == null) return;
-
-            _r.SetWidth(wrapper, contentW);
-            _r.SetHeight(wrapper, contentH);
-            // Clip content to the wrapper bounds
-            wrapper.GetType().GetProperty("ClipToBounds")?.SetValue(wrapper, true);
-
-            _r.SetCanvasPosition(wrapper, contentPos.Value.X, contentPos.Value.Y);
-            _r.AddToOverlay(_overlayLayer, wrapper);
-
-            _contentOverlay = wrapper;
-            _activePage = pageName;
-            _lastContentLeft = contentPos.Value.X;
-            _lastContentTop = contentPos.Value.Y;
-            _lastContentW = contentW;
-            _lastContentH = contentH;
-
-            Logger.Log("Injector", $"Content page '{pageName}' displayed at ({contentPos.Value.X:F0}, {contentPos.Value.Y:F0}) {contentW:F0}x{contentH:F0}");
-
-            UpdateItemHighlights();
-
-            // Deselect ListBox so Root doesn't show its own content
+            // Deselect Root's ListBox items
             if (_listBox != null)
+            {
                 _r.SetSelectedIndex(_listBox, -1);
+                _lastListBoxIdx = -1;
+            }
+
+            // Hide back button on Uprooted pages (Root's pages don't show it in content)
+            if (_backButton != null)
+                _r.SetIsVisible(_backButton, false);
+
+            _activePage = pageName;
+            UpdateNavHighlights();
+
+            Logger.Log("Injector", $"Content page '{pageName}' displayed in content Panel");
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"OnItemClicked error: {ex}");
+            Logger.Log("Injector", $"OnNavItemClicked error: {ex}");
         }
     }
 
-    private void RemoveContentOverlay()
+    private void RemoveContentPage()
     {
-        if (_overlayLayer != null && _contentOverlay != null)
+        if (_activeContentPage != null && _contentPanel != null)
         {
-            try
-            {
-                _r.RemoveFromOverlay(_overlayLayer, _contentOverlay);
-                Logger.Log("Injector", "Content overlay removed");
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Injector", $"RemoveContentOverlay error: {ex.Message}");
-            }
+            try { _r.RemoveChild(_contentPanel, _activeContentPage); }
+            catch { }
         }
-
-        _contentOverlay = null;
+        _activeContentPage = null;
         _activePage = null;
-        UpdateItemHighlights();
+
+        // Restore back button when returning to Root's pages
+        if (_backButton != null)
+            _r.SetIsVisible(_backButton, true);
+
+        UpdateNavHighlights();
     }
 
-    // ===== Navigation tracking =====
-
-    private void SubscribeListBoxSelection()
+    private void ClearPanelChildren(object panel)
     {
-        if (_listBox == null) return;
+        var children = _r.GetChildren(panel);
+        if (children == null) return;
 
-        _r.SubscribeEvent(_listBox, "PointerPressed", () =>
+        // Remove children in reverse to avoid index shifting
+        for (int i = children.Count - 1; i >= 0; i--)
         {
-            if (_ourItemClicked)
+            try { children.RemoveAt(i); }
+            catch { }
+        }
+    }
+
+    // ===== ScrollViewer wrapping =====
+
+    private void WrapInScrollViewer()
+    {
+        if (_navContainer == null || _sidebarGrid == null) return;
+
+        try
+        {
+            // Create ScrollViewer to wrap the NavContainer StackPanel
+            var scrollViewer = _r.CreateScrollViewer();
+            if (scrollViewer == null) return;
+
+            // Copy Grid row from NavContainer
+            int navRow = _r.GetGridRow(_navContainer);
+
+            // Remove NavContainer from its parent Grid
+            _r.RemoveChild(_sidebarGrid, _navContainer);
+
+            // Set NavContainer as ScrollViewer content
+            _r.SetScrollViewerContent(scrollViewer, _navContainer);
+
+            // Set Grid.Row on ScrollViewer
+            _r.SetGridRow(scrollViewer, navRow);
+
+            // Add ScrollViewer to parent Grid
+            _r.AddChild(_sidebarGrid, scrollViewer);
+
+            // Hide scrollbar for clean look
+            scrollViewer.GetType().GetProperty("VerticalScrollBarVisibility")?.SetValue(
+                scrollViewer,
+                Enum.Parse(scrollViewer.GetType().Assembly.GetType("Avalonia.Controls.Primitives.ScrollBarVisibility")
+                    ?? typeof(int), "Auto"));
+
+            _scrollViewerWrapper = scrollViewer;
+            Logger.Log("Injector", "NavContainer wrapped in ScrollViewer");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Injector", $"WrapInScrollViewer error: {ex.Message}");
+            // If wrapping fails, try to restore NavContainer to parent
+            if (_sidebarGrid != null && _navContainer != null)
             {
-                _ourItemClicked = false;
+                try { _r.AddChild(_sidebarGrid, _navContainer); }
+                catch { }
+            }
+        }
+    }
+
+    private void UnwrapScrollViewer()
+    {
+        if (_scrollViewerWrapper == null || _sidebarGrid == null || _navContainer == null) return;
+
+        try
+        {
+            int navRow = _r.GetGridRow(_scrollViewerWrapper);
+
+            // Remove ScrollViewer from Grid
+            _r.RemoveChild(_sidebarGrid, _scrollViewerWrapper);
+
+            // Clear ScrollViewer content
+            _r.SetScrollViewerContent(_scrollViewerWrapper, null);
+
+            // Restore Grid.Row and add NavContainer back
+            _r.SetGridRow(_navContainer, navRow);
+            _r.AddChild(_sidebarGrid, _navContainer);
+
+            _scrollViewerWrapper = null;
+            Logger.Log("Injector", "ScrollViewer unwrapped, NavContainer restored");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Injector", $"UnwrapScrollViewer error: {ex.Message}");
+        }
+    }
+
+    // ===== Version box injection =====
+
+    /// <summary>
+    /// Inject "Uprooted 0.1.1" into the grey version info box at the bottom of the sidebar.
+    /// The box lives in SidebarGrid Row=1 and contains "Root Version: X.Y.Z" and "System Info: ...".
+    /// </summary>
+    private void InjectVersionText()
+    {
+        if (_sidebarGrid == null) return;
+
+        try
+        {
+            // Find the StackPanel containing "Root Version:" text inside SidebarGrid Row=1
+            object? versionStackPanel = null;
+            foreach (var child in _r.GetVisualChildren(_sidebarGrid))
+            {
+                if (_r.GetGridRow(child) != 1) continue;
+
+                // Search this subtree for the TextBlock containing "Root Version"
+                foreach (var node in _walker.DescendantsDepthFirst(child))
+                {
+                    if (!_r.IsTextBlock(node)) continue;
+                    var txt = _r.GetText(node);
+                    if (txt != null && txt.StartsWith("Root Version", StringComparison.OrdinalIgnoreCase))
+                    {
+                        versionStackPanel = _r.GetParent(node);
+                        break;
+                    }
+                }
+                break;
+            }
+
+            if (versionStackPanel == null)
+            {
+                Logger.Log("Injector", "Version box: could not find 'Root Version' text container");
                 return;
             }
-            if (_contentOverlay != null)
-            {
-                Logger.Log("Injector", "ListBox click, removing content overlay");
-                RemoveContentOverlay();
-            }
-        });
 
-        Logger.Log("Injector", "Navigation tracking active");
+            // Create "Uprooted 0.1.1" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
+            var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, "#66f2f2f2");
+            if (versionText == null) return;
+
+            _r.AddChild(versionStackPanel, versionText);
+            _versionTextBlock = versionText;
+            _versionContainer = versionStackPanel;
+
+            Logger.Log("Injector", $"Version box: injected 'Uprooted {_settings.Version}' into version info");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Injector", $"InjectVersionText error: {ex.Message}");
+        }
     }
 
-    private void UpdateItemHighlights()
+    private void RemoveVersionText()
     {
-        if (_sidebarOverlay == null) return;
+        if (_versionTextBlock != null && _versionContainer != null)
+        {
+            try { _r.RemoveChild(_versionContainer, _versionTextBlock); }
+            catch { }
+        }
+        _versionTextBlock = null;
+        _versionContainer = null;
+    }
 
-        foreach (var node in _walker.DescendantsDepthFirst(_sidebarOverlay))
+    // ===== Helpers =====
+
+    private void UpdateNavHighlights()
+    {
+        if (_navContainer == null) return;
+
+        foreach (var node in _walker.DescendantsDepthFirst(_navContainer))
         {
             var tag = _r.GetTag(node);
             if (tag == null || !tag.StartsWith("uprooted-highlight-")) continue;
@@ -626,169 +674,191 @@ internal class SidebarInjector
         }
     }
 
-    // ===== Fallback positioning =====
+    // ===== Diagnostics =====
 
     /// <summary>
-    /// Fallback: compute screen-relative position by walking the parent chain
-    /// and summing Bounds offsets. Used when TranslatePoint returns null.
+    /// Recon: dump ListBoxItem styling and section header details for pixel-perfect matching.
     /// </summary>
-    private (double X, double Y)? GetBoundsPosition(object? control)
+    private void DumpVersionRecon(SettingsLayout layout)
     {
-        if (control == null) return null;
+        Logger.Log("Recon", "=== STYLE RECON ===");
 
-        double x = 0, y = 0;
-        var current = control;
-        int depth = 0;
-
-        while (current != null && depth < 50)
+        // 1. APP SETTINGS header: exact font, margin, padding, parent chain
+        Logger.Log("Recon", "--- Section header: APP SETTINGS ---");
+        var hdr = layout.AppSettingsText;
+        Logger.Log("Recon", $"Text: \"{_r.GetText(hdr)}\"");
+        Logger.Log("Recon", $"  Type: {hdr.GetType().Name}");
+        Logger.Log("Recon", $"  FontSize: {_r.GetFontSize(hdr)}");
+        Logger.Log("Recon", $"  FontWeight: {_r.GetFontWeight(hdr)}");
+        Logger.Log("Recon", $"  Foreground: {_r.GetForeground(hdr)}");
+        Logger.Log("Recon", $"  Margin: {GetPropStr(hdr, "Margin")}");
+        Logger.Log("Recon", $"  Bounds: {BoundsStr(_r.GetBounds(hdr))}");
+        // Walk up 4 parents to see containers/margins
+        var p = _r.GetParent(hdr);
+        for (int d = 0; d < 6 && p != null; d++)
         {
-            var bounds = _r.GetBounds(current);
-            if (bounds != null)
+            var pb = _r.GetBounds(p);
+            Logger.Log("Recon", $"  Parent[{d}]: {p.GetType().Name} M={GetPropStr(p, "Margin")} P={GetPropStr(p, "Padding")} Bounds={BoundsStr(pb)}");
+            p = _r.GetParent(p);
+        }
+
+        // 2. First 3 ListBoxItems: full visual tree for style matching
+        Logger.Log("Recon", "");
+        Logger.Log("Recon", "--- ListBox items (first 3 + selected) ---");
+        if (layout.ListBox != null)
+        {
+            var lb = layout.ListBox;
+            Logger.Log("Recon", $"ListBox: {lb.GetType().Name} Bounds={BoundsStr(_r.GetBounds(lb))}");
+            Logger.Log("Recon", $"  Margin: {GetPropStr(lb, "Margin")}");
+            Logger.Log("Recon", $"  Padding: {GetPropStr(lb, "Padding")}");
+            Logger.Log("Recon", $"  SelectedIndex: {_r.GetSelectedIndex(lb)}");
+
+            int selectedIdx = _r.GetSelectedIndex(lb);
+            int itemIdx = 0;
+            foreach (var node in _r.GetVisualChildren(lb))
             {
-                x += bounds.Value.X;
-                y += bounds.Value.Y;
+                foreach (var item in _walker.DescendantsDepthFirst(node))
+                {
+                    if (item.GetType().Name != "ListBoxItem") continue;
+                    bool shouldDump = itemIdx < 3 || itemIdx == selectedIdx;
+                    if (shouldDump)
+                    {
+                        var ib = _r.GetBounds(item);
+                        var text = FindFirstTextInTree(item);
+                        string sel = itemIdx == selectedIdx ? " [SELECTED]" : "";
+                        Logger.Log("Recon", $"");
+                        Logger.Log("Recon", $"  ListBoxItem[{itemIdx}] \"{text}\"{sel}");
+                        Logger.Log("Recon", $"    Bounds: {BoundsStr(ib)}");
+                        Logger.Log("Recon", $"    Margin: {GetPropStr(item, "Margin")}");
+                        Logger.Log("Recon", $"    Padding: {GetPropStr(item, "Padding")}");
+                        Logger.Log("Recon", $"    MinHeight: {GetPropStr(item, "MinHeight")}");
+                        Logger.Log("Recon", $"    Height: {GetPropStr(item, "Height")}");
+                        // Deep dump visual tree with all style props
+                        DumpTreeDetailed(item, 2, 6);
+                    }
+                    itemIdx++;
+                }
             }
+            Logger.Log("Recon", $"  Total items: {itemIdx}");
+        }
+
+        // 3. ListBox parent chain for understanding x-offset
+        Logger.Log("Recon", "");
+        Logger.Log("Recon", "--- ListBox parent chain (for x-offset context) ---");
+        if (layout.ListBox != null)
+        {
+            var lbp = _r.GetParent(layout.ListBox);
+            for (int d = 0; d < 6 && lbp != null; d++)
+            {
+                var lbb = _r.GetBounds(lbp);
+                Logger.Log("Recon", $"  Parent[{d}]: {lbp.GetType().Name} M={GetPropStr(lbp, "Margin")} P={GetPropStr(lbp, "Padding")} Bounds={BoundsStr(lbb)}");
+                lbp = _r.GetParent(lbp);
+            }
+        }
+
+        Logger.Log("Recon", "=== END STYLE RECON ===");
+    }
+
+    private string BoundsStr((double X, double Y, double W, double H)? b)
+    {
+        if (b == null) return "null";
+        return $"({b.Value.W:F1}x{b.Value.H:F1} @{b.Value.X:F1},{b.Value.Y:F1})";
+    }
+
+    private string? FindFirstTextInTree(object root)
+    {
+        if (_r.IsTextBlock(root))
+            return _r.GetText(root);
+        foreach (var child in _r.GetVisualChildren(root))
+        {
+            var text = FindFirstTextInTree(child);
+            if (text != null) return text;
+        }
+        return null;
+    }
+
+    private object? FindSidebarBorder(object navContainer)
+    {
+        var current = _r.GetParent(navContainer);
+        int depth = 0;
+        while (current != null && depth < 5)
+        {
+            if (_r.IsBorder(current))
+                return current;
             current = _r.GetParent(current);
             depth++;
         }
-
-        return (x, y);
+        return null;
     }
 
-    // ===== Diagnostics =====
-
-    private void DumpSidebarStyling(SettingsLayout layout)
+    private string GetPropStr(object? ctrl, string propName)
     {
-        try
-        {
-            var hdr = layout.AppSettingsText;
-            Logger.Log("Style", $"=== Section header '{_r.GetText(hdr)}' ===");
-            Logger.Log("Style", $"  FontSize={_r.GetFontSize(hdr)}, FontWeight={_r.GetFontWeight(hdr)}, " +
-                $"Foreground={_r.GetForeground(hdr)}, Margin={GetMarginStr(hdr)}");
-
-            var headerParent = _r.GetParent(hdr);
-            if (headerParent != null)
-                Logger.Log("Style", $"  HeaderParent: {headerParent.GetType().Name} Margin={GetMarginStr(headerParent)}");
-
-            int itemsDumped = 0;
-            if (_listBox != null)
-            {
-                Logger.Log("Style", "=== ListBox tree dump ===");
-                DumpFullTree(_listBox, 0, 20, ref itemsDumped, true);
-            }
-
-            Logger.Log("Style", "=== Nav parent chain ===");
-            var navParent = _r.GetParent(layout.NavContainer);
-            for (int d = 0; d < 6 && navParent != null; d++)
-            {
-                Logger.Log("Style", $"  NavParent[{d}]: {navParent.GetType().Name}, Margin={GetMarginStr(navParent)}, BG={GetBgStr(navParent)}");
-                navParent = _r.GetParent(navParent);
-            }
-
-            if (layout.IsGridLayout && layout.LayoutContainer != null)
-            {
-                Logger.Log("Style", "=== Grid definitions ===");
-                try
-                {
-                    var colDefs = layout.LayoutContainer.GetType().GetProperty("ColumnDefinitions")?.GetValue(layout.LayoutContainer);
-                    if (colDefs is System.Collections.IList cols)
-                        for (int i = 0; i < cols.Count; i++)
-                            Logger.Log("Style", $"  Col[{i}]: Width={cols[i]?.GetType().GetProperty("Width")?.GetValue(cols[i])}");
-                    var rowDefs = layout.LayoutContainer.GetType().GetProperty("RowDefinitions")?.GetValue(layout.LayoutContainer);
-                    if (rowDefs is System.Collections.IList rows)
-                        for (int i = 0; i < rows.Count; i++)
-                            Logger.Log("Style", $"  Row[{i}]: Height={rows[i]?.GetType().GetProperty("Height")?.GetValue(rows[i])}");
-                }
-                catch (Exception ex) { Logger.Log("Style", $"  Grid defs error: {ex.Message}"); }
-            }
-
-            // OverlayLayer info
-            var overlay = _r.GetOverlayLayer(_window);
-            Logger.Log("Style", $"=== OverlayLayer: {(overlay != null ? overlay.GetType().Name : "NULL")} ===");
-            if (overlay != null)
-            {
-                var overlayBounds = _r.GetBounds(overlay);
-                Logger.Log("Style", $"  Bounds: {overlayBounds?.X:F0},{overlayBounds?.Y:F0} {overlayBounds?.W:F0}x{overlayBounds?.H:F0}");
-                Logger.Log("Style", $"  Children: {_r.GetChildren(overlay)?.Count ?? 0}");
-            }
-
-            Logger.Log("Style", "=== NavContainer ancestry ===");
-            var nc = layout.NavContainer;
-            Logger.Log("Style", $"  NavContainer itself: {nc.GetType().Name}({_r.GetChildCount(nc)} children)");
-            var ncParent = _r.GetParent(nc);
-            for (int d = 0; d < 10 && ncParent != null; d++)
-            {
-                var t = ncParent.GetType().Name;
-                var cc = _r.GetChildCount(ncParent);
-                Logger.Log("Style", $"  Ancestor[{d}]: {t}({cc} children)");
-                ncParent = _r.GetParent(ncParent);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("Style", $"DumpSidebarStyling error: {ex.Message}");
-        }
+        if (ctrl == null) return "null";
+        try { return ctrl.GetType().GetProperty(propName)?.GetValue(ctrl)?.ToString() ?? "null"; }
+        catch { return "err"; }
     }
 
-    private void DumpFullTree(object node, int depth, int maxDepth, ref int itemsDumped, bool listBoxMode)
+    /// <summary>Detailed tree dump with ALL style properties for pixel-perfect matching.</summary>
+    private void DumpTreeDetailed(object node, int depth, int maxDepth)
     {
         if (depth > maxDepth) return;
-        if (listBoxMode && itemsDumped >= 3) return;
-
-        var typeName = node.GetType().Name;
         var indent = new string(' ', depth * 2);
-        var props = new List<string>();
+        var typeName = node.GetType().Name;
+        var b = _r.GetBounds(node);
+        var props = new List<string> { BoundsStr(b) };
 
+        // Margin/Padding
+        var m = GetPropStr(node, "Margin");
+        var p = GetPropStr(node, "Padding");
+        if (m != "0,0,0,0" && m != "0" && m != "null") props.Add($"M={m}");
+        if (p != "0,0,0,0" && p != "0" && p != "null") props.Add($"P={p}");
+
+        // Size
+        var w = GetPropStr(node, "Width");
+        var h = GetPropStr(node, "Height");
+        var minH = GetPropStr(node, "MinHeight");
+        if (w != "NaN" && w != "null") props.Add($"W={w}");
+        if (h != "NaN" && h != "null") props.Add($"H={h}");
+        if (minH != "0" && minH != "null" && minH != "NaN") props.Add($"MinH={minH}");
+
+        // Background
+        try { var bg = node.GetType().GetProperty("Background")?.GetValue(node); if (bg != null) props.Add($"BG={bg}"); } catch { }
+
+        // Border-specific
+        if (_r.IsBorder(node))
+        {
+            try
+            {
+                var cr = GetPropStr(node, "CornerRadius");
+                var bt = GetPropStr(node, "BorderThickness");
+                if (cr != "0" && cr != "0,0,0,0" && cr != "null") props.Add($"CR={cr}");
+                if (bt != "0" && bt != "0,0,0,0" && bt != "null") props.Add($"BT={bt}");
+            }
+            catch { }
+        }
+
+        // TextBlock-specific
         if (_r.IsTextBlock(node))
         {
             props.Add($"Text=\"{_r.GetText(node)}\"");
             props.Add($"FontSize={_r.GetFontSize(node)}");
             props.Add($"FontWeight={_r.GetFontWeight(node)}");
             props.Add($"Fg={_r.GetForeground(node)}");
-            props.Add($"Margin={GetMarginStr(node)}");
-        }
-        else
-        {
-            props.Add($"Margin={GetMarginStr(node)}");
-            var bg = GetBgStr(node);
-            if (bg != "err" && bg != "none") props.Add($"BG={bg}");
-            var fill = node.GetType().GetProperty("Fill")?.GetValue(node)?.ToString();
-            if (fill != null) props.Add($"Fill={fill}");
-            if (_r.IsBorder(node))
-            {
-                var cr = node.GetType().GetProperty("CornerRadius")?.GetValue(node);
-                if (cr != null) props.Add($"CR={cr}");
-            }
-            var w = node.GetType().GetProperty("Width")?.GetValue(node);
-            var h = node.GetType().GetProperty("Height")?.GetValue(node);
-            if (w != null && w.ToString() != "NaN") props.Add($"W={w}");
-            if (h != null && h.ToString() != "NaN") props.Add($"H={h}");
+            var ff = GetPropStr(node, "FontFamily");
+            if (ff != "null") props.Add($"FontFamily={ff}");
+            var lh = GetPropStr(node, "LineHeight");
+            if (lh != "NaN" && lh != "null" && lh != "0") props.Add($"LineHeight={lh}");
         }
 
-        Logger.Log("Style", $"{indent}{typeName} {string.Join(", ", props)}");
+        // HorizontalAlignment/VerticalAlignment
+        var ha = GetPropStr(node, "HorizontalAlignment");
+        var va = GetPropStr(node, "VerticalAlignment");
+        if (ha != "Stretch" && ha != "null") props.Add($"HA={ha}");
+        if (va != "Stretch" && va != "null") props.Add($"VA={va}");
 
-        if (typeName == "ListBoxItem" && listBoxMode)
-        {
-            itemsDumped++;
-            if (itemsDumped > 3) return;
-        }
+        Logger.Log("Recon", $"    {indent}{typeName} {string.Join(", ", props)}");
 
         foreach (var child in _r.GetVisualChildren(node))
-        {
-            DumpFullTree(child, depth + 1, maxDepth, ref itemsDumped, listBoxMode);
-            if (listBoxMode && itemsDumped > 3) return;
-        }
-    }
-
-    private string GetMarginStr(object? ctrl)
-    {
-        try { return ctrl?.GetType().GetProperty("Margin")?.GetValue(ctrl)?.ToString() ?? "none"; }
-        catch { return "err"; }
-    }
-
-    private string GetBgStr(object? ctrl)
-    {
-        try { return ctrl?.GetType().GetProperty("Background")?.GetValue(ctrl)?.ToString() ?? "none"; }
-        catch { return "err"; }
+            DumpTreeDetailed(child, depth + 1, maxDepth);
     }
 }
