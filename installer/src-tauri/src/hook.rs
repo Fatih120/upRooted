@@ -204,40 +204,72 @@ fn broadcast_env_change() {
 pub fn check_root_running() -> bool {
     #[cfg(windows)]
     {
-        use std::mem::MaybeUninit;
-        use windows_sys::Win32::Foundation::INVALID_HANDLE_VALUE;
-        use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
-
-        unsafe {
-            let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-            if snapshot == INVALID_HANDLE_VALUE {
-                return false;
-            }
-
-            let mut entry: PROCESSENTRY32W = MaybeUninit::zeroed().assume_init();
-            entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
-
-            if Process32FirstW(snapshot, &mut entry) != 0 {
-                loop {
-                    let name_len = entry
-                        .szExeFile
-                        .iter()
-                        .position(|&c| c == 0)
-                        .unwrap_or(entry.szExeFile.len());
-                    let name = String::from_utf16_lossy(&entry.szExeFile[..name_len]);
-                    if name.eq_ignore_ascii_case("Root.exe") {
-                        windows_sys::Win32::Foundation::CloseHandle(snapshot);
-                        return true;
-                    }
-                    if Process32NextW(snapshot, &mut entry) == 0 {
-                        break;
-                    }
-                }
-            }
-            windows_sys::Win32::Foundation::CloseHandle(snapshot);
-        }
-        false
+        !find_root_pids().is_empty()
     }
     #[cfg(not(windows))]
     false
+}
+
+/// Terminate all Root.exe processes. Returns the number of processes killed.
+pub fn kill_root_processes() -> u32 {
+    #[cfg(windows)]
+    {
+        use windows_sys::Win32::Foundation::CloseHandle;
+        use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+
+        let pids = find_root_pids();
+        let mut killed = 0u32;
+        for pid in &pids {
+            unsafe {
+                let handle = OpenProcess(PROCESS_TERMINATE, 0, *pid);
+                if handle != 0 {
+                    if TerminateProcess(handle, 1) != 0 {
+                        killed += 1;
+                    }
+                    CloseHandle(handle);
+                }
+            }
+        }
+        killed
+    }
+    #[cfg(not(windows))]
+    0
+}
+
+/// Find all PIDs for Root.exe.
+#[cfg(windows)]
+fn find_root_pids() -> Vec<u32> {
+    use std::mem::MaybeUninit;
+    use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::System::Diagnostics::ToolHelp::*;
+
+    let mut pids = Vec::new();
+    unsafe {
+        let snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+        if snapshot == INVALID_HANDLE_VALUE {
+            return pids;
+        }
+
+        let mut entry: PROCESSENTRY32W = MaybeUninit::zeroed().assume_init();
+        entry.dwSize = std::mem::size_of::<PROCESSENTRY32W>() as u32;
+
+        if Process32FirstW(snapshot, &mut entry) != 0 {
+            loop {
+                let name_len = entry
+                    .szExeFile
+                    .iter()
+                    .position(|&c| c == 0)
+                    .unwrap_or(entry.szExeFile.len());
+                let name = String::from_utf16_lossy(&entry.szExeFile[..name_len]);
+                if name.eq_ignore_ascii_case("Root.exe") {
+                    pids.push(entry.th32ProcessID);
+                }
+                if Process32NextW(snapshot, &mut entry) == 0 {
+                    break;
+                }
+            }
+        }
+        CloseHandle(snapshot);
+    }
+    pids
 }

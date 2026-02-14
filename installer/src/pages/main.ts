@@ -5,6 +5,7 @@ import {
   repairUprooted,
   getUprootedVersion,
   checkRootRunning,
+  killRoot,
   type DetectionResult,
 } from "../lib/tauri.js";
 
@@ -259,22 +260,81 @@ function setButtonsDisabled(disabled: boolean): void {
   }
 }
 
+// ── Root-running guard ──
+
+/** Returns true if safe to proceed, false if user cancelled. */
+async function ensureRootClosed(): Promise<boolean> {
+  let running = false;
+  try {
+    running = await checkRootRunning();
+  } catch {
+    return true; // can't check, proceed anyway
+  }
+  if (!running) return true;
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "popup-overlay";
+    overlay.innerHTML = `
+      <div class="popup">
+        <div class="popup-text">root.exe is running</div>
+        <div class="popup-sub">close it to continue, or we can do it for you</div>
+        <div class="popup-actions">
+          <button class="btn danger popup-kill">close root</button>
+          <button class="btn popup-cancel">cancel</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const cleanup = () => { overlay.remove(); };
+
+    overlay.querySelector(".popup-cancel")!.addEventListener("click", () => {
+      cleanup();
+      resolve(false);
+    });
+
+    overlay.querySelector(".popup-kill")!.addEventListener("click", async () => {
+      const killBtn = overlay.querySelector(".popup-kill") as HTMLButtonElement;
+      killBtn.disabled = true;
+      killBtn.textContent = "closing...";
+
+      try {
+        const killed = await killRoot();
+        log(`closed ${killed} root process${killed !== 1 ? "es" : ""}`, "info");
+        // Brief wait for process to fully exit
+        await new Promise((r) => setTimeout(r, 1500));
+      } catch (err) {
+        log(`failed to close root: ${err}`, "error");
+        cleanup();
+        resolve(false);
+        return;
+      }
+
+      // Verify it's actually gone
+      try {
+        const still = await checkRootRunning();
+        if (still) {
+          log("root.exe is still running — close it manually", "error");
+          cleanup();
+          resolve(false);
+          return;
+        }
+      } catch { /* proceed */ }
+
+      cleanup();
+      resolve(true);
+    });
+  });
+}
+
 // ── Actions ──
 
 async function handleInstall(): Promise<void> {
+  if (!(await ensureRootClosed())) return;
+
   setButtonLoading("btn-install");
   setButtonsDisabled(true);
-
-  try {
-    const running = await checkRootRunning();
-    if (running) {
-      log("root.exe is running — close it before installing", "error");
-      updateButtons();
-      return;
-    }
-  } catch {
-    // proceed
-  }
 
   log("installing uprooted...", "info");
   log("  deploying hook files...");
@@ -302,6 +362,8 @@ async function handleInstall(): Promise<void> {
 }
 
 async function handleUninstall(): Promise<void> {
+  if (!(await ensureRootClosed())) return;
+
   setButtonLoading("btn-uninstall");
   setButtonsDisabled(true);
 
@@ -329,6 +391,8 @@ async function handleUninstall(): Promise<void> {
 }
 
 async function handleRepair(): Promise<void> {
+  if (!(await ensureRootClosed())) return;
+
   setButtonLoading("btn-repair");
   setButtonsDisabled(true);
 

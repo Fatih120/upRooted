@@ -15,6 +15,7 @@ windows-sys = { version = "0.59", default-features = false, features = [
     "Win32_UI_WindowsAndMessaging",
     "Win32_Foundation",
     "Win32_System_Diagnostics_ToolHelp",
+    "Win32_System_Threading",
 ] }
 
 [build-dependencies]

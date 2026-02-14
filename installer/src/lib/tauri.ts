@@ -103,3 +103,7 @@ export async function checkHookStatus(): Promise<HookStatus> {
 export async function checkRootRunning(): Promise<boolean> {
   return invoke("check_root_running");
 }
+
+export async function killRoot(): Promise<number> {
+  return invoke("kill_root");
+}
