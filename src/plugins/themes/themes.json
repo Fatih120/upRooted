@@ -1,0 +1,39 @@
+[
+  {
+    "name": "default",
+    "display_name": "Default Dark",
+    "description": "Root's built-in dark theme",
+    "author": "Root Communications",
+    "variables": {},
+    "preview_colors": {
+      "background": "#0D1521",
+      "text": "#F2F2F2",
+      "accent": "#3B6AF8",
+      "border": "#242C36"
+    }
+  },
+  {
+    "name": "forest-green",
+    "display_name": "Forest Green",
+    "description": "Forest tones with green accents",
+    "author": "watchthelight",
+    "variables": {
+      "--rootsdk-brand-primary": "#2D7D46",
+      "--rootsdk-brand-secondary": "#7BC67E",
+      "--rootsdk-brand-tertiary": "#3AA55D",
+      "--rootsdk-background-primary": "#1A2F23",
+      "--rootsdk-background-secondary": "#1E3528",
+      "--rootsdk-background-tertiary": "#142A1C",
+      "--rootsdk-input": "#122218",
+      "--rootsdk-border": "#2A4A35",
+      "--rootsdk-link": "#7BC67E",
+      "--rootsdk-muted": "#4A6B52"
+    },
+    "preview_colors": {
+      "background": "#1A2F23",
+      "text": "#E8F0E8",
+      "accent": "#2D7D46",
+      "border": "#2A4A35"
+    }
+  }
+]

@@ -1,0 +1,84 @@
+/* Root Communications Theme Colors - Extracted from Root.exe v0.9.86 */
+/* Binary offset: 0x12AE9676 */
+
+:root [data-theme=dark] {
+  --color-brand-primary: var(--rootsdk-brand-primary, #3B6AF8);
+  --color-brand-secondary: var(--rootsdk-brand-secondary, #A8FF5D);
+  --color-brand-tertiary: var(--rootsdk-brand-tertiary, #49D6AC);
+  --color-text-primary: var(--rootsdk-text-primary, #F2F2F2);
+  --color-text-secondary: var(--rootsdk-text-secondary, #A7A7A8);
+  --color-text-tertiary: var(--rootsdk-text-tertiary, #7B7B89);
+  --color-text-white: var(--rootsdk-text-white, #F2F2F2);
+  --color-background-primary: var(--rootsdk-background-primary, #0D1521);
+  --color-background-secondary: var(--rootsdk-background-secondary, #121A26);
+  --color-background-tertiary: var(--rootsdk-background-tertiary, #07101B);
+  --color-input: var(--rootsdk-input, #090E13);
+  --color-border: var(--rootsdk-border, #242C36);
+  --color-highlight-light: var(--rootsdk-highlight-light, #FFFFFF0A);
+  --color-highlight-normal: var(--rootsdk-highlight-normal, #FFFFFF19);
+  --color-highlight-strong: var(--rootsdk-highlight-strong, #FFFFFF30);
+  --color-info: var(--rootsdk-info, #F0F250);
+  --color-warning: var(--rootsdk-warning, #E88F3D);
+  --color-error: var(--rootsdk-error, #F03F36);
+  --color-muted: var(--rootsdk-muted, #4F5C6F);
+  --color-link: var(--rootsdk-link, #88A5FF);
+  --color-background-blur: var(--rootsdk-background-blur, #00000080);
+  --color-self-mention: var(--rootsdk-self-mention, #FF2D1F66);
+  --color-community-mention: var(--rootsdk-community-mention, #A8FF5D33);
+  --color-channel-mention: var(--rootsdk-channel-mention, #E88F3D4D);
+  --color-transparent: var(--rootsdk-transparent, transparent)
+}
+:root [data-theme=light] {
+  --color-brand-primary: var(--rootsdk-brand-primary, #3B6AF8);
+  --color-brand-secondary: var(--rootsdk-brand-secondary, #58AC30);
+  --color-brand-tertiary: var(--rootsdk-brand-tertiary, #08a677);
+  --color-text-primary: var(--rootsdk-text-primary, #131313);
+  --color-text-secondary: var(--rootsdk-text-secondary, #282828);
+  --color-text-tertiary: var(--rootsdk-text-tertiary, #5E5E5E);
+  --color-text-white: var(--rootsdk-text-white, #F2F2F2);
+  --color-background-primary: var(--rootsdk-background-primary, #FBFBFB);
+  --color-background-secondary: var(--rootsdk-background-secondary, #FFFFFF);
+  --color-background-tertiary: var(--rootsdk-background-tertiary, #F5F6F8);
+  --color-input: var(--rootsdk-input, #F5F5F5);
+  --color-border: var(--rootsdk-border, #DDDDDD);
+  --color-highlight-light: var(--rootsdk-highlight-light, #2222220A);
+  --color-highlight-normal: var(--rootsdk-highlight-normal, #22222219);
+  --color-highlight-strong: var(--rootsdk-highlight-strong, #22222226);
+  --color-info: var(--rootsdk-info, #EA9134);
+  --color-warning: var(--rootsdk-warning, #EA9134);
+  --color-error: var(--rootsdk-error, #F03F36);
+  --color-muted: var(--rootsdk-muted, #A9B3C0);
+  --color-link: var(--rootsdk-link, #006eeb);
+  --color-background-blur: var(--rootsdk-background-blur, #6B6B6B80);
+  --color-self-mention: var(--rootsdk-self-mention, #FF2D1F66);
+  --color-community-mention: var(--rootsdk-community-mention, #90CC5C4D);
+  --color-channel-mention: var(--rootsdk-channel-mention, #E88F3D4D);
+  --color-transparent: var(--rootsdk-transparent, transparent)
+}
+:root [data-theme=pure-dark] {
+  --color-brand-primary: var(--rootsdk-brand-primary, #3B6AF8);
+  --color-brand-secondary: var(--rootsdk-brand-secondary, #A8FF5D);
+  --color-brand-tertiary: var(--rootsdk-brand-tertiary, #49D6AC);
+  --color-text-primary: var(--rootsdk-text-primary, #F2F2F2);
+  --color-text-secondary: var(--rootsdk-text-secondary, #A7A7A8);
+  --color-text-tertiary: var(--rootsdk-text-tertiary, #7B7B89);
+  --color-text-white: var(--rootsdk-text-white, #F2F2F2);
+  --color-background-primary: var(--rootsdk-background-primary, #161617);
+  --color-background-secondary: var(--rootsdk-background-secondary, #1F1F22);
+  --color-background-tertiary: var(--rootsdk-background-tertiary, #111113);
+  --color-input: var(--rootsdk-input, #101112);
+  --color-border: var(--rootsdk-border, #303030);
+  --color-highlight-light: var(--rootsdk-highlight-light, #FFFFFF0A);
+  --color-highlight-normal: var(--rootsdk-highlight-normal, #FFFFFF19);
+  --color-highlight-strong: var(--rootsdk-highlight-strong, #FFFFFF30);
+  --color-info: var(--rootsdk-info, #F0F250);
+  --color-warning: var(--rootsdk-warning, #E88F3D);
+  --color-error: var(--rootsdk-error, #F03F36);
+  --color-muted: var(--rootsdk-muted, #4F5C6F);
+  --color-link: var(--rootsdk-link, #88A5FF);
+  --color-background-blur: var(--rootsdk-background-blur, #00000080);
+  --color-self-mention: var(--rootsdk-self-mention, #FF2D1F66);
+  --color-community-mention: var(--rootsdk-community-mention, #A8FF5D33);
+  --color-channel-mention: var(--rootsdk-channel-mention, #E88F3D4D);
+  --color-transparent: var(--rootsdk-transparent, transparent)
+}

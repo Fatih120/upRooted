@@ -1,0 +1,192 @@
+---
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title="uprooted">
+  <div class="banner">
+    <p><strong>notice:</strong> this project will not release any of its codebase until strict written permission has been granted from the developers of Root.</p>
+  </div>
+
+  <div class="page">
+    <div class="columns">
+      <div class="left">
+        <h1>uprooted</h1>
+        <p class="sub">a client mod framework for root communications.</p>
+
+        <ul class="features">
+          <li>themes</li>
+          <li>plugins</li>
+          <li>bridge api</li>
+        </ul>
+
+        <nav>
+          <a href="https://github.com/watchthelight/uprooted">source</a>
+          <span class="dot">&middot;</span>
+          <span class="dim">gpl-3.0</span>
+        </nav>
+      </div>
+
+      <div class="right">
+        <div class="policy">
+          <p>uprooted is currently in <strong>early planning stages</strong>. nothing is available for download yet.</p>
+          <p>root's <a href="https://root.gg/terms">terms</a> prohibit reverse engineering and modification of the service. we believe cosmetic client mods can coexist with that policy, but we won't ship anything without explicit approval from root's team.</p>
+          <p class="interested">if you're interested, reach out:</p>
+          <ul class="contact">
+            <li><a href="mailto:admin@watchthelight.org">admin@watchthelight.org</a></li>
+            <li><a href="https://discord.com/users/697169405422862417">watchthelight</a> <span class="dim">(discord)</span></li>
+            <li><span>Root:watchthelight</span></li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <p class="footer dim">not affiliated with root communications.</p>
+  </div>
+</Layout>
+
+<style>
+  .banner {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 5;
+    background: rgba(164, 56, 56, 0.12);
+    border-bottom: 1px solid rgba(164, 56, 56, 0.3);
+    padding: 10px 24px;
+    font-size: 12px;
+    color: #d47070;
+    text-align: center;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+
+  .banner strong {
+    color: #e08080;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .page {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 32px;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+  }
+
+  .columns {
+    display: flex;
+    gap: 64px;
+    align-items: flex-start;
+  }
+
+  .left {
+    flex: 0 0 auto;
+  }
+
+  .right {
+    flex: 1;
+    padding-top: 4px;
+  }
+
+  h1 {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+    color: var(--text);
+  }
+
+  .sub {
+    color: var(--dim);
+    font-size: 13px;
+    margin-bottom: 20px;
+  }
+
+  .features {
+    list-style: none;
+    font-size: 13px;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+
+  .features li::before {
+    content: "- ";
+    color: var(--dim);
+  }
+
+  nav {
+    font-size: 13px;
+  }
+
+  .dot {
+    color: var(--dim);
+    margin: 0 6px;
+  }
+
+  .dim {
+    color: var(--dim);
+  }
+
+  .policy {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--dim);
+    border-left: 2px solid var(--dim);
+    padding-left: 16px;
+  }
+
+  .policy strong {
+    color: var(--text);
+  }
+
+  .policy p + p {
+    margin-top: 12px;
+  }
+
+  .interested {
+    color: var(--text);
+  }
+
+  .contact {
+    list-style: none;
+    font-size: 12px;
+    margin-top: 8px;
+  }
+
+  .contact li {
+    padding: 2px 0;
+  }
+
+  .contact li::before {
+    content: "- ";
+    color: var(--dim);
+  }
+
+  .footer {
+    position: absolute;
+    bottom: 24px;
+    left: 32px;
+    font-size: 11px;
+  }
+
+  @media (max-width: 640px) {
+    .columns {
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .page {
+      padding: 0 20px;
+    }
+
+    .footer {
+      left: 20px;
+    }
+  }
+</style>
