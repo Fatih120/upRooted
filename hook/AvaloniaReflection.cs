@@ -200,6 +200,7 @@ internal class AvaloniaReflection
         Logger.Log("Reflection", $"  VisualExtensions: {(VisualExtensionsType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  ToggleSwitch: {(ToggleSwitchType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Ellipse: {(EllipseType != null ? EllipseType.FullName : "MISSING")}");
+        Logger.Log("Reflection", $"  Visual: {(VisualType != null ? VisualType.FullName : "MISSING")}");
         Logger.Log("Reflection", $"  OverlayLayer: {(OverlayLayerType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Canvas: {(CanvasType != null ? "OK" : "MISSING")}");
     }
@@ -307,9 +308,53 @@ internal class AvaloniaReflection
         // Layoutable.Bounds (inherited by all controls via Control -> Layoutable)
         _layoutableBounds = ControlType?.GetProperty("Bounds", pub);
 
-        // TranslatePoint is an extension method on VisualExtensions
-        _translatePoint = VisualExtensionsType?.GetMethods(stat)
+        // TranslatePoint: try instance method on Visual first (Avalonia 11+),
+        // then fall back to static extension on VisualExtensions.
+        // Walk the Control type hierarchy to find it (may be on Visual base class).
+        var translateSearch = ControlType;
+        while (translateSearch != null && _translatePoint == null)
+        {
+            _translatePoint = translateSearch.GetMethods(pub | BindingFlags.DeclaredOnly)
+                .FirstOrDefault(m => m.Name == "TranslatePoint" && m.GetParameters().Length == 2);
+            translateSearch = translateSearch.BaseType;
+        }
+        _translatePoint ??= VisualExtensionsType?.GetMethods(stat)
             .FirstOrDefault(m => m.Name == "TranslatePoint" && m.GetParameters().Length == 3);
+        // Last resort: search all Avalonia types for a matching TranslatePoint
+        if (_translatePoint == null)
+        {
+            Logger.Log("Reflection", "  TranslatePoint: walking all Avalonia types...");
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
+                try
+                {
+                    foreach (var t in asm.GetTypes())
+                    {
+                        if (t.IsAbstract && t.IsSealed) // static class
+                        {
+                            var m = t.GetMethods(stat)
+                                .FirstOrDefault(mi => mi.Name == "TranslatePoint");
+                            if (m != null)
+                            {
+                                Logger.Log("Reflection", $"  TranslatePoint found: {t.FullName}.{m.Name}({m.GetParameters().Length} params, static={m.IsStatic})");
+                                _translatePoint = m;
+                            }
+                        }
+                        else
+                        {
+                            var m = t.GetMethods(pub | BindingFlags.DeclaredOnly)
+                                .FirstOrDefault(mi => mi.Name == "TranslatePoint");
+                            if (m != null)
+                                Logger.Log("Reflection", $"  TranslatePoint found: {t.FullName}.{m.Name}({m.GetParameters().Length} params, static={m.IsStatic})");
+                        }
+                    }
+                }
+                catch { }
+                if (_translatePoint != null) break;
+            }
+        }
 
         // Opacity and IsHitTestVisible
         _controlOpacity = ControlType?.GetProperty("Opacity", pub)
@@ -319,7 +364,7 @@ internal class AvaloniaReflection
         Logger.Log("Reflection", $"  OverlayLayer.GetOverlayLayer: {(_overlayGetOverlayLayer != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Canvas.SetLeft: {(_canvasSetLeft != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Layoutable.Bounds: {(_layoutableBounds != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  TranslatePoint: {(_translatePoint != null ? "OK" : "MISSING")}");
+        Logger.Log("Reflection", $"  TranslatePoint: {(_translatePoint != null ? $"OK ({(_translatePoint.IsStatic ? "static" : "instance")}, {_translatePoint.DeclaringType?.Name}.{_translatePoint.Name}({_translatePoint.GetParameters().Length} params))" : "MISSING")}");
     }
 
     // ===== Core access =====
@@ -804,6 +849,44 @@ internal class AvaloniaReflection
         }
     }
 
+    // ===== MaxHeight helpers =====
+
+    public void SetMaxHeight(object? control, double maxHeight)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("MaxHeight")?.SetValue(control, maxHeight);
+    }
+
+    public double GetMaxHeight(object? control)
+    {
+        if (control == null) return double.NaN;
+        return control.GetType().GetProperty("MaxHeight")?.GetValue(control) as double? ?? double.NaN;
+    }
+
+    public void ClearMaxHeight(object? control)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("MaxHeight")?.SetValue(control, double.NaN);
+    }
+
+    // ===== ContentControl helpers =====
+
+    public object? GetContent(object? contentControl)
+    {
+        if (contentControl == null) return null;
+        return _contentControlContent?.GetValue(contentControl)
+            ?? contentControl.GetType().GetProperty("Content")?.GetValue(contentControl);
+    }
+
+    public void SetContent(object? contentControl, object? content)
+    {
+        if (contentControl == null) return;
+        if (_contentControlContent != null)
+            _contentControlContent.SetValue(contentControl, content);
+        else
+            contentControl.GetType().GetProperty("Content")?.SetValue(contentControl, content);
+    }
+
     // ===== ListBox helpers =====
 
     public int GetSelectedIndex(object? listBox)
@@ -925,7 +1008,8 @@ internal class AvaloniaReflection
 
     /// <summary>
     /// Translates a point from one visual's coordinate space to another.
-    /// Uses VisualExtensions.TranslatePoint(this Visual, Point, Visual) -> Point?
+    /// Handles both instance method (Avalonia 11+: visual.TranslatePoint(Point, Visual))
+    /// and static extension (VisualExtensions.TranslatePoint(Visual, Point, Visual)).
     /// </summary>
     public (double X, double Y)? TranslatePoint(object from, double x, double y, object to)
     {
@@ -933,22 +1017,36 @@ internal class AvaloniaReflection
         try
         {
             var point = Activator.CreateInstance(PointType, x, y);
-            var result = _translatePoint.Invoke(null, new[] { from, point, to });
+
+            object? result;
+            if (_translatePoint.IsStatic)
+            {
+                // Static extension: TranslatePoint(Visual from, Point point, Visual to)
+                result = _translatePoint.Invoke(null, new[] { from, point, to });
+            }
+            else
+            {
+                // Instance method: from.TranslatePoint(Point point, Visual to)
+                result = _translatePoint.Invoke(from, new[] { point, to });
+            }
+
             if (result == null) return null;
 
-            // Result is Point? (nullable). Unwrap the Nullable<Point>.
+            // Result is Point? (nullable). Unwrap if needed.
             var resultType = result.GetType();
-            var hasValue = resultType.GetProperty("HasValue")?.GetValue(result);
-            if (hasValue is false) return null;
 
-            // If it's already a Point (not Nullable<Point>), read directly
-            var valProp = resultType.GetProperty("Value");
-            var val = valProp != null ? valProp.GetValue(result) : result;
-            if (val == null) return null;
+            // Check if it's Nullable<Point>
+            if (resultType.IsGenericType && resultType.GetGenericTypeDefinition() == typeof(Nullable<>))
+            {
+                var hasValue = (bool)(resultType.GetProperty("HasValue")?.GetValue(result) ?? false);
+                if (!hasValue) return null;
+                result = resultType.GetProperty("Value")?.GetValue(result);
+                if (result == null) return null;
+                resultType = result.GetType();
+            }
 
-            var vt = val.GetType();
-            var rx = (double)(vt.GetProperty("X")?.GetValue(val) ?? 0.0);
-            var ry = (double)(vt.GetProperty("Y")?.GetValue(val) ?? 0.0);
+            var rx = (double)(resultType.GetProperty("X")?.GetValue(result) ?? 0.0);
+            var ry = (double)(resultType.GetProperty("Y")?.GetValue(result) ?? 0.0);
             return (rx, ry);
         }
         catch (Exception ex)

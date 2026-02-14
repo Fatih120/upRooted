@@ -10,6 +10,13 @@ internal class SettingsLayout
     public bool IsGridLayout { get; init; }
     public int ContentColumnIndex { get; init; }
     public int ContentRowIndex { get; init; }
+
+    // New fields for direct injection approach
+    public object? BackButton { get; init; }       // The "<" back button/clickable in header row
+    public object? VersionBorder { get; init; }     // NavContainer child[1] (version info)
+    public object? SignOutControl { get; init; }    // NavContainer child[2] (sign out)
+    public object? SidebarGrid { get; init; }       // Grid parent of NavContainer
+    public int AdvancedIndex { get; init; }         // Index of "Advanced" in ListBox (-1 if not found)
 }
 
 /// <summary>
@@ -119,6 +126,35 @@ internal class VisualTreeWalker
         Logger.Log("TreeWalker", $"Layout: {layoutContainer.GetType().Name}, " +
             $"content: {contentArea.GetType().Name}, isGrid={isGrid}, contentCol={contentCol}");
 
+        // Find additional elements for direct injection
+        object? backButton = null;
+        object? versionBorder = null;
+        object? signOutControl = null;
+        object? sidebarGrid = null;
+        int advancedIndex = -1;
+
+        if (isGrid && layoutContainer != null)
+        {
+            backButton = FindBackButton(layoutContainer);
+        }
+
+        // NavContainer children: [0]=ListBox, [1]=version Border, [2]=sign-out ContentControl
+        int navChildCount = _r.GetChildCount(navContainer);
+        if (navChildCount >= 3)
+        {
+            versionBorder = _r.GetChild(navContainer, 1);
+            signOutControl = _r.GetChild(navContainer, 2);
+        }
+
+        // SidebarGrid: direct parent of NavContainer (Grid with Rows=[1*,Auto])
+        var navParent = _r.GetParent(navContainer);
+        if (navParent != null && _r.IsGrid(navParent))
+            sidebarGrid = navParent;
+
+        // Find Advanced index in ListBox
+        if (listBox != null)
+            advancedIndex = FindAdvancedIndex(listBox);
+
         return new SettingsLayout
         {
             NavContainer = navContainer,
@@ -128,8 +164,105 @@ internal class VisualTreeWalker
             ListBox = listBox,
             IsGridLayout = isGrid,
             ContentColumnIndex = contentCol,
-            ContentRowIndex = contentRow
+            ContentRowIndex = contentRow,
+            BackButton = backButton,
+            VersionBorder = versionBorder,
+            SignOutControl = signOutControl,
+            SidebarGrid = sidebarGrid,
+            AdvancedIndex = advancedIndex
         };
+    }
+
+    /// <summary>
+    /// Search Row=0 of the settings Grid for a TextBlock containing "&lt;" and walk up
+    /// to its clickable ancestor (Button or parent with PointerPressed).
+    /// </summary>
+    public object? FindBackButton(object settingsGrid)
+    {
+        // Row=0 contains the header bar with the back button
+        var children = new List<object>(_r.GetVisualChildren(settingsGrid));
+        foreach (var child in children)
+        {
+            int row = _r.GetGridRow(child);
+            if (row != 0) continue;
+
+            // Search this header area for "<" text or a back button
+            foreach (var node in DescendantsDepthFirst(child))
+            {
+                if (!_r.IsTextBlock(node)) continue;
+                var text = _r.GetText(node);
+                if (text != "<" && text != "\u2190" && text != "\uE72B") continue;
+
+                // Found the "<" text - walk up to find a clickable ancestor
+                var current = _r.GetParent(node);
+                for (int d = 0; d < 5 && current != null; d++)
+                {
+                    var typeName = current.GetType().Name;
+                    if (typeName == "Button" || typeName.Contains("Button") ||
+                        typeName.EndsWith("ClickableControl"))
+                    {
+                        Logger.Log("TreeWalker", $"Back button found: {typeName} (via '<' text at depth {d})");
+                        return current;
+                    }
+                    current = _r.GetParent(current);
+                }
+
+                // No Button ancestor found - use the parent of the text as clickable target
+                var textParent = _r.GetParent(node);
+                if (textParent != null)
+                {
+                    Logger.Log("TreeWalker", $"Back button fallback: {textParent.GetType().Name} (parent of '<' text)");
+                    return textParent;
+                }
+            }
+
+            // Fallback: look for any Button-type control in Row=0
+            foreach (var node in DescendantsDepthFirst(child))
+            {
+                var typeName = node.GetType().Name;
+                if (typeName == "Button" || typeName.Contains("Button"))
+                {
+                    Logger.Log("TreeWalker", $"Back button found (Button scan): {typeName}");
+                    return node;
+                }
+            }
+        }
+
+        Logger.Log("TreeWalker", "Back button not found in Row=0");
+        return null;
+    }
+
+    /// <summary>
+    /// Enumerate ListBox items and return the index of the one containing "Advanced".
+    /// Uses the ItemContainerGenerator or visual children to find ListBoxItems.
+    /// </summary>
+    public int FindAdvancedIndex(object listBox)
+    {
+        // Get items via visual children of the ListBox's panel
+        int index = 0;
+        foreach (var node in _r.GetVisualChildren(listBox))
+        {
+            // The ListBox has a Border > ScrollViewer > Panel > VirtualizingStackPanel > ListBoxItems
+            foreach (var item in DescendantsDepthFirst(node))
+            {
+                var typeName = item.GetType().Name;
+                if (typeName != "ListBoxItem") continue;
+
+                // Search this ListBoxItem for a TextBlock with "Advanced"
+                foreach (var textNode in DescendantsDepthFirst(item))
+                {
+                    if (_r.IsTextBlock(textNode) && _r.GetText(textNode) == "Advanced")
+                    {
+                        Logger.Log("TreeWalker", $"Advanced found at ListBox index {index}");
+                        return index;
+                    }
+                }
+                index++;
+            }
+        }
+
+        Logger.Log("TreeWalker", $"Advanced not found in ListBox ({index} items scanned)");
+        return -1;
     }
 
     /// <summary>

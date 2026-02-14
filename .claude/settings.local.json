@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cmp:*)",
+      "Bash(wc:*)",
+      "Bash(find:*)",
+      "Bash(head:*)"
+    ]
+  }
+}
