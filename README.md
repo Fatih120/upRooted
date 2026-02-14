@@ -12,7 +12,7 @@ a client mod framework for [root](https://rootapp.com).
 
 ## policy
 
-uprooted is not affiliated with root communications. this is an independent community project.
+uprooted is NOT affiliated with root communications. this is an independent community project.
 
 we will not distribute injection code until we have explicit approval from root's developers. all modifications are cosmetic-only and do not interact with root's backend services.
 
