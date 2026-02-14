@@ -704,6 +704,25 @@ internal class AvaloniaReflection
     public double? GetFontSize(object? control) => _textBlockFontSize?.GetValue(control) as double?;
     public object? GetFontWeight(object? control) => _textBlockFontWeight?.GetValue(control);
     public object? GetForeground(object? control) => _textBlockForeground?.GetValue(control);
+    public object? GetFontFamily(object? control)
+    {
+        if (control == null) return null;
+        return control.GetType().GetProperty("FontFamily")?.GetValue(control);
+    }
+
+    /// <summary>
+    /// Set FontFamily on a TextBlock using an Avalonia font family string.
+    /// Supports both simple names ("CircularXX TT") and avares URIs.
+    /// </summary>
+    public void SetFontFamily(object? control, object? fontFamily)
+    {
+        if (control == null || fontFamily == null) return;
+        try
+        {
+            control.GetType().GetProperty("FontFamily")?.SetValue(control, fontFamily);
+        }
+        catch { }
+    }
 
     // ===== Panel children helpers =====
 
