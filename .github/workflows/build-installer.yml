@@ -98,18 +98,18 @@ jobs:
 
       # ── Build Tauri ──
 
-      - name: Build Tauri installer
+      - name: Build Tauri portable exe
         working-directory: installer
         run: pnpm tauri build
+
+      - name: Rename portable exe
+        run: |
+          $version = (Get-Content installer\src-tauri\tauri.conf.json | ConvertFrom-Json).version
+          Copy-Item "installer\src-tauri\target\release\uprooted-installer.exe" "installer\src-tauri\target\release\Uprooted-$version.exe"
+          Write-Host "Renamed to Uprooted-$version.exe"
 
       - name: Upload portable exe
         uses: actions/upload-artifact@v4
         with:
-          name: Uprooted-Installer
-          path: installer/src-tauri/target/release/Uprooted Installer.exe
-
-      - name: Upload NSIS installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: Uprooted-NSIS-Setup
-          path: installer/src-tauri/target/release/bundle/nsis/*.exe
+          name: Uprooted
+          path: installer/src-tauri/target/release/Uprooted-*.exe
