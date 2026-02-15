@@ -289,6 +289,10 @@ async function ensureRootClosed(): Promise<boolean> {
 
     const cleanup = () => { overlay.remove(); };
 
+    overlay.addEventListener("click", (e) => {
+      if (e.target === overlay) { cleanup(); resolve(false); }
+    });
+
     overlay.querySelector(".popup-cancel")!.addEventListener("click", () => {
       cleanup();
       resolve(false);
@@ -438,7 +442,7 @@ function copyLogs(): void {
 // ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.1.5";
+  let version = "0.1.6";
   try {
     version = await getUprootedVersion();
   } catch {
