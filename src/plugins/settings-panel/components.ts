@@ -6,6 +6,7 @@ import type { PluginLoader } from "../../core/pluginLoader.js";
 import { setCssVariables, removeCssVariable } from "../../api/native.js";
 import { injectCss, removeCss } from "../../api/css.js";
 import themes from "../themes/themes.json";
+import { generateCustomVariables } from "../themes/index.js";
 
 interface ThemeDef {
   name: string;
@@ -231,6 +232,35 @@ export function buildPluginsPage(loader: PluginLoader): HTMLElement {
   return page;
 }
 
+/** Flush all known theme CSS variables */
+function flushAllThemeVars(): void {
+  for (const t of themes as ThemeDef[]) {
+    for (const varName of Object.keys(t.variables)) {
+      removeCssVariable(varName);
+    }
+  }
+  // Also flush custom variable names
+  for (const varName of [
+    "--rootsdk-brand-primary",
+    "--rootsdk-brand-secondary",
+    "--rootsdk-brand-tertiary",
+    "--rootsdk-background-primary",
+    "--rootsdk-background-secondary",
+    "--rootsdk-background-tertiary",
+    "--rootsdk-input",
+    "--rootsdk-border",
+    "--rootsdk-link",
+    "--rootsdk-muted",
+  ]) {
+    removeCssVariable(varName);
+  }
+}
+
+/** Validate a #RRGGBB hex string */
+function isValidHex(hex: string): boolean {
+  return /^#[0-9A-Fa-f]{6}$/.test(hex);
+}
+
 /** Build the themes management page. */
 export function buildThemesPage(loader: PluginLoader): HTMLElement {
   const page = document.createElement("div");
@@ -245,29 +275,34 @@ export function buildThemesPage(loader: PluginLoader): HTMLElement {
   header.appendChild(title);
   page.appendChild(header);
 
-  // Theme selector
+  // Theme selector dropdown
   const themeSection = createSection("Active Theme");
   const settings = window.__UPROOTED_SETTINGS__;
   const currentTheme = (settings?.plugins?.themes?.config?.theme as string) ?? "default";
-  const themeDisplayNames = (themes as ThemeDef[]).map((t) => t.display_name);
+  const themeNames = (themes as ThemeDef[]).map((t) => t.display_name);
 
   const themeSelect = createSelect(
-    themeDisplayNames,
+    themeNames,
     (themes as ThemeDef[]).find((t) => t.name === currentTheme)?.display_name ?? "Default Dark",
     (displayName) => {
       const theme = (themes as ThemeDef[]).find((t) => t.display_name === displayName);
       if (!theme) return;
 
-      // Remove all existing theme vars first
-      for (const t of themes as ThemeDef[]) {
-        for (const varName of Object.keys(t.variables)) {
-          removeCssVariable(varName);
-        }
-      }
+      flushAllThemeVars();
 
-      // Apply new theme vars
-      if (Object.keys(theme.variables).length > 0) {
-        setCssVariables(theme.variables);
+      if (theme.name === "custom") {
+        // Show custom section, apply current custom colors
+        customSection.style.display = "";
+        const accent = accentInput.value || "#3B6AF8";
+        const bg = bgInput.value || "#0D1521";
+        if (isValidHex(accent) && isValidHex(bg)) {
+          setCssVariables(generateCustomVariables(accent, bg));
+        }
+      } else {
+        customSection.style.display = "none";
+        if (Object.keys(theme.variables).length > 0) {
+          setCssVariables(theme.variables);
+        }
       }
     },
   );
@@ -279,6 +314,8 @@ export function buildThemesPage(loader: PluginLoader): HTMLElement {
   // Theme preview cards
   const previewSection = createSection("Available Themes");
   for (const theme of themes as ThemeDef[]) {
+    if (theme.name === "custom") continue; // Custom has its own section
+
     const card = document.createElement("div");
     card.className = "uprooted-theme-card";
 
@@ -308,6 +345,49 @@ export function buildThemesPage(loader: PluginLoader): HTMLElement {
     previewSection.appendChild(card);
   }
   page.appendChild(previewSection);
+
+  // Custom theme section
+  const customSection = document.createElement("div");
+  customSection.className = "uprooted-settings-section";
+  customSection.style.display = currentTheme === "custom" ? "" : "none";
+
+  const customHeader = document.createElement("div");
+  customHeader.className = "uprooted-settings-section-label";
+  customHeader.textContent = "Custom Theme Colors";
+  customSection.appendChild(customHeader);
+
+  const customDesc = document.createElement("div");
+  customDesc.className = "uprooted-page-text";
+  customDesc.textContent = "Pick accent and background colors. All shades are auto-derived.";
+  customSection.appendChild(customDesc);
+
+  // Accent color picker
+  const accentInput = document.createElement("input");
+  accentInput.type = "color";
+  accentInput.value = (settings?.plugins?.themes?.config?.customAccent as string) ?? "#3B6AF8";
+  accentInput.className = "uprooted-color-input";
+  const accentRow = createRow("Accent", "Primary brand color", accentInput);
+  customSection.appendChild(accentRow);
+
+  // Background color picker
+  const bgInput = document.createElement("input");
+  bgInput.type = "color";
+  bgInput.value = (settings?.plugins?.themes?.config?.customBackground as string) ?? "#0D1521";
+  bgInput.className = "uprooted-color-input";
+  const bgRow = createRow("Background", "Main background color", bgInput);
+  customSection.appendChild(bgRow);
+
+  // Live preview on input change
+  const applyCustomPreview = () => {
+    if (!isValidHex(accentInput.value) || !isValidHex(bgInput.value)) return;
+    flushAllThemeVars();
+    setCssVariables(generateCustomVariables(accentInput.value, bgInput.value));
+  };
+
+  accentInput.addEventListener("input", applyCustomPreview);
+  bgInput.addEventListener("input", applyCustomPreview);
+
+  page.appendChild(customSection);
 
   // Custom CSS
   const cssSection = createSection("Custom CSS");

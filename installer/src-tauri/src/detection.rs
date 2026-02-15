@@ -15,6 +15,7 @@ pub struct DetectionResult {
     pub hook_status: HookStatus,
 }
 
+#[cfg(target_os = "windows")]
 pub fn get_profile_dir() -> PathBuf {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
     PathBuf::from(local_app_data)
@@ -24,12 +25,46 @@ pub fn get_profile_dir() -> PathBuf {
         .join("default")
 }
 
+#[cfg(target_os = "linux")]
+pub fn get_profile_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home)
+        .join(".local/share/Root Communications/Root/profile/default")
+}
+
+#[cfg(target_os = "windows")]
 pub fn get_root_exe_path() -> PathBuf {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
     PathBuf::from(local_app_data)
         .join("Root")
         .join("current")
         .join("Root.exe")
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_root_exe_path() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    // Search common locations for Root.AppImage
+    let candidates = [
+        format!("{}/Applications/Root.AppImage", home),
+        format!("{}/Downloads/Root.AppImage", home),
+        format!("{}/.local/bin/Root.AppImage", home),
+        "/opt/Root.AppImage".to_string(),
+        "/usr/bin/Root.AppImage".to_string(),
+    ];
+    for c in &candidates {
+        let p = PathBuf::from(c);
+        if p.exists() {
+            return p;
+        }
+    }
+    // Also check if a plain "Root" binary exists (extracted AppImage)
+    let local_root = PathBuf::from(&home).join(".local/bin/Root");
+    if local_root.exists() {
+        return local_root;
+    }
+    // Default fallback
+    PathBuf::from(format!("{}/Applications/Root.AppImage", home))
 }
 
 pub fn find_target_html_files() -> Vec<PathBuf> {

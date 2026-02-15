@@ -7,9 +7,7 @@ internal static class Logger
 
     static Logger()
     {
-        var profileDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "Root Communications", "Root", "profile", "default");
+        var profileDir = PlatformPaths.GetProfileDir();
         Directory.CreateDirectory(profileDir);
         LogPath = Path.Combine(profileDir, "uprooted-hook.log");
     }

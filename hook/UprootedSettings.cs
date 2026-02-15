@@ -3,10 +3,12 @@ namespace Uprooted;
 internal class UprootedSettings
 {
     public bool Enabled { get; set; } = true;
-    public string Version { get; set; } = "0.1.2";
+    public string Version { get; set; } = "0.1.7";
     public string ActiveTheme { get; set; } = "default-dark";
     public Dictionary<string, bool> Plugins { get; set; } = new();
     public string CustomCss { get; set; } = "";
+    public string CustomAccent { get; set; } = "#3B6AF8";
+    public string CustomBackground { get; set; } = "#0D1521";
 
     private static string? _settingsPath;
 
@@ -15,9 +17,7 @@ internal class UprootedSettings
         if (_settingsPath != null) return _settingsPath;
         try
         {
-            var profileDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "Root Communications", "Root", "profile", "default");
+            var profileDir = PlatformPaths.GetProfileDir();
             _settingsPath = Path.Combine(profileDir, "uprooted-settings.ini");
         }
         catch
@@ -45,6 +45,8 @@ internal class UprootedSettings
                     case "ActiveTheme": settings.ActiveTheme = val; break;
                     case "Enabled": settings.Enabled = val == "true"; break;
                     case "CustomCss": settings.CustomCss = val; break;
+                    case "CustomAccent": settings.CustomAccent = val; break;
+                    case "CustomBackground": settings.CustomBackground = val; break;
                 }
             }
             Logger.Log("Settings", $"Loaded settings from {path}: ActiveTheme={settings.ActiveTheme}");
@@ -65,7 +67,9 @@ internal class UprootedSettings
                 "ActiveTheme=" + ActiveTheme,
                 "Enabled=" + (Enabled ? "true" : "false"),
                 "Version=" + Version,
-                "CustomCss=" + CustomCss);
+                "CustomCss=" + CustomCss,
+                "CustomAccent=" + CustomAccent,
+                "CustomBackground=" + CustomBackground);
             File.WriteAllText(path, content);
             Logger.Log("Settings", "Saved settings to " + path + ": ActiveTheme=" + ActiveTheme);
         }

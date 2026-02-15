@@ -33,5 +33,18 @@ hook-test/**/obj/
 .env
 .env.*
 
+# Old build outputs
+Uprooted/
+
+# Compiled tool binaries (built locally)
+tools/*.exe
+tools/*.obj
+tools/*.dll
+tools/*.lib
+tools/*.exp
+
+# Hook build output
+hook/_out/
+
 # Windows junk
 nul
