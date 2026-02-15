@@ -24,6 +24,7 @@ internal class AvaloniaReflection
     public Type? ContentControlType { get; private set; }
     public Type? ButtonType { get; private set; }
     public Type? ToggleSwitchType { get; private set; }
+    public Type? TextBoxType { get; private set; }
     public Type? EllipseType { get; private set; }
     public Type? CanvasType { get; private set; }
 
@@ -41,6 +42,11 @@ internal class AvaloniaReflection
     public Type? ColorType { get; private set; }
     public Type? ThicknessType { get; private set; }
     public Type? CornerRadiusType { get; private set; }
+
+    // Grid layout types
+    public Type? ColumnDefinitionType { get; private set; }
+    public Type? GridLengthType { get; private set; }
+    public Type? GridUnitTypeEnum { get; private set; }
 
     // Enums / structs
     public Type? HorizontalAlignmentType { get; private set; }
@@ -95,6 +101,9 @@ internal class AvaloniaReflection
     private MethodInfo? _gridSetRow;
     private MethodInfo? _gridGetRow;
     private PropertyInfo? _toggleSwitchIsChecked;
+    private FieldInfo? _textBoxTextProperty;       // TextBox.TextProperty (AvaloniaProperty)
+    private FieldInfo? _textBoxWatermarkProperty;  // TextBox.WatermarkProperty (AvaloniaProperty)
+    private FieldInfo? _textBoxMaxLengthProperty;  // TextBox.MaxLengthProperty (AvaloniaProperty)
 
     // Overlay / Canvas / Bounds
     private MethodInfo? _overlayGetOverlayLayer;  // OverlayLayer.GetOverlayLayer(Visual)
@@ -168,6 +177,7 @@ internal class AvaloniaReflection
         ContentControlType = Find("Avalonia.Controls.ContentControl");
         ButtonType = Find("Avalonia.Controls.Button");
         ToggleSwitchType = Find("Avalonia.Controls.ToggleSwitch");
+        TextBoxType = Find("Avalonia.Controls.TextBox");
         EllipseType = Find("Avalonia.Controls.Shapes.Ellipse");
 
         // Fallback: search by name if namespace differs
@@ -178,6 +188,10 @@ internal class AvaloniaReflection
         ColorType = Find("Avalonia.Media.Color");
         ThicknessType = Find("Avalonia.Thickness");
         CornerRadiusType = Find("Avalonia.CornerRadius");
+
+        ColumnDefinitionType = Find("Avalonia.Controls.ColumnDefinition");
+        GridLengthType = Find("Avalonia.Controls.GridLength");
+        GridUnitTypeEnum = Find("Avalonia.Controls.GridUnitType");
 
         HorizontalAlignmentType = Find("Avalonia.Layout.HorizontalAlignment");
         VerticalAlignmentType = Find("Avalonia.Layout.VerticalAlignment");
@@ -314,6 +328,12 @@ internal class AvaloniaReflection
 
         // ToggleSwitch
         _toggleSwitchIsChecked = ToggleSwitchType?.GetProperty("IsChecked", pub);
+
+        // TextBox
+        var staticPub = BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy;
+        _textBoxTextProperty = TextBoxType?.GetField("TextProperty", staticPub);
+        _textBoxWatermarkProperty = TextBoxType?.GetField("WatermarkProperty", staticPub);
+        _textBoxMaxLengthProperty = TextBoxType?.GetField("MaxLengthProperty", staticPub);
 
         // OverlayLayer.GetOverlayLayer(Visual) - static method
         _overlayGetOverlayLayer = OverlayLayerType?.GetMethod("GetOverlayLayer", stat);
@@ -697,6 +717,121 @@ internal class AvaloniaReflection
         catch { return null; }
     }
 
+    public object? CreateTextBox(string? watermark = null, string? text = null, int maxLength = 0)
+    {
+        if (TextBoxType == null) return null;
+
+        try
+        {
+            var tb = Activator.CreateInstance(TextBoxType);
+            if (tb == null) return null;
+
+            // CLR property setters are trimmed in Root's single-file binary.
+            // Use Avalonia's SetValue(AvaloniaProperty, object) instead.
+            if (watermark != null) SetAvaloniaProperty(tb, _textBoxWatermarkProperty, watermark);
+            if (text != null) SetAvaloniaProperty(tb, _textBoxTextProperty, text);
+            if (maxLength > 0) SetAvaloniaProperty(tb, _textBoxMaxLengthProperty, maxLength);
+            return tb;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"CreateTextBox error: {ex.Message}");
+            return null;
+        }
+    }
+
+    public string? GetTextBoxText(object? textBox)
+    {
+        if (textBox == null) return null;
+        return GetAvaloniaProperty(textBox, _textBoxTextProperty) as string;
+    }
+
+    public void SetTextBoxText(object? textBox, string text)
+    {
+        if (textBox == null) return;
+        SetAvaloniaProperty(textBox, _textBoxTextProperty, text);
+    }
+
+    /// <summary>
+    /// Set a value via the Avalonia property system, bypassing trimmed CLR setters.
+    /// avaloniaPropertyField is a FieldInfo for the static AvaloniaProperty (e.g. TextBox.TextProperty).
+    /// Uses SetValue(AvaloniaProperty, object?, BindingPriority) — the 3-param non-generic overload.
+    /// </summary>
+    private void SetAvaloniaProperty(object control, FieldInfo? avaloniaPropertyField, object value)
+    {
+        if (avaloniaPropertyField == null) return;
+        var avProp = avaloniaPropertyField.GetValue(null);
+        if (avProp == null) return;
+
+        // Ensure BindingPriority is resolved
+        EnsureBindingPriorityResolved();
+
+        // Ensure the 3-param SetValue method is cached
+        if (_setValueWithPriority == null && _bindingPriorityStyle != null)
+        {
+            var methods = control.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .Where(m => m.Name == "SetValue" && !m.IsGenericMethod && m.GetParameters().Length == 3);
+            foreach (var method in methods)
+            {
+                var parms = method.GetParameters();
+                if (parms[0].ParameterType.IsAssignableFrom(avProp.GetType())
+                    && parms[2].ParameterType.Name == "BindingPriority")
+                {
+                    _setValueWithPriority = method;
+                    break;
+                }
+            }
+        }
+
+        if (_setValueWithPriority != null && _bindingPriorityStyle != null)
+        {
+            _setValueWithPriority.Invoke(control, new[] { avProp, value, _bindingPriorityStyle });
+        }
+        else
+        {
+            Logger.Log("Reflection", $"SetAvaloniaProperty FAILED: method={_setValueWithPriority != null} priority={_bindingPriorityStyle != null} field={avaloniaPropertyField.Name}");
+        }
+    }
+
+    /// <summary>Resolve BindingPriority.LocalValue once.</summary>
+    private void EnsureBindingPriorityResolved()
+    {
+        if (_priorityResolved) return;
+        _priorityResolved = true;
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            var bpType = asm.GetType("Avalonia.Data.BindingPriority");
+            if (bpType != null)
+            {
+                _bindingPriorityStyle = Enum.ToObject(bpType, 0); // LocalValue = 0
+                break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Get a value via the Avalonia property system, bypassing trimmed CLR getters.
+    /// </summary>
+    private object? GetAvaloniaProperty(object control, FieldInfo? avaloniaPropertyField)
+    {
+        if (avaloniaPropertyField == null) return null;
+        var avProp = avaloniaPropertyField.GetValue(null);
+        if (avProp == null) return null;
+
+        // Find GetValue(AvaloniaProperty) - non-generic, 1-param overload
+        var methods = control.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "GetValue" && !m.IsGenericMethod && m.GetParameters().Length == 1);
+        foreach (var method in methods)
+        {
+            var parms = method.GetParameters();
+            if (parms[0].ParameterType.IsAssignableFrom(avProp.GetType()))
+            {
+                return method.Invoke(control, new[] { avProp });
+            }
+        }
+        return null;
+    }
+
     public object? CreatePanel()
     {
         if (PanelType == null) return null;
@@ -948,6 +1083,41 @@ internal class AvaloniaReflection
         catch { return 0; }
     }
 
+    // ===== Grid creation =====
+
+    public object? CreateGrid()
+    {
+        if (GridType == null) return null;
+        return Activator.CreateInstance(GridType);
+    }
+
+    /// <summary>
+    /// Add a star-width column definition to a Grid.
+    /// </summary>
+    public void AddGridColumn(object? grid, double starWidth = 1.0)
+    {
+        if (grid == null || ColumnDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            // GridUnitType.Star = 1
+            var starUnit = Enum.ToObject(GridUnitTypeEnum, 1);
+            // new GridLength(starWidth, GridUnitType.Star)
+            var gridLength = Activator.CreateInstance(GridLengthType, starWidth, starUnit);
+            // new ColumnDefinition { Width = gridLength }
+            var colDef = Activator.CreateInstance(ColumnDefinitionType);
+            ColumnDefinitionType.GetProperty("Width")?.SetValue(colDef, gridLength);
+
+            // grid.ColumnDefinitions.Add(colDef)
+            var colDefs = grid.GetType().GetProperty("ColumnDefinitions")?.GetValue(grid);
+            if (colDefs is System.Collections.IList colList)
+                colList.Add(colDef);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddGridColumn error: {ex.Message}");
+        }
+    }
+
     // ===== Type checking =====
 
     public bool IsTextBlock(object? obj) => obj != null && TextBlockType?.IsAssignableFrom(obj.GetType()) == true;
@@ -1087,24 +1257,7 @@ internal class AvaloniaReflection
     {
         try
         {
-            if (!_priorityResolved)
-            {
-                _priorityResolved = true;
-                // Find BindingPriority enum
-                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-                {
-                    var bpType = asm.GetType("Avalonia.Data.BindingPriority");
-                    if (bpType != null)
-                    {
-                        // BindingPriority.LocalValue = 0 - only priority that reliably overrides
-                        // template and style values on controls.
-                        _bindingPriorityStyle = Enum.ToObject(bpType, 0);
-                        Logger.Log("Reflection", "BindingPriority.LocalValue resolved: " + _bindingPriorityStyle);
-                        break;
-                    }
-                }
-            }
-
+            EnsureBindingPriorityResolved();
             if (_bindingPriorityStyle == null) return false;
 
             // Find the static AvaloniaProperty field

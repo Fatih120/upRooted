@@ -11,6 +11,8 @@ import {
 
 let logEl: HTMLDivElement;
 let detection: DetectionResult | null = null;
+const isLinux = navigator.platform.startsWith("Linux");
+const rootExeName = isLinux ? "Root" : "root.exe";
 
 // ── Logging ──
 
@@ -60,12 +62,12 @@ async function runDetection(): Promise<void> {
 
   logBlank();
 
-  // Root.exe
+  // Root executable
   if (detection.root_found) {
-    log(`root.exe found`, "success");
+    log(`${rootExeName} found`, "success");
     log(`  path: ${detection.root_path}`);
   } else {
-    log("root.exe not found", "error");
+    log(`${rootExeName} not found`, "error");
     log("  is Root Communications installed?", "warn");
   }
 
@@ -91,7 +93,7 @@ async function runDetection(): Promise<void> {
     log("hook files: all deployed", "success");
   } else {
     const missing: string[] = [];
-    if (!hs.profiler_dll) missing.push("profiler dll");
+    if (!hs.profiler_dll) missing.push(isLinux ? "profiler so" : "profiler dll");
     if (!hs.hook_dll) missing.push("hook dll");
     if (!hs.hook_deps) missing.push("hook deps");
     if (!hs.preload_js) missing.push("preload.js");
@@ -193,7 +195,7 @@ function updateStatusDisplay(): void {
   el.innerHTML = `
     <div class="status-row">
       ${statusDot(detection.root_found ? "green" : "red")}
-      <span class="status-label">Root.exe</span>
+      <span class="status-label">${rootExeName}</span>
       <span class="status-value">${detection.root_found ? truncatePath(detection.root_path) : "not found"}</span>
     </div>
     <div class="status-row">
@@ -203,7 +205,7 @@ function updateStatusDisplay(): void {
     </div>
     <div class="status-row">
       ${statusDot(hs.files_ok ? "green" : (hs.profiler_dll || hs.hook_dll ? "yellow" : "red"))}
-      <span class="status-label">Hook DLLs</span>
+      <span class="status-label">Hook Files</span>
       <span class="status-value">${hs.files_ok ? "deployed" : "not deployed"}</span>
     </div>
     <div class="status-row">
@@ -277,7 +279,7 @@ async function ensureRootClosed(): Promise<boolean> {
     overlay.className = "popup-overlay";
     overlay.innerHTML = `
       <div class="popup">
-        <div class="popup-text">root.exe is running</div>
+        <div class="popup-text">${rootExeName} is running</div>
         <div class="popup-sub">close it to continue, or we can do it for you</div>
         <div class="popup-actions">
           <button class="btn danger popup-kill">close root</button>
@@ -442,7 +444,7 @@ function copyLogs(): void {
 // ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.1.6";
+  let version = "0.1.7";
   try {
     version = await getUprootedVersion();
   } catch {

@@ -49,6 +49,7 @@ internal class ThemeEngine
     /// </summary>
     private void UpdateTitleBarColor(string hexColor)
     {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows)) return;
         try
         {
             var hwnd = GetMainWindowHandle();
@@ -96,8 +97,7 @@ internal class ThemeEngine
     }
 
     /// <summary>
-    /// Apply a theme by name. Directly overrides resources in Styles[0].Resources
-    /// for Root-specific keys, and adds a MergedDictionary for FluentTheme keys.
+    /// Apply a named preset theme (crimson, loki).
     /// </summary>
     public bool ApplyTheme(string name)
     {
@@ -108,6 +108,43 @@ internal class ThemeEngine
             return false;
         }
 
+        TreeColorMaps.TryGetValue(themeName, out var treeMap);
+        return ApplyThemeInternal(themeName, palette, treeMap);
+    }
+
+    /// <summary>
+    /// Apply a custom theme generated from user-chosen accent + background colors.
+    /// Generates the full palette and tree color map from ColorUtils.
+    /// </summary>
+    public bool ApplyCustomTheme(string accentHex, string bgHex)
+    {
+        if (!ColorUtils.IsValidHex(accentHex) || !ColorUtils.IsValidHex(bgHex))
+        {
+            Logger.Log("Theme", "Invalid custom colors: accent=" + accentHex + " bg=" + bgHex);
+            return false;
+        }
+
+        var palette = GenerateCustomTheme(accentHex, bgHex);
+        var treeMap = GenerateCustomTreeColorMap(accentHex, bgHex);
+        _customPalette = palette;
+        _customAccent = accentHex;
+        _customBg = bgHex;
+        return ApplyThemeInternal("custom", palette, treeMap);
+    }
+
+    // Stored custom palette for GetAccentColor/GetBgPrimary when theme is "custom"
+    private Dictionary<string, string>? _customPalette;
+    private string? _customAccent;
+    private string? _customBg;
+
+    /// <summary>
+    /// Core theme application. Overrides resources in Styles[0].Resources,
+    /// adds a MergedDictionary for FluentTheme keys, sets up visual tree walks.
+    /// </summary>
+    private bool ApplyThemeInternal(string themeName,
+        Dictionary<string, string> palette,
+        Dictionary<string, string>? treeColorMap)
+    {
         Logger.Log("Theme", "Applying theme: " + themeName + " (" + palette.Count + " resource overrides)");
 
         // Save previous theme's color map BEFORE reverting, so we can build
@@ -235,25 +272,16 @@ internal class ThemeEngine
         Logger.Log("Theme", "Theme applied: " + styleOverrides + " style overrides + " + mergedAdded + " merged dict entries");
 
         // === Phase 3: Set up visual tree color maps ===
-        // Build a COMBINED map that includes:
-        //   1. Root original colors -> new theme colors (standard)
-        //   2. Previous theme colors -> new theme colors (for late-loaded controls
-        //      that still show the old theme's colors after the one-shot revert walk)
-        if (TreeColorMaps.TryGetValue(themeName, out var colorMap))
+        if (treeColorMap != null)
         {
-            // Start with the new theme's standard map (Root originals -> new replacements)
-            var combinedMap = new Dictionary<string, string>(colorMap, StringComparer.OrdinalIgnoreCase);
+            var combinedMap = new Dictionary<string, string>(treeColorMap, StringComparer.OrdinalIgnoreCase);
             int crossMapped = 0;
 
-            // If switching from a previous theme, add cross-mappings
             if (previousColorMap != null && previousThemeName != null)
             {
                 foreach (var (origColor, prevReplacement) in previousColorMap)
                 {
-                    // For each Root original that both themes map:
-                    // add prevTheme's replacement -> newTheme's replacement
-                    // E.g., Onyx #000000 (from #0d1521) -> Crimson #241414 (from #0d1521)
-                    if (colorMap.TryGetValue(origColor, out var newReplacement))
+                    if (treeColorMap.TryGetValue(origColor, out var newReplacement))
                     {
                         if (!combinedMap.ContainsKey(prevReplacement) &&
                             !string.Equals(prevReplacement, newReplacement, StringComparison.OrdinalIgnoreCase))
@@ -271,19 +299,22 @@ internal class ThemeEngine
             _reverseColorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (var (orig, repl) in combinedMap)
                 _reverseColorMap[repl] = orig;
-            Logger.Log("Theme", "Color map loaded: " + combinedMap.Count + " mappings (" + colorMap.Count + " base + " + crossMapped + " cross-mapped)");
+            Logger.Log("Theme", "Color map loaded: " + combinedMap.Count + " mappings (" + treeColorMap.Count + " base + " + crossMapped + " cross-mapped)");
         }
 
-        // === Phase 4: Schedule delayed visual tree walks ===
-        // The main UI loads asynchronously after auth, so walk multiple times.
+        // === Phase 4: Immediate full tree walk + schedule continuous walks ===
+        try
+        {
+            int initial = WalkAllWindows();
+            Logger.Log("Theme", "Immediate walk: " + initial + " recolored");
+        }
+        catch { }
         ScheduleVisualTreeWalks();
-
-        // Install layout interceptor for near-instant recoloring on navigation
         InstallLayoutInterceptor();
 
         // === Phase 5: Update DWM title bar color ===
-        if (palette.TryGetValue("SolidBackgroundFillColorBase", out var bgHex))
-            UpdateTitleBarColor(bgHex);
+        if (palette.TryGetValue("SolidBackgroundFillColorBase", out var titleBarBg))
+            UpdateTitleBarColor(titleBarBg);
 
         return true;
     }
@@ -323,7 +354,7 @@ internal class ThemeEngine
                     Logger.Log("Theme", "Walk error: " + ex.Message);
                 }
             });
-        }, null, 1000, 500); // First walk at 1s, then every 500ms
+        }, null, 200, 500); // First walk at 200ms, then every 500ms
     }
 
     /// <summary>
@@ -570,49 +601,6 @@ internal class ThemeEngine
             ["#fff2f2f2"] = "#fff0ece0",
         },
 
-        ["onyx"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-        {
-            // Blue accents -> cool silver
-            ["#ff3b6af8"] = "#ffa0a8b0",
-            ["#ff4a78f9"] = "#ffb0b8c0",
-            ["#ff2e59d1"] = "#ff8890a0",
-            ["#ff2148af"] = "#ff707888",
-            ["#ff5b88ff"] = "#ffc0c8d0",
-            ["#ff3366ff"] = "#ffb1b9c1",    // unique (not #ffb0b8c0)
-            ["#663b6af8"] = "#66a0a8b0",
-            ["#333b6af8"] = "#33a0a8b0",
-            ["#193b6af8"] = "#19a0a8b0",
-
-            // ContentPages card background
-            ["#ff0f1923"] = "#ff060606",    // CardBg -> near-black card
-
-            // Structural dark backgrounds -> pure OLED black
-            // Each must be UNIQUE for reverse map (visually identical)
-            ["#ff0d1521"] = "#ff000000",    // Main dark bg -> pure black
-            ["#ff07101b"] = "#ff010101",    // Darker bg -> near-black (unique)
-            ["#ff090e13"] = "#ff020202",    // Near-black bg -> near-black (unique)
-            ["#ff0a1a2e"] = "#ff050505",    // Another dark bg
-            ["#ff101c2e"] = "#ff0a0a0a",    // Slightly lighter
-            ["#ff121a26"] = "#ff080808",    // DM/chat panel bg
-            ["#ff141e2b"] = "#ff0e0e0e",    // Panel bg
-            ["#ff282828"] = "#ff141414",    // Neutral gray -> dark gray
-            ["#ff4f5c6f"] = "#ff484848",    // Gray-blue metadata -> neutral gray
-
-            // Dark borders -> very dark gray
-            ["#ff242c36"] = "#ff222222",
-            ["#ff1a2230"] = "#ff1b1b1b",    // unique (not #ff1a1a1a -> was too close to #ff1a2230 original)
-            ["#ff505050"] = "#ff2a2a2a",
-
-            // Text: slightly dimmer for OLED comfort
-            ["#a3f2f2f2"] = "#a3e0e0e0",
-            ["#66f2f2f2"] = "#66e0e0e0",
-            // NOTE: #19ffffff/#0affffff (hover overlays) intentionally excluded -
-            // theming them makes hover effects persist permanently
-
-            // Text: slightly muted
-            ["#ffdedede"] = "#ffd0d0d0",
-            ["#fff2f2f2"] = "#ffe8e8e8",
-        },
     };
 
     // Active color map for the current theme (original -> replacement)
@@ -664,6 +652,10 @@ internal class ThemeEngine
         Dictionary<string, int>? colorCounts)
     {
         if (depth > 50 || _activeColorMap == null) return;
+
+        // Skip subtrees tagged by Uprooted (e.g. theme preview swatches)
+        var tag = _r.GetTag(visual);
+        if (tag == "uprooted-no-recolor") return;
 
         try
         {
@@ -729,6 +721,7 @@ internal class ThemeEngine
     private int WalkAndRestore(object visual, int depth)
     {
         if (depth > 50 || _reverseColorMap == null) return 0;
+        if (_r.GetTag(visual) == "uprooted-no-recolor") return 0;
         int count = 0;
 
         try
@@ -855,31 +848,41 @@ internal class ThemeEngine
             _injectedDict = null;
         }
 
-        // === Phase 2: Walk visual tree with hybrid ClearValue + SetValue ===
-        // Now that resources are restored, ClearValue lets DynamicResource
-        // bindings re-resolve to the correct originals. For controls without
-        // DynamicResource, the fallback SetValue handles them.
-
-        // Save reverse map for follow-up walks (before clearing state)
-        var savedReverseMap = _reverseColorMap;
-        var savedThemeName = _activeThemeName;
-
-        if (savedThemeName != null && savedReverseMap != null)
+        // === Phase 2: Targeted purge — ClearValue on all KNOWN theme colors ===
+        // Build a set of every color we know about (both originals and replacements).
+        // Only ClearValue on controls whose current color is in this set.
+        // This avoids nuking Root's structural backgrounds that weren't theme-related.
+        var purgeColors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        if (_activeColorMap != null)
         {
-            try
+            foreach (var (orig, repl) in _activeColorMap)
             {
-                int restored = 0;
-                foreach (var topLevel in _r.GetAllTopLevels())
-                {
-                    try { restored += WalkAndRestore(topLevel, 0); }
-                    catch { }
-                }
-                Logger.Log("Theme", "Revert walk: " + restored + " controls restored");
+                purgeColors.Add(orig);
+                purgeColors.Add(repl);
             }
-            catch (Exception ex)
+        }
+        if (_reverseColorMap != null)
+        {
+            foreach (var (repl, orig) in _reverseColorMap)
             {
-                Logger.Log("Theme", "Revert walk error: " + ex.Message);
+                purgeColors.Add(repl);
+                purgeColors.Add(orig);
             }
+        }
+
+        try
+        {
+            int purged = 0;
+            foreach (var topLevel in _r.GetAllTopLevels())
+            {
+                try { purged += PurgeKnownColors(topLevel, 0, purgeColors); }
+                catch { }
+            }
+            Logger.Log("Theme", "Targeted purge: " + purged + " color properties cleared (" + purgeColors.Count + " known colors)");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Theme", "Targeted purge error: " + ex.Message);
         }
 
         _savedOriginals.Clear();
@@ -890,14 +893,6 @@ internal class ThemeEngine
 
         _activeThemeName = null;
         _reverseColorMap = null;
-
-        // === Phase 3: Schedule follow-up revert walks ===
-        // Late-loaded controls (lazy panels, popups) may still show old theme
-        // colors after the one-shot walk. Schedule a few follow-ups.
-        if (savedReverseMap != null)
-        {
-            ScheduleRevertFollowUps(savedReverseMap);
-        }
     }
 
     /// <summary>
@@ -934,12 +929,71 @@ internal class ThemeEngine
     }
 
     /// <summary>
+    /// Targeted purge: ClearValue on color properties only if the current color
+    /// is in the known set (theme colors we applied or originals we mapped from).
+    /// This avoids clearing Root's structural backgrounds.
+    /// </summary>
+    private int PurgeKnownColors(object visual, int depth, HashSet<string> knownColors)
+    {
+        if (depth > 50) return 0;
+        if (_r.GetTag(visual) == "uprooted-no-recolor") return 0;
+        int count = 0;
+
+        try
+        {
+            foreach (var propName in new[] { "Background", "Foreground", "BorderBrush", "Fill" })
+            {
+                try
+                {
+                    var prop = visual.GetType().GetProperty(propName);
+                    if (prop == null) continue;
+                    var brush = prop.GetValue(visual);
+                    if (brush == null) continue;
+                    var colorStr = GetBrushColorString(brush);
+                    if (colorStr == null) continue;
+
+                    if (knownColors.Contains(colorStr))
+                    {
+                        var fieldName = AvaloniaReflection.PropertyToFieldName(propName);
+                        if (_r.ClearValueSilent(visual, fieldName))
+                        {
+                            // Verify — if ClearValue left it null, restore a fallback
+                            var newBrush = prop.GetValue(visual);
+                            if (newBrush == null)
+                            {
+                                string restoreColor = colorStr;
+                                if (_reverseColorMap != null && _reverseColorMap.TryGetValue(colorStr, out var orig))
+                                    restoreColor = orig;
+
+                                var restoreBrush = _r.CreateBrush(restoreColor);
+                                if (restoreBrush != null)
+                                    _r.SetValueStylePriority(visual, fieldName, restoreBrush);
+                            }
+                            count++;
+                        }
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+        {
+            count += PurgeKnownColors(child, depth + 1, knownColors);
+        }
+
+        return count;
+    }
+
+    /// <summary>
     /// Walk and restore using a specific reverse map (for follow-up revert walks).
     /// Uses ClearValue + SetValue fallback, same as WalkAndRestore.
     /// </summary>
     private int WalkAndRestoreWithMap(object visual, int depth, Dictionary<string, string> reverseMap)
     {
         if (depth > 50) return 0;
+        if (_r.GetTag(visual) == "uprooted-no-recolor") return 0;
         int count = 0;
 
         try
@@ -1229,6 +1283,8 @@ internal class ThemeEngine
 
     public string GetAccentColor()
     {
+        if (_activeThemeName == "custom" && _customAccent != null)
+            return _customAccent;
         if (_activeThemeName != null && Themes.TryGetValue(_activeThemeName, out var p))
         {
             if (p.TryGetValue("ThemeAccentColor", out var hex)) return hex;
@@ -1239,11 +1295,196 @@ internal class ThemeEngine
 
     public string GetBgPrimary()
     {
+        if (_activeThemeName == "custom" && _customBg != null)
+            return _customBg;
         if (_activeThemeName != null && Themes.TryGetValue(_activeThemeName, out var p))
         {
             if (p.TryGetValue("SolidBackgroundFillColorBase", out var hex)) return hex;
         }
         return "#0D1521"; // Root's default dark bg
+    }
+
+    // ===== Custom Theme Generation =====
+
+    /// <summary>
+    /// Generate a full theme palette from accent + background colors using ColorUtils.
+    /// Produces the same ~50 keys as the preset themes.
+    /// </summary>
+    private static Dictionary<string, string> GenerateCustomTheme(string accent, string bg)
+    {
+        var textColor = ColorUtils.DeriveTextColor(bg);
+        var accentLight1 = ColorUtils.Lighten(accent, 15);
+        var accentLight2 = ColorUtils.Lighten(accent, 30);
+        var accentLight3 = ColorUtils.Lighten(accent, 45);
+        var accentDark1 = ColorUtils.Darken(accent, 15);
+        var accentDark2 = ColorUtils.Darken(accent, 30);
+        var accentDark3 = ColorUtils.Darken(accent, 45);
+
+        var bgSecondary = ColorUtils.Lighten(bg, 8);
+        var bgTertiary = ColorUtils.Lighten(bg, 14);
+        var bgQuarternary = ColorUtils.Lighten(bg, 20);
+
+        var textFaded78 = ColorUtils.WithAlphaFraction(textColor, 0.78);
+        var textFaded55 = ColorUtils.WithAlphaFraction(textColor, 0.55);
+        var textFaded36 = ColorUtils.WithAlphaFraction(textColor, 0.36);
+
+        return new Dictionary<string, string>
+        {
+            // Root custom theme keys
+            ["ThemeAccentColor"]     = accent,
+            ["ThemeAccentColor2"]    = accentLight1,
+            ["ThemeAccentColor3"]    = accentDark1,
+            ["ThemeAccentColor4"]    = accentDark2,
+            ["ThemeAccentBrush"]     = accent,
+            ["ThemeAccentBrush2"]    = accentLight1,
+            ["ThemeAccentBrush3"]    = accentDark1,
+            ["ThemeAccentBrush4"]    = accentDark2,
+            ["ThemeForegroundLowColor"]  = textFaded55,
+            ["ThemeForegroundLowBrush"]  = textFaded55,
+            ["HighlightForegroundColor"] = accent,
+            ["HighlightForegroundBrush"] = accent,
+            ["ErrorColor"]               = "#FF4444",
+            ["ErrorLowColor"]            = "#80FF4444",
+            ["ErrorBrush"]               = "#FF4444",
+            ["ErrorLowBrush"]            = "#80FF4444",
+            ["DatePickerFlyoutPresenterHighlightFill"]  = accent,
+            ["TimePickerFlyoutPresenterHighlightFill"]  = accent,
+
+            // System accent colors
+            ["SystemAccentColor"]       = accent,
+            ["SystemAccentColorDark1"]  = accentDark1,
+            ["SystemAccentColorDark2"]  = accentDark2,
+            ["SystemAccentColorDark3"]  = accentDark3,
+            ["SystemAccentColorLight1"] = accentLight1,
+            ["SystemAccentColorLight2"] = accentLight2,
+            ["SystemAccentColorLight3"] = accentLight3,
+
+            // Text fill
+            ["TextFillColorPrimary"]    = ColorUtils.WithAlphaFraction(textColor, 1.0),
+            ["TextFillColorSecondary"]  = textFaded78,
+            ["TextFillColorTertiary"]   = textFaded55,
+            ["TextFillColorDisabled"]   = textFaded36,
+
+            // Control fills
+            ["ControlFillColorDefault"]   = "#15FFFFFF",
+            ["ControlFillColorSecondary"] = "#10FFFFFF",
+            ["ControlFillColorTertiary"]  = "#08FFFFFF",
+            ["ControlFillColorDisabled"]  = "#06FFFFFF",
+
+            // Solid backgrounds
+            ["SolidBackgroundFillColorBase"]        = bg,
+            ["SolidBackgroundFillColorSecondary"]   = bgSecondary,
+            ["SolidBackgroundFillColorTertiary"]    = bgTertiary,
+            ["SolidBackgroundFillColorQuarternary"] = bgQuarternary,
+
+            // Card/layer
+            ["CardBackgroundFillColorDefault"]       = ColorUtils.WithAlpha(accent, 0x20),
+            ["CardBackgroundFillColorDefaultBrush"]  = ColorUtils.WithAlpha(accent, 0x20),
+            ["LayerFillColorDefault"]                = "#08FFFFFF",
+            ["LayerFillColorAlt"]                    = "#0AFFFFFF",
+
+            // Accent fill brushes
+            ["AccentFillColorDefaultBrush"]    = accent,
+            ["AccentFillColorSecondaryBrush"]  = accentLight1,
+            ["AccentFillColorTertiaryBrush"]   = accentDark1,
+            ["AccentFillColorDisabledBrush"]   = ColorUtils.WithAlpha(accent, 0x5C),
+
+            // Strokes
+            ["ControlStrokeColorDefault"]   = ColorUtils.WithAlphaFraction(textColor, 0.24),
+            ["ControlStrokeColorSecondary"] = ColorUtils.WithAlphaFraction(textColor, 0.15),
+            ["CardStrokeColorDefault"]      = ColorUtils.WithAlphaFraction(textColor, 0.19),
+            ["SurfaceStrokeColorDefault"]   = ColorUtils.WithAlpha(accent, 0x40),
+
+            // Buttons
+            ["ButtonBackground"]                   = ColorUtils.WithAlpha(accent, 0x15),
+            ["ButtonBackgroundPointerOver"]         = ColorUtils.WithAlpha(accent, 0x25),
+            ["ButtonBackgroundPressed"]             = ColorUtils.WithAlpha(accent, 0x10),
+            ["ButtonBackgroundDisabled"]            = "#08FFFFFF",
+
+            // ListBox
+            ["ListBoxItemBackgroundPointerOver"]    = ColorUtils.WithAlpha(accent, 0x15),
+            ["ListBoxItemBackgroundPressed"]        = ColorUtils.WithAlpha(accent, 0x20),
+            ["ListBoxItemBackgroundSelected"]       = ColorUtils.WithAlpha(accent, 0x25),
+            ["ListBoxItemBackgroundSelectedPointerOver"]  = ColorUtils.WithAlpha(accent, 0x30),
+            ["ListBoxItemBackgroundSelectedPressed"]      = ColorUtils.WithAlpha(accent, 0x20),
+
+            // ToggleSwitch
+            ["ToggleSwitchFillOn"]               = accent,
+            ["ToggleSwitchFillOnPointerOver"]    = accentLight1,
+            ["ToggleSwitchFillOnPressed"]        = accentDark1,
+
+            // ScrollBar
+            ["ScrollBarThumbFill"]               = ColorUtils.WithAlpha(accent, 0x50),
+            ["ScrollBarThumbFillPointerOver"]    = ColorUtils.WithAlpha(accent, 0x80),
+            ["ScrollBarThumbFillPressed"]        = accent,
+
+            // TextControl
+            ["TextControlBackgroundFocused"]     = ColorUtils.WithAlpha(accent, 0x20),
+            ["TextControlBorderBrushFocused"]    = accent,
+
+            // Selection
+            ["TextSelectionHighlightColor"]      = ColorUtils.WithAlpha(accent, 0x60),
+        };
+    }
+
+    /// <summary>
+    /// Generate a tree color map for custom themes. Maps Root's original ARGB colors
+    /// to custom-derived equivalents. Each replacement value must be unique.
+    /// </summary>
+    private static Dictionary<string, string> GenerateCustomTreeColorMap(string accent, string bg)
+    {
+        // Root's original colors (ARGB format from Avalonia Color.ToString())
+        var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        // Blue accent -> custom accent (with minor offsets for uniqueness)
+        var (ar, ag, ab) = ColorUtils.ParseHex(accent);
+        map["#ff3b6af8"] = $"#FF{ar:X2}{ag:X2}{ab:X2}";
+        map["#ff4a78f9"] = "#FF" + ColorUtils.Lighten(accent, 15).TrimStart('#');
+        map["#ff2e59d1"] = "#FF" + ColorUtils.Darken(accent, 15).TrimStart('#');
+        map["#ff2148af"] = "#FF" + ColorUtils.Darken(accent, 30).TrimStart('#');
+        map["#ff5b88ff"] = "#FF" + ColorUtils.Lighten(accent, 30).TrimStart('#');
+        // Offset by 1 for uniqueness
+        var accentL15 = ColorUtils.ParseHex(ColorUtils.Lighten(accent, 15));
+        map["#ff3366ff"] = $"#FF{(byte)Math.Min(255, accentL15.R + 1):X2}{accentL15.G:X2}{accentL15.B:X2}";
+        map["#663b6af8"] = $"#66{ar:X2}{ag:X2}{ab:X2}";
+        map["#333b6af8"] = $"#33{ar:X2}{ag:X2}{ab:X2}";
+        map["#193b6af8"] = $"#19{ar:X2}{ag:X2}{ab:X2}";
+
+        // ContentPages card bg
+        var cardBg = ColorUtils.Lighten(bg, 6);
+        map["#ff0f1923"] = "#FF" + cardBg.TrimStart('#');
+
+        // Structural backgrounds -> custom bg with incremental lightening for uniqueness
+        var (br, bgr, bb) = ColorUtils.ParseHex(bg);
+        map["#ff0d1521"] = $"#FF{br:X2}{bgr:X2}{bb:X2}";
+        var bg2 = ColorUtils.Darken(bg, 8);
+        map["#ff07101b"] = "#FF" + bg2.TrimStart('#');
+        var bg3 = ColorUtils.Darken(bg, 5);
+        map["#ff090e13"] = "#FF" + bg3.TrimStart('#');
+        var bg4 = ColorUtils.Darken(bg, 3);
+        map["#ff0a1a2e"] = "#FF" + bg4.TrimStart('#');
+        map["#ff101c2e"] = "#FF" + ColorUtils.Lighten(bg, 5).TrimStart('#');
+        map["#ff121a26"] = "#FF" + ColorUtils.Lighten(bg, 3).TrimStart('#');
+        map["#ff141e2b"] = "#FF" + ColorUtils.Lighten(bg, 8).TrimStart('#');
+        map["#ff282828"] = "#FF" + ColorUtils.Lighten(bg, 10).TrimStart('#');
+        map["#ff4f5c6f"] = "#FF" + ColorUtils.Lighten(bg, 25).TrimStart('#');
+
+        // Borders
+        map["#ff242c36"] = "#FF" + ColorUtils.Lighten(bg, 18).TrimStart('#');
+        map["#ff1a2230"] = "#FF" + ColorUtils.Lighten(bg, 12).TrimStart('#');
+        map["#ff505050"] = "#FF" + ColorUtils.Lighten(bg, 20).TrimStart('#');
+
+        // Text semi-transparent
+        var textBase = ColorUtils.DeriveTextColor(bg);
+        var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
+        map[$"#a3f2f2f2"] = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+        map[$"#66f2f2f2"] = $"#66{tr:X2}{tg:X2}{tb:X2}";
+
+        // Text opaque
+        map["#ffdedede"] = "#FF" + ColorUtils.Darken(textBase, 5).TrimStart('#');
+        map["#fff2f2f2"] = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+
+        return map;
     }
 
     // ===== Theme Definitions =====
@@ -1439,91 +1680,5 @@ internal class ThemeEngine
             ["TextSelectionHighlightColor"]      = "#602A5A40",
         },
 
-        ["onyx"] = new Dictionary<string, string>
-        {
-            // === Root's custom theme keys (Styles[0].Resources) ===
-            // OLED Onyx: pure black backgrounds, cool silver accent
-            ["ThemeAccentColor"]     = "#A0A8B0",
-            ["ThemeAccentColor2"]    = "#B0B8C0",
-            ["ThemeAccentColor3"]    = "#8890A0",
-            ["ThemeAccentColor4"]    = "#707888",
-            ["ThemeAccentBrush"]     = "#A0A8B0",
-            ["ThemeAccentBrush2"]    = "#B0B8C0",
-            ["ThemeAccentBrush3"]    = "#8890A0",
-            ["ThemeAccentBrush4"]    = "#707888",
-            ["ThemeForegroundLowColor"]  = "#8CE0E0E0",
-            ["ThemeForegroundLowBrush"]  = "#8CE0E0E0",
-            ["HighlightForegroundColor"] = "#A0A8B0",
-            ["HighlightForegroundBrush"] = "#A0A8B0",
-            ["ErrorColor"]               = "#FF4444",
-            ["ErrorLowColor"]            = "#80FF4444",
-            ["ErrorBrush"]               = "#FF4444",
-            ["ErrorLowBrush"]            = "#80FF4444",
-            ["DatePickerFlyoutPresenterHighlightFill"]  = "#A0A8B0",
-            ["TimePickerFlyoutPresenterHighlightFill"]  = "#A0A8B0",
-
-            // === Standard FluentTheme keys ===
-            ["SystemAccentColor"]       = "#A0A8B0",
-            ["SystemAccentColorDark1"]  = "#8890A0",
-            ["SystemAccentColorDark2"]  = "#707888",
-            ["SystemAccentColorDark3"]  = "#585F70",
-            ["SystemAccentColorLight1"] = "#B0B8C0",
-            ["SystemAccentColorLight2"] = "#C0C8D0",
-            ["SystemAccentColorLight3"] = "#D0D8E0",
-
-            ["TextFillColorPrimary"]    = "#FFE0E0E0",
-            ["TextFillColorSecondary"]  = "#C8E0E0E0",
-            ["TextFillColorTertiary"]   = "#8CE0E0E0",
-            ["TextFillColorDisabled"]   = "#5CE0E0E0",
-
-            ["ControlFillColorDefault"]   = "#15FFFFFF",
-            ["ControlFillColorSecondary"] = "#10FFFFFF",
-            ["ControlFillColorTertiary"]  = "#08FFFFFF",
-            ["ControlFillColorDisabled"]  = "#06FFFFFF",
-
-            ["SolidBackgroundFillColorBase"]        = "#000000",
-            ["SolidBackgroundFillColorSecondary"]   = "#0A0A0A",
-            ["SolidBackgroundFillColorTertiary"]    = "#111111",
-            ["SolidBackgroundFillColorQuarternary"] = "#181818",
-
-            ["CardBackgroundFillColorDefault"]       = "#20A0A8B0",
-            ["CardBackgroundFillColorDefaultBrush"]  = "#20A0A8B0",
-            ["LayerFillColorDefault"]                = "#08FFFFFF",
-            ["LayerFillColorAlt"]                    = "#0AFFFFFF",
-
-            ["AccentFillColorDefaultBrush"]    = "#A0A8B0",
-            ["AccentFillColorSecondaryBrush"]  = "#B0B8C0",
-            ["AccentFillColorTertiaryBrush"]   = "#8890A0",
-            ["AccentFillColorDisabledBrush"]   = "#5CA0A8B0",
-
-            ["ControlStrokeColorDefault"]   = "#3DE0E0E0",
-            ["ControlStrokeColorSecondary"] = "#25E0E0E0",
-            ["CardStrokeColorDefault"]      = "#30E0E0E0",
-            ["SurfaceStrokeColorDefault"]   = "#40A0A8B0",
-
-            ["ButtonBackground"]                   = "#15A0A8B0",
-            ["ButtonBackgroundPointerOver"]         = "#25A0A8B0",
-            ["ButtonBackgroundPressed"]             = "#10A0A8B0",
-            ["ButtonBackgroundDisabled"]            = "#08FFFFFF",
-
-            ["ListBoxItemBackgroundPointerOver"]    = "#15A0A8B0",
-            ["ListBoxItemBackgroundPressed"]        = "#20A0A8B0",
-            ["ListBoxItemBackgroundSelected"]       = "#25A0A8B0",
-            ["ListBoxItemBackgroundSelectedPointerOver"]  = "#30A0A8B0",
-            ["ListBoxItemBackgroundSelectedPressed"]      = "#20A0A8B0",
-
-            ["ToggleSwitchFillOn"]               = "#A0A8B0",
-            ["ToggleSwitchFillOnPointerOver"]    = "#B0B8C0",
-            ["ToggleSwitchFillOnPressed"]        = "#8890A0",
-
-            ["ScrollBarThumbFill"]               = "#50A0A8B0",
-            ["ScrollBarThumbFillPointerOver"]    = "#80A0A8B0",
-            ["ScrollBarThumbFillPressed"]        = "#A0A8B0",
-
-            ["TextControlBackgroundFocused"]     = "#20A0A8B0",
-            ["TextControlBorderBrushFocused"]    = "#A0A8B0",
-
-            ["TextSelectionHighlightColor"]      = "#60A0A8B0",
-        },
     };
 }

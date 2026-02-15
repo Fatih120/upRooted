@@ -2,11 +2,15 @@ use crate::embedded;
 use serde::Serialize;
 use std::fs;
 use std::path::PathBuf;
+
+#[cfg(target_os = "windows")]
 use winreg::enums::*;
+#[cfg(target_os = "windows")]
 use winreg::RegKey;
 
 const PROFILER_GUID: &str = "{D1A6F5A0-1234-4567-89AB-CDEF01234567}";
 
+#[cfg(target_os = "windows")]
 const ENV_VARS: &[&str] = &[
     "CORECLR_ENABLE_PROFILING",
     "CORECLR_PROFILER",
@@ -32,11 +36,30 @@ pub struct HookStatus {
     pub env_ok: bool,
 }
 
-/// Returns `%LOCALAPPDATA%\Root\uprooted\`
+// ==================== Platform-specific: install directory ====================
+
+/// Returns `%LOCALAPPDATA%\Root\uprooted\` on Windows.
+#[cfg(target_os = "windows")]
 pub fn get_uprooted_dir() -> PathBuf {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
     PathBuf::from(local_app_data).join("Root").join("uprooted")
 }
+
+/// Returns `~/.local/share/uprooted/` on Linux.
+#[cfg(target_os = "linux")]
+pub fn get_uprooted_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home).join(".local/share/uprooted")
+}
+
+// ==================== Platform-specific: profiler filename ====================
+
+#[cfg(target_os = "windows")]
+const PROFILER_FILENAME: &str = "uprooted_profiler.dll";
+#[cfg(target_os = "linux")]
+const PROFILER_FILENAME: &str = "libuprooted_profiler.so";
+
+// ==================== Deploy files ====================
 
 /// Deploy all embedded files to the install directory.
 pub fn deploy_files() -> Result<(), String> {
@@ -44,7 +67,7 @@ pub fn deploy_files() -> Result<(), String> {
     fs::create_dir_all(&dir).map_err(|e| format!("Failed to create {}: {}", dir.display(), e))?;
 
     let files: &[(&str, &[u8])] = &[
-        ("uprooted_profiler.dll", embedded::PROFILER_DLL),
+        (PROFILER_FILENAME, embedded::PROFILER),
         ("UprootedHook.dll", embedded::HOOK_DLL),
         ("UprootedHook.deps.json", embedded::HOOK_DEPS_JSON),
         ("uprooted-preload.js", embedded::PRELOAD_JS),
@@ -57,10 +80,22 @@ pub fn deploy_files() -> Result<(), String> {
             .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     }
 
+    // On Linux, set the profiler .so as executable
+    #[cfg(target_os = "linux")]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let profiler_path = dir.join(PROFILER_FILENAME);
+        let perms = std::fs::Permissions::from_mode(0o755);
+        let _ = std::fs::set_permissions(&profiler_path, perms);
+    }
+
     Ok(())
 }
 
+// ==================== Windows: environment variables via registry ====================
+
 /// Set CLR profiler environment variables (user-scoped) and broadcast WM_SETTINGCHANGE.
+#[cfg(target_os = "windows")]
 pub fn set_env_vars() -> Result<(), String> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let (env_key, _) = hkcu
@@ -93,6 +128,7 @@ pub fn set_env_vars() -> Result<(), String> {
 }
 
 /// Remove all Uprooted-related environment variables (user-scoped).
+#[cfg(target_os = "windows")]
 pub fn remove_env_vars() -> Result<(), String> {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let env_key = hkcu
@@ -107,47 +143,8 @@ pub fn remove_env_vars() -> Result<(), String> {
     Ok(())
 }
 
-/// Delete the uprooted install directory.
-pub fn remove_files() -> Result<(), String> {
-    let dir = get_uprooted_dir();
-    if dir.exists() {
-        fs::remove_dir_all(&dir)
-            .map_err(|e| format!("Failed to remove {}: {}", dir.display(), e))?;
-    }
-    Ok(())
-}
-
-/// Check per-file and per-env-var status.
-pub fn check_hook_status() -> HookStatus {
-    let dir = get_uprooted_dir();
-
-    let profiler_dll = dir.join("uprooted_profiler.dll").exists();
-    let hook_dll = dir.join("UprootedHook.dll").exists();
-    let hook_deps = dir.join("UprootedHook.deps.json").exists();
-    let preload_js = dir.join("uprooted-preload.js").exists();
-    let theme_css = dir.join("uprooted.css").exists();
-
-    let (env_enable, env_guid, env_path, env_r2r) = check_env_vars();
-
-    let files_ok = profiler_dll && hook_dll && hook_deps && preload_js && theme_css;
-    let env_ok = env_enable && env_guid && env_path;
-
-    HookStatus {
-        profiler_dll,
-        hook_dll,
-        hook_deps,
-        preload_js,
-        theme_css,
-        env_enable_profiling: env_enable,
-        env_profiler_guid: env_guid,
-        env_profiler_path: env_path,
-        env_ready_to_run: env_r2r,
-        files_ok,
-        env_ok,
-    }
-}
-
-/// Read env var status from the registry (not process env, which may be stale).
+/// Check env var status from the registry.
+#[cfg(target_os = "windows")]
 fn check_env_vars() -> (bool, bool, bool, bool) {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
     let env_key = match hkcu.open_subkey("Environment") {
@@ -176,8 +173,8 @@ fn check_env_vars() -> (bool, bool, bool, bool) {
 }
 
 /// Broadcast WM_SETTINGCHANGE so other processes pick up env var changes.
+#[cfg(target_os = "windows")]
 fn broadcast_env_change() {
-    #[cfg(windows)]
     unsafe {
         use std::ffi::OsStr;
         use std::os::windows::ffi::OsStrExt;
@@ -200,19 +197,178 @@ fn broadcast_env_change() {
     }
 }
 
-/// Check if Root.exe is currently running.
+// ==================== Linux: wrapper script + .desktop file ====================
+
+/// Create a wrapper script that sets CLR profiler env vars and launches Root.
+#[cfg(target_os = "linux")]
+pub fn set_env_vars() -> Result<(), String> {
+    let dir = get_uprooted_dir();
+    let profiler_path = dir.join(PROFILER_FILENAME);
+    let root_path = crate::detection::get_root_exe_path();
+
+    // Create wrapper script
+    let wrapper = dir.join("launch-root.sh");
+    let script = format!(
+        "#!/bin/bash\n\
+        # Uprooted launcher - sets CLR profiler env vars for Root only\n\
+        export CORECLR_ENABLE_PROFILING=1\n\
+        export CORECLR_PROFILER='{}'\n\
+        export CORECLR_PROFILER_PATH='{}'\n\
+        export DOTNET_ReadyToRun=0\n\
+        exec '{}' \"$@\"\n",
+        PROFILER_GUID,
+        profiler_path.display(),
+        root_path.display()
+    );
+    fs::write(&wrapper, &script)
+        .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
+
+    // chmod +x
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o755);
+        let _ = std::fs::set_permissions(&wrapper, perms);
+    }
+
+    // Create .desktop file
+    create_desktop_file(&wrapper)?;
+
+    Ok(())
+}
+
+/// Remove wrapper script and .desktop file.
+#[cfg(target_os = "linux")]
+pub fn remove_env_vars() -> Result<(), String> {
+    let dir = get_uprooted_dir();
+    let wrapper = dir.join("launch-root.sh");
+    let _ = fs::remove_file(&wrapper);
+
+    // Remove .desktop file
+    let home = std::env::var("HOME").unwrap_or_default();
+    let desktop_file = PathBuf::from(&home)
+        .join(".local/share/applications/root-uprooted.desktop");
+    let _ = fs::remove_file(&desktop_file);
+
+    Ok(())
+}
+
+/// Create a .desktop file that launches Root through the wrapper script.
+#[cfg(target_os = "linux")]
+fn create_desktop_file(wrapper: &PathBuf) -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let apps_dir = PathBuf::from(&home).join(".local/share/applications");
+    fs::create_dir_all(&apps_dir)
+        .map_err(|e| format!("Failed to create applications dir: {}", e))?;
+
+    let desktop_content = format!(
+        "[Desktop Entry]\n\
+        Name=Root (Uprooted)\n\
+        Comment=Root Communications with Uprooted mods\n\
+        Exec={}\n\
+        Type=Application\n\
+        Categories=Network;Chat;\n\
+        Terminal=false\n",
+        wrapper.display()
+    );
+
+    let desktop_file = apps_dir.join("root-uprooted.desktop");
+    fs::write(&desktop_file, &desktop_content)
+        .map_err(|e| format!("Failed to write .desktop file: {}", e))?;
+
+    // chmod +x on desktop file
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o755);
+        let _ = std::fs::set_permissions(&desktop_file, perms);
+    }
+
+    Ok(())
+}
+
+/// Check env var status by reading the wrapper script.
+#[cfg(target_os = "linux")]
+fn check_env_vars() -> (bool, bool, bool, bool) {
+    let dir = get_uprooted_dir();
+    let wrapper = dir.join("launch-root.sh");
+    let content = match fs::read_to_string(&wrapper) {
+        Ok(c) => c,
+        Err(_) => return (false, false, false, false),
+    };
+
+    let enable = content.contains("CORECLR_ENABLE_PROFILING=1");
+    let guid = content.contains(PROFILER_GUID);
+    let path = content.contains("CORECLR_PROFILER_PATH=");
+    let r2r = content.contains("DOTNET_ReadyToRun=0");
+
+    (enable, guid, path, r2r)
+}
+
+// ==================== Common: file operations ====================
+
+/// Delete the uprooted install directory.
+pub fn remove_files() -> Result<(), String> {
+    let dir = get_uprooted_dir();
+    if dir.exists() {
+        fs::remove_dir_all(&dir)
+            .map_err(|e| format!("Failed to remove {}: {}", dir.display(), e))?;
+    }
+    Ok(())
+}
+
+/// Check per-file and per-env-var status.
+pub fn check_hook_status() -> HookStatus {
+    let dir = get_uprooted_dir();
+
+    let profiler_dll = dir.join(PROFILER_FILENAME).exists();
+    let hook_dll = dir.join("UprootedHook.dll").exists();
+    let hook_deps = dir.join("UprootedHook.deps.json").exists();
+    let preload_js = dir.join("uprooted-preload.js").exists();
+    let theme_css = dir.join("uprooted.css").exists();
+
+    let (env_enable, env_guid, env_path, env_r2r) = check_env_vars();
+
+    let files_ok = profiler_dll && hook_dll && hook_deps && preload_js && theme_css;
+    let env_ok = env_enable && env_guid && env_path;
+
+    HookStatus {
+        profiler_dll,
+        hook_dll,
+        hook_deps,
+        preload_js,
+        theme_css,
+        env_enable_profiling: env_enable,
+        env_profiler_guid: env_guid,
+        env_profiler_path: env_path,
+        env_ready_to_run: env_r2r,
+        files_ok,
+        env_ok,
+    }
+}
+
+// ==================== Process management ====================
+
+/// Check if Root is currently running.
 pub fn check_root_running() -> bool {
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     {
         !find_root_pids().is_empty()
     }
-    #[cfg(not(windows))]
-    false
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("pgrep")
+            .arg("-x")
+            .arg("Root")
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+    }
 }
 
-/// Terminate all Root.exe processes. Returns the number of processes killed.
+/// Terminate all Root processes. Returns the number of processes killed.
 pub fn kill_root_processes() -> u32 {
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::Foundation::CloseHandle;
         use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
@@ -232,12 +388,19 @@ pub fn kill_root_processes() -> u32 {
         }
         killed
     }
-    #[cfg(not(windows))]
-    0
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("pkill")
+            .arg("-x")
+            .arg("Root")
+            .output()
+            .map(|o| if o.status.success() { 1 } else { 0 })
+            .unwrap_or(0)
+    }
 }
 
-/// Find all PIDs for Root.exe.
-#[cfg(windows)]
+/// Find all PIDs for Root.exe (Windows only).
+#[cfg(target_os = "windows")]
 fn find_root_pids() -> Vec<u32> {
     use std::mem::MaybeUninit;
     use windows_sys::Win32::Foundation::{CloseHandle, INVALID_HANDLE_VALUE};

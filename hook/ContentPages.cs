@@ -47,6 +47,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
+        r.SetTag(page, "uprooted-no-recolor");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Uprooted", 20, TextWhite);
@@ -178,6 +179,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
+        r.SetTag(page, "uprooted-no-recolor");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Plugins", 20, TextWhite);
@@ -251,6 +253,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
+        r.SetTag(page, "uprooted-no-recolor");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Themes", 20, TextWhite);
@@ -258,40 +261,57 @@ internal static class ContentPages
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
-        // Section header
-        var sectionHeader = CreateSectionHeader(r, "UPROOTED THEMES", font);
-        if (sectionHeader != null)
+        // === PRESET THEMES section ===
+        var presetHeader = CreateSectionHeader(r, "PRESET THEMES", font);
+        if (presetHeader != null)
         {
-            r.SetMargin(sectionHeader, 0, 20, 0, 12);
-            r.AddChild(page, sectionHeader);
+            r.SetMargin(presetHeader, 0, 20, 0, 12);
+            r.AddChild(page, presetHeader);
         }
 
-        // Theme cards - matching Root's native theme page layout
-        var themes = new[]
+        // All three preset cards in a horizontal row
+        var allPresets = new[]
         {
-            ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default dark theme"),
-            ("Crimson",  "crimson",      "#1A0A0A", "#C42B1C", "Deep red accent theme"),
-            ("Loki",     "loki",         "#0F1210", "#2A5A40", "Moss green and gold, trestle palette"),
-            ("Onyx",     "onyx",         "#000000", "#A0A8B0", "OLED black with silver accent"),
+            ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default"),
+            ("Crimson",  "crimson",      "#1A0A0A", "#C42B1C", "Deep red accent"),
+            ("Loki",     "loki",         "#0F1210", "#2A5A40", "Gold and green"),
         };
 
-        foreach (var (displayName, themeId, bgColor, accentColor, description) in themes)
+        var presetsRow = r.CreateStackPanel(vertical: false, spacing: 8);
+        if (presetsRow != null)
         {
-            bool isActive = settings.ActiveTheme == themeId;
-            var card = BuildThemeCard(r, displayName, themeId, bgColor, accentColor,
-                description, isActive, font, themeEngine, settings, onThemeChanged);
-            if (card != null)
+            for (int i = 0; i < allPresets.Length; i++)
             {
-                r.SetMargin(card, 0, 0, 0, 8);
-                r.AddChild(page, card);
+                var (displayName, themeId, bgColor, accentColor, description) = allPresets[i];
+                bool isActive = settings.ActiveTheme == themeId;
+                var card = BuildThemeCard(r, displayName, themeId, bgColor, accentColor,
+                    description, isActive, font, themeEngine, settings, onThemeChanged);
+                if (card != null)
+                {
+                    r.AddChild(presetsRow, card);
+                }
             }
+
+            r.AddChild(page, presetsRow);
         }
+
+        // === CUSTOM THEME section ===
+        var customHeader = CreateSectionHeader(r, "CUSTOM THEME", font);
+        if (customHeader != null)
+        {
+            r.SetMargin(customHeader, 0, 16, 0, 12);
+            r.AddChild(page, customHeader);
+        }
+
+        var customSection = BuildCustomThemeSection(r, settings, font, themeEngine, onThemeChanged);
+        if (customSection != null)
+            r.AddChild(page, customSection);
 
         // About themes card
         var aboutCard = CreateCard(r);
         if (aboutCard != null)
         {
-            r.SetMargin(aboutCard, 0, 12, 0, 0);
+            r.SetMargin(aboutCard, 0, 16, 0, 0);
             var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
             r.SetMargin(cardContent, 24, 24, 24, 24);
 
@@ -301,7 +321,8 @@ internal static class ContentPages
             var aboutText = r.CreateTextBlock(
                 "Themes modify Avalonia's FluentTheme resource dictionary at runtime. " +
                 "They change accent colors, backgrounds, control fills, and text colors " +
-                "across the entire native UI. Your theme choice persists across restarts.",
+                "across the entire native UI. Custom themes derive all shades from your " +
+                "chosen accent and background colors. Your theme persists across restarts.",
                 13, TextMuted);
             if (aboutText != null)
             {
@@ -326,46 +347,39 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Build a full-width theme card matching Root's native theme page cards.
-    /// Structure: Border (full-width, rounded) containing horizontal layout with
-    /// radio indicator + name on left, preview swatch on right.
+    /// Build the custom theme card with hex inputs for accent + background, color swatches, and apply button.
     /// </summary>
-    private static object? BuildThemeCard(AvaloniaReflection r, string displayName,
-        string themeId, string bgColor, string accentColor, string description,
-        bool isActive, object? font, ThemeEngine? themeEngine,
-        UprootedSettings settings, Action? onThemeChanged)
+    private static object? BuildCustomThemeSection(AvaloniaReflection r, UprootedSettings settings,
+        object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
     {
-        // Outer border: full-width card with subtle or accent border
-        var borderColor = isActive ? accentColor : "#242C36";
+        bool isActive = settings.ActiveTheme == "custom";
+        var borderColor = isActive ? settings.CustomAccent : "#242C36";
+
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
         SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
-        r.SetCursorHand(card);
 
-        // Main horizontal layout
-        var outerLayout = r.CreateStackPanel(vertical: false, spacing: 0);
-        if (outerLayout == null) return null;
-        r.SetMargin(outerLayout, 20, 16, 20, 16);
+        var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (outerContent == null) return card;
+        r.SetMargin(outerContent, 20, 16, 20, 16);
 
-        // Left side: radio indicator + text
-        var leftPanel = r.CreateStackPanel(vertical: false, spacing: 12);
-        if (leftPanel != null)
+        // Header row with radio indicator — clickable to activate custom theme
+        var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (headerRow != null)
         {
-            r.SetVerticalAlignment(leftPanel, "Center");
+            r.SetVerticalAlignment(headerRow, "Center");
+            r.SetBackground(headerRow, "Transparent"); // Required for hit-testing
 
-            // Radio indicator: rounded rectangle border with fill when active
             var radioOuter = r.CreateBorder(null, 4);
             if (radioOuter != null)
             {
                 r.SetWidth(radioOuter, 20);
                 r.SetHeight(radioOuter, 20);
-                SetBorderStroke(r, radioOuter, isActive ? accentColor : "#555555", 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : "#555555", 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
-
                 if (isActive)
                 {
-                    // Inner fill dot
-                    var innerDot = r.CreateBorder(accentColor, 2);
+                    var innerDot = r.CreateBorder(settings.CustomAccent, 2);
                     if (innerDot != null)
                     {
                         r.SetWidth(innerDot, 10);
@@ -374,39 +388,303 @@ internal static class ContentPages
                     }
                     r.SetBorderChild(radioOuter, innerDot);
                 }
-
-                r.AddChild(leftPanel, radioOuter);
+                r.AddChild(headerRow, radioOuter);
             }
 
-            // Text stack: name + description
             var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
             if (textStack != null)
             {
-                r.SetVerticalAlignment(textStack, "Center");
-
-                var nameText = r.CreateTextBlock(displayName, 14, TextWhite);
+                var nameText = r.CreateTextBlock("Custom", 14, TextWhite);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(description, 12, TextMuted);
+                var descText = r.CreateTextBlock("Pick your own accent and background", 12, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
-                r.AddChild(leftPanel, textStack);
+                r.AddChild(headerRow, textStack);
             }
 
-            r.AddChild(outerLayout, leftPanel);
+            // Click handler to activate custom theme
+            r.SetCursorHand(headerRow);
+            r.SubscribeEvent(headerRow, "PointerPressed", () =>
+            {
+                try
+                {
+                    if (settings.ActiveTheme == "custom") return; // already active
+
+                    Logger.Log("Theme", "Custom theme card clicked");
+                    settings.ActiveTheme = "custom";
+
+                    // Apply custom theme with current saved colors
+                    themeEngine?.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
+
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+
+                    if (onThemeChanged != null)
+                    {
+                        r.RunOnUIThread(() =>
+                        {
+                            try { onThemeChanged.Invoke(); }
+                            catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                        });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Theme", "Custom theme activate error: " + ex.Message);
+                }
+            });
+
+            r.AddChild(outerContent, headerRow);
         }
 
-        // Right side: preview swatch
+        // Accent row: label + textbox + swatch
+        var accentSwatch = r.CreateBorder(settings.CustomAccent, 4);
+        var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch);
+        if (accentRow != null)
+        {
+            r.SetMargin(accentRow, 32, 16, 0, 0);
+            r.AddChild(outerContent, accentRow);
+        }
+
+        // Background row: label + textbox + swatch
+        var bgSwatch = r.CreateBorder(settings.CustomBackground, 4);
+        var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch);
+        if (bgRow != null)
+        {
+            r.SetMargin(bgRow, 32, 10, 0, 0);
+            r.AddChild(outerContent, bgRow);
+        }
+
+        // Apply button
+        var applyRow = r.CreateStackPanel(vertical: false, spacing: 0);
+        if (applyRow != null)
+        {
+            r.SetMargin(applyRow, 32, 16, 0, 0);
+
+            var applyBtn = r.CreateBorder(AccentGreen, 8);
+            if (applyBtn != null)
+            {
+                r.SetCursorHand(applyBtn);
+                var applyText = r.CreateTextBlock("Apply Custom", 13, TextWhite);
+                r.SetFontWeightNumeric(applyText, 500);
+                ApplyFont(r, applyText, font);
+                r.SetPadding(applyBtn, 16, 6, 16, 6);
+                r.SetBorderChild(applyBtn, applyText);
+
+                // Get textbox references for reading values
+                var accentTextBox = GetTextBoxFromRow(r, accentRow);
+                var bgTextBox = GetTextBoxFromRow(r, bgRow);
+
+                r.SubscribeEvent(applyBtn, "PointerPressed", () =>
+                {
+                    try
+                    {
+                        var accentVal = r.GetTextBoxText(accentTextBox)?.Trim() ?? "";
+                        var bgVal = r.GetTextBoxText(bgTextBox)?.Trim() ?? "";
+
+                        if (!ColorUtils.IsValidHex(accentVal) || !ColorUtils.IsValidHex(bgVal))
+                        {
+                            Logger.Log("Theme", "Invalid custom hex values: accent=" + accentVal + " bg=" + bgVal);
+                            return;
+                        }
+
+                        settings.CustomAccent = accentVal;
+                        settings.CustomBackground = bgVal;
+                        settings.ActiveTheme = "custom";
+
+                        themeEngine?.ApplyCustomTheme(accentVal, bgVal);
+
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+
+                        if (onThemeChanged != null)
+                        {
+                            r.RunOnUIThread(() =>
+                            {
+                                try { onThemeChanged.Invoke(); }
+                                catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Theme", "Custom theme apply error: " + ex.Message);
+                    }
+                });
+
+                // Hover effects
+                r.SubscribeEvent(applyBtn, "PointerEntered", () =>
+                    r.SetBackground(applyBtn, "#3D8D56"));
+                r.SubscribeEvent(applyBtn, "PointerExited", () =>
+                    r.SetBackground(applyBtn, AccentGreen));
+
+                r.AddChild(applyRow, applyBtn);
+            }
+
+            r.AddChild(outerContent, applyRow);
+        }
+
+        r.SetBorderChild(card, outerContent);
+        return card;
+    }
+
+    /// <summary>
+    /// Build a row: [Label] [TextBox] [ColorSwatch]
+    /// </summary>
+    private static object? BuildColorInputRow(AvaloniaReflection r, string label,
+        string initialValue, object? font, object? swatch)
+    {
+        var row = r.CreateStackPanel(vertical: false, spacing: 10);
+        if (row == null) return null;
+        r.SetVerticalAlignment(row, "Center");
+
+        // Label
+        var labelText = r.CreateTextBlock(label, 13, TextMuted);
+        r.SetFontWeightNumeric(labelText, 450);
+        ApplyFont(r, labelText, font);
+        r.SetWidth(labelText, 90);
+        r.AddChild(row, labelText);
+
+        // TextBox
+        var textBox = r.CreateTextBox("#RRGGBB", initialValue, 7);
+        if (textBox != null)
+        {
+            r.SetWidth(textBox, 100);
+            textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
+            r.SetBackground(textBox, "#15FFFFFF");
+            r.SetForeground(textBox, TextWhite);
+            ApplyFont(r, textBox, font);
+            r.SetTag(textBox, "uprooted-color-input");
+
+            // Update swatch preview on text change
+            if (swatch != null)
+            {
+                r.SubscribeEvent(textBox, "TextChanged", () =>
+                {
+                    var text = r.GetTextBoxText(textBox)?.Trim() ?? "";
+                    if (ColorUtils.IsValidHex(text))
+                        r.SetBackground(swatch, text);
+                });
+            }
+
+            r.AddChild(row, textBox);
+        }
+
+        // Color swatch (clickable — opens color picker popup)
+        if (swatch != null)
+        {
+            r.SetWidth(swatch, 24);
+            r.SetHeight(swatch, 24);
+            SetBorderStroke(r, swatch, "#40ffffff", 1.0);
+            r.AddChild(row, swatch);
+
+            r.SetCursorHand(swatch);
+            r.SubscribeEvent(swatch, "PointerPressed", () =>
+            {
+                ColorPickerPopup.Show(r, swatch, textBox);
+            });
+        }
+
+        return row;
+    }
+
+    /// <summary>
+    /// Find the TextBox child inside a color input row (tagged "uprooted-color-input").
+    /// </summary>
+    private static object? GetTextBoxFromRow(AvaloniaReflection r, object? row)
+    {
+        if (row == null) return null;
+        var children = r.GetChildren(row);
+        if (children == null) return null;
+        foreach (var child in children)
+        {
+            if (child != null && r.GetTag(child) == "uprooted-color-input")
+                return child;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Build a compact theme card for 3-column grid layout.
+    /// Structure: Border (rounded) containing vertical layout with
+    /// preview swatch on top, radio + name below.
+    /// </summary>
+    private static object? BuildThemeCard(AvaloniaReflection r, string displayName,
+        string themeId, string bgColor, string accentColor, string description,
+        bool isActive, object? font, ThemeEngine? themeEngine,
+        UprootedSettings settings, Action? onThemeChanged)
+    {
+        var borderColor = isActive ? accentColor : "#242C36";
+        var card = r.CreateBorder(CardBg, 12);
+        if (card == null) return null;
+        SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
+        r.SetCursorHand(card);
+        r.SetWidth(card, 200);
+
+        // Vertical layout: preview on top, radio + name below
+        var outerLayout = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (outerLayout == null) return null;
+        r.SetMargin(outerLayout, 14, 14, 14, 14);
+
+        // Theme preview swatch at top
         var preview = BuildThemePreview(r, bgColor, accentColor);
         if (preview != null)
         {
-            r.SetHorizontalAlignment(preview, "Right");
-            r.SetVerticalAlignment(preview, "Center");
-            r.SetMargin(preview, 24, 0, 0, 0);
+            r.SetHorizontalAlignment(preview, "Center");
             r.AddChild(outerLayout, preview);
+        }
+
+        // Bottom row: radio indicator + name
+        var bottomRow = r.CreateStackPanel(vertical: false, spacing: 10);
+        if (bottomRow != null)
+        {
+            r.SetMargin(bottomRow, 0, 12, 0, 0);
+            r.SetVerticalAlignment(bottomRow, "Center");
+
+            // Radio indicator
+            var radioOuter = r.CreateBorder(null, 4);
+            if (radioOuter != null)
+            {
+                r.SetWidth(radioOuter, 18);
+                r.SetHeight(radioOuter, 18);
+                SetBorderStroke(r, radioOuter, isActive ? accentColor : "#555555", 2.0);
+                r.SetVerticalAlignment(radioOuter, "Center");
+                if (isActive)
+                {
+                    var innerDot = r.CreateBorder(accentColor, 2);
+                    if (innerDot != null)
+                    {
+                        r.SetWidth(innerDot, 8);
+                        r.SetHeight(innerDot, 8);
+                        r.SetMargin(innerDot, 3, 3, 3, 3);
+                    }
+                    r.SetBorderChild(radioOuter, innerDot);
+                }
+                r.AddChild(bottomRow, radioOuter);
+            }
+
+            // Name + description
+            var textStack = r.CreateStackPanel(vertical: true, spacing: 1);
+            if (textStack != null)
+            {
+                r.SetVerticalAlignment(textStack, "Center");
+                var nameText = r.CreateTextBlock(displayName, 13, TextWhite);
+                r.SetFontWeightNumeric(nameText, 500);
+                ApplyFont(r, nameText, font);
+                r.AddChild(textStack, nameText);
+
+                var descText = r.CreateTextBlock(description, 11, TextMuted);
+                ApplyFont(r, descText, font);
+                r.AddChild(textStack, descText);
+
+                r.AddChild(bottomRow, textStack);
+            }
+
+            r.AddChild(outerLayout, bottomRow);
         }
 
         r.SetBorderChild(card, outerLayout);
@@ -470,9 +748,10 @@ internal static class ContentPages
     /// </summary>
     private static object? BuildThemePreview(AvaloniaReflection r, string bgColor, string accentColor)
     {
-        // Outer frame
+        // Outer frame — tagged to prevent tree walker from recoloring
         var frame = r.CreateBorder("#00000000", 6);
         if (frame == null) return null;
+        r.SetTag(frame, "uprooted-no-recolor");
         SetBorderStroke(r, frame, "#30ffffff", 0.5);
         r.SetWidth(frame, 100);
         r.SetHeight(frame, 56);
