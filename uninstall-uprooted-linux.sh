@@ -63,6 +63,14 @@ else
     log "$restored HTML file(s) restored"
 fi
 
+# ── Remove environment.d config ──
+
+env_conf="$HOME/.config/environment.d/uprooted.conf"
+if [[ -f "$env_conf" ]]; then
+    rm "$env_conf"
+    log "Removed environment.d/uprooted.conf"
+fi
+
 # ── Remove .desktop file ──
 
 desktop_file="$HOME/.local/share/applications/root-uprooted.desktop"
