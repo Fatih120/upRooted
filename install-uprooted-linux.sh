@@ -152,6 +152,24 @@ build_artifacts() {
     log "Artifacts deployed to $INSTALL_DIR"
 }
 
+# ── Set session-wide env vars (systemd environment.d) ──
+
+set_env_vars() {
+    local env_dir="$HOME/.config/environment.d"
+    mkdir -p "$env_dir"
+
+    cat > "$env_dir/uprooted.conf" << ENVCONF
+# Uprooted CLR profiler — remove this file or run the uninstaller to disable
+CORECLR_ENABLE_PROFILING=1
+CORECLR_PROFILER=$PROFILER_GUID
+CORECLR_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
+DOTNET_ReadyToRun=0
+ENVCONF
+    log "Session env vars written to $env_dir/uprooted.conf"
+    warn "Log out and back in (or reboot) for env vars to take effect globally."
+    warn "Or use the wrapper script below for immediate use."
+}
+
 # ── Create wrapper script ──
 
 create_wrapper() {
@@ -249,12 +267,16 @@ echo ""
 find_root
 check_prereqs
 build_artifacts
+set_env_vars
 create_wrapper
 create_desktop_file
 patch_html
 
 echo ""
 log "Installation complete!"
-log "Launch Root with: $INSTALL_DIR/launch-root.sh"
-log "Or find 'Root (Uprooted)' in your application menu."
+log ""
+log "To activate Uprooted, either:"
+log "  1. Log out and back in, then launch Root normally"
+log "  2. Run: $INSTALL_DIR/launch-root.sh"
+log "  3. Find 'Root (Uprooted)' in your application menu"
 echo ""

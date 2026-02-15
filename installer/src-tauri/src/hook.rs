@@ -199,14 +199,37 @@ fn broadcast_env_change() {
 
 // ==================== Linux: wrapper script + .desktop file ====================
 
-/// Create a wrapper script that sets CLR profiler env vars and launches Root.
+/// Set CLR profiler env vars system-wide on Linux.
+///
+/// Three mechanisms for maximum compatibility:
+/// 1. `~/.config/environment.d/uprooted.conf` — systemd user session (applies after re-login)
+/// 2. Wrapper script `~/.local/share/uprooted/launch-root.sh` — immediate use from terminal
+/// 3. `.desktop` file — "Root (Uprooted)" app menu entry using the wrapper
 #[cfg(target_os = "linux")]
 pub fn set_env_vars() -> Result<(), String> {
     let dir = get_uprooted_dir();
     let profiler_path = dir.join(PROFILER_FILENAME);
     let root_path = crate::detection::get_root_exe_path();
 
-    // Create wrapper script
+    // 1. systemd environment.d — session-wide env vars (like Windows registry)
+    let home = std::env::var("HOME").unwrap_or_default();
+    let env_dir = PathBuf::from(&home).join(".config/environment.d");
+    fs::create_dir_all(&env_dir)
+        .map_err(|e| format!("Failed to create environment.d: {}", e))?;
+
+    let env_conf = format!(
+        "# Uprooted CLR profiler — remove this file or run the uninstaller to disable\n\
+        CORECLR_ENABLE_PROFILING=1\n\
+        CORECLR_PROFILER={}\n\
+        CORECLR_PROFILER_PATH={}\n\
+        DOTNET_ReadyToRun=0\n",
+        PROFILER_GUID,
+        profiler_path.display()
+    );
+    fs::write(env_dir.join("uprooted.conf"), &env_conf)
+        .map_err(|e| format!("Failed to write environment.d/uprooted.conf: {}", e))?;
+
+    // 2. Wrapper script — works immediately from terminal
     let wrapper = dir.join("launch-root.sh");
     let script = format!(
         "#!/bin/bash\n\
@@ -223,7 +246,6 @@ pub fn set_env_vars() -> Result<(), String> {
     fs::write(&wrapper, &script)
         .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
 
-    // chmod +x
     #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
@@ -231,21 +253,27 @@ pub fn set_env_vars() -> Result<(), String> {
         let _ = std::fs::set_permissions(&wrapper, perms);
     }
 
-    // Create .desktop file
+    // 3. .desktop file
     create_desktop_file(&wrapper)?;
 
     Ok(())
 }
 
-/// Remove wrapper script and .desktop file.
+/// Remove all env var mechanisms: environment.d, wrapper script, .desktop file.
 #[cfg(target_os = "linux")]
 pub fn remove_env_vars() -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // Remove systemd environment.d config
+    let env_conf = PathBuf::from(&home).join(".config/environment.d/uprooted.conf");
+    let _ = fs::remove_file(&env_conf);
+
+    // Remove wrapper script
     let dir = get_uprooted_dir();
     let wrapper = dir.join("launch-root.sh");
     let _ = fs::remove_file(&wrapper);
 
     // Remove .desktop file
-    let home = std::env::var("HOME").unwrap_or_default();
     let desktop_file = PathBuf::from(&home)
         .join(".local/share/applications/root-uprooted.desktop");
     let _ = fs::remove_file(&desktop_file);
@@ -287,15 +315,20 @@ fn create_desktop_file(wrapper: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-/// Check env var status by reading the wrapper script.
+/// Check env var status from environment.d config (falls back to wrapper script).
 #[cfg(target_os = "linux")]
 fn check_env_vars() -> (bool, bool, bool, bool) {
-    let dir = get_uprooted_dir();
-    let wrapper = dir.join("launch-root.sh");
-    let content = match fs::read_to_string(&wrapper) {
-        Ok(c) => c,
-        Err(_) => return (false, false, false, false),
-    };
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // Check environment.d first (primary mechanism)
+    let env_conf = PathBuf::from(&home).join(".config/environment.d/uprooted.conf");
+    let content = fs::read_to_string(&env_conf)
+        .or_else(|_| {
+            // Fallback: check wrapper script
+            let dir = get_uprooted_dir();
+            fs::read_to_string(dir.join("launch-root.sh"))
+        })
+        .unwrap_or_default();
 
     let enable = content.contains("CORECLR_ENABLE_PROFILING=1");
     let guid = content.contains(PROFILER_GUID);
