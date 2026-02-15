@@ -14,14 +14,52 @@ namespace Uprooted;
 /// </summary>
 internal static class ContentPages
 {
-    // Root's colors matching native UI
-    private const string CardBg = "#0f1923";         // Card background (slightly lighter than Root's #0d1521)
-    private const string CardBorder = "#19ffffff";    // Thin border color
-    private const string TextWhite = "#fff2f2f2";     // Primary text (full opacity)
-    private const string TextMuted = "#a3f2f2f2";     // Labels/muted text
-    private const string TextDim = "#66f2f2f2";       // Placeholder/dim text (also section headers)
-    private const string AccentGreen = "#2A5A40";     // Uprooted brand green (Moss)
-    private const string SubtleOverlay = "#19ffffff";  // Subtle white overlay
+    // Default Root colors (used as fallback when no theme active)
+    private const string DefaultCardBg = "#0f1923";
+    private const string DefaultCardBorder = "#19ffffff";
+    private const string DefaultTextWhite = "#fff2f2f2";
+    private const string DefaultTextMuted = "#a3f2f2f2";
+    private const string DefaultTextDim = "#66f2f2f2";
+    private const string DefaultAccentGreen = "#2A5A40";
+
+    // Themed colors derived from the active theme engine (set per-build)
+    private static string CardBg = DefaultCardBg;
+    private static string CardBorder = DefaultCardBorder;
+    private static string TextWhite = DefaultTextWhite;
+    private static string TextMuted = DefaultTextMuted;
+    private static string TextDim = DefaultTextDim;
+    private static string AccentGreen = DefaultAccentGreen;
+
+    /// <summary>
+    /// Update static color fields from the active theme engine.
+    /// Called at the start of each page build so all cards/text use themed colors.
+    /// </summary>
+    private static void ApplyThemedColors(ThemeEngine? themeEngine)
+    {
+        if (themeEngine?.ActiveThemeName == null || themeEngine.ActiveThemeName == "default-dark")
+        {
+            // Reset to defaults
+            CardBg = DefaultCardBg;
+            CardBorder = DefaultCardBorder;
+            TextWhite = DefaultTextWhite;
+            TextMuted = DefaultTextMuted;
+            TextDim = DefaultTextDim;
+            AccentGreen = DefaultAccentGreen;
+            return;
+        }
+
+        var bg = themeEngine.GetBgPrimary();
+        var accent = themeEngine.GetAccentColor();
+        var textBase = ColorUtils.DeriveTextColor(bg);
+        var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
+
+        CardBg = ColorUtils.Lighten(bg, 6);
+        CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
+        TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+        TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+        TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        AccentGreen = accent;
+    }
 
     public static object? BuildPage(string pageName, AvaloniaReflection r,
         UprootedSettings settings, object? nativeFontFamily = null,
@@ -30,7 +68,7 @@ internal static class ContentPages
         return pageName switch
         {
             "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
-            "plugins" => BuildPluginsPage(r, settings, nativeFontFamily),
+            "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
             "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
             _ => null
         };
@@ -44,6 +82,7 @@ internal static class ContentPages
 
     private static object? BuildUprootedPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
+        ApplyThemedColors(themeEngine);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -174,8 +213,9 @@ internal static class ContentPages
         return r.CreateScrollViewer(page);
     }
 
-    private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font)
+    private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
+        ApplyThemedColors(themeEngine);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -250,6 +290,7 @@ internal static class ContentPages
     private static object? BuildThemesPage(AvaloniaReflection r, UprootedSettings settings,
         object? font, ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
     {
+        ApplyThemedColors(themeEngine);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -353,7 +394,8 @@ internal static class ContentPages
         object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
     {
         bool isActive = settings.ActiveTheme == "custom";
-        var borderColor = isActive ? settings.CustomAccent : "#242C36";
+        var inactiveBorder = ColorUtils.Lighten(CardBg, 12);
+        var borderColor = isActive ? settings.CustomAccent : inactiveBorder;
 
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
@@ -375,7 +417,7 @@ internal static class ContentPages
             {
                 r.SetWidth(radioOuter, 20);
                 r.SetHeight(radioOuter, 20);
-                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : "#555555", 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : ColorUtils.Lighten(CardBg, 25), 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
                 if (isActive)
                 {
@@ -517,10 +559,11 @@ internal static class ContentPages
                 });
 
                 // Hover effects
+                var btnAccent = AccentGreen;
                 r.SubscribeEvent(applyBtn, "PointerEntered", () =>
-                    r.SetBackground(applyBtn, "#3D8D56"));
+                    r.SetBackground(applyBtn, ColorUtils.Lighten(btnAccent, 15)));
                 r.SubscribeEvent(applyBtn, "PointerExited", () =>
-                    r.SetBackground(applyBtn, AccentGreen));
+                    r.SetBackground(applyBtn, btnAccent));
 
                 r.AddChild(applyRow, applyBtn);
             }
@@ -555,7 +598,7 @@ internal static class ContentPages
         {
             r.SetWidth(textBox, 100);
             textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
-            r.SetBackground(textBox, "#15FFFFFF");
+            r.SetBackground(textBox, ColorUtils.Lighten(CardBg, 5));
             r.SetForeground(textBox, TextWhite);
             ApplyFont(r, textBox, font);
             r.SetTag(textBox, "uprooted-color-input");
@@ -618,7 +661,7 @@ internal static class ContentPages
         bool isActive, object? font, ThemeEngine? themeEngine,
         UprootedSettings settings, Action? onThemeChanged)
     {
-        var borderColor = isActive ? accentColor : "#242C36";
+        var borderColor = isActive ? accentColor : ColorUtils.Lighten(CardBg, 12);
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
         SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
@@ -651,7 +694,7 @@ internal static class ContentPages
             {
                 r.SetWidth(radioOuter, 18);
                 r.SetHeight(radioOuter, 18);
-                SetBorderStroke(r, radioOuter, isActive ? accentColor : "#555555", 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? accentColor : ColorUtils.Lighten(CardBg, 25), 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
                 if (isActive)
                 {
@@ -728,16 +771,17 @@ internal static class ContentPages
             }
         });
 
-        // Hover effect
+        // Hover effect — capture current CardBg for the closure
+        var cardBgCurrent = CardBg;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
             if (!isActive)
-                r.SetBackground(card, "#14FFFFFF");
+                r.SetBackground(card, ColorUtils.Lighten(cardBgCurrent, 5));
         });
         r.SubscribeEvent(card, "PointerExited", () =>
         {
             if (!isActive)
-                r.SetBackground(card, CardBg);
+                r.SetBackground(card, cardBgCurrent);
         });
 
         return card;

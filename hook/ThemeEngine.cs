@@ -28,11 +28,27 @@ internal class ThemeEngine
     // Keys that were ADDED to Styles[0] (had no original) - must be removed on revert
     private readonly HashSet<string> _addedKeys = new();
 
+    // Persistent map: ANY theme replacement color → Root's original color.
+    // Accumulates across theme switches so stale colors from earlier themes
+    // can always be traced back to Root's originals (not intermediate theme colors).
+    private readonly Dictionary<string, string> _rootOriginals = new(StringComparer.OrdinalIgnoreCase);
+
     public string? ActiveThemeName => _activeThemeName;
 
     public ThemeEngine(AvaloniaReflection r)
     {
         _r = r;
+        // Pre-populate _rootOriginals from all static theme maps
+        foreach (var (_, themeMap) in TreeColorMaps)
+        {
+            foreach (var (rootOrig, replacement) in themeMap)
+            {
+                // Only set if not already mapped — Root original always wins
+                if (!_rootOriginals.ContainsKey(replacement))
+                    _rootOriginals[replacement] = rootOrig;
+            }
+        }
+        Logger.Log("Theme", "Root originals map initialized: " + _rootOriginals.Count + " entries from " + TreeColorMaps.Count + " preset themes");
     }
 
     // ===== DWM title bar color (Windows 11) =====
@@ -277,6 +293,14 @@ internal class ThemeEngine
             var combinedMap = new Dictionary<string, string>(treeColorMap, StringComparer.OrdinalIgnoreCase);
             int crossMapped = 0;
 
+            // Register this theme's replacements in the persistent root originals map
+            foreach (var (rootOrig, replacement) in treeColorMap)
+            {
+                if (!_rootOriginals.ContainsKey(replacement))
+                    _rootOriginals[replacement] = rootOrig;
+            }
+
+            // Cross-map from previous theme (immediate predecessor)
             if (previousColorMap != null && previousThemeName != null)
             {
                 foreach (var (origColor, prevReplacement) in previousColorMap)
@@ -295,10 +319,32 @@ internal class ThemeEngine
                     Logger.Log("Theme", "Cross-mapped " + crossMapped + " colors from " + previousThemeName + " -> " + themeName);
             }
 
+            // Cross-map from ALL known stale theme colors (catches colors from themes
+            // applied 2+ switches ago that persisted through Default revert)
+            int staleMapped = 0;
+            foreach (var (staleReplacement, rootOrig) in _rootOriginals)
+            {
+                if (combinedMap.ContainsKey(staleReplacement)) continue; // already handled
+                if (treeColorMap.TryGetValue(rootOrig, out var newReplacement))
+                {
+                    if (!string.Equals(staleReplacement, newReplacement, StringComparison.OrdinalIgnoreCase))
+                    {
+                        combinedMap[staleReplacement] = newReplacement;
+                        staleMapped++;
+                    }
+                }
+            }
+            if (staleMapped > 0)
+                Logger.Log("Theme", "Stale-mapped " + staleMapped + " colors from _rootOriginals");
+
             _activeColorMap = combinedMap;
             _reverseColorMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            // Build reverse map: prefer Root originals over cross-mapped intermediates
             foreach (var (orig, repl) in combinedMap)
-                _reverseColorMap[repl] = orig;
+            {
+                if (!_reverseColorMap.ContainsKey(repl))
+                    _reverseColorMap[repl] = orig;
+            }
             Logger.Log("Theme", "Color map loaded: " + combinedMap.Count + " mappings (" + treeColorMap.Count + " base + " + crossMapped + " cross-mapped)");
         }
 
@@ -311,6 +357,21 @@ internal class ThemeEngine
         catch { }
         ScheduleVisualTreeWalks();
         InstallLayoutInterceptor();
+
+        // === Phase 4b: Diagnostic audit after 1.5s — find stale/orphan colors ===
+        var auditMap = _activeColorMap;
+        var auditReverse = _reverseColorMap;
+        var auditName = themeName;
+        System.Threading.ThreadPool.QueueUserWorkItem(_ =>
+        {
+            Thread.Sleep(1500);
+            if (_activeThemeName != auditName) return; // theme changed, skip audit
+            _r.RunOnUIThread(() =>
+            {
+                try { RunColorAudit(auditMap, auditReverse, auditName); }
+                catch (Exception ex) { Logger.Log("Theme", "Audit error: " + ex.Message); }
+            });
+        });
 
         // === Phase 5: Update DWM title bar color ===
         if (palette.TryGetValue("SolidBackgroundFillColorBase", out var titleBarBg))
@@ -469,6 +530,94 @@ internal class ThemeEngine
             catch { }
         }
         return total;
+    }
+
+    /// <summary>
+    /// Diagnostic: audit the visual tree 1.5s after theme apply.
+    /// Reports colors that are STILL in the reverse map (old theme colors that survived)
+    /// and colors that match neither the active map nor Root's originals.
+    /// </summary>
+    private void RunColorAudit(Dictionary<string, string>? activeMap, Dictionary<string, string>? reverseMap, string themeName)
+    {
+        if (activeMap == null) return;
+
+        var staleColors = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var unmappedColors = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int totalProps = 0;
+        int matchedProps = 0;
+
+        // Collect all Root original colors (keys of the active map) — these should NOT be present anymore
+        var originals = new HashSet<string>(activeMap.Keys, StringComparer.OrdinalIgnoreCase);
+
+        foreach (var topLevel in _r.GetAllTopLevels())
+        {
+            AuditNode(topLevel, 0, activeMap, reverseMap, originals, staleColors, unmappedColors, ref totalProps, ref matchedProps);
+        }
+
+        Logger.Log("Theme", $"=== COLOR AUDIT ({themeName}) after 1.5s ===");
+        Logger.Log("Theme", $"  Total color props scanned: {totalProps}");
+        Logger.Log("Theme", $"  Still matching original (need recolor): {matchedProps}");
+
+        if (staleColors.Count > 0)
+        {
+            int staleTotal = 0;
+            foreach (var v in staleColors.Values) staleTotal += v;
+            var topStale = staleColors.OrderByDescending(kv => kv.Value).Take(10);
+            Logger.Log("Theme", $"  --- STALE (original Root colors still present, {staleTotal} total) ---");
+            foreach (var (key, freq) in topStale)
+                Logger.Log("Theme", $"    [{freq}x] {key}");
+        }
+        else
+        {
+            Logger.Log("Theme", "  No stale original colors found (good!)");
+        }
+
+        Logger.Log("Theme", $"=== END AUDIT ===");
+    }
+
+    private void AuditNode(object visual, int depth,
+        Dictionary<string, string> activeMap, Dictionary<string, string>? reverseMap,
+        HashSet<string> originals,
+        Dictionary<string, int> staleColors,
+        Dictionary<string, int> unmappedColors,
+        ref int totalProps, ref int matchedProps)
+    {
+        if (depth > 50) return;
+        if (_r.GetTag(visual) == "uprooted-no-recolor") return;
+
+        try
+        {
+            foreach (var propName in new[] { "Background", "Foreground", "BorderBrush" })
+            {
+                var prop = visual.GetType().GetProperty(propName);
+                if (prop == null) continue;
+                try
+                {
+                    var brush = prop.GetValue(visual);
+                    if (brush == null) continue;
+                    var colorStr = GetBrushColorString(brush);
+                    if (colorStr == null) continue;
+
+                    totalProps++;
+
+                    // Is this an original Root color that should have been recolored?
+                    if (originals.Contains(colorStr))
+                    {
+                        matchedProps++;
+                        var key = propName + ":" + colorStr + " on " + visual.GetType().Name;
+                        staleColors.TryGetValue(key, out int ex);
+                        staleColors[key] = ex + 1;
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+        {
+            AuditNode(child, depth + 1, activeMap, reverseMap, originals, staleColors, unmappedColors, ref totalProps, ref matchedProps);
+        }
     }
 
     /// <summary>
@@ -872,13 +1021,32 @@ internal class ThemeEngine
 
         try
         {
+            _purgeNullFallbacks = 0;
+            _purgeOrphans = 0;
+            _purgeOrphanColors = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
             int purged = 0;
             foreach (var topLevel in _r.GetAllTopLevels())
             {
                 try { purged += PurgeKnownColors(topLevel, 0, purgeColors); }
                 catch { }
             }
-            Logger.Log("Theme", "Targeted purge: " + purged + " color properties cleared (" + purgeColors.Count + " known colors)");
+            Logger.Log("Theme", "Targeted purge: " + purged + " cleared, " +
+                _purgeNullFallbacks + " null-fallbacks, " +
+                _purgeOrphans + " orphan props (" + purgeColors.Count + " known colors)");
+
+            // Log top orphan colors — these are colors left on controls that we didn't touch
+            if (_purgeOrphanColors.Count > 0)
+            {
+                var topOrphans = _purgeOrphanColors
+                    .OrderByDescending(kv => kv.Value)
+                    .Take(15);
+                Logger.Log("Theme", "--- ORPHAN COLORS (not in known set, left untouched) ---");
+                foreach (var (key, freq) in topOrphans)
+                    Logger.Log("Theme", $"  [{freq}x] {key}");
+            }
+
+            _purgeOrphanColors = null;
         }
         catch (Exception ex)
         {
@@ -933,6 +1101,11 @@ internal class ThemeEngine
     /// is in the known set (theme colors we applied or originals we mapped from).
     /// This avoids clearing Root's structural backgrounds.
     /// </summary>
+    // Diagnostic counters for PurgeKnownColors
+    private int _purgeNullFallbacks;
+    private int _purgeOrphans;
+    private Dictionary<string, int>? _purgeOrphanColors;
+
     private int PurgeKnownColors(object visual, int depth, HashSet<string> knownColors)
     {
         if (depth > 50) return 0;
@@ -961,15 +1134,35 @@ internal class ThemeEngine
                             var newBrush = prop.GetValue(visual);
                             if (newBrush == null)
                             {
+                                _purgeNullFallbacks++;
+                                // Use _rootOriginals (persistent, always maps to Root's true original)
+                                // NOT _reverseColorMap (may point to intermediate theme colors)
                                 string restoreColor = colorStr;
-                                if (_reverseColorMap != null && _reverseColorMap.TryGetValue(colorStr, out var orig))
-                                    restoreColor = orig;
+                                if (_rootOriginals.TryGetValue(colorStr, out var rootOrig))
+                                    restoreColor = rootOrig;
+                                else if (_reverseColorMap != null && _reverseColorMap.TryGetValue(colorStr, out var revOrig))
+                                    restoreColor = revOrig;
 
                                 var restoreBrush = _r.CreateBrush(restoreColor);
                                 if (restoreBrush != null)
                                     _r.SetValueStylePriority(visual, fieldName, restoreBrush);
+
+                                if (_purgeNullFallbacks <= 10)
+                                    Logger.Log("Theme", $"  PURGE NULL: {visual.GetType().Name}.{propName} was {colorStr} -> restored {restoreColor} (root orig)");
                             }
                             count++;
+                        }
+                    }
+                    else
+                    {
+                        // Track orphan colors: present on controls but NOT in our known set
+                        // These are colors from a previous theme that we missed
+                        if (_purgeOrphanColors != null)
+                        {
+                            var key = propName + ":" + colorStr;
+                            _purgeOrphanColors.TryGetValue(key, out int existing);
+                            _purgeOrphanColors[key] = existing + 1;
+                            _purgeOrphans++;
                         }
                     }
                 }
@@ -1307,26 +1500,49 @@ internal class ThemeEngine
     // ===== Custom Theme Generation =====
 
     /// <summary>
-    /// Generate a full theme palette from accent + background colors using ColorUtils.
-    /// Produces the same ~50 keys as the preset themes.
+    /// Generate a full theme palette from accent + background colors.
+    /// Anti-neon algorithm: backgrounds always use accent hue at heavily capped saturation,
+    /// accent shades are capped to prevent pure neon, text is hue-tinted for warmth.
+    /// Modeled after the hand-tuned Crimson/Loki presets.
     /// </summary>
     private static Dictionary<string, string> GenerateCustomTheme(string accent, string bg)
     {
-        var textColor = ColorUtils.DeriveTextColor(bg);
-        var accentLight1 = ColorUtils.Lighten(accent, 15);
-        var accentLight2 = ColorUtils.Lighten(accent, 30);
-        var accentLight3 = ColorUtils.Lighten(accent, 45);
-        var accentDark1 = ColorUtils.Darken(accent, 15);
-        var accentDark2 = ColorUtils.Darken(accent, 30);
-        var accentDark3 = ColorUtils.Darken(accent, 45);
+        var (ah, asat, al) = ColorUtils.RgbToHsl(accent);
+        var (_, _, bl) = ColorUtils.RgbToHsl(bg);
 
-        var bgSecondary = ColorUtils.Lighten(bg, 8);
-        var bgTertiary = ColorUtils.Lighten(bg, 14);
-        var bgQuarternary = ColorUtils.Lighten(bg, 20);
+        // === Anti-neon: cap accent saturation and lightness ===
+        double cappedAsat = Math.Min(asat, 0.85);
+        double cappedAl = Math.Clamp(al, 0.15, 0.65);
 
+        // Accent variations — capped to prevent garish neon
+        var accentLight1 = ColorUtils.HslToHex(ah, Math.Min(0.85, cappedAsat * 1.05), Math.Min(0.75, cappedAl + 0.10));
+        var accentLight2 = ColorUtils.HslToHex(ah, Math.Min(0.80, cappedAsat * 1.0),  Math.Min(0.80, cappedAl + 0.20));
+        var accentLight3 = ColorUtils.HslToHex(ah, Math.Min(0.75, cappedAsat * 0.9),  Math.Min(0.85, cappedAl + 0.30));
+        var accentDark1  = ColorUtils.HslToHex(ah, Math.Min(0.85, cappedAsat * 1.1),  Math.Max(0.10, cappedAl - 0.10));
+        var accentDark2  = ColorUtils.HslToHex(ah, Math.Min(0.85, cappedAsat * 1.1),  Math.Max(0.08, cappedAl - 0.18));
+        var accentDark3  = ColorUtils.HslToHex(ah, Math.Min(0.85, cappedAsat * 1.0),  Math.Max(0.05, cappedAl - 0.25));
+
+        // === Anti-neon: backgrounds ALWAYS use accent hue, heavily desaturated ===
+        double bgHue = ah;
+        double bgSat = Math.Clamp(asat * 0.25, 0.04, 0.15);
+        double bgL = Math.Clamp(bl, 0.04, 0.15);
+
+        var bgBase        = ColorUtils.HslToHex(bgHue, bgSat, bgL);
+        var bgSecondary   = ColorUtils.HslToHex(bgHue, bgSat, bgL + 0.03);
+        var bgTertiary    = ColorUtils.HslToHex(bgHue, bgSat, bgL + 0.06);
+        var bgQuarternary = ColorUtils.HslToHex(bgHue, bgSat, bgL + 0.09);
+
+        // Text — hue-tinted for warmth instead of cold gray
+        var textColor = ColorUtils.DeriveTextColorTinted(bgBase, accent);
         var textFaded78 = ColorUtils.WithAlphaFraction(textColor, 0.78);
         var textFaded55 = ColorUtils.WithAlphaFraction(textColor, 0.55);
         var textFaded36 = ColorUtils.WithAlphaFraction(textColor, 0.36);
+
+        // Accent-tinted overlay for cards
+        var cardFill = ColorUtils.WithAlpha(accent, 0x18);
+
+        // Highlight foreground: if accent is dark, use a lighter version
+        var highlightFg = cappedAl < 0.4 ? accentLight2 : accent;
 
         return new Dictionary<string, string>
         {
@@ -1341,8 +1557,8 @@ internal class ThemeEngine
             ["ThemeAccentBrush4"]    = accentDark2,
             ["ThemeForegroundLowColor"]  = textFaded55,
             ["ThemeForegroundLowBrush"]  = textFaded55,
-            ["HighlightForegroundColor"] = accent,
-            ["HighlightForegroundBrush"] = accent,
+            ["HighlightForegroundColor"] = highlightFg,
+            ["HighlightForegroundBrush"] = highlightFg,
             ["ErrorColor"]               = "#FF4444",
             ["ErrorLowColor"]            = "#80FF4444",
             ["ErrorBrush"]               = "#FF4444",
@@ -1365,23 +1581,23 @@ internal class ThemeEngine
             ["TextFillColorTertiary"]   = textFaded55,
             ["TextFillColorDisabled"]   = textFaded36,
 
-            // Control fills
-            ["ControlFillColorDefault"]   = "#15FFFFFF",
-            ["ControlFillColorSecondary"] = "#10FFFFFF",
-            ["ControlFillColorTertiary"]  = "#08FFFFFF",
+            // Control fills — accent-tinted for cohesion
+            ["ControlFillColorDefault"]   = ColorUtils.WithAlpha(accent, 0x15),
+            ["ControlFillColorSecondary"] = ColorUtils.WithAlpha(accent, 0x10),
+            ["ControlFillColorTertiary"]  = ColorUtils.WithAlpha(accent, 0x08),
             ["ControlFillColorDisabled"]  = "#06FFFFFF",
 
-            // Solid backgrounds
-            ["SolidBackgroundFillColorBase"]        = bg,
+            // Solid backgrounds — anti-neon derived
+            ["SolidBackgroundFillColorBase"]        = bgBase,
             ["SolidBackgroundFillColorSecondary"]   = bgSecondary,
             ["SolidBackgroundFillColorTertiary"]    = bgTertiary,
             ["SolidBackgroundFillColorQuarternary"] = bgQuarternary,
 
             // Card/layer
-            ["CardBackgroundFillColorDefault"]       = ColorUtils.WithAlpha(accent, 0x20),
-            ["CardBackgroundFillColorDefaultBrush"]  = ColorUtils.WithAlpha(accent, 0x20),
-            ["LayerFillColorDefault"]                = "#08FFFFFF",
-            ["LayerFillColorAlt"]                    = "#0AFFFFFF",
+            ["CardBackgroundFillColorDefault"]       = cardFill,
+            ["CardBackgroundFillColorDefaultBrush"]  = cardFill,
+            ["LayerFillColorDefault"]                = ColorUtils.WithAlpha(accent, 0x08),
+            ["LayerFillColorAlt"]                    = ColorUtils.WithAlpha(accent, 0x0A),
 
             // Accent fill brushes
             ["AccentFillColorDefaultBrush"]    = accent,
@@ -1430,59 +1646,102 @@ internal class ThemeEngine
     /// <summary>
     /// Generate a tree color map for custom themes. Maps Root's original ARGB colors
     /// to custom-derived equivalents. Each replacement value must be unique.
+    /// Anti-neon algorithm: backgrounds ALWAYS use accent hue at heavily capped saturation,
+    /// accent shades are capped, text is hue-tinted. Modeled after Crimson/Loki presets.
+    /// Includes uniqueness enforcement pass to prevent collisions at very low saturation.
     /// </summary>
     private static Dictionary<string, string> GenerateCustomTreeColorMap(string accent, string bg)
     {
-        // Root's original colors (ARGB format from Avalonia Color.ToString())
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var (ah, asat, al) = ColorUtils.RgbToHsl(accent);
+        var (_, _, bl) = ColorUtils.RgbToHsl(bg);
 
-        // Blue accent -> custom accent (with minor offsets for uniqueness)
+        // === Anti-neon: cap accent to prevent pure neon shades ===
+        double cappedAsat = Math.Min(asat, 0.85);
+        double cappedAl = Math.Clamp(al, 0.15, 0.65);
+
+        // === Anti-neon: backgrounds ALWAYS use accent hue, heavily desaturated ===
+        double bgHue = ah;
+        double bgSat = Math.Clamp(asat * 0.25, 0.04, 0.15);
+        double bgL = Math.Clamp(bl, 0.04, 0.15);
+
+        // Border saturation: slightly richer than bg, hard-capped
+        double borderSat = Math.Clamp(bgSat * 1.5, 0.06, 0.22);
+
+        // Helper: create unique ARGB hex (FF prefix) from an HSL color
+        string Hsl(double h, double s, double l) =>
+            "#FF" + ColorUtils.HslToHex(h, s, l).TrimStart('#');
+
+        // === Blue accent -> custom accent (capped HSL shades) ===
+        map["#ff3b6af8"] = Hsl(ah, cappedAsat, cappedAl);                                              // Primary accent
+        map["#ff4a78f9"] = Hsl(ah, Math.Min(0.85, cappedAsat * 1.05), Math.Min(0.75, cappedAl + 0.10)); // Lighter
+        map["#ff2e59d1"] = Hsl(ah, Math.Min(0.85, cappedAsat * 1.1),  Math.Max(0.10, cappedAl - 0.10)); // Darker
+        map["#ff2148af"] = Hsl(ah, Math.Min(0.85, cappedAsat * 1.1),  Math.Max(0.08, cappedAl - 0.18)); // Much darker
+        map["#ff5b88ff"] = Hsl(ah, Math.Min(0.80, cappedAsat * 1.0),  Math.Min(0.80, cappedAl + 0.20)); // Much lighter
+        // Unique variant: tiny hue shift (+2°) for uniqueness vs #ff4a78f9
+        map["#ff3366ff"] = Hsl(ah + 2, Math.Min(0.85, cappedAsat * 1.05), Math.Min(0.75, cappedAl + 0.10));
+        // Semi-transparent accent variants
         var (ar, ag, ab) = ColorUtils.ParseHex(accent);
-        map["#ff3b6af8"] = $"#FF{ar:X2}{ag:X2}{ab:X2}";
-        map["#ff4a78f9"] = "#FF" + ColorUtils.Lighten(accent, 15).TrimStart('#');
-        map["#ff2e59d1"] = "#FF" + ColorUtils.Darken(accent, 15).TrimStart('#');
-        map["#ff2148af"] = "#FF" + ColorUtils.Darken(accent, 30).TrimStart('#');
-        map["#ff5b88ff"] = "#FF" + ColorUtils.Lighten(accent, 30).TrimStart('#');
-        // Offset by 1 for uniqueness
-        var accentL15 = ColorUtils.ParseHex(ColorUtils.Lighten(accent, 15));
-        map["#ff3366ff"] = $"#FF{(byte)Math.Min(255, accentL15.R + 1):X2}{accentL15.G:X2}{accentL15.B:X2}";
         map["#663b6af8"] = $"#66{ar:X2}{ag:X2}{ab:X2}";
         map["#333b6af8"] = $"#33{ar:X2}{ag:X2}{ab:X2}";
         map["#193b6af8"] = $"#19{ar:X2}{ag:X2}{ab:X2}";
 
-        // ContentPages card bg
-        var cardBg = ColorUtils.Lighten(bg, 6);
-        map["#ff0f1923"] = "#FF" + cardBg.TrimStart('#');
+        // === ContentPages card bg — accent hue, slightly lighter than main bg ===
+        map["#ff0f1923"] = Hsl(bgHue, bgSat * 0.9, bgL + 0.03);
 
-        // Structural backgrounds -> custom bg with incremental lightening for uniqueness
-        var (br, bgr, bb) = ColorUtils.ParseHex(bg);
-        map["#ff0d1521"] = $"#FF{br:X2}{bgr:X2}{bb:X2}";
-        var bg2 = ColorUtils.Darken(bg, 8);
-        map["#ff07101b"] = "#FF" + bg2.TrimStart('#');
-        var bg3 = ColorUtils.Darken(bg, 5);
-        map["#ff090e13"] = "#FF" + bg3.TrimStart('#');
-        var bg4 = ColorUtils.Darken(bg, 3);
-        map["#ff0a1a2e"] = "#FF" + bg4.TrimStart('#');
-        map["#ff101c2e"] = "#FF" + ColorUtils.Lighten(bg, 5).TrimStart('#');
-        map["#ff121a26"] = "#FF" + ColorUtils.Lighten(bg, 3).TrimStart('#');
-        map["#ff141e2b"] = "#FF" + ColorUtils.Lighten(bg, 8).TrimStart('#');
-        map["#ff282828"] = "#FF" + ColorUtils.Lighten(bg, 10).TrimStart('#');
-        map["#ff4f5c6f"] = "#FF" + ColorUtils.Lighten(bg, 25).TrimStart('#');
+        // === Structural backgrounds — accent hue, desaturated, clear level hierarchy ===
+        map["#ff0d1521"] = Hsl(bgHue, bgSat, bgL);                                    // Main dark bg
+        map["#ff07101b"] = Hsl(bgHue, bgSat, Math.Max(0.02, bgL - 0.025));            // Darkest bg
+        map["#ff090e13"] = Hsl(bgHue, bgSat, Math.Max(0.02, bgL - 0.015));            // Near-black bg
+        map["#ff0a1a2e"] = Hsl(bgHue, Math.Max(bgSat - 0.02, 0.03), Math.Max(0.02, bgL - 0.01)); // Unique via slight desat
+        map["#ff101c2e"] = Hsl(bgHue, bgSat, bgL + 0.02);                             // Slightly lighter
+        map["#ff121a26"] = Hsl(bgHue, bgSat, bgL + 0.01);                             // DM/chat panel
+        map["#ff141e2b"] = Hsl(bgHue, bgSat, bgL + 0.04);                             // Panel bg
+        map["#ff282828"] = Hsl(bgHue, bgSat * 0.5, bgL + 0.07);                       // Neutral gray (lower sat)
+        map["#ff4f5c6f"] = Hsl(bgHue, bgSat * 0.6, bgL + 0.18);                      // Gray metadata (big jump)
 
-        // Borders
-        map["#ff242c36"] = "#FF" + ColorUtils.Lighten(bg, 18).TrimStart('#');
-        map["#ff1a2230"] = "#FF" + ColorUtils.Lighten(bg, 12).TrimStart('#');
-        map["#ff505050"] = "#FF" + ColorUtils.Lighten(bg, 20).TrimStart('#');
+        // === Borders — accent-tinted, clearly above backgrounds ===
+        map["#ff242c36"] = Hsl(bgHue, borderSat, bgL + 0.10);                          // Primary border
+        map["#ff1a2230"] = Hsl(bgHue, borderSat, bgL + 0.07);                          // Darker border
+        map["#ff505050"] = Hsl(bgHue, borderSat * 0.8, bgL + 0.12);                    // Gray border (unique sat)
 
-        // Text semi-transparent
-        var textBase = ColorUtils.DeriveTextColor(bg);
+        // === Text — hue-tinted for warmth ===
+        var textBase = ColorUtils.DeriveTextColorTinted(Hsl(bgHue, bgSat, bgL), accent);
         var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
-        map[$"#a3f2f2f2"] = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-        map[$"#66f2f2f2"] = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        map["#a3f2f2f2"] = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+        map["#66f2f2f2"] = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        map["#ffdedede"] = $"#FF{tr:X2}{tg:X2}{tb:X2}";
 
-        // Text opaque
-        map["#ffdedede"] = "#FF" + ColorUtils.Darken(textBase, 5).TrimStart('#');
-        map["#fff2f2f2"] = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+        // Ensure #fff2f2f2 is distinct from #ffdedede — nudge lightness slightly
+        var textBright = ColorUtils.DeriveTextColorTinted(Hsl(bgHue, bgSat, bgL), accent);
+        var (tbh, tbs, tbl) = ColorUtils.RgbToHsl(textBright);
+        var textBrightAdjusted = ColorUtils.HslToHex(tbh, tbs, Math.Min(0.98, tbl + 0.02));
+        var (tr2, tg2, tb2) = ColorUtils.ParseHex(textBrightAdjusted);
+        map["#fff2f2f2"] = $"#FF{tr2:X2}{tg2:X2}{tb2:X2}";
+
+        // === Uniqueness enforcement: nudge collisions by +1 RGB ===
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var keys = new List<string>(map.Keys);
+        foreach (var key in keys)
+        {
+            var val = map[key];
+            while (seen.Contains(val))
+            {
+                // Parse and nudge green channel by +1
+                var hex = val.TrimStart('#');
+                if (hex.Length == 8)
+                {
+                    byte a = Convert.ToByte(hex[0..2], 16);
+                    byte r = Convert.ToByte(hex[2..4], 16);
+                    byte g = Math.Min((byte)255, (byte)(Convert.ToByte(hex[4..6], 16) + 1));
+                    byte b = Convert.ToByte(hex[6..8], 16);
+                    val = $"#{a:X2}{r:X2}{g:X2}{b:X2}";
+                    map[key] = val;
+                }
+                else break; // safety: shouldn't happen
+            }
+            seen.Add(val);
+        }
 
         return map;
     }

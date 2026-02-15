@@ -27,7 +27,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.1.7 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.1.81 Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
@@ -83,7 +83,12 @@ internal class StartupHook
             {
                 try
                 {
-                    if (savedSettings.ActiveTheme != "default-dark")
+                    if (savedSettings.ActiveTheme == "custom")
+                    {
+                        Logger.Log("Startup", "Applying saved custom theme: accent=" + savedSettings.CustomAccent + " bg=" + savedSettings.CustomBackground);
+                        themeEngine.ApplyCustomTheme(savedSettings.CustomAccent, savedSettings.CustomBackground);
+                    }
+                    else if (savedSettings.ActiveTheme != "default-dark")
                     {
                         Logger.Log("Startup", "Applying saved theme: " + savedSettings.ActiveTheme);
                         themeEngine.ApplyTheme(savedSettings.ActiveTheme);

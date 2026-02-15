@@ -1,5 +1,5 @@
 #!/bin/bash
-# Uprooted Linux Uninstaller v0.1.7
+# Uprooted Linux Uninstaller v0.1.81
 # Removes all Uprooted files and restores original Root behavior.
 
 set -euo pipefail
