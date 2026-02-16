@@ -446,7 +446,7 @@ These globals are available on `window` inside Root's Chromium context.
 | Global | Type | Description |
 |--------|------|-------------|
 | `window.__UPROOTED_SETTINGS__` | `UprootedSettings` | The settings object loaded at startup. Contains `enabled`, `plugins` (per-plugin config), and `customCss`. |
-| `window.__UPROOTED_VERSION__` | `string` | Uprooted version string (e.g. `"1.9.0"`). Set during initialization. |
+| `window.__UPROOTED_VERSION__` | `string` | Uprooted version string (e.g. `"0.1.9"`). Set during initialization. |
 | `window.__UPROOTED_LOADER__` | `PluginLoader` | The active plugin loader instance. Exposed for the settings panel; avoid depending on this in regular plugins. |
 
 ### Root Bridge Globals
