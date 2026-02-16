@@ -282,10 +282,10 @@ internal static class ContentPages
     // Known plugins metadata: (id, displayName, version, description, defaultEnabled)
     private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled)[] KnownPlugins =
     {
-        ("sentry-blocker", "Sentry Blocker", "0.1.9",
+        ("sentry-blocker", "Sentry Blocker", "0.9.2",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
             true),
-        ("themes", "Themes", "0.1.9",
+        ("themes", "Themes", "0.9.2",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
             true),
     };
