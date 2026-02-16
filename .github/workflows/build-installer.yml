@@ -128,6 +128,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
+          if (-not $env:GH_TOKEN) {
+            Write-Host "PUBLIC_REPO_TOKEN not configured, skipping public release"
+            exit 0
+          }
           $version = (Get-Content installer\src-tauri\tauri.conf.json | ConvertFrom-Json).version
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version.exe"
           Write-Host "Uploading $($exe.Name) to watchthelight/uprooted v$version"
