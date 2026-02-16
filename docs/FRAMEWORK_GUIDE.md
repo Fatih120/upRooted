@@ -217,7 +217,7 @@ Old Python scripts for binary patching (theme application, revert). These are no
 
 | File | Purpose |
 |---|---|
-| `package.json` | pnpm workspace root. v0.1.0, GPL-3.0, Node >= 20. Scripts: build, dev, install-root, uninstall-root. |
+| `package.json` | pnpm workspace root. v0.1.95, custom license (see LICENSE), Node >= 20. Scripts: build, dev, install-root, uninstall-root. |
 | `tsconfig.json` | ES2022 target/module, strict mode, `@uprooted/*` path alias to `src/*`. |
 | `pnpm-workspace.yaml` | Monorepo: `installer/`, `site/`. |
 | `Install-Uprooted.ps1` | PowerShell one-click installer. Supports Profiler and StartupHooks methods. |
@@ -463,7 +463,7 @@ Add an entry to `src/plugins/themes/themes.json`:
 }
 ```
 
-Variable names must match Root's CSS variable names (`--rootsdk-*`). See `docs/architecture/THEME_EXTRACTION.md` for the full list.
+Variable names must match Root's CSS variable names (`--rootsdk-*`). See `docs/plugins/ROOT_ENVIRONMENT.md` for the full list of CSS variables.
 
 ### Common mistakes to avoid
 

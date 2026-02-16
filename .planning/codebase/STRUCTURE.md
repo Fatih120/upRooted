@@ -10,8 +10,8 @@ uprooted-private/
 ├── .planning/                  # GSD planning documents (generated)
 ├── docs/                       # User and developer documentation
 │   └── plugins/                # Plugin development guide
-├── hook/                       # .NET hook for Avalonia theme injection
-│   ├── *.cs                    # C# source files for theme engine
+├── hook/                       # .NET hook for Avalonia UI injection (sidebar, settings pages, themes, version display)
+│   ├── *.cs                    # C# source files for UI injection and theme engine
 │   └── UprootedHook.csproj     # .NET project file
 ├── hook-test/                  # Tests for .NET hook
 ├── installer/                  # Desktop installer application (Tauri + TypeScript)
@@ -64,7 +64,7 @@ uprooted-private/
 │   │   ├── themes/             # Theme engine plugin
 │   │   │   ├── index.ts        # Plugin definition + color math
 │   │   │   ├── themes.json     # Theme definitions
-│   │   │   └── panel.css       # Not shown, loaded at build time
+│   │   │   └── forest-green.css # Theme CSS, loaded at build time
 │   │   └── settings-panel/     # Settings UI plugin
 │   │       ├── index.ts        # Plugin entry, lifecycle
 │   │       ├── panel.ts        # DOM injection and observation
@@ -74,7 +74,7 @@ uprooted-private/
 │       ├── plugin.ts           # UprootedPlugin, Patch interfaces
 │       ├── settings.ts         # UprootedSettings, PluginSettings
 │       └── root.ts             # Root-specific types (UserGuid, DeviceGuid, themes)
-├── tests/                      # Test files
+├── tests/                      # C# unit tests (ColorUtils, GradientBrush)
 ├── tools/                      # Development tools
 ├── .gitignore
 ├── package.json                # Root workspace package.json
@@ -161,13 +161,13 @@ uprooted-private/
 - `src/types/settings.ts`: UprootedSettings, PluginSettings, DEFAULT_SETTINGS
 
 **Testing:**
-- `tests/`: Test directory (location for test files)
+- `tests/`: C# unit tests for hook utilities (ColorUtils, GradientBrush). No TypeScript tests exist.
 
 ## Naming Conventions
 
 **Files:**
 - Plugin files: `src/plugins/{plugin-name}/index.ts` (default export is the plugin)
-- CSS files: `*.css` co-located with their plugin (e.g., `src/plugins/themes/panel.css`)
+- CSS files: `*.css` co-located with their plugin (e.g., `src/plugins/themes/forest-green.css`)
 - Types: `*.ts` in `src/types/` for reusable types
 - Scripts: `scripts/{action}.ts` for build/install/uninstall actions
 - Pages: `installer/src/pages/{name}.ts` for installer pages
