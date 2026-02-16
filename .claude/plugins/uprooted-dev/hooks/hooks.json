@@ -1,0 +1,14 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Write|Edit",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Check if this tool use modifies a file in the hook/ directory (C# code). If it does, inspect the new content for these forbidden patterns:\n\n1. Type.GetType( — Must use AvaloniaReflection instead\n2. typeof(Avalonia — Must use AvaloniaReflection instead\n3. System.Text.Json or JsonSerializer — Causes MissingMethodException in profiler context\n4. .AddEventHandler( on RoutedEvents — Must use Expression.Lambda\n5. .Content = (on ContentControl) — Causes UI freeze, must use Grid overlay\n6. Enum.Parse for DispatcherPriority — It's a struct not enum in Avalonia 11+\n\nAlso check TypeScript files (src/) for:\n7. localStorage. — Root runs with --incognito, data is lost\n\nIf ANY violation is found, respond with:\nBLOCK: [rule number] [brief explanation of what's wrong and what to use instead]\n\nIf no violations are found, respond with:\nAPPROVE",
+          "timeout": 15
+        }
+      ]
+    }
+  ]
+}

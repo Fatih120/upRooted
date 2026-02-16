@@ -1,0 +1,8 @@
+{
+  "name": "uprooted-dev",
+  "version": "0.1.0",
+  "description": "Development workflow, standards enforcement, and architecture knowledge for the Uprooted project",
+  "author": {
+    "name": "agomusio"
+  }
+}
