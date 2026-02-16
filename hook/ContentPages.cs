@@ -294,13 +294,13 @@ internal static class ContentPages
     // Known plugins metadata
     private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings, int TestingStatus)[] KnownPlugins =
     {
-        ("sentry-blocker", "Sentry Blocker", "0.1.10",
+        ("sentry-blocker", "Sentry Blocker", "0.2.0",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
             true, false, 1),   // Alpha
-        ("themes", "Themes", "0.1.10",
+        ("themes", "Themes", "0.2.0",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
             true, false, 2),   // Beta
-        ("content-filter", "Content Filter", "0.1.10",
+        ("content-filter", "Content Filter", "0.2.0",
             "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
             false, true, 0),   // Untested
     };

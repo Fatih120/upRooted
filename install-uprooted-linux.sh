@@ -1,5 +1,5 @@
 #!/bin/bash
-# Uprooted Linux Installer v0.1.10
+# Uprooted Linux Installer v0.2.0
 # Standalone bash installer for systems without the GUI installer.
 #
 # Usage: ./install-uprooted-linux.sh [--root-path /path/to/Root.AppImage]
@@ -19,7 +19,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.1.10"
+VERSION="0.2.0"
 
 # Colors
 RED='\033[0;31m'

@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-16)
 
-## Release: v0.1.10
+## Release: v0.2.0
 
 ### What Changed
 
@@ -36,7 +36,7 @@ Full Google Cloud Vision SafeSearch-based content filter. See previous session n
 **New files:** `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`, `hook/nsfw-filter.js`
 **Modified:** UprootedSettings, ContentPages, SidebarInjector, StartupHook (Phase 5), HtmlPatchVerifier, UprootedHook.csproj
 
-#### Version Bump: 0.1.96 -> 0.1.10
+#### Version Bump: 0.1.96 -> 0.2.0
 
 Bumped across all files: package.json (x2), Cargo.toml, Cargo.lock, tauri.conf.json, C# source, TypeScript plugins, install scripts, PKGBUILD, site, all docs, _publish staging.
 
@@ -58,13 +58,13 @@ Bumped across all files: package.json (x2), Cargo.toml, Cargo.lock, tauri.conf.j
 2. Plugins -> `BuildPluginsPage()` (includes Content Filter as a plugin card with gear/info lightboxes)
 3. Themes -> `BuildThemesPage()`
 
-### Release Artifacts (v0.1.10)
+### Release Artifacts (v0.2.0)
 | Platform | Artifact | CI Workflow |
 |----------|----------|-------------|
-| Windows | `Uprooted-0.1.10.exe` | build-installer.yml |
-| Linux (Debian/Ubuntu) | `uprooted_0.1.10_amd64.deb` | build-linux.yml |
-| Linux (portable) | `Uprooted-0.1.10.AppImage` | build-linux.yml |
-| Arch Linux | `uprooted-bin-0.1.10-1-x86_64.pkg.tar.zst` | build-linux.yml (build-arch job) |
+| Windows | `Uprooted-0.2.0.exe` | build-installer.yml |
+| Linux (Debian/Ubuntu) | `uprooted_0.2.0_amd64.deb` | build-linux.yml |
+| Linux (portable) | `Uprooted-0.2.0.AppImage` | build-linux.yml |
+| Arch Linux | `uprooted-bin-0.2.0-1-x86_64.pkg.tar.zst` | build-linux.yml (build-arch job) |
 
 ## Build & Test
 
