@@ -2,15 +2,24 @@
 
 Runtime context for plugin developers. Understanding Root's Chromium environment is essential for writing plugins that work reliably.
 
+> **Related Docs:**
+> [Getting Started](GETTING_STARTED.md) |
+> [Bridge Reference](BRIDGE_REFERENCE.md) |
+> [Architecture](../ARCHITECTURE.md) |
+> [Hook Reference](../HOOK_REFERENCE.md)
+
 ## Table of Contents
 
 - [Chromium Environment](#chromium-environment)
 - [Injection Targets](#injection-targets)
+- [Sub-App Context Comparison](#sub-app-context-comparison)
 - [CSS Variable System](#css-variable-system)
+- [Theme CSS Variable Architecture](#theme-css-variable-architecture)
 - [Window Globals](#window-globals)
 - [Available Web APIs](#available-web-apis)
 - [Debugging Strategies](#debugging-strategies)
 - [Constraints & Gotchas](#constraints--gotchas)
+- [Version Compatibility](#version-compatibility)
 
 ---
 
@@ -48,12 +57,39 @@ The primary injection target. Contains:
 - Media management (WebRTC peer connections)
 - Full DOM access to the call interface
 
+This context is loaded from Root's bundled HTML files. Uprooted's C# hook patches these HTML files to inject the `<script>` tag that loads `uprooted-preload.js`. See [Hook Reference](../HOOK_REFERENCE.md) for details on how the HTML patching works.
+
 ### Sub-App Contexts (separate iframes)
 
 Root also embeds 7 React/Vite sub-apps in iframes:
 - Polls, Tasks, Raids, Suggestions, Stickers, Hexatris, Minecraft
 
 These run in **separate iframe contexts**. Your plugin cannot directly access their DOM or JS globals. They communicate with the native host via a different bridge (`__rootSdkBridgeWebToNative`), which Uprooted does not proxy.
+
+---
+
+## Sub-App Context Comparison
+
+The different web contexts in Root have different capabilities. This table summarizes what is available in each context.
+
+| Feature | WebRTC Context (plugins) | Sub-App Iframes | Notes |
+|---------|--------------------------|-----------------|-------|
+| `__nativeToWebRtc` | Available (after join) | Not available | Only exists in WebRTC context |
+| `__webRtcToNative` | Available (after join) | Not available | Only exists in WebRTC context |
+| `__rootSdkBridgeWebToNative` | Not available | Available | Sub-app bridge, not proxied by Uprooted |
+| DOM access | Full (own context) | Own iframe only | Cannot cross iframe boundaries |
+| Uprooted globals | Available | Not available | `__UPROOTED_SETTINGS__`, `__UPROOTED_VERSION__`, etc. |
+| CSS variables (`--color-*`) | Available | Available | Shared across all contexts via Root's theme system |
+| `--rootsdk-*` overrides | Effective in own context | Not effective | Overrides only apply to the document where they are set |
+| Fetch API | Available (no CORS) | Available (no CORS) | `--disable-web-security` applies globally |
+| WebRTC APIs | Full access | Not available | Only the WebRTC context manages peer connections |
+| React | Minimal (not a React app) | Full React apps | Sub-apps are React/Vite bundles |
+
+### Implications for Plugin Developers
+
+- **You cannot modify sub-app UI.** The Polls, Tasks, and other iframe-based features are isolated. Your CSS injections and DOM manipulations only affect the WebRTC context.
+- **Theme variable overrides are context-scoped.** Setting `--rootsdk-brand-primary` on `:root` in your context does not propagate to iframes. However, Root's own theme system sets `--color-*` variables in all contexts via the native layer.
+- **Bridge methods are WebRTC-only.** The 71 methods documented in [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) are only available in the WebRTC context. Sub-apps use a completely different bridge protocol.
 
 ---
 
@@ -74,7 +110,7 @@ Each `--color-*` variable is defined using `var(--rootsdk-*, fallback)`, allowin
 --color-brand-primary: var(--rootsdk-brand-primary, #3B6AF8);
 ```
 
-To override, set `--rootsdk-brand-primary` — no need to touch `--color-brand-primary` directly.
+To override, set `--rootsdk-brand-primary` -- no need to touch `--color-brand-primary` directly.
 
 ### Theme Variables (25 per theme)
 
@@ -118,6 +154,58 @@ See the [themes.json](../../src/plugins/themes/themes.json) file for the exact o
 
 ---
 
+## Theme CSS Variable Architecture
+
+This section explains how Root's CSS variable system works end-to-end and how Uprooted's theme plugin interacts with it.
+
+### How Root Sets Theme Variables
+
+1. Root's C# host calls `nativeToWebRtc.setTheme(theme)` when the user changes the theme in settings. This is a bridge call that plugins can intercept (see [Bridge Reference -- setTheme](BRIDGE_REFERENCE.md#setthemetheme)).
+2. Root's WebRTC JS layer sets the `data-theme` attribute on `<html>` (e.g. `data-theme="dark"`).
+3. Root's CSS uses attribute selectors to apply theme-specific variable values:
+   ```css
+   [data-theme="dark"] {
+     --color-brand-primary: var(--rootsdk-brand-primary, #3B6AF8);
+     --color-background-primary: var(--rootsdk-background-primary, #0D1521);
+     /* ... */
+   }
+   ```
+
+### How Uprooted Overrides Variables
+
+Uprooted's theme plugin (`src/plugins/themes/index.ts`) overrides the `--rootsdk-*` variables by setting inline styles on `document.documentElement`:
+
+```typescript
+// From src/api/native.ts:19
+document.documentElement.style.setProperty("--rootsdk-brand-primary", "#e11d48");
+```
+
+This works because CSS specificity rules make inline styles on `:root` take precedence over the stylesheet defaults. Since `--color-brand-primary` is defined as `var(--rootsdk-brand-primary, #3B6AF8)`, setting the override variable changes the computed value of the base variable.
+
+### Custom Theme Generation
+
+The built-in theme plugin can generate a full set of theme variables from just two inputs: an accent color and a background color. The `generateCustomVariables()` function in `src/plugins/themes/index.ts:82` uses color math helpers (`darken`, `lighten`, `luminance`) to derive all 10 override variables:
+
+- Brand primary = accent color
+- Brand secondary = accent lightened 15%
+- Brand tertiary = accent darkened 15%
+- Background primary = background color
+- Background secondary = background lightened 8%
+- Background tertiary = background darkened 8%
+- Input = background darkened 5%
+- Border = background lightened 18%
+- Link = accent lightened 30%
+- Muted = background lightened 25% (dark themes) or darkened 25% (light themes)
+
+### Best Practices for Theme Plugins
+
+- **Always clean up variables in `stop()`.** Call `removeCssVariable()` for every variable you set. The built-in theme plugin tracks all variable names in a Set and iterates it on stop.
+- **Flush before applying.** When switching between themes, remove all previous overrides first to avoid stale values. See `src/plugins/themes/index.ts:117`.
+- **Use `--rootsdk-*` not `--color-*`.** Setting `--color-*` directly will work but will not be removed cleanly when themes change, because Root resets `--color-*` via its own stylesheet.
+- **Consider the `setTheme` bridge call.** When Root changes theme, your overrides may conflict. Intercept `setTheme` to detect theme changes and re-apply or clear your overrides accordingly.
+
+---
+
 ## Window Globals
 
 Objects available on `window` in Root's Chromium context.
@@ -126,8 +214,8 @@ Objects available on `window` in Root's Chromium context.
 
 | Global | Always Present | Description |
 |--------|----------------|-------------|
-| `__nativeToWebRtc` | After join | INativeToWebRtc — native host controls (proxied by Uprooted) |
-| `__webRtcToNative` | After join | IWebRtcToNative — WebRTC notifications (proxied by Uprooted) |
+| `__nativeToWebRtc` | After join | INativeToWebRtc -- native host controls (proxied by Uprooted) |
+| `__webRtcToNative` | After join | IWebRtcToNative -- WebRTC notifications (proxied by Uprooted) |
 
 These are only populated when a voice session is active. They may be `undefined` before the user joins a call.
 
@@ -155,23 +243,23 @@ Root may also expose additional globals depending on context. These are not part
 Since you're running in a Chromium context, standard web APIs are available:
 
 ### Fully Available
-- **DOM API** — `document.querySelector`, `createElement`, `MutationObserver`, etc.
-- **Fetch API** — `fetch()` with no CORS restrictions
-- **WebRTC** — `RTCPeerConnection`, `MediaStream`, `getUserMedia`
-- **MediaDevices** — `navigator.mediaDevices.enumerateDevices()`
-- **Timers** — `setTimeout`, `setInterval`, `requestAnimationFrame`
-- **Web Audio** — `AudioContext`, `GainNode`, analyzers
-- **Canvas** — `<canvas>` rendering, `OffscreenCanvas`
-- **Clipboard** — `navigator.clipboard` (read/write)
-- **Notifications** — `Notification` API (if permitted)
-- **WebSocket** — Full WebSocket support
+- **DOM API** -- `document.querySelector`, `createElement`, `MutationObserver`, etc.
+- **Fetch API** -- `fetch()` with no CORS restrictions
+- **WebRTC** -- `RTCPeerConnection`, `MediaStream`, `getUserMedia`
+- **MediaDevices** -- `navigator.mediaDevices.enumerateDevices()`
+- **Timers** -- `setTimeout`, `setInterval`, `requestAnimationFrame`
+- **Web Audio** -- `AudioContext`, `GainNode`, analyzers
+- **Canvas** -- `<canvas>` rendering, `OffscreenCanvas`
+- **Clipboard** -- `navigator.clipboard` (read/write)
+- **Notifications** -- `Notification` API (if permitted)
+- **WebSocket** -- Full WebSocket support
 
 ### Not Available or Restricted
-- **localStorage** — Returns empty / throws (incognito mode)
-- **IndexedDB** — Not available (incognito mode)
-- **Service Workers** — Not registered
-- **DevTools** — No access to Chrome DevTools
-- **Extensions** — No Chrome extension APIs
+- **localStorage** -- Returns empty / throws (incognito mode)
+- **IndexedDB** -- Not available (incognito mode)
+- **Service Workers** -- Not registered
+- **DevTools** -- No access to Chrome DevTools
+- **Extensions** -- No Chrome extension APIs
 
 ---
 
@@ -214,7 +302,7 @@ nativeLog("Plugin started");
 nativeLog(`Found ${count} elements`);
 ```
 
-These appear in Root's internal logs with the `[Uprooted]` prefix.
+These appear in Root's internal logs with the `[Uprooted]` prefix. The function is defined in `src/api/native.ts:42`.
 
 ### DOM Indicators
 
@@ -245,7 +333,7 @@ Root runs Chromium with `--incognito`. This means:
 - IndexedDB is unavailable
 - Cookies are session-only
 
-**Workaround:** Use `window.__UPROOTED_SETTINGS__` for configuration. For runtime state, keep it in memory (it resets on restart anyway).
+**Workaround:** Use `window.__UPROOTED_SETTINGS__` for configuration. For runtime state, keep it in memory (it resets on restart anyway). For data that must persist across sessions, the only path is through the settings JSON file which Uprooted's C# hook reads at startup.
 
 ### Obfuscated CSS Classes
 
@@ -259,11 +347,11 @@ Root's UI (especially sub-apps) uses React, which can remove and re-create DOM n
 - Your injected nodes may be removed without warning
 - Event listeners on React-managed nodes may stop working
 
-**Workaround:** Use `MutationObserver` (via `observe()`) to detect when your injected content is removed, and re-inject it. Always clean up observers in `stop()`.
+**Workaround:** Use `MutationObserver` (via `observe()` in `src/api/dom.ts:44`) to detect when your injected content is removed, and re-inject it. Always clean up observers in `stop()`. See [Getting Started -- Tutorial 5: DOM Injection](GETTING_STARTED.md#tutorial-5-dom-injection) for a full walkthrough.
 
 ### Bridge Timing
 
-The bridge objects (`__nativeToWebRtc`, `__webRtcToNative`) are only set when a voice session is active. If your plugin patches bridge methods, the patches are installed at plugin start regardless — they'll fire when the bridge becomes active.
+The bridge objects (`__nativeToWebRtc`, `__webRtcToNative`) are only set when a voice session is active. If your plugin patches bridge methods, the patches are installed at plugin start regardless -- they'll fire when the bridge becomes active.
 
 However, if you need to call bridge methods directly in `start()`, check for their existence first:
 
@@ -277,14 +365,16 @@ start() {
 
 ### No Module Imports at Runtime
 
-Plugins are bundled into the Uprooted preload script at build time. You cannot use dynamic `import()` at runtime — there's no module server or filesystem access from the Chromium context.
+Plugins are bundled into the Uprooted preload script at build time. You cannot use dynamic `import()` at runtime -- there's no module server or filesystem access from the Chromium context.
 
 ### Single Context
 
 All plugins share a single JS execution context. This means:
-- Global variable pollution is possible — namespace your globals
+- Global variable pollution is possible -- namespace your globals
 - One plugin's uncaught error can affect others
 - `window` is shared across all plugins
+
+See [API Reference -- Error Handling](API_REFERENCE.md#error-handling) for how the loader isolates plugin errors, and [API Reference -- Plugin-to-Plugin Communication](API_REFERENCE.md#plugin-to-plugin-communication) for patterns to safely share state between plugins.
 
 ### CSS Specificity
 
@@ -296,4 +386,30 @@ Root's own styles may use `!important` or high-specificity selectors. Your injec
 }
 ```
 
-For CSS variable overrides, use the `--rootsdk-*` pattern instead of trying to override `--color-*` directly — this is the designed override mechanism.
+For CSS variable overrides, use the `--rootsdk-*` pattern instead of trying to override `--color-*` directly -- this is the designed override mechanism.
+
+---
+
+## Version Compatibility
+
+This table tracks which Uprooted versions have been tested against which Root Communications versions.
+
+| Uprooted Version | Root Version(s) | Status | Notes |
+|-------------------|-----------------|--------|-------|
+| 0.1.x | 0.9.86+ | Supported | Current development line |
+| 0.1.92+ | 0.9.86 - 0.9.90 | Tested | Verified working |
+| 0.1.95 | 0.9.86 - latest | In development | Active development target |
+
+### Compatibility Notes
+
+- **Root updates may break HTML patches.** Root's auto-updater can overwrite the HTML files that Uprooted patches. The C# hook's `HtmlPatchVerifier` (see [Hook Reference](../HOOK_REFERENCE.md)) automatically detects and re-applies patches using a `FileSystemWatcher`.
+- **Bridge method signatures are stable.** Root's bridge interfaces (`INativeToWebRtc`, `IWebRtcToNative`) have remained stable across all tested versions. New methods may be added, but existing method signatures have not changed.
+- **CSS variable names are stable.** The 25 `--color-*` / `--rootsdk-*` variable pairs have been consistent across all tested Root versions. New variables may be added in future versions.
+- **Sub-app iframe structure may change.** The number and type of embedded sub-apps can change between Root versions. Do not rely on specific iframes being present.
+
+### If Something Breaks After a Root Update
+
+1. Check that Uprooted's HTML patches are still applied (look for the `<script>` tag in Root's HTML files)
+2. Verify the bridge objects are still being proxied (`window.__nativeToWebRtc` should be a Proxy)
+3. Check `nativeLog` output for startup errors
+4. If CSS looks wrong, Root may have changed variable names -- compare against the variable table above

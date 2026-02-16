@@ -2,6 +2,12 @@
 
 Complete reference for all 71 bridge methods across Root's two WebRTC bridge interfaces. These are the methods you can intercept with [Patch](API_REFERENCE.md#patch-interface) definitions in your plugin.
 
+> **Related Docs:**
+> [API Reference](API_REFERENCE.md) |
+> [Root Environment](ROOT_ENVIRONMENT.md) |
+> [TypeScript Reference](../TYPESCRIPT_REFERENCE.md) |
+> [Architecture](../ARCHITECTURE.md)
+
 ## Table of Contents
 
 - [How Interception Works](#how-interception-works)
@@ -37,11 +43,13 @@ Root exposes two bridge objects on `window`:
 | `__nativeToWebRtc` | C# host -> JS WebRTC | The .NET host calls these to control the WebRTC session (mute, theme, devices, etc.) |
 | `__webRtcToNative` | JS WebRTC -> C# host | The WebRTC JS layer calls these to notify the host of state changes (speaking, track events, etc.) |
 
-Uprooted wraps both with ES6 Proxies at startup. Every method call passes through the proxy, which:
+Uprooted wraps both with ES6 Proxies at startup (see `src/api/bridge.ts:49`, `installBridgeProxy()`). Every method call passes through the proxy, which:
 
 1. Creates a `BridgeEvent` with the method name and arguments
 2. Runs all registered `before` / `replace` handlers (from plugin patches)
 3. If not cancelled, calls the original method
+
+The proxy is created by `createBridgeProxy()` at `src/api/bridge.ts:21`. The event dispatch happens through `pluginLoader.emit()` at `src/api/bridge.ts:37`.
 
 Plugins intercept these calls using `patches` in their plugin definition:
 
@@ -64,6 +72,8 @@ export default {
 ---
 
 ## BridgeEvent Structure
+
+Defined in `src/core/pluginLoader.ts:11`.
 
 ```typescript
 interface BridgeEvent {
@@ -144,9 +154,11 @@ interface IPacket {
 
 ---
 
-## INativeToWebRtc — Native -> WebRTC
+## INativeToWebRtc -- Native -> WebRTC
 
 **42 methods.** These are called by Root's C# host to control the WebRTC session. Intercept with `bridge: "nativeToWebRtc"`.
+
+Source: Interface defined in `src/types/bridge.ts`. Proxy wrapping in `src/api/bridge.ts:56`.
 
 ### Connection
 
@@ -480,9 +492,11 @@ stopNativeLoopbackAudio(): void
 
 ---
 
-## IWebRtcToNative — WebRTC -> Native
+## IWebRtcToNative -- WebRTC -> Native
 
 **29 methods.** These are called by Root's WebRTC JS layer to notify the C# host. Intercept with `bridge: "webRtcToNative"`.
+
+Source: Interface defined in `src/types/bridge.ts`. Proxy wrapping in `src/api/bridge.ts:65`.
 
 ### Session Lifecycle
 
@@ -674,7 +688,7 @@ viewContextMenu(
 ### Logging
 
 #### `log(message)`
-Send a log message to the native host. This is what `nativeLog()` uses under the hood.
+Send a log message to the native host. This is what `nativeLog()` (defined in `src/api/native.ts:42`) uses under the hood.
 
 ```typescript
 log(message: string): void

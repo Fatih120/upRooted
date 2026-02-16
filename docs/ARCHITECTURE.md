@@ -130,7 +130,7 @@ uprooted-private/
 |-- docs/                             # Developer and user documentation
 |   |-- ARCHITECTURE.md               # This file -- authoritative architecture reference
 |   |-- HOW_IT_WORKS.md               # Narrative walkthrough (reverse engineering to injected UI)
-|   |-- FUTURE_PLANS.md               # Roadmap
+|   |-- ROADMAP.md                    # Known issues and planned features
 |   |-- INDEX.md                      # Documentation navigation hub
 |   `-- plugins/                      # Plugin development documentation
 |       |-- API_REFERENCE.md          # Plugin API surface

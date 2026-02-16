@@ -39,7 +39,7 @@ Verify your Uprooted installation is working by launching Root and checking for 
 
 ### What You Should Know
 
-This guide assumes you are comfortable with TypeScript and basic DOM manipulation. You do not need to know anything about Root's internals -- that is what Uprooted abstracts for you. If you want to understand the internals anyway, read [Root Environment](ROOT_ENVIRONMENT.md) and the [Framework Guide](../FRAMEWORK_GUIDE.md).
+This guide assumes you are comfortable with TypeScript and basic DOM manipulation. You do not need to know anything about Root's internals -- that is what Uprooted abstracts for you. If you want to understand the internals anyway, read [Root Environment](ROOT_ENVIRONMENT.md) and the [Architecture Reference](../ARCHITECTURE.md).
 
 ---
 
@@ -608,5 +608,5 @@ See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more det
 - [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) -- All 71 bridge methods with type signatures
 - [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md) -- Runtime constraints, CSS variables, and available APIs
 - [EXAMPLES.md](EXAMPLES.md) -- Copy-paste example plugins covering common patterns
-- [Framework Guide](../FRAMEWORK_GUIDE.md) -- Authoritative reference for the full Uprooted system
+- [Architecture Reference](../ARCHITECTURE.md) -- Authoritative reference for the full Uprooted system
 - Study the built-in plugins at `src/plugins/themes/` and `src/plugins/sentry-blocker/` for real-world patterns
