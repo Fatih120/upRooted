@@ -13,9 +13,9 @@ Three interconnected fixes for Uprooted failing to load when Root is launched as
    - Added `#define _GNU_SOURCE` for `strcasestr`
 
 2. **Runtime env var detection** (`installer/src-tauri/src/hook.rs`)
-   - Added `env_vars_active` field to `HookStatus` — checks actual `std::env::var()` on Linux
+   - Added `env_vars_active` field to `HookStatus` -- checks actual `std::env::var()` on Linux
    - Config files say "configured" but env vars aren't active until re-login
-   - Installer now warns: "configured (not active — restart session or use wrapper)"
+   - Installer now warns: "configured (not active -- restart session or use wrapper)"
    - Added `~/.profile` as fallback for non-systemd sessions (X11, login shells)
    - Uninstaller cleans up `~/.profile` entries
 
@@ -55,9 +55,8 @@ Bumped across all files: package.json (x2), Cargo.toml, Cargo.lock, tauri.conf.j
 
 ### Sidebar Nav Items
 1. Uprooted -> `BuildUprootedPage()`
-2. Plugins -> `BuildPluginsPage()`
+2. Plugins -> `BuildPluginsPage()` (includes Content Filter as a plugin card with gear/info lightboxes)
 3. Themes -> `BuildThemesPage()`
-4. Content Filter -> `BuildContentFilterPage()`
 
 ### Release Artifacts (v0.1.10)
 | Platform | Artifact | CI Workflow |
