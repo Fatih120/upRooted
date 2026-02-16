@@ -73,6 +73,8 @@ internal class SidebarInjector
             _settings.Plugins["sentry-blocker"] = true;
         if (!_settings.Plugins.ContainsKey("themes"))
             _settings.Plugins["themes"] = true;
+        if (!_settings.Plugins.ContainsKey("content-filter"))
+            _settings.Plugins["content-filter"] = _settings.NsfwFilterEnabled;
     }
 
     public void StartMonitoring()
@@ -362,8 +364,8 @@ internal class SidebarInjector
         if (sectionHeader != null)
             _r.AddChild(container, sectionHeader);
 
-        // 2. Nav items: Uprooted, Plugins, Themes, Content Filter
-        foreach (var (label, page) in new[] { ("Uprooted", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes"), ("Content Filter", "content-filter") })
+        // 2. Nav items: Uprooted, Plugins, Themes
+        foreach (var (label, page) in new[] { ("Uprooted", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
         {
             var item = BuildNavItem(label, page, nativeFontFamily, nativeNavForeground, nativeNavFontWeight);
             if (item != null)
