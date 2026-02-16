@@ -32,7 +32,6 @@ tests/**/bin/
 tests/**/obj/
 
 # Env
-.claude/
 .env
 .env.*
 
