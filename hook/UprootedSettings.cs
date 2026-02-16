@@ -3,7 +3,7 @@ namespace Uprooted;
 internal class UprootedSettings
 {
     public bool Enabled { get; set; } = true;
-    public string Version { get; set; } = "0.2.0";
+    public string Version { get; set; } = "0.2.1";
     public string ActiveTheme { get; set; } = "default-dark";
     public Dictionary<string, bool> Plugins { get; set; } = new();
     public string CustomCss { get; set; } = "";

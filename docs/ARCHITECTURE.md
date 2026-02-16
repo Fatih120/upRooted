@@ -241,7 +241,7 @@ uprooted-private/
 |   |-- uprooted-preload.js           # IIFE bundle injected via <script> tag.
 |   |-- uprooted-preload.js.map       # Source map.
 |   `-- uprooted.css                  # Combined CSS from all plugins.
-|-- package.json                      # pnpm workspace root (v0.2.0).
+|-- package.json                      # pnpm workspace root (v0.2.1).
 |-- pnpm-workspace.yaml               # Monorepo: root, installer/, site/.
 |-- tsconfig.json                     # ES2022, strict, @uprooted/* path alias.
 |-- tsconfig.build.json               # Build-specific TypeScript config.
@@ -809,4 +809,4 @@ These are the fragile integration points that must be checked when Root releases
 
 ---
 
-*Architecture reference for Uprooted v0.2.0. Last updated 2026-02-16.*
+*Architecture reference for Uprooted v0.2.1. Last updated 2026-02-16.*

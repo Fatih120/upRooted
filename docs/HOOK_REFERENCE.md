@@ -958,7 +958,7 @@ control from `NavContainer` (they'll be re-added at the bottom after our items).
 **Step 4** (`SidebarInjector.cs:229`): Wrap NavContainer in a ScrollViewer for sidebar
 scrolling via `WrapInScrollViewer()` (`SidebarInjector.cs:632-676`).
 
-**Step 5** (`SidebarInjector.cs:232`): Inject "Uprooted 0.2.0" version text into
+**Step 5** (`SidebarInjector.cs:232`): Inject "Uprooted 0.2.1" version text into
 Root's grey version info box via `InjectVersionText()` (`SidebarInjector.cs:711-788`).
 
 **Step 6** (`SidebarInjector.cs:235`): Record current ListBox selection index for
@@ -1509,7 +1509,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.2.0";
+public string Version { get; set; } = "0.2.1";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -1546,7 +1546,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.2.0
+Version=0.2.1
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521

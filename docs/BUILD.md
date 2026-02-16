@@ -602,12 +602,12 @@ The version string appears in multiple locations and must be kept in sync.
 
 | Location                                    | Current  | Format     | Used By                              |
 | ------------------------------------------- | -------- | ---------- | ------------------------------------ |
-| `package.json` (`version`)                  | `0.2.0` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
-| `installer/src-tauri/Cargo.toml` (`version`)| `0.2.0` | semver     | Rust crate version, Tauri build      |
-| `installer/src-tauri/tauri.conf.json` (`version`) | `0.2.0` | semver | Installer product version, CI rename |
-| `installer/package.json` (`version`)        | `0.2.0` | semver     | Installer frontend package           |
-| `hook/UprootedSettings.cs` (`Version`)      | `0.2.0` | string     | Default version in settings INI file |
-| `scripts/install-hook.ps1` (settings write) | `0.2.0` | string     | Written to `uprooted-settings.ini`   |
+| `package.json` (`version`)                  | `0.2.1` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
+| `installer/src-tauri/Cargo.toml` (`version`)| `0.2.1` | semver     | Rust crate version, Tauri build      |
+| `installer/src-tauri/tauri.conf.json` (`version`) | `0.2.1` | semver | Installer product version, CI rename |
+| `installer/package.json` (`version`)        | `0.2.1` | semver     | Installer frontend package           |
+| `hook/UprootedSettings.cs` (`Version`)      | `0.2.1` | string     | Default version in settings INI file |
+| `scripts/install-hook.ps1` (settings write) | `0.2.1` | string     | Written to `uprooted-settings.ini`   |
 
 ### How Versions Propagate
 
@@ -616,7 +616,7 @@ The version string appears in multiple locations and must be kept in sync.
    as `window.__UPROOTED_VERSION__` in the browser context.
 
 2. **C# hook:** `UprootedSettings.cs` has a hardcoded default
-   (`Version = "0.2.0"`) that gets written to `uprooted-settings.ini`.
+   (`Version = "0.2.1"`) that gets written to `uprooted-settings.ini`.
    The settings page displays this version as a badge via `ContentPages.cs`,
    and the sidebar injector adds it to the version info box.
 
