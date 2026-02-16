@@ -23,12 +23,44 @@ internal static class ContentPages
     private const string DefaultAccentGreen = "#2A5A40";
 
     // Themed colors derived from the active theme engine (set per-build)
-    private static string CardBg = DefaultCardBg;
+    internal static string CardBg = DefaultCardBg;
     private static string CardBorder = DefaultCardBorder;
-    private static string TextWhite = DefaultTextWhite;
-    private static string TextMuted = DefaultTextMuted;
-    private static string TextDim = DefaultTextDim;
-    private static string AccentGreen = DefaultAccentGreen;
+    internal static string TextWhite = DefaultTextWhite;
+    internal static string TextMuted = DefaultTextMuted;
+    internal static string TextDim = DefaultTextDim;
+    internal static string AccentGreen = DefaultAccentGreen;
+
+    /// <summary>
+    /// Update statics for live preview during color picker drag.
+    /// Uses palette values for consistency with resource/tree updates.
+    /// </summary>
+    internal static void UpdateLiveColors(string accent, string bg, Dictionary<string, string>? palette)
+    {
+        AccentGreen = accent;
+
+        // Use palette colors so Uprooted elements match Root's tree-walked colors
+        if (palette != null &&
+            palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
+            palette.TryGetValue("TextFillColorPrimary", out var palText))
+        {
+            CardBg = palBg;
+            CardBorder = ColorUtils.WithAlpha(palText, 0x19);
+            var (tr, tg, tb) = ColorUtils.ParseHex(palText);
+            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        }
+        else
+        {
+            var textBase = ColorUtils.DeriveTextColor(bg);
+            var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
+            CardBg = ColorUtils.Lighten(bg, 6);
+            CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
+            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        }
+    }
 
     /// <summary>
     /// Update static color fields from the active theme engine.
@@ -50,28 +82,58 @@ internal static class ContentPages
 
         var bg = themeEngine.GetBgPrimary();
         var accent = themeEngine.GetAccentColor();
-        var textBase = ColorUtils.DeriveTextColor(bg);
-        var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
-
-        CardBg = ColorUtils.Lighten(bg, 6);
-        CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
-        TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
-        TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-        TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
         AccentGreen = accent;
+
+        // Use palette-derived colors for consistency with resource/tree updates
+        var palette = themeEngine.GetPalette();
+        if (palette != null &&
+            palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
+            palette.TryGetValue("TextFillColorPrimary", out var palText))
+        {
+            CardBg = palBg;
+            CardBorder = ColorUtils.WithAlpha(palText, 0x19);
+            var (tr, tg, tb) = ColorUtils.ParseHex(palText);
+            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        }
+        else
+        {
+            var textBase = ColorUtils.DeriveTextColor(bg);
+            var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
+            CardBg = ColorUtils.Lighten(bg, 6);
+            CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
+            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+        }
     }
 
     public static object? BuildPage(string pageName, AvaloniaReflection r,
         UprootedSettings settings, object? nativeFontFamily = null,
         ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
     {
-        return pageName switch
+        var page = pageName switch
         {
             "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
             "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
             "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
             _ => null
         };
+
+        // Set background on the returned ScrollViewer so our page covers any
+        // stale colors from Root's content panel behind it
+        if (page != null)
+        {
+            var bg = themeEngine?.ActiveThemeName != null &&
+                     themeEngine.ActiveThemeName != "default-dark"
+                ? themeEngine.GetBgPrimary()
+                : "#0D1521";
+            r.SetBackground(page, bg);
+            r.SetTag(page, "uprooted-content");
+        }
+
+        return page;
     }
 
     private static void ApplyFont(AvaloniaReflection r, object? control, object? fontFamily)
@@ -86,7 +148,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
-        r.SetTag(page, "uprooted-no-recolor");
+        r.SetTag(page, "uprooted-content");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Uprooted", 20, TextWhite);
@@ -219,7 +281,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
-        r.SetTag(page, "uprooted-no-recolor");
+        r.SetTag(page, "uprooted-content");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Plugins", 20, TextWhite);
@@ -294,7 +356,7 @@ internal static class ContentPages
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
-        r.SetTag(page, "uprooted-no-recolor");
+        r.SetTag(page, "uprooted-content");
 
         // Page title
         var pageTitle = r.CreateTextBlock("Themes", 20, TextWhite);
@@ -483,9 +545,45 @@ internal static class ContentPages
             r.AddChild(outerContent, headerRow);
         }
 
+        // Mutable holders so each color picker callback can read the other textbox
+        // (which may not exist yet at closure creation time)
+        object?[] accentTextBoxRef = new object?[1];
+        object?[] bgTextBoxRef = new object?[1];
+
+        // Track last-known values to skip no-op TextChanged events during page init.
+        // Avalonia fires TextChanged when controls attach to the visual tree, even
+        // if the text hasn't actually changed. We skip those to avoid unnecessary
+        // UpdateCustomThemeLive calls and saves during page construction.
+        string[] lastAccent = new[] { settings.CustomAccent };
+        string[] lastBg = new[] { settings.CustomBackground };
+
+        // Debounced auto-save: saves settings 1s after last color change
+        System.Threading.Timer? saveTimer = null;
+        Action debounceSave = () =>
+        {
+            saveTimer?.Dispose();
+            saveTimer = new System.Threading.Timer(_ =>
+            {
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("Theme", "Auto-save error: " + sx.Message); }
+            }, null, 1000, System.Threading.Timeout.Infinite);
+        };
+
         // Accent row: label + textbox + swatch
         var accentSwatch = r.CreateBorder(settings.CustomAccent, 4);
-        var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch);
+        var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch,
+            accentHex =>
+            {
+                // Skip if this is the same value (e.g. from page init TextChanged)
+                if (string.Equals(accentHex, lastAccent[0], StringComparison.OrdinalIgnoreCase)) return;
+                lastAccent[0] = accentHex;
+                settings.CustomAccent = accentHex;
+                settings.ActiveTheme = "custom";
+                var bgVal = r.GetTextBoxText(bgTextBoxRef[0])?.Trim() ?? settings.CustomBackground;
+                if (ColorUtils.IsValidHex(bgVal))
+                    themeEngine?.UpdateCustomThemeLive(accentHex, bgVal);
+                debounceSave();
+            });
         if (accentRow != null)
         {
             r.SetMargin(accentRow, 32, 16, 0, 0);
@@ -494,12 +592,28 @@ internal static class ContentPages
 
         // Background row: label + textbox + swatch
         var bgSwatch = r.CreateBorder(settings.CustomBackground, 4);
-        var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch);
+        var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch,
+            bgHex =>
+            {
+                // Skip if this is the same value (e.g. from page init TextChanged)
+                if (string.Equals(bgHex, lastBg[0], StringComparison.OrdinalIgnoreCase)) return;
+                lastBg[0] = bgHex;
+                settings.CustomBackground = bgHex;
+                settings.ActiveTheme = "custom";
+                var accentVal = r.GetTextBoxText(accentTextBoxRef[0])?.Trim() ?? settings.CustomAccent;
+                if (ColorUtils.IsValidHex(accentVal))
+                    themeEngine?.UpdateCustomThemeLive(accentVal, bgHex);
+                debounceSave();
+            });
         if (bgRow != null)
         {
             r.SetMargin(bgRow, 32, 10, 0, 0);
             r.AddChild(outerContent, bgRow);
         }
+
+        // Fill in the mutable holders now that both rows exist
+        accentTextBoxRef[0] = GetTextBoxFromRow(r, accentRow);
+        bgTextBoxRef[0] = GetTextBoxFromRow(r, bgRow);
 
         // Apply button
         var applyRow = r.CreateStackPanel(vertical: false, spacing: 0);
@@ -579,7 +693,8 @@ internal static class ContentPages
     /// Build a row: [Label] [TextBox] [ColorSwatch]
     /// </summary>
     private static object? BuildColorInputRow(AvaloniaReflection r, string label,
-        string initialValue, object? font, object? swatch)
+        string initialValue, object? font, object? swatch,
+        Action<string>? onColorChanged = null)
     {
         var row = r.CreateStackPanel(vertical: false, spacing: 10);
         if (row == null) return null;
@@ -603,16 +718,17 @@ internal static class ContentPages
             ApplyFont(r, textBox, font);
             r.SetTag(textBox, "uprooted-color-input");
 
-            // Update swatch preview on text change
-            if (swatch != null)
+            // Update swatch preview + trigger live theme preview on text change
+            r.SubscribeEvent(textBox, "TextChanged", () =>
             {
-                r.SubscribeEvent(textBox, "TextChanged", () =>
+                var text = r.GetTextBoxText(textBox)?.Trim() ?? "";
+                if (ColorUtils.IsValidHex(text))
                 {
-                    var text = r.GetTextBoxText(textBox)?.Trim() ?? "";
-                    if (ColorUtils.IsValidHex(text))
+                    if (swatch != null)
                         r.SetBackground(swatch, text);
-                });
-            }
+                    onColorChanged?.Invoke(text);
+                }
+            });
 
             r.AddChild(row, textBox);
         }
@@ -628,7 +744,7 @@ internal static class ContentPages
             r.SetCursorHand(swatch);
             r.SubscribeEvent(swatch, "PointerPressed", () =>
             {
-                ColorPickerPopup.Show(r, swatch, textBox);
+                ColorPickerPopup.Show(r, swatch, textBox, onColorChanged);
             });
         }
 

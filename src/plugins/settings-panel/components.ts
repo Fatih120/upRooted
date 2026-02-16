@@ -313,6 +313,18 @@ export function buildThemesPage(loader: PluginLoader): HTMLElement {
 
   // Theme preview cards
   const previewSection = createSection("Available Themes");
+  const themeCards: { card: HTMLElement; theme: ThemeDef }[] = [];
+
+  /** Highlight only the active card */
+  function updateActiveCard(activeThemeName: string): void {
+    for (const entry of themeCards) {
+      entry.card.classList.toggle(
+        "uprooted-theme-card--active",
+        entry.theme.name === activeThemeName,
+      );
+    }
+  }
+
   for (const theme of themes as ThemeDef[]) {
     if (theme.name === "custom") continue; // Custom has its own section
 
@@ -339,11 +351,22 @@ export function buildThemesPage(loader: PluginLoader): HTMLElement {
       }
     }
 
+    // Click-to-select: apply theme and sync dropdown
+    card.addEventListener("click", () => {
+      themeSelect.value = theme.display_name;
+      themeSelect.dispatchEvent(new Event("change"));
+      updateActiveCard(theme.name);
+    });
+
     card.appendChild(cardName);
     card.appendChild(cardAuthor);
     card.appendChild(colorBar);
     previewSection.appendChild(card);
+    themeCards.push({ card, theme });
   }
+
+  // Set initial active state
+  updateActiveCard(currentTheme);
   page.appendChild(previewSection);
 
   // Custom theme section

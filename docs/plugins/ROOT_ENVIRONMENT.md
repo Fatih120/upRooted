@@ -136,7 +136,7 @@ These are only populated when a voice session is active. They may be `undefined`
 | Global | Always Present | Description |
 |--------|----------------|-------------|
 | `__UPROOTED_SETTINGS__` | Yes | Settings object with `enabled`, `plugins`, `customCss` |
-| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"0.1.81"`) |
+| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"1.9.0"`) |
 | `__UPROOTED_LOADER__` | Yes | PluginLoader instance |
 
 ### Other Root Globals

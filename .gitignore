@@ -28,6 +28,8 @@ hook/bin/
 hook/obj/
 hook-test/**/bin/
 hook-test/**/obj/
+tests/**/bin/
+tests/**/obj/
 
 # Env
 .env
