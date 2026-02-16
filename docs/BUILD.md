@@ -1,7 +1,7 @@
 # Build Pipeline Guide
 
 > **Related docs:**
-> [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Installation Guide](INSTALLATION.md) | [Contributing](CONTRIBUTING.md)
+> [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Installation Guide](INSTALLATION.md) | [Contributing](../CONTRIBUTING.md)
 
 This document covers every stage of the Uprooted build pipeline -- from
 compiling individual components to producing a self-contained installer

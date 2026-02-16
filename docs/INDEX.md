@@ -27,6 +27,19 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Bridge Reference | [`docs/plugins/BRIDGE_REFERENCE.md`](plugins/BRIDGE_REFERENCE.md) | Root bridge API (IPC proxy methods, interceptors, call patterns) | Plugin authors |
 | Root Environment | [`docs/plugins/ROOT_ENVIRONMENT.md`](plugins/ROOT_ENVIRONMENT.md) | Root app internals (Chromium context, DOM structure, CSS variables) | Plugin authors |
 | Plugin Examples | [`docs/plugins/EXAMPLES.md`](plugins/EXAMPLES.md) | Annotated example plugins covering common patterns | Plugin authors |
+| Theme Engine Deep Dive | [`docs/THEME_ENGINE_DEEP_DIVE.md`](THEME_ENGINE_DEEP_DIVE.md) | ThemeEngine algorithm deep dive (live preview, color audit, revert) | Framework contributors |
+| Avalonia Patterns | [`docs/AVALONIA_PATTERNS.md`](AVALONIA_PATTERNS.md) | Avalonia UI concepts through Uprooted's reflection-only lens | Framework contributors |
+| .NET Runtime | [`docs/DOTNET_RUNTIME.md`](DOTNET_RUNTIME.md) | CLR profiler, IL injection, assembly scanning, startup hooks | Framework contributors |
+| Root Internals | [`docs/ROOT_INTERNALS.md`](ROOT_INTERNALS.md) | Root's native architecture from reverse engineering | Framework contributors |
+| gRPC Protocol | [`docs/GRPC_PROTOCOL.md`](GRPC_PROTOCOL.md) | Complete gRPC-web protocol reference (27 services) | Security researchers |
+| Reverse Engineering | [`docs/REVERSE_ENGINEERING.md`](REVERSE_ENGINEERING.md) | RE methodology: source maps, binary analysis, protocol discovery | Security researchers |
+| Security Research | [`docs/SECURITY_RESEARCH.md`](SECURITY_RESEARCH.md) | 105 security findings structured by category | Security researchers |
+| Research Index | [`docs/RESEARCH_INDEX.md`](RESEARCH_INDEX.md) | Navigation guide for research/ directory | Security researchers |
+| Planning Reference | [`docs/PLANNING_REFERENCE.md`](PLANNING_REFERENCE.md) | Index of .planning/codebase/ analysis files | Contributors |
+| Contributing Technical | [`docs/CONTRIBUTING_TECHNICAL.md`](CONTRIBUTING_TECHNICAL.md) | Technical onboarding: dev environment, debugging, failure modes | Contributors |
+| gRPC Library Reference | [`docs/GRPC_LIB_REFERENCE.md`](GRPC_LIB_REFERENCE.md) | API reference for grpc_lib.py encoding/decoding library | Security researchers |
+| Advanced Plugin Dev | [`docs/plugins/ADVANCED_DEVELOPMENT.md`](plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin patterns: bridge chains, performance, error recovery | Plugin authors |
+| AI Session Onboarding | [`NEW-SESSION.md`](../NEW-SESSION.md) | Context-efficient AI agent onboarding reference card | AI contributors |
 
 ---
 
@@ -72,12 +85,41 @@ For those who want the complete technical picture.
 6. [Installer Reference](INSTALLER.md) -- Tauri installer internals
 7. [Roadmap](ROADMAP.md) -- where the project is headed
 
+### Security Research
+
+For researchers investigating Root's security posture.
+
+1. [Security Research](SECURITY_RESEARCH.md) -- structured findings by category
+2. [Reverse Engineering](REVERSE_ENGINEERING.md) -- methodology and tools
+3. [gRPC Protocol](GRPC_PROTOCOL.md) -- backend protocol specification
+4. [gRPC Library Reference](GRPC_LIB_REFERENCE.md) -- Python library for gRPC calls
+5. [Research Index](RESEARCH_INDEX.md) -- full file inventory
+
+### Root Internals
+
+For understanding Root's application architecture.
+
+1. [Root Internals](ROOT_INTERNALS.md) -- native process architecture
+2. [Root Environment](plugins/ROOT_ENVIRONMENT.md) -- browser-side view
+3. [gRPC Protocol](GRPC_PROTOCOL.md) -- backend communication
+4. [Reverse Engineering](REVERSE_ENGINEERING.md) -- how it was discovered
+
+### Dev Environment
+
+For setting up a development environment.
+
+1. [Contributing Technical](CONTRIBUTING_TECHNICAL.md) -- setup, debugging, failure modes
+2. [Build Guide](BUILD.md) -- build pipeline for all layers
+3. [Contributing](../CONTRIBUTING.md) -- branch rules and PR process
+4. [Planning Reference](PLANNING_REFERENCE.md) -- technical debt and known issues
+
 ---
 
 ## Quick-Reference Topic Finder
 
 | Topic | Document | Section |
 |-------|----------|---------|
+| Avalonia patterns | [Avalonia Patterns](AVALONIA_PATTERNS.md) | -- |
 | Avalonia reflection | [Hook Reference](HOOK_REFERENCE.md) | Avalonia reflection cache |
 | Avalonia visual tree | [Hook Reference](HOOK_REFERENCE.md) | Visual tree traversal |
 | Branch rules | [Contributing](../CONTRIBUTING.md) | Branch Rules |
@@ -86,25 +128,39 @@ For those who want the complete technical picture.
 | Build pipeline | [Build Guide](BUILD.md) | -- |
 | Chromium context | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | Chromium context |
 | CLR profiler attach | [CLR Profiler](CLR_PROFILER.md) | Attach flow |
+| CLR profiler concepts | [.NET Runtime](DOTNET_RUNTIME.md) | CLR Profiler API |
 | Color utilities | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | Color utilities |
 | Content pages | [Hook Reference](HOOK_REFERENCE.md) | Content pages |
 | CSS variables | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | CSS variables |
+| Custom themes | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | Custom theme generation |
+| Debugging the hook | [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | Debugging the C# Hook |
+| Dev environment setup | [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | Development Environment |
+| .NET runtime | [.NET Runtime](DOTNET_RUNTIME.md) | -- |
 | DOM structure | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | DOM structure |
 | Environment variables | [CLR Profiler](CLR_PROFILER.md) | Environment variables |
 | File deployment | [Installer Reference](INSTALLER.md) | File deployment |
+| gRPC library | [gRPC Library Reference](GRPC_LIB_REFERENCE.md) | -- |
+| gRPC protocol | [gRPC Protocol](GRPC_PROTOCOL.md) | -- |
 | HTML patching | [Hook Reference](HOOK_REFERENCE.md) | HTML patch verification |
 | IL injection | [CLR Profiler](CLR_PROFILER.md) | IL injection |
 | Install / uninstall | [Installation Guide](INSTALLATION.md) | -- |
 | Installer detection | [Installer Reference](INSTALLER.md) | Root detection |
 | Lifecycle hooks | [Plugin API Reference](plugins/API_REFERENCE.md) | Lifecycle hooks |
 | Linux installer | [Installation Guide](INSTALLATION.md) | Linux |
+| Live theme preview | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | Live Preview System |
 | Logging | [Hook Reference](HOOK_REFERENCE.md) | Logging |
 | Platform paths | [Hook Reference](HOOK_REFERENCE.md) | Platform paths |
+| Plugin advanced patterns | [Advanced Plugin Dev](plugins/ADVANCED_DEVELOPMENT.md) | -- |
 | Plugin examples | [Plugin Examples](plugins/EXAMPLES.md) | -- |
 | Plugin settings | [Plugin API Reference](plugins/API_REFERENCE.md) | Settings |
 | Plugin storage | [Plugin API Reference](plugins/API_REFERENCE.md) | Storage |
+| Research files | [Research Index](RESEARCH_INDEX.md) | -- |
+| Reverse engineering | [Reverse Engineering](REVERSE_ENGINEERING.md) | -- |
+| Root architecture | [Root Internals](ROOT_INTERNALS.md) | -- |
 | Root detection | [Installer Reference](INSTALLER.md) | Root detection |
+| Security findings | [Security Research](SECURITY_RESEARCH.md) | -- |
 | Sidebar injection | [Hook Reference](HOOK_REFERENCE.md) | Sidebar injection |
 | Startup phases | [Hook Reference](HOOK_REFERENCE.md) | Startup phases |
+| Technical debt | [Planning Reference](PLANNING_REFERENCE.md) | Concerns and Technical Debt |
 | Theme engine | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | Theme engine |
 | Theme system (Root) | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | Theme system |

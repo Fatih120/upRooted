@@ -1,10 +1,6 @@
 # TypeScript Browser Injection Layer Reference
 
-> **Related Documentation**
->
-> - [Architecture Overview](ARCHITECTURE.md) -- System-level overview of Uprooted's dual-layer design
-> - [Hook Reference](HOOK_REFERENCE.md) -- C# .NET hook that injects scripts into the HTML
-> - [Plugin API Reference](plugins/API_REFERENCE.md) -- Full API surface available to plugin authors
+> **Related docs:** [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [Root Internals](ROOT_INTERNALS.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [Root Environment](plugins/ROOT_ENVIRONMENT.md)
 > - [Bridge Reference](plugins/BRIDGE_REFERENCE.md) -- Bridge proxy interception and method catalog
 > - [Build Guide](BUILD.md) -- Build instructions for all components
 
@@ -292,6 +288,49 @@ ES6 Proxy with a `get` trap. For function properties, returns a wrapper that cre
 
 Wires the loader into the bridge module. Called once during initialization.
 
+#### Bridge Proxy Deferred Installation
+
+The bridge globals (`window.__nativeToWebRtc` and `window.__webRtcToNative`) are not
+present on the `window` object when Uprooted's preload script runs. Root's DotNetBrowser
+host assigns them asynchronously -- the C# side calls `ExecuteJavaScript` to set the
+globals after the Chromium frame has loaded and the WebRTC session is being initialized.
+The exact timing depends on network conditions and the .NET host's initialization sequence,
+so Uprooted cannot simply wait a fixed delay.
+
+**Why immediate installation fails:** If `installBridgeProxy()` only checked for the
+globals at call time and wrapped them, it would miss the assignment entirely. The globals
+do not exist yet, so there is nothing to wrap. By the time Root assigns them, the plain
+(unproxied) objects would be on `window` and all bridge calls would bypass the plugin
+system.
+
+**The deferred pattern** solves this with `Object.defineProperty` setter traps:
+
+1. `installBridgeProxy()` first checks whether the globals already exist (lines 53-71).
+   If Root has somehow already assigned them (rare but possible on cached pages), they are
+   wrapped immediately with `createBridgeProxy()`.
+
+2. For globals that do not yet exist, a property descriptor with a `get`/`set` pair is
+   installed on `window` (lines 80-102). The `set` trap intercepts Root's future
+   assignment and automatically wraps the assigned value with `createBridgeProxy()` before
+   storing it in a closure variable. The `get` trap returns the proxied value from that
+   same closure variable.
+
+3. The property is marked `configurable: true` so that if Root's code itself tries to
+   redefine the property (it does not currently, but defensive coding), the trap can be
+   replaced without throwing.
+
+**Timing guarantee:** Because Uprooted's `<script>` tag appears before Root's bundle
+scripts in the HTML `<head>`, the `Object.defineProperty` traps are installed before any
+Root code executes. When Root later assigns `window.__nativeToWebRtc = { ... }`, the
+setter trap fires, the value is proxied transparently, and all subsequent reads through
+`window.__nativeToWebRtc` return the proxied version. Root's own code never sees the raw
+object after this point.
+
+**Edge case -- double assignment:** If Root assigns the same global twice (observed during
+reconnection flows), the setter fires again and re-wraps the new value. The old proxy is
+discarded. The `pluginLoader` reference is module-scoped, so all proxies share the same
+loader instance regardless of how many times the globals are reassigned.
+
 ---
 
 ### css.ts -- CSS Injection Utilities
@@ -429,6 +468,62 @@ variables (or generates custom variables from accent + background colors).
 
 Removes all known CSS variables, restoring Root's defaults.
 
+#### CSS Variable Integration with Native Theme Engine
+
+The TypeScript theme plugin and the C# `ThemeEngine` (see
+[Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md)) operate on different layers of the
+same application. The browser theme plugin overrides `--rootsdk-*` CSS variables in
+Chromium's DOM, while the C# engine overrides Avalonia `ResourceDictionary` entries for
+native controls. Both must stay in sync so the native sidebar, title bar, and window chrome
+match the web content area.
+
+**Mapping between CSS variables and Avalonia resource keys:**
+
+| CSS Variable (`--rootsdk-*`) | Avalonia Resource Key | Notes |
+|------------------------------|-----------------------|-------|
+| `--rootsdk-brand-primary` | `ThemeAccentColor` / `ThemeAccentBrush` | Primary accent color |
+| `--rootsdk-brand-secondary` | `ThemeAccentColor2` / `ThemeAccentBrush2` | Lighter accent variant |
+| `--rootsdk-brand-tertiary` | `ThemeAccentColor3` / `ThemeAccentBrush3` | Darker accent variant |
+| `--rootsdk-background-primary` | `SolidBackgroundFillColorBase` | Main background fill |
+| `--rootsdk-background-secondary` | `SolidBackgroundFillColorSecondary` | Secondary background |
+| `--rootsdk-background-tertiary` | `SolidBackgroundFillColorTertiary` | Tertiary background |
+| `--rootsdk-text-primary` | `TextFillColorPrimary` | Primary text fill |
+| `--rootsdk-text-secondary` | `TextFillColorSecondary` | Secondary (dimmed) text |
+| `--rootsdk-border` | `ControlStrokeColorDefault` | Border/stroke color |
+| `--rootsdk-error` | `ErrorColor` / `ErrorBrush` | Error state color |
+
+These are not wired automatically. The two layers derive their palettes independently
+from the same pair of inputs (accent color + background color) stored in settings. The C#
+side uses `GenerateCustomTheme()` in `ThemeEngine.cs` to compute ~60 Avalonia resource
+overrides via HSL color math. The TypeScript side uses `generateCustomVariables()` in
+`src/plugins/themes/index.ts` to compute 10 CSS variable overrides using its own
+`darken`/`lighten`/`luminance` helpers.
+
+**Propagation flow -- native to browser:**
+
+1. User selects a theme in Uprooted's native settings page (Avalonia UI).
+2. `ThemeEngine.ApplyTheme()` or `ApplyCustomTheme()` updates Avalonia resources.
+3. `ContentPages.UpdateLiveColors()` saves the accent and background hex values into
+   static fields that feed `window.__UPROOTED_SETTINGS__`.
+4. On the next page load, the TypeScript preload reads these settings and the themes
+   plugin calls `setCssVariables()` to apply matching CSS overrides.
+
+**Propagation flow -- browser to native (planned, not yet implemented):**
+
+Currently there is no live channel from the TypeScript layer back to the C# hook at
+runtime. If a user were to change the theme from within the browser settings panel, the
+change would only take effect in CSS. The native Avalonia controls would not update until
+the next application restart, when the C# hook reads the updated settings file. A future
+bridge method (`__webRtcToNative.uprootedThemeChanged`) is planned to close this gap.
+
+**Why two separate engines?**
+
+Root's desktop app renders in two completely different technologies. Native controls
+(sidebar, title bar, settings chrome, overlays) are Avalonia XAML -- they do not respond
+to CSS. Web content (chat, voice, communities) is Chromium HTML -- it does not respond to
+Avalonia resource dictionaries. There is no shared color bus, so each layer needs its own
+theme engine targeting its own rendering pipeline.
+
 ---
 
 ### settings-panel -- In-App Settings UI
@@ -462,6 +557,50 @@ debounce. Calls `tryInject()` on every mutation.
 6. `injectSidebarSection()` (line 284): Clones the header as "UPROOTED", creates nav items
    ("Uprooted", "Plugins", "Themes") by cloning the template, strips React attributes.
 7. `injectVersionText()` (line 489): Appends version text near Root's version display.
+
+#### DOM Discovery Algorithm (Detail)
+
+Root does not expose semantic IDs or stable class names for its settings layout. Class
+names are hashed by the build tool (e.g. `_abc12d`) and change between versions. The
+TypeScript layer therefore discovers the DOM structure using text content matching and
+layout geometry analysis, never relying on class names or IDs.
+
+**Phase 1 -- Text anchors.** `findByExactText()` uses a `TreeWalker` with
+`NodeFilter.SHOW_ELEMENT` to find leaf elements (no children) whose trimmed `textContent`
+exactly matches a target string. The two anchors are `"APP SETTINGS"` (confirms the
+settings page is open) and `"Advanced"` (locates the last sidebar item for insertion). If
+either anchor is missing, `tryInject()` returns silently -- this is expected on non-settings
+pages and fires on every MutationObserver callback.
+
+**Phase 2 -- Layout discovery.** `findSettingsLayout()` walks up from the `"APP SETTINGS"`
+element through up to 20 ancestors, checking each for `display: flex; flex-direction: row`
+or `display: grid` with at least 2 children. When found, it identifies which child contains
+the sidebar text and which sibling is the content panel (the first non-sidebar child with
+`clientWidth > 50` and `clientHeight > 50`). A fallback path looks for any ancestor whose
+sibling is wider than itself, catching unusual layout structures.
+
+**Phase 3 -- Template extraction.** `findItemElement()` walks up from the `"Advanced"`
+text leaf toward the sidebar container. It identifies the item-level element by checking
+whether the current element's parent has 3 or more children with text content (indicating
+sibling nav items). The matched element becomes the clone template for Uprooted's sidebar
+items.
+
+**Phase 4 -- Injection.** `injectSidebarSection()` clones the `"APP SETTINGS"` header and
+the template item. For each Uprooted nav item ("Uprooted", "Plugins", "Themes"), it:
+- Deep-clones the template
+- Replaces the first text node via `replaceTextContent()` (TreeWalker on `SHOW_TEXT`)
+- Strips active/selected CSS classes via regex (`/active|selected|current/i`)
+- Removes React internal attributes (`__react*`, `data-reactid`) and duplicate IDs
+- Attaches a click handler that hides Root's content panel and inserts a dynamically
+  built Uprooted page as a sibling
+
+**MutationObserver pattern.** The observer watches `document.body` with
+`{ childList: true, subtree: true }`. Every mutation triggers an 80ms debounced call to
+`tryInject()`. The debounce prevents thrashing during React re-renders, which typically
+emit multiple rapid mutations. The guard check (`document.querySelector("[data-uprooted]")`)
+makes repeat calls nearly free. When settings closes and Root removes the sidebar from the
+DOM, the `injected` flag is reset on the next mutation, allowing re-injection when settings
+reopens.
 
 **Content swapping** -- `onUprootedItemClick()` (line 397): Hides Root's content panel,
 builds the requested page, inserts it as a sibling. `onSidebarClick()` (line 464) restores

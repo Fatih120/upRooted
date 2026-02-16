@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+> **Related docs:** [NEW-SESSION.md](NEW-SESSION.md) | [Architecture](docs/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Contributing](CONTRIBUTING.md)
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -9,6 +11,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 For comprehensive documentation, start with [docs/INDEX.md](docs/INDEX.md).
 
 Read `docs/INDEX.md` for navigation, `docs/ARCHITECTURE.md` for architecture reference.
+
+### Quick Context for AI Sessions
+
+For a context-efficient onboarding reference, see [NEW-SESSION.md](NEW-SESSION.md). It provides a structured reference card covering architecture, critical rules, file map, and current state in ~230 lines.
 
 ## Collaboration
 
@@ -94,6 +100,28 @@ uprooted-private/
 ├── CLAUDE.md                          # AI contributor guide (this file)
 └── README.md                          # Repository landing page
 ```
+
+## Research and Planning
+
+- **Research directory**: `research/` contains 100+ files from reverse engineering Root -- see [docs/RESEARCH_INDEX.md](docs/RESEARCH_INDEX.md) for a navigable inventory
+- **Planning analysis**: `.planning/codebase/` has 7 automated analysis files -- see [docs/PLANNING_REFERENCE.md](docs/PLANNING_REFERENCE.md) for structured summaries
+- **Security findings**: 105 security findings from penetration testing -- see [docs/SECURITY_RESEARCH.md](docs/SECURITY_RESEARCH.md)
+
+## Extended Documentation
+
+Beyond the core docs listed above, the project includes deep-dive references:
+
+| Document | Purpose |
+|----------|---------|
+| [Theme Engine Deep Dive](docs/THEME_ENGINE_DEEP_DIVE.md) | Full ThemeEngine algorithm documentation |
+| [Avalonia Patterns](docs/AVALONIA_PATTERNS.md) | Avalonia concepts via reflection |
+| [.NET Runtime](docs/DOTNET_RUNTIME.md) | CLR profiler, IL injection, assembly scanning |
+| [Root Internals](docs/ROOT_INTERNALS.md) | Root's native architecture |
+| [gRPC Protocol](docs/GRPC_PROTOCOL.md) | Complete gRPC-web protocol reference |
+| [Contributing Technical](docs/CONTRIBUTING_TECHNICAL.md) | Dev environment, debugging, failure modes |
+| [Advanced Plugin Dev](docs/plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin development patterns |
+
+See [docs/INDEX.md](docs/INDEX.md) for the complete documentation map with reading paths.
 
 ## Build
 

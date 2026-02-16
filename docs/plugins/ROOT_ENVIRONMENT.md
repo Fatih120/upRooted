@@ -2,17 +2,17 @@
 
 Runtime context for plugin developers. Understanding Root's Chromium environment is essential for writing plugins that work reliably.
 
-> **Related Docs:**
-> [Getting Started](GETTING_STARTED.md) |
-> [Bridge Reference](BRIDGE_REFERENCE.md) |
-> [Architecture](../ARCHITECTURE.md) |
-> [Hook Reference](../HOOK_REFERENCE.md)
+> **Related docs:** [Root Internals](../ROOT_INTERNALS.md) | [gRPC Protocol](../GRPC_PROTOCOL.md) | [Bridge Reference](BRIDGE_REFERENCE.md) | [Plugin API Reference](API_REFERENCE.md) | [TypeScript Reference](../TYPESCRIPT_REFERENCE.md)
 
 ## Table of Contents
 
 - [Chromium Environment](#chromium-environment)
 - [Injection Targets](#injection-targets)
 - [Sub-App Context Comparison](#sub-app-context-comparison)
+- [gRPC Backend Overview](#grpc-backend-overview)
+- [Sub-Application Lifecycle](#sub-application-lifecycle)
+- [DotNetBrowser Binary IPC](#dotnetbrowser-binary-ipc)
+- [Effects SDK Pipeline](#effects-sdk-pipeline)
 - [CSS Variable System](#css-variable-system)
 - [Theme CSS Variable Architecture](#theme-css-variable-architecture)
 - [Window Globals](#window-globals)
@@ -90,6 +90,193 @@ The different web contexts in Root have different capabilities. This table summa
 - **You cannot modify sub-app UI.** The Polls, Tasks, and other iframe-based features are isolated. Your CSS injections and DOM manipulations only affect the WebRTC context.
 - **Theme variable overrides are context-scoped.** Setting `--rootsdk-brand-primary` on `:root` in your context does not propagate to iframes. However, Root's own theme system sets `--color-*` variables in all contexts via the native layer.
 - **Bridge methods are WebRTC-only.** The 71 methods documented in [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) are only available in the WebRTC context. Sub-apps use a completely different bridge protocol.
+
+---
+
+> **Note:** For the native application perspective on Root's architecture, see [Root Internals](../ROOT_INTERNALS.md). This document focuses on the browser-side view relevant to plugin development.
+
+## gRPC Backend Overview
+
+Every action a user takes in Root -- sending a message, joining a community, uploading a file, managing roles -- translates to a **gRPC-web** remote procedure call to Root's backend at `api.rootapp.com`. As a plugin author, you do not call gRPC directly. Instead, your plugin interacts with bridge methods (documented in [Bridge Reference](BRIDGE_REFERENCE.md)), and those bridge methods ultimately cause the .NET host or the WebRTC JavaScript layer to issue gRPC-web requests on your behalf. Understanding this plumbing is valuable for debugging, for knowing what data is available, and for anticipating the capabilities and limits of bridge calls.
+
+### What gRPC-Web Means for Plugins
+
+Standard gRPC requires HTTP/2 with features that browsers cannot fully support. gRPC-web is an adaptation that works over standard HTTP/1.1 or HTTP/2 by encoding trailers in the response body instead of using HTTP/2 trailing headers. Root's embedded Chromium (DotNetBrowser) makes all backend calls using this protocol with `Content-Type: application/grpc-web+proto` and protobuf binary serialization.
+
+From the plugin perspective, the key implications are:
+
+- **Bridge calls are not HTTP calls.** When you call a bridge method like `webRtcToNative.kickPeer()`, the .NET host translates that into a gRPC-web POST to the backend. You never see the HTTP request or the protobuf encoding from your plugin code.
+- **Fetch is available for direct calls.** Because Root runs Chromium with `--disable-web-security`, you can technically use `fetch()` to make your own gRPC-web calls to `api.rootapp.com` if you construct the proper framing and protobuf encoding. This is advanced usage and requires understanding the wire format.
+- **Responses are binary.** gRPC-web responses are length-prefixed protobuf frames, not JSON. If you intercept network traffic or attempt direct calls, you need a protobuf decoder to make sense of the data.
+- **Authentication is automatic.** The bearer token is attached to all gRPC-web requests by Root's networking layer. Plugins do not need to handle authentication for bridge calls. For direct `fetch()` calls, you would need to extract the token from the `initialize()` bridge call (see [Bridge Reference -- initialize](BRIDGE_REFERENCE.md)).
+
+### Service Categories
+
+Root's backend exposes 27 gRPC services with 163 total methods. These group into several broad categories relevant to plugin development:
+
+| Category | Key Services | What They Cover |
+|----------|-------------|-----------------|
+| **Users & Auth** | `UserGrpcService` (31 methods) | Profile management, settings, blocking, friend lists, authentication |
+| **Messaging** | `v2.MessageGrpcService` (15 methods), `DirectMessageGrpcService` (6 methods) | Send/receive messages, reactions, pins, search, direct messages |
+| **Communities** | `CommunityGrpcService` (11 methods), `CommunityMemberGrpcService` (6 methods), `CommunityRoleGrpcService` (6 methods) | Community CRUD, membership, roles, invitations, bans |
+| **Channels** | `ChannelGrpcService` (6 methods), `ChannelGroupGrpcService` (6 methods), `AccessRuleGrpcService` (7 methods) | Channel management, grouping, access control |
+| **Files & Assets** | `FileGrpcService` (9 methods), `AssetGrpcService` (3 methods) | File upload, download, search, asset management |
+| **Voice/Video** | `WebRtcGrpcService` (12 methods) | Session management, track signaling, media control |
+| **Sub-Apps** | `CommunityAppGrpcService` (14 methods), `AppStoreGrpcService` (6 methods) | Sub-app installation, configuration, app store browsing |
+| **Notifications** | `NotificationGrpcService` (7 methods) | Push notifications, read state, preferences |
+
+Not all 163 methods are implemented on the backend. Active testing found 32 actually-implemented endpoints. The remaining methods return gRPC status 12 (UNIMPLEMENTED), meaning the client stubs exist but the server-side logic has not been deployed yet.
+
+For the full protocol specification -- including wire format, protobuf encoding, UUID format, and per-method documentation -- see [gRPC Protocol](../GRPC_PROTOCOL.md).
+
+---
+
+## Sub-Application Lifecycle
+
+Root's web UI is not a single monolithic page. It is composed of multiple sub-applications loaded into iframes, plus the WebRTC context where your plugin runs. Understanding how these sub-apps load, navigate, and affect the DOM is important for writing plugins that remain stable as the user moves through the application.
+
+### How Root Loads Sub-Apps
+
+Root uses a **host iframe container** pattern. The file `DotNetBrowser/RootApps/Bundle/Host/index.html` acts as a frame orchestrator. When the user navigates to a feature like Polls or Raid Planner, the host container loads the corresponding sub-app into an iframe. Each sub-app is a self-contained React/Vite bundle (except Stickerwall, which uses Alpine.js and PixiJS) stored in the profile directory under `RootApps/<uuid>/<version>/`.
+
+Seven sub-apps are currently registered:
+
+| Sub-App | Framework | Description |
+|---------|-----------|-------------|
+| Polls | React/Vite | Community polling |
+| Suggestions | React/Vite | Suggestion board |
+| Task Tracker | React/Vite | Task management |
+| Raid Planner | React/Vite | Raid scheduling and coordination |
+| Hexatris | React/Vite | Tetris-like game |
+| Minecraft Easy Setup | React/Vite | Server setup wizard |
+| Stickerwall | Alpine.js + PixiJS | Interactive sticker board |
+
+Sub-apps communicate with the native host exclusively through the `__rootSdkBridgeWebToNative` bridge. They do not make direct network requests to the backend. Instead, they serialize protobuf messages and pass them to the bridge's `.send()` method, which the .NET host forwards to the backend via gRPC-web.
+
+The WebRTC context (where your plugin runs) is loaded separately from the sub-app host. It has its own `WebRtcBundle/index.html` and its own bridge objects (`__nativeToWebRtc` and `__webRtcToNative`). Your plugin code does not run inside sub-app iframes.
+
+### Navigation Events Plugins Can Observe
+
+Root's overall navigation model is SPA-like from the user's perspective. The native Avalonia shell provides the persistent sidebar and window chrome, while the DotNetBrowser control swaps content as the user navigates between chat, communities, settings, and other views.
+
+Plugins can observe navigation in several ways:
+
+- **MutationObserver on the DOM.** When Root transitions between views, the DOM structure within the WebRTC context may change. Use `MutationObserver` (via the `observe()` helper in `src/api/dom.ts`) to detect when elements you depend on are added or removed.
+- **Bridge call interception.** Certain bridge methods fire during navigation-related events. For example, `setTheme` fires when the user opens settings and changes themes, and `initialize` fires when a voice session begins. See [Bridge Reference](BRIDGE_REFERENCE.md) for the full list.
+- **`hashchange` and `popstate` events.** Root uses local file URLs, not traditional web navigation, so these events are not reliably fired. Do not depend on them.
+
+### How Navigation Affects the DOM and Plugin State
+
+When the user navigates between major sections of Root (for example, from a chat channel to the settings page, or from one community to another), the following can happen in the WebRTC context:
+
+1. **DOM subtrees may be removed and recreated.** Root's UI layer can tear down and rebuild portions of the DOM during transitions. If your plugin injected elements into a subtree that gets destroyed, those elements are gone. Your `MutationObserver` should detect the removal and trigger re-injection.
+
+2. **Bridge objects may become undefined.** The `__nativeToWebRtc` and `__webRtcToNative` objects are only populated during active voice sessions. If the user leaves a call, these become `undefined`. Uprooted's bridge proxies handle this transparently -- your patches remain installed and will fire again when the bridges reappear.
+
+3. **CSS variable values may shift.** If the user changes themes during navigation (through settings), the `--color-*` variables update. Your plugin's custom CSS should use these variables rather than hardcoded colors to stay consistent.
+
+4. **Sub-app iframes are created and destroyed.** When the user opens a sub-app (like Polls or Raid Planner), a new iframe is created. When they leave, it may be destroyed. Since your plugin cannot access sub-app iframes anyway, this primarily matters if you are observing the parent DOM structure and notice iframe elements appearing and disappearing.
+
+### When Plugins Need to Re-Initialize After Navigation
+
+Your plugin's `start()` method is called once during Uprooted's initialization. It is not called again when the user navigates. This means your plugin must be resilient to DOM changes on its own. The recommended patterns are:
+
+- **Use `MutationObserver` for DOM-dependent features.** If your plugin injects UI elements, watch for their removal and re-inject. The `observe()` helper in `src/api/dom.ts` simplifies this pattern.
+- **Use bridge interception for data-dependent features.** If your plugin needs to react to voice session changes, intercept the `initialize` and related bridge calls rather than polling for bridge object existence.
+- **Store state in memory, not the DOM.** Keep your plugin's state in JavaScript variables, not in DOM attributes or data properties that could be lost during a navigation-triggered re-render.
+- **Clean up in `stop()` unconditionally.** Your `stop()` method should remove all injected elements, observers, and event listeners regardless of the current navigation state. Do not assume the DOM is in the same state as when `start()` ran.
+
+---
+
+## DotNetBrowser Binary IPC
+
+Root's .NET host and its embedded Chromium instance communicate through a proprietary binary IPC channel. Understanding this channel helps explain the characteristics of bridge calls that your plugin makes.
+
+### How the .NET Host Talks to Chromium
+
+DotNetBrowser (the Chromium wrapper Root uses) maintains a binary IPC connection between the .NET host process and the Chromium renderer processes. This connection runs over a dynamically assigned localhost TCP port (the port number changes each launch). Four established loopback TCP connections are maintained between the two sides.
+
+This IPC channel is **not** the Chrome DevTools Protocol. Probing the dynamic port with raw TCP, HTTP, WebSocket upgrades, and CDP endpoint requests returns nothing meaningful. The protocol is proprietary to DotNetBrowser.
+
+### Bridge Object Injection
+
+The JavaScript bridge objects (`__nativeToWebRtc`, `__webRtcToNative`, `__rootSdkBridgeWebToNative`) are injected into the Chromium `window` scope by DotNetBrowser's bridge injection mechanism. The .NET host creates C# objects that implement specific interfaces, and DotNetBrowser's runtime marshals calls between JavaScript and C# across the binary IPC channel.
+
+When your plugin calls a bridge method (through Uprooted's proxy), the call path is:
+
+```
+Plugin JS code
+  --> Uprooted ES6 Proxy (intercept/log/modify)
+    --> Original bridge object (JS stub)
+      --> DotNetBrowser binary IPC (localhost TCP)
+        --> .NET host method implementation
+          --> (possibly) gRPC-web call to api.rootapp.com
+```
+
+And for native-to-web calls (where the .NET host pushes data to the browser):
+
+```
+.NET host code
+  --> DotNetBrowser binary IPC (localhost TCP)
+    --> Bridge object JS method
+      --> Uprooted ES6 Proxy (intercept/log/modify)
+        --> Original handler (or plugin override)
+```
+
+### IPC Channel Characteristics
+
+The binary IPC channel has characteristics that affect how bridge calls behave from the plugin perspective:
+
+- **Latency.** Bridge calls cross a process boundary via localhost TCP. Round-trip latency is typically sub-millisecond on modern hardware, but it is not zero. Avoid tight loops that make hundreds of bridge calls in rapid succession.
+- **Serialization.** Arguments and return values are serialized across the IPC boundary. Complex objects are converted to JSON-compatible representations. Large payloads (such as file data or long message lists) incur serialization overhead proportional to their size.
+- **Synchronous appearance, asynchronous reality.** Some bridge methods appear synchronous from JavaScript but involve asynchronous IPC under the hood. DotNetBrowser handles the synchronization, but this means a bridge call that triggers a backend gRPC request will block the JavaScript thread until the .NET host completes the operation and returns the result.
+- **Error propagation.** Exceptions thrown in the .NET host during a bridge call may or may not propagate cleanly to JavaScript. Some errors become generic "native error" messages. Your plugin should wrap bridge calls in try-catch blocks and handle failures gracefully.
+
+### What This Means for Plugin Bridge Calls
+
+As a plugin author, the IPC layer is transparent -- you call bridge methods and get results back. But the following practical guidance follows from the IPC architecture:
+
+- **Batch where possible.** If you need multiple pieces of data from the native host, look for a single bridge method that returns all of it rather than making many individual calls.
+- **Do not assume instant returns.** A bridge method that triggers a backend API call may take hundreds of milliseconds. Design your UI to handle loading states.
+- **The IPC channel is shared.** Root's own code and all Uprooted plugins share the same IPC channel. There is no priority or isolation between bridge callers. Heavy bridge usage by one plugin could theoretically slow down bridge responses for others, though in practice the overhead is negligible for typical plugin workloads.
+- **Uprooted's proxy adds minimal overhead.** The ES6 Proxy wrapping adds a few microseconds of JavaScript overhead per call. This is negligible compared to the IPC round-trip time.
+
+---
+
+## Effects SDK Pipeline
+
+Root integrates the **Effects SDK** (from effectssdk.ai) for real-time audio and video processing during voice and video calls. This SDK runs within the WebRTC context -- the same context where your plugin code executes.
+
+### What the Effects SDK Does
+
+The Effects SDK provides AI-powered processing features:
+
+- **Noise suppression** -- Removes background noise from microphone input using ONNX Runtime compiled to WebAssembly. Three model tiers are available: speed-optimized (7.1 MB), balanced quality (11.2 MB), and high quality (52.8 MB).
+- **Background effects** -- Virtual backgrounds and blur for video calls.
+- **Audio enhancement** -- Real-time audio filtering and processing.
+
+The SDK loads WASM model files at runtime from `effectssdk.ai` CDN URLs. These models are cached in the browser's Cache API (which works despite `--incognito` mode).
+
+### Processing Architecture
+
+The Effects SDK operates using Web Workers and AudioWorklets within the WebRTC context:
+
+| Component | Role |
+|-----------|------|
+| Effects SDK Worker | Exchanges `Float32Array` audio frames with the main thread |
+| Noise Gate Worklet | Manages push-to-talk state and talking indicators |
+| Native Screen Audio Worklet | Processes screen share audio buffers |
+
+The balanced noise suppression model runs as native WASM (compiled via Emscripten) with direct `HEAPF32` memory access for real-time audio processing.
+
+### Plugin Interaction Considerations
+
+Uprooted does not currently provide an API for interacting with the Effects SDK pipeline. However, plugin authors should be aware of the following:
+
+- **Shared WebRTC context.** The Effects SDK runs in the same JavaScript context as your plugin. Its Web Workers and AudioWorklets are active during voice sessions.
+- **Audio stream access.** Plugins that use the Web Audio API (`AudioContext`, `MediaStream`) are working with the same audio streams that the Effects SDK processes. If you create custom audio processing nodes, they may interact with the SDK's pipeline. Test carefully to avoid introducing audio artifacts.
+- **CPU and memory impact.** The WASM noise suppression models consume significant CPU and memory during voice sessions. Plugins that perform heavy computation during calls should be mindful of the total resource budget.
+- **No direct SDK API.** The Effects SDK does not expose a public JavaScript API that plugins can call. Its configuration is controlled by Root's native layer through bridge calls. If future Uprooted versions expose effects control, it will be through bridge method interception rather than direct SDK calls.
 
 ---
 

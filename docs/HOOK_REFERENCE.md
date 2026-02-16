@@ -2,6 +2,8 @@
 
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
+> [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) |
+> [Avalonia Patterns](AVALONIA_PATTERNS.md) |
 > [TypeScript Reference](TYPESCRIPT_REFERENCE.md) |
 > [CLR Profiler](CLR_PROFILER.md) |
 > [Build](BUILD.md) |
@@ -15,6 +17,7 @@
 2. [Entry Points](#entry-points)
 3. [Startup Sequence](#startup-sequence)
 4. [AvaloniaReflection Deep Dive](#avaloniareflection-deep-dive)
+   - [Advanced AvaloniaReflection Patterns](#advanced-avaloniareflection-patterns)
 5. [Visual Tree Discovery](#visual-tree-discovery)
 6. [Sidebar Injection](#sidebar-injection)
 7. [Content Pages](#content-pages)
@@ -543,6 +546,264 @@ callback.
 - **`PropertyToFieldName(propertyName)`** (`AvaloniaReflection.cs:1313`) -- Maps
   `"Background"` to `"BackgroundProperty"`.
 
+### Advanced AvaloniaReflection Patterns
+
+The sections above cover the general-purpose reflection cache. What follows describes
+four advanced patterns that are not obvious from the API surface alone: how windows are
+discovered, how coordinate spaces are bridged, how event subscription works around CLR
+limitations, and how Avalonia's style priority system governs value precedence.
+
+For conceptual background on Avalonia's property system, visual tree, and threading
+model, see [Avalonia Patterns](AVALONIA_PATTERNS.md).
+
+#### WindowImpl.s_instances -- Discovering All Native Windows
+
+Avalonia creates one native window per top-level surface. The main application window is
+accessible via `IClassicDesktopStyleApplicationLifetime.MainWindow`, but popup roots
+(profile cards, context menus, tooltips, overlay windows) are **not** -- they live in
+separate `Window` objects that the lifetime does not expose. The theme engine and overlay
+system need access to every live surface.
+
+Avalonia's internal `WindowImpl` class (platform-specific: `Win32WindowImpl` on Windows,
+`X11WindowImpl` on Linux) keeps a private static list of all active native window
+instances:
+
+```csharp
+// Internal to Avalonia -- not part of the public API
+private static readonly List<WindowImpl> s_instances;
+```
+
+`AvaloniaReflection.ResolveWindowImpl()` (`AvaloniaReflection.cs:524-551`) discovers
+this list at runtime:
+
+1. Scans all loaded assemblies whose `FullName` contains `"Avalonia"`.
+2. Searches for a type named `WindowImpl` (exact name match on `Type.Name`).
+3. Resolves the `Owner` property (`BindingFlags.Public | NonPublic | Instance`) --
+   this returns the Avalonia `TopLevel` (or `IInputRoot`) that owns the native window.
+4. Resolves the `s_instances` field (`BindingFlags.NonPublic | Static`).
+
+Once resolved, `GetAllTopLevels()` (`AvaloniaReflection.cs:477-522`) iterates
+`s_instances`, reads `Owner` on each, and returns the deduplicated list of all live
+`TopLevel` objects. The method is lazy -- `ResolveWindowImpl()` runs only on the first
+call, guarded by `_windowImplResolved`.
+
+**Fallback behavior:** If `WindowImpl` resolution fails (e.g., Avalonia renamed the
+internal type), the method silently returns a single-element list containing only
+`MainWindow`. This ensures the theme engine and overlay system degrade gracefully rather
+than crashing.
+
+**Why this matters for theming:** `ThemeEngine.WalkAllWindows()` uses `GetAllTopLevels()`
+to color-walk every surface. Without this, popup windows and overlay cards would retain
+Root's default blue accent while the main window shows the user's chosen theme.
+
+#### TranslatePoint -- Coordinate Mapping Between Visual Nodes
+
+The color picker popup, overlay layer, and diagnostic tools need to convert between
+coordinate spaces (e.g., "where is this swatch relative to the main window?"). Avalonia
+provides `TranslatePoint(Point, Visual)` for this, but the method location varies
+between Avalonia versions and build configurations.
+
+`AvaloniaReflection` resolves `_translatePoint` (`AvaloniaReflection.cs:358-404`) using
+a three-strategy fallback chain:
+
+**Strategy 1 -- Instance method on the type hierarchy:**
+
+```csharp
+var translateSearch = ControlType;
+while (translateSearch != null && _translatePoint == null)
+{
+    _translatePoint = translateSearch.GetMethods(pub | BindingFlags.DeclaredOnly)
+        .FirstOrDefault(m => m.Name == "TranslatePoint" && m.GetParameters().Length == 2);
+    translateSearch = translateSearch.BaseType;
+}
+```
+
+Walks from `Control` up through `Layoutable`, `Visual`, and `StyledElement` looking for
+an instance method named `TranslatePoint` with exactly 2 parameters (the `Point` and
+the target `Visual`). In Avalonia 11+, this is typically on `Visual`.
+
+**Strategy 2 -- Static extension method on VisualExtensions:**
+
+```csharp
+_translatePoint ??= VisualExtensionsType?.GetMethods(stat)
+    .FirstOrDefault(m => m.Name == "TranslatePoint" && m.GetParameters().Length == 3);
+```
+
+Older Avalonia versions or certain trimmed configurations expose `TranslatePoint` as a
+static extension method on `Avalonia.VisualTree.VisualExtensions`. The static variant
+takes 3 parameters: `(Visual from, Point point, Visual to)`.
+
+**Strategy 3 -- Brute-force scan of all Avalonia types:**
+
+If neither strategy finds the method, `ResolveMembers` logs a warning and iterates every
+type in every Avalonia assembly, checking both static classes and instance types for any
+method named `TranslatePoint`.
+
+The public wrapper `TranslatePoint(object from, double x, double y, object to)`
+(`AvaloniaReflection.cs:1477-1520`) handles both the instance and static calling
+conventions:
+
+```csharp
+if (_translatePoint.IsStatic)
+    result = _translatePoint.Invoke(null, new[] { from, point, to });
+else
+    result = _translatePoint.Invoke(from, new[] { point, to });
+```
+
+The return type is `Point?` (nullable struct). The wrapper unwraps it by reading the
+`HasValue` property (if present), then extracts `X` and `Y` via reflection on the
+result's `Type`.
+
+#### Expression.Lambda for Pointer and Routed Events
+
+**The problem:** Avalonia RoutedEvents (like `PointerPressed`, `PointerMoved`,
+`PointerReleased`, `Click`) use custom delegate types such as
+`EventHandler<PointerPressedEventArgs>`. At compile time, Uprooted has no reference to
+these types. The standard `EventInfo.AddEventHandler(object, Delegate)` requires a
+delegate whose type exactly matches the event's `EventHandlerType`. Passing a plain
+`Action` or `EventHandler` throws `ArgumentException` because the CLR cannot convert
+between unrelated delegate types.
+
+**The solution:** Build a compiled expression tree that matches the exact delegate
+signature at runtime, then use `EventInfo.AddEventHandler` with the correctly-typed
+compiled delegate.
+
+**Simple events** (`SubscribeEvent`, `AvaloniaReflection.cs:1141-1170`):
+
+```csharp
+// 1. Discover the event's delegate type and parameter types
+var handlerType = eventInfo.EventHandlerType!;
+var invokeMethod = handlerType.GetMethod("Invoke")!;
+var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+
+// 2. Build expression parameters matching the delegate signature
+var p0 = Expression.Parameter(paramTypes[0], "sender");   // object
+var p1 = Expression.Parameter(paramTypes[1], "e");         // PointerPressedEventArgs
+
+// 3. Build a lambda that ignores sender/e and calls our Action
+var callbackExpr = Expression.Constant(callback);
+var invokeExpr = Expression.Invoke(callbackExpr);
+var lambda = Expression.Lambda(handlerType, invokeExpr, p0, p1);
+
+// 4. Compile and register
+var handler = lambda.Compile();
+eventInfo.AddEventHandler(control, handler);
+```
+
+The key insight is `Expression.Lambda(handlerType, ...)` -- this creates a lambda whose
+`.GetType()` matches the event's `EventHandlerType`, satisfying the CLR's delegate type
+check. The body ignores both parameters and simply invokes the captured `Action`.
+
+**Pointer events with position extraction** (`SubscribePointerEvent`,
+`AvaloniaReflection.cs:1846-1901`):
+
+The pointer variant is more complex because it extracts `(x, y)` coordinates from the
+event args. The expression tree encodes the equivalent of:
+
+```csharp
+(sender, e) => {
+    var pos = e.GetPosition((Visual)sender);
+    callback(pos.X, pos.Y);
+}
+```
+
+Built step by step:
+
+1. Find `GetPosition(Visual)` on the event args type (`paramTypes[1]`). Falls back to
+   any single-parameter `GetPosition` overload if the `Visual` type cannot be matched.
+2. Build `Expression.Convert(p0, ...)` to cast `sender` to the parameter type expected
+   by `GetPosition`.
+3. Build `Expression.Call(p1, getPositionMethod, castSender)` to invoke
+   `e.GetPosition(sender)`.
+4. Extract `pos.X` and `pos.Y` via `Expression.Property`.
+5. Build `Expression.Invoke(callbackExpr, xExpr, yExpr)` to call the
+   `Action<double, double>` with the coordinates.
+6. Wrap in `Expression.Lambda(handlerType, invokeExpr, p0, p1)` and compile.
+
+This compiled delegate runs at near-native speed despite being built at runtime. The
+expression tree is compiled once per subscription and cached by the CLR's JIT.
+
+**Why not use a dynamic method or Delegate.CreateDelegate?** Both alternatives require
+knowing the delegate type at compile time or building IL manually. Expression trees are
+higher-level, produce readable debug output, and integrate naturally with the CLR's type
+system. They are also safe to use in partial-trust and profiler-injected contexts where
+direct IL emission may be restricted.
+
+#### BindingPriority -- Value Precedence in the Avalonia Property System
+
+Avalonia's property system resolves each property's effective value by checking multiple
+sources in priority order. The `BindingPriority` type defines these levels (from highest
+to lowest precedence):
+
+| Value | Name | Meaning |
+|------:|------|---------|
+| -1 | `Animation` | Active animation values (highest priority) |
+| 0 | `LocalValue` | Explicit `control.SetValue(prop, val)` -- equivalent to XAML `Property="Value"` |
+| 1 | `StyleTrigger` | Pseudo-class triggers (`:pointerover`, `:pressed`, `:focus`) |
+| 2 | `Template` | Values set inside `ControlTemplate` |
+| 3 | `Style` | Values set by `Style` setters (theme styles, global styles) |
+| 4 | `Inherited` | Values inherited from the parent visual |
+| 5 | `Unset` | No value set; the property's default applies |
+
+**Critical Avalonia 11 detail:** `BindingPriority` is a **struct** (value type), not an
+enum. It has static properties like `BindingPriority.LocalValue` that return struct
+instances. Code that tries `Enum.Parse(typeof(BindingPriority), "LocalValue")` will
+throw. The reflection code in `EnsureBindingPriorityResolved()`
+(`AvaloniaReflection.cs:807-820`) works around this by looking up the type
+`Avalonia.Data.BindingPriority` and using `Enum.ToObject(bpType, 0)` which succeeds
+because the struct's underlying representation is still an integer.
+
+**How Uprooted uses priorities:**
+
+`SetAvaloniaProperty()` (`AvaloniaReflection.cs:770-804`) writes values at
+**LocalValue** priority (0). This is used for control construction -- creating
+TextBlocks, Borders, etc. -- where the value should be definitive and override styles.
+
+`SetValueStylePriority()` (`AvaloniaReflection.cs:1266-1307`) writes values at
+**Style** priority (3). This is critical for the theme engine's visual tree walk. When
+the theme engine recolors a Button's `Background`, it sets the replacement brush at
+Style priority. If the user hovers over that button, Avalonia's `:pointerover`
+StyleTrigger (priority 1) temporarily overrides the Style-priority value with the hover
+color. When the pointer leaves, the StyleTrigger deactivates and the theme engine's
+Style-priority value reasserts -- producing correct hover/unhover behavior.
+
+If the theme engine used **LocalValue** priority instead, hover triggers would never
+fire because LocalValue (0) outranks StyleTrigger (1). The button would appear frozen
+with no hover feedback.
+
+**Live preview exception:** During color picker drag (`UpdateCustomThemeLive`), the
+theme engine deliberately uses direct `prop.SetValue()` which writes at LocalValue
+priority. This is necessary because Root's own controls may have LocalValue-priority
+colors set via code-behind, and Style-priority writes would not override them. The
+trade-off is that hover feedback is suppressed during live preview, but this is
+acceptable for the brief duration of a color drag.
+
+**How style priorities ensure Uprooted wins:**
+
+The theme engine applies colors through two channels, each targeting a different
+priority level:
+
+1. **Resource dictionary injection** (Phase 1-2 of `ApplyThemeInternal`): Overwrites
+   named resource keys like `ThemeAccentBrush` and `SystemAccentColor` in
+   `Styles[0].Resources` and a merged `ResourceDictionary`. Controls that use
+   `DynamicResource` bindings automatically pick up the new values because the binding
+   system re-evaluates when the resource changes. No explicit priority is needed here
+   -- the resource itself changes, so all bindings resolve to the new value regardless
+   of the priority at which they were originally bound.
+
+2. **Visual tree color walk** (Phase 4 of `ApplyThemeInternal`): For controls with
+   hardcoded brushes (not bound to resources), the walk sets replacement brushes at
+   Style priority via `SetValueStylePriority`. This is high enough to override
+   `Inherited` and `Unset` values, but low enough to let `StyleTrigger` hover effects
+   work. The theme engine's values thus "win" over Root's theme defaults (which are
+   typically at Style priority or lower) while preserving interactive feedback.
+
+   The one exception is controls where Root sets colors at LocalValue priority in
+   code-behind. For these, Style-priority writes are invisible. The live preview mode
+   handles this by escalating to LocalValue, and the normal walk's `prop.SetValue`
+   fallback (`ThemeEngine.cs:1015`) catches cases where `SetValueStylePriority` cannot
+   override the existing value.
+
 ---
 
 ## Visual Tree Discovery
@@ -1050,6 +1311,10 @@ Converts `#RRGGBB` to COLORREF format (`0x00BBGGRR`).
 - `GetAccentColor()` -- Current accent hex.
 - `GetBgPrimary()` -- Current background hex.
 - `GetPalette()` -- Current full palette dictionary.
+
+For full algorithm documentation including live preview, tree fingerprinting, color
+audit, custom generation, and revert mechanics, see
+[Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md).
 
 ---
 
