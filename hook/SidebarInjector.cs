@@ -587,7 +587,7 @@ internal class SidebarInjector
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"OnNavItemClicked error: {ex}");
+            Logger.LogException("Injector", $"OnNavItemClicked('{pageName}')", ex);
         }
     }
 

@@ -116,26 +116,42 @@ internal static class ContentPages
         UprootedSettings settings, object? nativeFontFamily = null,
         ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
     {
-        var page = pageName switch
+        Logger.Log("ContentPages", $"BuildPage('{pageName}') called");
+        EnsureStaticInit();
+
+        object? page = null;
+        try
         {
-            "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
-            "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
-            "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
-            _ => null
-        };
+            page = pageName switch
+            {
+                "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
+                "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
+                "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
+                _ => null
+            };
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("ContentPages", $"BuildPage('{pageName}') EXCEPTION", ex);
+            return null;
+        }
+
+        if (page == null)
+        {
+            Logger.Log("ContentPages", $"BuildPage('{pageName}') returned null");
+            return null;
+        }
 
         // Set background on the returned ScrollViewer so our page covers any
         // stale colors from Root's content panel behind it
-        if (page != null)
-        {
-            var bg = themeEngine?.ActiveThemeName != null &&
-                     themeEngine.ActiveThemeName != "default-dark"
-                ? themeEngine.GetBgPrimary()
-                : "#0D1521";
-            r.SetBackground(page, bg);
-            r.SetTag(page, "uprooted-content");
-        }
+        var bg = themeEngine?.ActiveThemeName != null &&
+                 themeEngine.ActiveThemeName != "default-dark"
+            ? themeEngine.GetBgPrimary()
+            : "#0D1521";
+        r.SetBackground(page, bg);
+        r.SetTag(page, "uprooted-content");
 
+        Logger.Log("ContentPages", $"BuildPage('{pageName}') OK");
         return page;
     }
 
@@ -271,6 +287,32 @@ internal static class ContentPages
             r.AddChild(page, hookCard);
         }
 
+        // Card 5: Log file path (diagnostics)
+        var logCard = CreateCard(r);
+        if (logCard != null)
+        {
+            r.SetMargin(logCard, 0, 12, 0, 0);
+            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            r.SetMargin(cardContent, 24, 24, 24, 24);
+
+            var logTitle = CreateSectionHeader(r, "DIAGNOSTICS", font);
+            r.AddChild(cardContent, logTitle);
+
+            var logPathText = r.CreateTextBlock(
+                "Log file: " + Logger.GetLogPath(),
+                12, TextDim);
+            if (logPathText != null)
+            {
+                ApplyFont(r, logPathText, font);
+                r.SetTextWrapping(logPathText, "Wrap");
+                r.SetMargin(logPathText, 0, 12, 0, 0);
+            }
+            r.AddChild(cardContent, logPathText);
+
+            r.SetBorderChild(logCard, cardContent);
+            r.AddChild(page, logCard);
+        }
+
         // Bottom padding
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
@@ -283,27 +325,52 @@ internal static class ContentPages
     }
 
     // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Closed (green)
-    private static readonly (string Label, string Color)[] TestingLevels =
-    {
-        ("Untested", "#E04040"),
-        ("Alpha",    "#E08030"),
-        ("Beta",     "#C0A820"),
-        ("Closed",   "#40A050"),
-    };
+    private static (string Label, string Color)[] TestingLevels = Array.Empty<(string, string)>();
 
     // Known plugins metadata
-    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings, int TestingStatus)[] KnownPlugins =
+    private static (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings, int TestingStatus)[] KnownPlugins =
+        Array.Empty<(string, string, string, string, bool, bool, int)>();
+
+    private static bool _staticInitDone;
+
+    /// <summary>
+    /// Initialize static arrays in a method (not field initializer) so any failure
+    /// doesn't permanently break the class via TypeInitializationException.
+    /// </summary>
+    private static void EnsureStaticInit()
     {
-        ("sentry-blocker", "Sentry Blocker", "0.2.0",
-            "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-            true, false, 1),   // Alpha
-        ("themes", "Themes", "0.2.0",
-            "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
-            true, false, 2),   // Beta
-        ("content-filter", "Content Filter", "0.2.0",
-            "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
-            false, true, 0),   // Untested
-    };
+        if (_staticInitDone) return;
+        _staticInitDone = true;
+        try
+        {
+            TestingLevels = new (string, string)[]
+            {
+                ("Untested", "#E04040"),
+                ("Alpha",    "#E08030"),
+                ("Beta",     "#C0A820"),
+                ("Closed",   "#40A050"),
+            };
+
+            KnownPlugins = new (string, string, string, string, bool, bool, int)[]
+            {
+                ("sentry-blocker", "Sentry Blocker", "0.2.1",
+                    "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
+                    true, false, 1),
+                ("themes", "Themes", "0.2.1",
+                    "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
+                    true, false, 2),
+                ("content-filter", "Content Filter", "0.2.1",
+                    "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
+                    false, true, 0),
+            };
+
+            Logger.Log("ContentPages", $"Static init OK: {TestingLevels.Length} levels, {KnownPlugins.Length} plugins");
+        }
+        catch (Exception ex)
+        {
+            Logger.LogException("ContentPages", "Static init FAILED", ex);
+        }
+    }
 
     // Filter dropdown state (singleton, like ColorPickerPopup)
     private static object? _filterOverlay;

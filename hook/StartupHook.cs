@@ -30,11 +30,12 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.2.0 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.2.1 Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
             Logger.Log("Startup", $".NET: {Environment.Version}");
+            Logger.Log("Startup", $"Log file: {Logger.GetLogPath()}");
 
             // Phase 0: Verify HTML patches (filesystem only -- no Avalonia needed)
             Logger.Log("Startup", "Phase 0: Verifying HTML patches...");
