@@ -8,6 +8,7 @@ on:
       - "src/**"
       - "installer/**"
       - "tools/uprooted_profiler_linux.c"
+      - "packaging/arch/**"
       - ".github/workflows/build-linux.yml"
 
 jobs:
@@ -110,3 +111,55 @@ jobs:
         with:
           name: Uprooted-Linux-AppImage
           path: installer/src-tauri/target/release/bundle/appimage/*.AppImage
+
+  # ── Arch Linux Package ──
+  # Repackages the .deb into a native .pkg.tar.zst for pacman
+
+  build-arch:
+    needs: build-linux
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            packaging/arch
+            installer/src-tauri/tauri.conf.json
+
+      - name: Download .deb artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Uprooted-Linux-deb
+          path: ./deb-artifact/
+
+      - name: Prepare PKGBUILD
+        run: |
+          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
+          DEB_FILE=$(ls deb-artifact/*.deb | head -1)
+          DEB_NAME=$(basename "$DEB_FILE")
+          SHA256=$(sha256sum "$DEB_FILE" | awk '{print $1}')
+
+          echo "Version: $VERSION"
+          echo "Deb: $DEB_NAME"
+          echo "SHA256: $SHA256"
+
+          mkdir -p uprooted-bin
+          cp "$DEB_FILE" uprooted-bin/
+          sed -e "s|%%VERSION%%|${VERSION}|g" \
+              -e "s|%%DEB_NAME%%|${DEB_NAME}|g" \
+              -e "s|%%SHA256%%|${SHA256}|g" \
+              packaging/arch/PKGBUILD > uprooted-bin/PKGBUILD
+
+          echo "=== Generated PKGBUILD ==="
+          cat uprooted-bin/PKGBUILD
+
+      - name: Build Arch package
+        uses: 2m/arch-pkgbuild-builder@v1.17
+        with:
+          target: pkgbuild
+          pkgname: uprooted-bin
+
+      - name: Upload .pkg.tar.zst
+        uses: actions/upload-artifact@v4
+        with:
+          name: Uprooted-Arch
+          path: uprooted-bin/*.pkg.tar.zst

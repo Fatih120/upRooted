@@ -1109,8 +1109,8 @@ internal class AvaloniaReflection
         if (grid == null || ColumnDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
         try
         {
-            // GridUnitType.Star = 1
-            var starUnit = Enum.ToObject(GridUnitTypeEnum, 1);
+            // GridUnitType: Auto=0, Pixel=1, Star=2 — use Parse to avoid wrong-value bugs
+            var starUnit = Enum.Parse(GridUnitTypeEnum, "Star");
             // new GridLength(starWidth, GridUnitType.Star)
             var gridLength = Activator.CreateInstance(GridLengthType, starWidth, starUnit);
             // new ColumnDefinition { Width = gridLength }

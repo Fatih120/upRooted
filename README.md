@@ -9,8 +9,9 @@
 <p align="center">
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
   <a href="https://github.com/watchthelight/uprooted/releases/latest"><img src="https://img.shields.io/badge/download-latest-2D7D46?style=flat" alt="download" /></a>
-  <img src="https://img.shields.io/badge/version-0.9.2-2D7D46?style=flat" alt="version" />
-  <img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat" alt="license" />
+  <a href="https://github.com/watchthelight/uprooted/releases"><img src="https://img.shields.io/github/downloads/watchthelight/uprooted/total?style=flat&color=2D7D46&label=downloads" alt="downloads" /></a>
+  <img src="https://img.shields.io/badge/version-0.1.92-2D7D46?style=flat" alt="version" />
+  <img src="https://img.shields.io/badge/license-custom-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>
 
@@ -47,4 +48,4 @@ these rules exist to protect the project and its users. if you want to share upr
 
 ## license
 
-[gpl-3.0](LICENSE)
+[uprooted license v1.0](LICENSE) — use pieces with credit, don't redistribute the whole thing
