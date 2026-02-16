@@ -212,6 +212,7 @@ export function buildPluginsPage(loader: PluginLoader): HTMLElement {
 
     const plugin = getPlugin(loader, name);
     const isEnabled = settings?.plugins?.[name]?.enabled ?? true;
+    const isActive = getActivePlugins(loader).has(name);
 
     const toggle = createToggle(isEnabled, async (enabled) => {
       if (enabled) {
@@ -219,13 +220,44 @@ export function buildPluginsPage(loader: PluginLoader): HTMLElement {
       } else {
         await loader.stop(name);
       }
+      // Update status badge after toggle
+      const badge = row.querySelector(".uprooted-plugin-status");
+      if (badge) {
+        badge.textContent = enabled ? "Active" : "Inactive";
+        badge.className = "uprooted-plugin-status " + (enabled ? "uprooted-plugin-status--active" : "");
+      }
     });
 
     const description = plugin?.description ?? "";
     const version = plugin?.version ? ` v${plugin.version}` : "";
+
     const row = createRow(name + version, description, toggle);
     row.classList.add("uprooted-plugin-row");
+
+    // Status badge
+    const badge = document.createElement("span");
+    badge.className = "uprooted-plugin-status " + (isActive ? "uprooted-plugin-status--active" : "");
+    badge.textContent = isActive ? "Active" : "Inactive";
+    const rowInfo = row.querySelector(".uprooted-settings-row-info");
+    if (rowInfo) {
+      const labelEl = rowInfo.querySelector(".uprooted-settings-row-label");
+      if (labelEl) labelEl.appendChild(badge);
+    }
+
     listSection.appendChild(row);
+
+    // Privacy notice for sentry-blocker
+    if (name === "sentry-blocker") {
+      const notice = document.createElement("div");
+      notice.className = "uprooted-page-notice";
+      notice.innerHTML =
+        "<strong>Without this plugin, Root sends the following to Sentry's servers (not Root's servers):</strong><br>" +
+        "\u2022 Your IP address (on every error event)<br>" +
+        "\u2022 Session replays: DOM snapshots, mouse movements, input values<br>" +
+        "\u2022 Authentication headers including your Bearer token<br>" +
+        "\u2022 Application traces and logs";
+      listSection.appendChild(notice);
+    }
   }
 
   page.appendChild(listSection);
@@ -480,4 +512,8 @@ function getRegisteredPlugins(loader: PluginLoader): string[] {
 function getPlugin(loader: PluginLoader, name: string): { description?: string; version?: string } | null {
   const plugins = (loader as any).plugins as Map<string, any>;
   return plugins.get(name) ?? null;
+}
+
+function getActivePlugins(loader: PluginLoader): Set<string> {
+  return (loader as any).activePlugins as Set<string>;
 }

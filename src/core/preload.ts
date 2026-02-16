@@ -11,6 +11,7 @@
 import { PluginLoader } from "./pluginLoader.js";
 import { installBridgeProxy, setPluginLoader } from "../api/bridge.js";
 import { injectCss, removeCss } from "../api/css.js";
+import sentryBlockerPlugin from "../plugins/sentry-blocker/index.js";
 import themesPlugin from "../plugins/themes/index.js";
 import settingsPanelPlugin from "../plugins/settings-panel/index.js";
 
@@ -44,7 +45,8 @@ function main(): void {
     // Wire loader into bridge proxy so plugin events fire
     setPluginLoader(loader);
 
-    // Register built-in plugins
+    // Register built-in plugins (sentry-blocker first so fetch is wrapped earliest)
+    loader.register(sentryBlockerPlugin);
     loader.register(themesPlugin);
     loader.register(settingsPanelPlugin);
 

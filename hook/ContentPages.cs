@@ -275,6 +275,17 @@ internal static class ContentPages
         return r.CreateScrollViewer(page);
     }
 
+    // Known plugins metadata: (id, displayName, version, description, defaultEnabled)
+    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled)[] KnownPlugins =
+    {
+        ("sentry-blocker", "Sentry Blocker", "0.1.9",
+            "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
+            true),
+        ("themes", "Themes", "0.1.9",
+            "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
+            true),
+    };
+
     private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
         ApplyThemedColors(themeEngine);
@@ -289,47 +300,22 @@ internal static class ContentPages
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
-        // Card: Installed Plugins
-        var pluginsCard = CreateCard(r);
-        if (pluginsCard != null)
+        // Build a card for each known plugin
+        foreach (var plugin in KnownPlugins)
         {
-            r.SetMargin(pluginsCard, 0, 20, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var pluginsTitle = CreateSectionHeader(r, "INSTALLED PLUGINS", font);
-            r.AddChild(cardContent, pluginsTitle);
-
-            if (settings.Plugins.Count == 0)
+            bool isEnabled = settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled;
+            var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
+                plugin.Version, plugin.Description, isEnabled, font, themeEngine);
+            if (card != null)
             {
-                var emptyText = r.CreateTextBlock(
-                    "No plugins installed. Plugins extend Root with custom features, " +
-                    "commands, and UI modifications.",
-                    13, TextMuted);
-                if (emptyText != null)
-                {
-                    ApplyFont(r, emptyText, font);
-                    r.SetTextWrapping(emptyText, "Wrap");
-                    r.SetMargin(emptyText, 0, 16, 0, 0);
-                }
-                r.AddChild(cardContent, emptyText);
+                r.SetMargin(card, 0, 16, 0, 0);
+                r.AddChild(page, card);
             }
-            else
-            {
-                foreach (var (name, enabled) in settings.Plugins)
-                {
-                    AddPluginField(r, cardContent, name, enabled, font);
-                }
-            }
-
-            r.SetBorderChild(pluginsCard, cardContent);
-            r.AddChild(page, pluginsCard);
         }
 
-        // Note
+        // Note about persistence
         var noteText = r.CreateTextBlock(
-            "Plugin management, including install, enable/disable, and configuration, " +
-            "will be available in a future update.",
+            "Plugin toggles are saved and persist across restarts.",
             13, TextDim);
         if (noteText != null)
         {
@@ -347,6 +333,239 @@ internal static class ContentPages
         }
 
         return r.CreateScrollViewer(page);
+    }
+
+    /// <summary>
+    /// Build an interactive plugin card with toggle switch, description, and optional privacy info.
+    /// </summary>
+    private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
+        string pluginId, string displayName, string version, string description,
+        bool isEnabled, object? font, ThemeEngine? themeEngine = null)
+    {
+        var card = CreateCard(r);
+        if (card == null) return null;
+        r.SetTag(card, $"uprooted-item-{pluginId}");
+
+        var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (cardContent == null) return card;
+        r.SetMargin(cardContent, 24, 20, 24, 20);
+
+        // Status text reference for dynamic updates
+        object? statusTextRef = null;
+
+        // Top row: toggle + name + version badge
+        var topRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (topRow != null)
+        {
+            r.SetVerticalAlignment(topRow, "Center");
+
+            // Toggle switch
+            var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
+            {
+                settings.Plugins[pluginId] = enabled;
+
+                // Handle theme toggle: revert theme when disabled, reapply when enabled
+                if (pluginId == "themes" && themeEngine != null)
+                {
+                    if (!enabled)
+                    {
+                        themeEngine.RevertTheme();
+                        settings.ActiveTheme = "default-dark";
+                    }
+                    else if (settings.ActiveTheme != "default-dark")
+                    {
+                        if (settings.ActiveTheme == "custom")
+                            themeEngine.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
+                        else
+                            themeEngine.ApplyTheme(settings.ActiveTheme);
+                    }
+                }
+
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
+                Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+
+                // Update status text dynamically
+                if (statusTextRef != null)
+                {
+                    var newLabel = enabled
+                        ? (pluginId == "sentry-blocker" ? "Active, blocking requests to sentry.io" : "Active")
+                        : "Inactive";
+                    var newColor = enabled ? AccentGreen : TextDim;
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(statusTextRef, newLabel);
+                    r.SetForeground(statusTextRef, newColor);
+                }
+            });
+            if (togglePill != null)
+                r.AddChild(topRow, togglePill);
+
+            // Name
+            var nameText = r.CreateTextBlock(displayName, 14, TextWhite);
+            r.SetFontWeightNumeric(nameText, 500);
+            ApplyFont(r, nameText, font);
+            r.SetVerticalAlignment(nameText, "Center");
+            r.AddChild(topRow, nameText);
+
+            // Version badge
+            var versionText = r.CreateTextBlock($"v{version}", 11, TextWhite);
+            ApplyFont(r, versionText, font);
+            var versionBadge = r.CreateBorder(AccentGreen, 8, versionText);
+            r.SetPadding(versionBadge, 6, 2, 6, 2);
+            r.SetVerticalAlignment(versionBadge, "Center");
+            r.AddChild(topRow, versionBadge);
+
+            r.AddChild(cardContent, topRow);
+        }
+
+        // Description
+        var descText = r.CreateTextBlock(description, 13, TextMuted);
+        if (descText != null)
+        {
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.SetMargin(descText, 0, 12, 0, 0);
+        }
+        r.AddChild(cardContent, descText);
+
+        // Privacy info box for sentry-blocker
+        if (pluginId == "sentry-blocker")
+        {
+            var privacyBox = BuildPrivacyInfoBox(r, font);
+            if (privacyBox != null)
+            {
+                r.SetMargin(privacyBox, 0, 12, 0, 0);
+                r.AddChild(cardContent, privacyBox);
+            }
+        }
+
+        // Status line
+        var statusColor = isEnabled ? AccentGreen : TextDim;
+        var statusLabel = isEnabled
+            ? (pluginId == "sentry-blocker" ? "Active, blocking requests to sentry.io" : "Active")
+            : "Inactive";
+        var statusText = r.CreateTextBlock(statusLabel, 12, statusColor);
+        if (statusText != null)
+        {
+            r.SetFontWeightNumeric(statusText, 450);
+            ApplyFont(r, statusText, font);
+            r.SetMargin(statusText, 0, 10, 0, 0);
+        }
+        statusTextRef = statusText;
+        r.AddChild(cardContent, statusText);
+
+        r.SetBorderChild(card, cardContent);
+        return card;
+    }
+
+    /// <summary>
+    /// Build the privacy info box shown on the sentry-blocker card.
+    /// </summary>
+    private static object? BuildPrivacyInfoBox(AvaloniaReflection r, object? font)
+    {
+        var infoBg = ColorUtils.Lighten(CardBg, 4);
+        var box = r.CreateBorder(infoBg, 8);
+        if (box == null) return null;
+        SetBorderStroke(r, box, "#15ffffff", 0.5);
+
+        var content = r.CreateStackPanel(vertical: true, spacing: 6);
+        if (content == null) return box;
+        r.SetMargin(content, 16, 14, 16, 14);
+
+        var headerText = r.CreateTextBlock(
+            "Without this plugin, Root sends the following to Sentry's servers (not Root's servers):",
+            12, TextMuted);
+        if (headerText != null)
+        {
+            r.SetFontWeightNumeric(headerText, 450);
+            ApplyFont(r, headerText, font);
+            r.SetTextWrapping(headerText, "Wrap");
+        }
+        r.AddChild(content, headerText);
+
+        var items = new[]
+        {
+            "\u2022  Your IP address (on every error event)",
+            "\u2022  Session replays: DOM snapshots, mouse movements, input values",
+            "\u2022  Authentication headers including your Bearer token",
+            "\u2022  Application traces and logs",
+        };
+        foreach (var item in items)
+        {
+            var itemText = r.CreateTextBlock(item, 12, TextDim);
+            if (itemText != null)
+            {
+                ApplyFont(r, itemText, font);
+                r.SetTextWrapping(itemText, "Wrap");
+                r.SetMargin(itemText, 4, 0, 0, 0);
+            }
+            r.AddChild(content, itemText);
+        }
+
+        r.SetBorderChild(box, content);
+        return box;
+    }
+
+    /// <summary>
+    /// Build a pill-shaped toggle switch (44x24) with animated thumb.
+    /// ON: AccentGreen pill, thumb right. OFF: dim pill, thumb left.
+    /// </summary>
+    private static object? BuildToggleSwitch(AvaloniaReflection r, bool initialState, object? font,
+        Action<bool>? onToggled = null)
+    {
+        bool state = initialState;
+
+        var dimColor = ColorUtils.Lighten(CardBg, 18);
+        var pillColor = state ? AccentGreen : dimColor;
+
+        // Outer pill
+        var pill = r.CreateBorder(pillColor, 12);
+        if (pill == null) return null;
+        r.SetWidth(pill, 44);
+        r.SetHeight(pill, 24);
+        r.SetCursorHand(pill);
+        r.SetTag(pill, "uprooted-toggle-pill");
+
+        // Thumb (circle inside)
+        var thumb = r.CreateBorder("#FFFFFFFF", 9);
+        if (thumb != null)
+        {
+            r.SetWidth(thumb, 18);
+            r.SetHeight(thumb, 18);
+            r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
+            r.SetVerticalAlignment(thumb, "Center");
+            r.SetMargin(thumb, 3, 0, 3, 0);
+        }
+        r.SetBorderChild(pill, thumb);
+
+        // Capture the current accent for closures
+        var accentColor = AccentGreen;
+
+        // Click handler
+        r.SubscribeEvent(pill, "PointerPressed", () =>
+        {
+            state = !state;
+            // Update visuals
+            r.SetBackground(pill, state ? accentColor : dimColor);
+            if (thumb != null)
+                r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
+
+            onToggled?.Invoke(state);
+        });
+
+        // Hover effects
+        r.SubscribeEvent(pill, "PointerEntered", () =>
+        {
+            var hoverColor = state
+                ? ColorUtils.Lighten(accentColor, 10)
+                : ColorUtils.Lighten(dimColor, 8);
+            r.SetBackground(pill, hoverColor);
+        });
+        r.SubscribeEvent(pill, "PointerExited", () =>
+        {
+            r.SetBackground(pill, state ? accentColor : dimColor);
+        });
+
+        return pill;
     }
 
     private static object? BuildThemesPage(AvaloniaReflection r, UprootedSettings settings,
@@ -1052,35 +1271,6 @@ internal static class ContentPages
         r.AddChild(panel, row);
     }
 
-    /// <summary>
-    /// Plugin status field.
-    /// </summary>
-    private static void AddPluginField(AvaloniaReflection r, object? panel,
-        string name, bool enabled, object? font)
-    {
-        var row = r.CreateStackPanel(vertical: false, spacing: 0);
-        if (row == null) return;
-        r.SetMargin(row, 0, 16, 0, 0);
-
-        var nameText = r.CreateTextBlock(name, 13, TextWhite);
-        r.SetFontWeightNumeric(nameText, 450);
-        ApplyFont(r, nameText, font);
-        r.AddChild(row, nameText);
-
-        var separator = r.CreateTextBlock(" \u2022 ", 13, TextDim);
-        ApplyFont(r, separator, font);
-        r.AddChild(row, separator);
-
-        var statusText = r.CreateTextBlock(
-            enabled ? "Enabled" : "Disabled",
-            13,
-            enabled ? AccentGreen : TextDim);
-        r.SetFontWeightNumeric(statusText, 450);
-        ApplyFont(r, statusText, font);
-        r.AddChild(row, statusText);
-
-        r.AddChild(panel, row);
-    }
 
     private static void SetBorderStroke(AvaloniaReflection r, object? border, string hex, double width)
     {

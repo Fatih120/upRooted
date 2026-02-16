@@ -67,6 +67,12 @@ internal class SidebarInjector
         _settings = UprootedSettings.Load();
         _themeEngine = themeEngine;
         _window = mainWindow;
+
+        // Populate default plugin entries if not already set
+        if (!_settings.Plugins.ContainsKey("sentry-blocker"))
+            _settings.Plugins["sentry-blocker"] = true;
+        if (!_settings.Plugins.ContainsKey("themes"))
+            _settings.Plugins["themes"] = true;
     }
 
     public void StartMonitoring()
