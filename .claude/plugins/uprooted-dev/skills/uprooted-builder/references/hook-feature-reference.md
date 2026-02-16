@@ -267,6 +267,16 @@ These cause real bugs — never violate:
 3. **Never use `System.Text.Json`** — `MissingMethodException` in profiler context. Use manual string parsing or `UprootedSettings` INI format.
 4. **Never use `EventInfo.AddEventHandler` for RoutedEvents** — silently fails. Use `SubscribeEvent` or `SubscribePointerEvent` which use Expression.Lambda.
 5. **`DispatcherPriority` is a struct not enum** in Avalonia 11+ — `Enum.Parse` fails. `AvaloniaReflection.Resolve()` handles this with a fallback chain.
+6. **Never block the UI thread** — all heavy work on background threads, UI mutations via `RunOnUIThread()`. Cross-thread Avalonia access crashes.
+7. **Never add children to `VirtualizingStackPanel`** — items get recycled by the virtualizer. Add to the parent container instead.
+8. **Never cross-contaminate repos** — private (`uprooted-private`) and public (`uprooted`) repos are strictly separate. Never copy code between them.
+
+## Additional Pitfalls
+
+- **Creating Avalonia controls on a background thread** — always dispatch via `r.RunOnUIThread(action)`. Cross-thread control creation crashes.
+- **Ignoring null from AvaloniaReflection methods** — every method can return `null`. Types may not exist in future Avalonia versions. Always null-check.
+- **Confusing the two settings systems** — C# uses `uprooted-settings.ini` (INI format via `UprootedSettings`); TypeScript uses `uprooted-settings.json` (JSON inlined as `window.__UPROOTED_SETTINGS__`). They are separate files.
+- **Assuming TypeScript changes affect native Avalonia UI** — they are separate runtimes (Chromium vs .NET). No shared state. CSS variables don't reach Avalonia controls; resource dictionaries don't reach the browser.
 
 ## Error Handling
 

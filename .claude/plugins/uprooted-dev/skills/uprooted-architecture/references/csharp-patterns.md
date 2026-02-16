@@ -208,7 +208,7 @@ catch (Exception ex)
 Content pages match Root's exact card styling for visual consistency.
 
 ```
-Card background:    #081408
+Card background:    #0f1923
 Corner radius:      12
 Border:             #19ffffff, thickness 0.5
 Inner padding:      24px

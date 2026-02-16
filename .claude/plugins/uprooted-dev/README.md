@@ -57,7 +57,7 @@ This plugin makes Claude Code an effective contributor to the Uprooted codebase.
 │       └── references/
 │           ├── ts-plugin-reference.md       # UprootedPlugin interface, all APIs, templates
 │           ├── hook-feature-reference.md    # AvaloniaReflection API, settings pages, styling
-│           ├── bridge-methods.md            # 42+29 bridge method signatures, patch patterns
+│           ├── bridge-methods.md            # 41+29 bridge method signatures, patch patterns
 │           └── theme-building.md            # CSS variables, native color maps, dual-layer
 └── README.md                                # This file
 ```
@@ -95,7 +95,7 @@ Provides Claude with deep knowledge of:
 
 - **Dual-layer architecture** — C# .NET hook (Avalonia reflection) + TypeScript injection (Chromium bridge proxy)
 - **5-phase startup lifecycle** — Phase 0 (HTML patches) through Phase 4 (sidebar injection)
-- **Critical rules** — The 6 forbidden patterns with correct alternatives and code examples
+- **Critical rules** — The 7 forbidden patterns with correct alternatives and code examples
 - **C# patterns** — Reflection access, CAS guards, UI thread dispatch, content overlay, tag identification, phase waits, error handling, assembly scanning
 - **TypeScript patterns** — Plugin definition, bridge interception, patch priority, plugin lifecycle, settings, logging, DOM utilities, CSS injection, imports, error handling
 - **Fragile areas** — AvaloniaReflection, VisualTreeWalker, SidebarInjector, bridge proxy, plugin lifecycle, settings merge
@@ -123,12 +123,12 @@ Routes to the correct reference based on what you're building:
 
 #### C# Hook Feature Reference (`references/hook-feature-reference.md`, 333 lines)
 
-- Complete `AvaloniaReflection` API: 15 creation methods, 30+ property setters, event subscription, resource management
+- Complete `AvaloniaReflection` API: 12 creation methods, 30+ property setters, event subscription, resource management
 - How to add a new settings page: BuildPage method, switch case, SidebarInjector nav item
 - Styling constants: card BG, corner radius, border, font sizes, margins (all with theme-aware values)
 - Tag-based identification (`uprooted-*` prefix convention)
 - UI thread dispatch patterns
-- All 5 critical rules with correct alternatives
+- All 8 critical rules with correct alternatives + 4 additional pitfalls
 - Error handling (never throw, catch and Logger.Log)
 - File structure conventions (internal classes, Uprooted namespace, zero NuGet deps)
 
@@ -136,7 +136,7 @@ Routes to the correct reference based on what you're building:
 
 - Type aliases (`UserGuid`, `DeviceGuid`, `Theme`, `TileType`, `ScreenQualityMode`)
 - `InitializeDesktopWebRtcPayload` fields
-- **42 `INativeToWebRtc` methods** grouped by: Connection, Media, Devices, User State, Audio/Quality, UI, Moderation, Volume, Packets/Native Audio
+- **41 `INativeToWebRtc` methods** grouped by: Connection, Media, Devices, User State, Audio/Quality, UI, Moderation, Volume, Packets/Native Audio
 - **29 `IWebRtcToNative` methods** grouped by: Session, Local Tracks, Remote Tracks, User State, Moderation, Profile/UI, Logging
 - `BridgeEvent` interface
 - 5 common patterns: observe, cancel, replace, multi-method monitor, modify arguments

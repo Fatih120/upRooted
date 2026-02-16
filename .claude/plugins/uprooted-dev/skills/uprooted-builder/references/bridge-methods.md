@@ -47,7 +47,7 @@ interface BridgeEvent {
 }
 ```
 
-## INativeToWebRtc — Native to JS (42 methods)
+## INativeToWebRtc — Native to JS (41 methods)
 
 Intercepted with `bridge: "nativeToWebRtc"`. C# host controls the WebRTC session.
 

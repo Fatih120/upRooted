@@ -85,5 +85,10 @@ Before building any component, verify:
 - [ ] No `localStorage` in TypeScript (Root runs `--incognito`)
 - [ ] No `System.Text.Json` in C# hook
 - [ ] Wrap all code in try/catch — never throw from injected code
+- [ ] Never block the UI thread — heavy work on background threads, `RunOnUIThread()` for UI mutations
+- [ ] Never add children to `VirtualizingStackPanel` — add to parent container instead
+- [ ] Never create Avalonia controls on background thread — dispatch via `RunOnUIThread()`
+- [ ] Null-check all `AvaloniaReflection` return values — every method can return null
 - [ ] Clean up in `stop()` (TS) or cleanup methods (C#)
 - [ ] Tag all injected Avalonia controls with `uprooted-*` prefix
+- [ ] TS and C# are separate runtimes — CSS variables don't reach Avalonia, resource dicts don't reach Chromium
