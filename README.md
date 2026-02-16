@@ -8,7 +8,7 @@
 
 <p align="center">
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
-  <img src="https://img.shields.io/badge/version-1.9.0-2D7D46?style=flat" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.1.9-2D7D46?style=flat" alt="version" />
   <img src="https://img.shields.io/badge/status-beta · awaiting approval-yellow?style=flat" alt="status" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
