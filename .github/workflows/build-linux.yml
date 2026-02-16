@@ -101,24 +101,42 @@ jobs:
         working-directory: installer
         run: pnpm tauri build --bundles deb appimage
 
-      - name: List bundle outputs
+      - name: Rename Linux bundles
         run: |
+          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
+          DEBDIR="installer/src-tauri/target/release/bundle/deb"
+          APPDIR="installer/src-tauri/target/release/bundle/appimage"
+
           echo "=== deb ==="
-          ls -la installer/src-tauri/target/release/bundle/deb/ 2>/dev/null || echo "No deb output"
+          ls -la "$DEBDIR/" 2>/dev/null || echo "No deb output"
           echo "=== appimage ==="
-          ls -la installer/src-tauri/target/release/bundle/appimage/ 2>/dev/null || echo "No appimage output"
+          ls -la "$APPDIR/" 2>/dev/null || echo "No appimage output"
+
+          # Rename deb
+          DEB=$(ls "$DEBDIR"/*.deb 2>/dev/null | head -1)
+          if [ -n "$DEB" ]; then
+            mv "$DEB" "$DEBDIR/Uprooted-${VERSION}-amd64.deb"
+            echo "Renamed deb to Uprooted-${VERSION}-amd64.deb"
+          fi
+
+          # Rename AppImage
+          AI=$(ls "$APPDIR"/*.AppImage 2>/dev/null | head -1)
+          if [ -n "$AI" ]; then
+            mv "$AI" "$APPDIR/Uprooted-${VERSION}-amd64.AppImage"
+            echo "Renamed AppImage to Uprooted-${VERSION}-amd64.AppImage"
+          fi
 
       - name: Upload .deb
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux-deb
-          path: installer/src-tauri/target/release/bundle/deb/*.deb
+          path: installer/src-tauri/target/release/bundle/deb/Uprooted-*.deb
 
       - name: Upload AppImage
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux-AppImage
-          path: installer/src-tauri/target/release/bundle/appimage/*.AppImage
+          path: installer/src-tauri/target/release/bundle/appimage/Uprooted-*.AppImage
 
       - name: Publish to public repo release
         if: success()
@@ -183,11 +201,20 @@ jobs:
           target: pkgbuild
           pkgname: uprooted-bin
 
+      - name: Rename Arch package
+        run: |
+          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
+          PKG=$(ls uprooted-bin/*.pkg.tar.zst 2>/dev/null | head -1)
+          if [ -n "$PKG" ]; then
+            mv "$PKG" "uprooted-bin/Uprooted-${VERSION}-x86_64.pkg.tar.zst"
+            echo "Renamed to Uprooted-${VERSION}-x86_64.pkg.tar.zst"
+          fi
+
       - name: Upload .pkg.tar.zst
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Arch
-          path: uprooted-bin/*.pkg.tar.zst
+          path: uprooted-bin/Uprooted-*.pkg.tar.zst
 
       - name: Publish to public repo release
         if: success()
@@ -199,6 +226,6 @@ jobs:
             exit 0
           fi
           VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          for f in uprooted-bin/*.pkg.tar.zst; do
+          for f in uprooted-bin/Uprooted-*.pkg.tar.zst; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done

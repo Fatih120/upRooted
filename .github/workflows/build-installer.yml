@@ -111,17 +111,19 @@ jobs:
         working-directory: installer
         run: pnpm tauri build
 
-      - name: Rename portable exe
+      - name: Rename installer exe
         run: |
           $version = (Get-Content installer\src-tauri\tauri.conf.json | ConvertFrom-Json).version
-          Copy-Item "installer\src-tauri\target\release\uprooted-installer.exe" "installer\src-tauri\target\release\Uprooted-$version.exe"
-          Write-Host "Renamed to Uprooted-$version.exe"
+          $src = "installer\src-tauri\target\release\uprooted-installer.exe"
+          $dst = "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
+          Move-Item $src $dst
+          Write-Host "Renamed to Uprooted-$version-Setup.exe"
 
-      - name: Upload portable exe
+      - name: Upload installer exe
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted
-          path: installer/src-tauri/target/release/Uprooted-*.exe
+          path: installer/src-tauri/target/release/Uprooted-*-Setup.exe
 
       - name: Publish to public repo release
         if: success()
@@ -133,7 +135,7 @@ jobs:
             exit 0
           }
           $version = (Get-Content installer\src-tauri\tauri.conf.json | ConvertFrom-Json).version
-          $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version.exe"
+          $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
           Write-Host "Uploading $($exe.Name) to watchthelight/uprooted v$version"
           gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" --draft 2>&1
           gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
