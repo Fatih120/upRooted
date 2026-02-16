@@ -1,93 +1,106 @@
-# Uprooted Hook - Session State (2026-02-14 07:20 UTC)
+# Uprooted Hook - Session State (2026-02-16 21:42 UTC)
 
 ## What Was Done This Session
 
-### Bug Fixes (ALL WORKING)
-1. **Fixed infinite inject/detach loop** - Replaced broken `VisualRoot` property check with lightweight `FindFirstTextBlock("APP SETTINGS")` search, throttled every 5 ticks (~1 second). The VisualRoot approach failed because ScrollViewer wrapping reparents NavContainer into a logical-only position where VisualRoot is null.
+### Feature: NSFW Content Filter Plugin (v0.1.96)
 
-2. **Fixed chatty TreeWalker logging** - Alive check no longer calls full `FindSettingsLayout` (which logged ~10 lines/second). Uses silent text block search instead.
+Full implementation of a Google Cloud Vision SafeSearch-based content filter that blurs NSFW images in chat.
 
-3. **Replaced crashing DumpDiagnostics** - Old method always threw MissingMethodException. Replaced with focused `DumpVersionRecon` (now renamed to style recon) that runs once successfully.
+**New files created:**
+1. **`hook/DotNetBrowserReflection.cs`** (+203 lines) — Reflection cache for DotNetBrowser types (BrowserView, IBrowser, IFrame). Scans assemblies prefixed with `"DotNetBrowser"`, resolves types/members, provides `FindBrowserView()`, `GetBrowser()`, `GetMainFrame()`, `ExecuteJavaScript()`. Follows AvaloniaReflection patterns.
 
-### Features Added
-4. **"Uprooted 0.1.1" in grey version box** - Injected into the StackPanel containing "Root Version: 0.9.87" inside SidebarGrid Row=1. Matches native style: FontSize=10, Fg=#66f2f2f2. Cleanup on settings close handled.
+2. **`hook/NsfwFilter.cs`** (+291 lines) — Filter lifecycle orchestration. Finds BrowserView in visual tree, gets IBrowser → IFrame, injects config JSON + JS filter script via `ExecuteJavaScript()`. 30s re-injection timer for page navigation. `UpdateConfig()` for live settings changes. `IDisposable` cleanup.
 
-5. **Style fixes for sidebar items** (cosmetic, latest change):
-   - Section header "UPROOTED": margin M=12,12,12,0 (was M=18,16,12,4)
-   - Nav item text: left margin 12px (was 18px), aligns with native items
-   - FontWeight: 400/Normal (was 450)
-   - Hover highlight: full-width Border with no side margins + CR=12 (was M=6,1,6,1)
-   - Inner Panel: M=0,2,0,2 (matching native ListBoxItem vertical spacing)
-   - Text VerticalAlignment=Center in 36px space
+3. **`hook/nsfw-filter.js`** (+275 lines) — MutationObserver-based image filter injected into DotNetBrowser. Pre-blur (8px) during classification, full blur (25px) + "Click to reveal" overlay for NSFW. Rate limiting (5 concurrent, 30/min), URL cache (2000 entries), fail-open on errors. CSS classes: `.uprooted-nsfw-pending`, `.uprooted-nsfw-blur`, `.uprooted-nsfw-revealed`.
 
-### What Was Removed
-- Advanced clone logic (BuildAdvancedClone, CalculateListBoxClipHeight, MaxHeight manipulation)
-- `_diagnosticsRetries` field
-- Version TextBlock from NavContainer (moved to grey version box instead)
-- Massive DumpDiagnostics method (~500 lines) replaced with focused recon
+**Modified files:**
+4. **`hook/UprootedSettings.cs`** — Added `NsfwFilterEnabled` (bool), `NsfwApiKey` (string), `NsfwThreshold` (double, default 0.6). Load/Save with invariant culture parsing.
+
+5. **`hook/ContentPages.cs`** (+317 lines) — Added `"content-filter"` case to `BuildPage()`. New `BuildContentFilterPage()` with 4 cards: enable toggle, API key input + save button, sensitivity radios (Strict/Normal/Relaxed), How It Works info. Added `NsfwFilterInstance` static property for live config updates from settings UI.
+
+6. **`hook/SidebarInjector.cs`** — Added `("Content Filter", "content-filter")` as fourth nav item in Uprooted sidebar section.
+
+7. **`hook/StartupHook.cs`** (+51 lines) — Added Phase 5 after "Hook Ready". Non-blocking background thread: waits for DotNetBrowser assemblies (30s), resolves types, initializes NsfwFilter, sets `ContentPages.NsfwFilterInstance`.
+
+8. **`hook/HtmlPatchVerifier.cs`** (+24 lines) — Embeds `window.__UPROOTED_NSFW_CONFIG__` JSON in HTML patches (dual injection: HTML patch catches early loads, JS execution handles runtime). Added `BuildNsfwConfigJson()`. Extended `FindTargetHtmlFiles()` for HostBundle directory. Added bare tag stripping for `__UPROOTED_NSFW_CONFIG__`.
+
+9. **`hook/UprootedHook.csproj`** — Added `nsfw-filter.js` as content with `CopyToOutputDirectory=PreserveNewest`.
+
+### Version Bump: 0.1.95 → 0.1.96
+Bumped across 33 files: hook source, installer configs (Cargo.toml, tauri.conf.json, package.json), scripts, TypeScript plugins, site, docs, PKGBUILD, session state.
 
 ## Current Architecture
 
-### Files Modified
+### Startup Phases
+| Phase | File | Purpose |
+|-------|------|---------|
+| 0 | HtmlPatchVerifier | Verify/repair HTML patches + FileSystemWatcher |
+| 1 | StartupHook | Wait for Avalonia assemblies (30s) |
+| 2 | StartupHook | Wait for Application.Current (30s) |
+| 3 | StartupHook | Wait for MainWindow (60s) |
+| 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
+| 4 | SidebarInjector | Start settings page monitor (200ms poll) |
+| 5 | NsfwFilter | **NEW** — Background thread: DotNetBrowser discovery + JS injection |
+
+### Sidebar Nav Items
+1. Uprooted → `BuildUprootedPage()`
+2. Plugins → `BuildPluginsPage()`
+3. Themes → `BuildThemesPage()`
+4. Content Filter → `BuildContentFilterPage()` **NEW**
+
+### NSFW Filter Architecture
+```
+C# side (NsfwFilter.cs):
+  DotNetBrowserReflection → find BrowserView in Avalonia tree
+  → IBrowser.MainFrame → IFrame.ExecuteJavaScript()
+  → Injects: window.__UPROOTED_NSFW_CONFIG__ = {enabled, apiKey, threshold}
+  → Injects: nsfw-filter.js (full MutationObserver script)
+  → 30s timer re-checks injection (page navigation)
+
+JS side (nsfw-filter.js):
+  MutationObserver on document.body {childList, subtree}
+  → New <img> detected → pre-blur(8px) → fetch Vision API
+  → NSFW? → blur(25px) + overlay → click to reveal/re-blur
+  → Safe? → remove pre-blur
+  → Error? → fail open (show image)
+  → Cache by normalized URL (2000 max)
+  → Rate limit: 5 concurrent, 30/minute
+
+Dual injection:
+  HTML patch embeds config (catches early-loading images)
+  + ExecuteJavaScript injects at runtime (handles config changes)
+```
+
+### Key Design Decisions
+- **API calls in JS, not C#** — `--disable-web-security` eliminates CORS, avoids System.Text.Json
+- **Pre-blur during classification** — prevents flash of NSFW content
+- **Fail open** — errors never block image viewing, only add reveal step when flagged
+- **Config JSON built manually** — no System.Text.Json (MissingMethodException in profiler context)
+
+## Files Modified This Session
 | File | State |
 |------|-------|
-| `hook/SidebarInjector.cs` | Heavily modified - all fixes above |
-| `hook/UprootedSettings.cs` | Version changed to "0.1.1" |
-| `hook/AvaloniaReflection.cs` | Unchanged this session |
-| `hook/VisualTreeWalker.cs` | Unchanged this session |
-| `hook/ContentPages.cs` | Unchanged this session |
-
-### Key Constants/Values from Recon
-
-**Native ListBoxItem structure:**
-```
-ListBoxItem (250x40, M=0 P=0)
-  Panel (250x36, M=0,2,0,2)
-    ContentPresenter (BG=Transparent)  <- hover highlight changes here
-      MenuItemPageContainerView > ContentPresenter > [text content]
-    Border (H=36, BG=Transparent, CR=12)  <- rounded highlight border
-```
-
-**APP SETTINGS header:**
-- FontSize=12, FontWeight=Medium, Fg=#66f2f2f2
-- Parent StackPanel M=12,12,12,0
-- Inside MenuItemPageContainerView inside ListBoxItem
-
-**NavContainer:** StackPanel M=12,0,24,0, Bounds=(250x534.5 @12,0)
-
-**SidebarGrid:** Grid Rows=[1*,Auto]
-- Row 0: NavContainer (StackPanel, 250x534)
-- Row 1: ContentControl (250x71) containing version box
-
-**Version box structure:**
-```
-SidebarGrid Row=1: ContentControl (250x71)
-  > ContentPresenter > ContentControl > ContentPresenter
-    > StackPanel (250x71)
-      > Button (250x39) > RootBorder (BG=#ff121a26, the grey box)
-        > StackPanel (237x26) <- contains version texts
-          > "Root Version: 0.9.87" FontSize=10 Fg=#66f2f2f2
-          > "System Info: Windows 10.0.26200.0 (x64)" FontSize=10 Fg=#66f2f2f2
-          > [our injected] "Uprooted 0.1.1" FontSize=10 Fg=#66f2f2f2
-      > RootLinkButton "Check for updates" FontSize=10 Fg=#ff88a5ff
-```
-
-## User's Last Request & Status
-
-The user asked for **cosmetic-only fixes** to make Uprooted sidebar items match Root's native items exactly. Changes were made to:
-- Font weight, margins, hover highlight structure, vertical spacing
-
-The user was about to test the latest build visually. **They have NOT yet confirmed whether the style fixes look correct.** They may need further pixel adjustments based on visual comparison.
+| `hook/DotNetBrowserReflection.cs` | **NEW** — DotNetBrowser reflection cache |
+| `hook/NsfwFilter.cs` | **NEW** — Filter orchestration |
+| `hook/nsfw-filter.js` | **NEW** — JS filter script |
+| `hook/UprootedSettings.cs` | Added 3 NSFW properties |
+| `hook/ContentPages.cs` | Added Content Filter page |
+| `hook/SidebarInjector.cs` | Added nav item |
+| `hook/StartupHook.cs` | Added Phase 5 |
+| `hook/HtmlPatchVerifier.cs` | NSFW config in patches |
+| `hook/UprootedHook.csproj` | JS file copy to output |
 
 ## Pending / Potential Issues
 
-1. **Style verification needed** - User hasn't confirmed the latest cosmetic fixes look right. May need further margin/weight tweaks.
+1. **Cannot build-verify in this environment** — .NET 10 SDK not available in container. Code was verified via manual cross-reference of all type/method signatures. First real build should be done on dev machine.
 
-2. **Recon doesn't reach TextBlock inside native items** - DumpTreeDetailed maxDepth=6 stops at `MenuItemPageContainerView > ContentPresenter` but the actual TextBlock is deeper. If font properties of native items need confirmation, increase maxDepth to 10.
+2. **DotNetBrowser API surface unknown** — The reflection targets (`BrowserView.Browser`, `IBrowser.MainFrame`, `IFrame.ExecuteJavaScript`) are based on DotNetBrowser's documented API. If Root uses a different version or custom wrapper, the fallback type searches should catch it. If not, `IsResolved = false` and the filter silently disables.
 
-3. **Selected item highlight** - The recon shows Border BG=Transparent even for selected items. The actual selection highlight may be applied via Avalonia's style system (pseudo-classes like `:selected`) which we can't see via property reflection. Our items use `#19ffffff` for active, `#0Dffffff` for hover - may need adjustment.
+3. **nsfw-filter.js deployment** — Script must be alongside `UprootedHook.dll` in the output directory (handled by csproj `CopyToOutputDirectory`). Alternatively, can be placed in the Uprooted assets directory (`PlatformPaths.GetUprootedDir()`).
 
-4. **Back button hiding** - When Uprooted pages are active, the `<` back button is hidden (SetIsVisible false). Restored when leaving Uprooted pages or on cleanup.
+4. **Settings page not yet visually tested** — The Content Filter page follows identical patterns to Uprooted/Plugins/Themes pages but hasn't been seen live. Radio indicators and API key save button need visual verification.
+
+5. **Re-injection after page navigation** — The 30s timer re-injects the filter script. The script self-guards against double injection (`window.__UPROOTED_NSFW_ACTIVE__`). On navigation, the guard resets naturally. `UpdateConfig()` explicitly resets the guard to pick up new settings.
 
 ## Build & Test
 
@@ -101,3 +114,11 @@ powershell -ExecutionPolicy Bypass -File ..\scripts\test-hook.ps1
 # Check log:
 Get-Content "$env:LOCALAPPDATA\Root Communications\Root\profile\default\uprooted-hook.log" -Tail 30
 ```
+
+### Testing the NSFW filter
+1. Enable in Settings → Content Filter → toggle ON
+2. Enter Google Cloud Vision API key → Save
+3. Set sensitivity (Normal = default)
+4. Send an image in a Root chat
+5. Check log for Phase 5 messages: `[NsfwFilter] BrowserView found`, `Filter script injected`
+6. Verify: images get light pre-blur briefly, then resolve (blur stays or clears)
