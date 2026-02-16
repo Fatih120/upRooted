@@ -123,13 +123,14 @@ jobs:
           name: Uprooted
           path: installer/src-tauri/target/release/Uprooted-*.exe
 
-      - name: Upload to GitHub Release
+      - name: Publish to public repo release
         if: success()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           $version = (Get-Content installer\src-tauri\tauri.conf.json | ConvertFrom-Json).version
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version.exe"
-          Write-Host "Uploading $($exe.Name) to release v$version"
-          gh release upload "v$version" $exe.FullName --clobber 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "No release v$version found, skipping" }
+          Write-Host "Uploading $($exe.Name) to watchthelight/uprooted v$version"
+          gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" --draft 2>&1
+          gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
+          if ($LASTEXITCODE -ne 0) { Write-Host "Release upload failed or no release found, skipping" }

@@ -120,16 +120,17 @@ jobs:
           name: Uprooted-Linux-AppImage
           path: installer/src-tauri/target/release/bundle/appimage/*.AppImage
 
-      - name: Upload to GitHub Release
+      - name: Publish to public repo release
         if: success()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          echo "Uploading Linux artifacts to release v$VERSION"
+          echo "Uploading Linux artifacts to watchthelight/uprooted v$VERSION"
+          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" --draft 2>/dev/null || true
           for f in installer/src-tauri/target/release/bundle/deb/*.deb \
                    installer/src-tauri/target/release/bundle/appimage/*.AppImage; do
-            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --clobber || true
+            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done
 
   # ── Arch Linux Package ──
@@ -184,12 +185,12 @@ jobs:
           name: Uprooted-Arch
           path: uprooted-bin/*.pkg.tar.zst
 
-      - name: Upload to GitHub Release
+      - name: Publish to public repo release
         if: success()
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
           VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
           for f in uprooted-bin/*.pkg.tar.zst; do
-            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --clobber || true
+            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done
