@@ -6,7 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Uprooted** is a client mod framework for Root Communications desktop app (like Vencord for Discord). Dual-layer injection: C# .NET hook into Root.exe (Avalonia) + TypeScript injection into embedded Chromium.
 
-Read `docs/FRAMEWORK_GUIDE.md` first — it is the authoritative reference.
+For comprehensive documentation, start with [docs/INDEX.md](docs/INDEX.md).
+
+Read `docs/INDEX.md` for navigation, `docs/ARCHITECTURE.md` for architecture reference.
 
 ## Collaboration
 
@@ -14,8 +16,8 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ### Git Workflow (IMPORTANT)
 
-- **Always `git pull` before starting any work** — the other contributor may have pushed changes
-- **Always push after committing** — don't leave unpushed commits sitting locally
+- **Always `git pull` before starting any work** -- the other contributor may have pushed changes
+- **Always push after committing** -- don't leave unpushed commits sitting locally
 - **Write clear, descriptive commit messages** following this format:
   - `type: concise description of what changed and why`
   - Types: `fix:`, `feat:`, `refactor:`, `docs:`, `chore:`, `style:`
@@ -26,36 +28,71 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
     - `refactor: prefer in-place stripping over stale backup restore`
 - **Never force-push to main** without explicit approval from both contributors
 - **Check `git log` before committing** to see recent history and match style
-- If there are merge conflicts, resolve carefully — don't discard the other person's work
+- If there are merge conflicts, resolve carefully -- don't discard the other person's work
 
 ## Repository Structure
 
 ```
 uprooted-private/
-├── hook/                          # C# .NET hook (CLR profiler injection)
-│   ├── StartupHook.cs             # 5-phase Avalonia wait + initialization
-│   ├── HtmlPatchVerifier.cs       # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
-│   ├── AvaloniaReflection.cs      # Reflection cache for ~80 Avalonia types
-│   ├── SidebarInjector.cs         # Timer-based sidebar injection (200ms poll)
-│   ├── ContentPages.cs            # Settings page builders
-│   ├── ThemeEngine.cs             # Native Avalonia theme application
-│   ├── PlatformPaths.cs           # Platform-specific path resolution
-│   ├── UprootedSettings.cs        # INI-based settings (no System.Text.Json)
-│   ├── Entry.cs                   # Profiler injection entry point
-│   ├── Logger.cs                  # File-based logging
-│   └── SESSION_STATE.md           # Session state/context handoff
-├── installer/src-tauri/src/       # Tauri installer (Rust)
-│   ├── patcher.rs                 # HTML patch install/uninstall/repair
-│   ├── hook.rs                    # File deployment + env var management
-│   ├── detection.rs               # Root installation detection
-│   └── settings.rs                # JSON settings management
-├── install-uprooted-linux.sh      # Standalone bash installer for Linux
-├── dist/                          # Prebuilt TypeScript bundle (from public repo)
-├── docs/
-│   ├── FRAMEWORK_GUIDE.md         # Authoritative reference (read first!)
-│   ├── HOW_IT_WORKS.md            # Complete technical walkthrough
-│   └── FUTURE_PLANS.md            # Roadmap
-└── tools/                         # Build utilities
+├── hook/                              # C# .NET hook (CLR profiler injection)
+│   ├── StartupHook.cs                 # 5-phase Avalonia wait + initialization
+│   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
+│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types
+│   ├── SidebarInjector.cs             # Timer-based sidebar injection (200ms poll)
+│   ├── ContentPages.cs                # Settings page builders
+│   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview)
+│   ├── ColorUtils.cs                  # HSL/HSV/RGB color conversion
+│   ├── ColorPickerPopup.cs            # HSV color picker UI
+│   ├── VisualTreeWalker.cs            # Visual tree DFS traversal
+│   ├── NativeEntry.cs                 # Native method proxies
+│   ├── PlatformPaths.cs               # Platform-specific path resolution
+│   ├── UprootedSettings.cs            # INI-based settings (no System.Text.Json)
+│   ├── Entry.cs                       # Profiler injection entry point
+│   ├── Logger.cs                      # File-based logging
+│   └── SESSION_STATE.md               # Session state/context handoff
+├── installer/src-tauri/src/           # Tauri installer (Rust)
+│   ├── main.rs                        # Tauri app entry point
+│   ├── patcher.rs                     # HTML patch install/uninstall/repair
+│   ├── hook.rs                        # File deployment + env var management
+│   ├── detection.rs                   # Root installation detection
+│   ├── settings.rs                    # JSON settings management
+│   ├── themes.rs                      # Theme file discovery and embedding
+│   └── embedded.rs                    # Embedded resource management
+├── tools/                             # Native profiler and build utilities
+│   ├── uprooted_profiler.c            # CLR profiler DLL (Windows)
+│   ├── uprooted_profiler_linux.c      # CLR profiler shared object (Linux)
+│   ├── uprooted_profiler.def          # Profiler DLL export definitions
+│   └── (build scripts, proxy DLLs, diagnostic tools)
+├── scripts/                           # Build and install automation
+│   ├── build_installer.ps1            # Full installer build with embedded artifacts
+│   ├── install-hook.ps1               # Hook deployment script
+│   ├── uninstall-hook.ps1             # Hook removal script
+│   ├── diagnose.ps1                   # Installation diagnostics
+│   └── (additional build/test/analysis scripts)
+├── tests/                             # Test suites
+│   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush)
+├── docs/                              # Documentation
+│   ├── INDEX.md                       # Documentation navigation hub (start here)
+│   ├── ARCHITECTURE.md                # System architecture and design decisions
+│   ├── HOOK_REFERENCE.md              # C# hook layer deep dive
+│   ├── TYPESCRIPT_REFERENCE.md        # TypeScript browser injection reference
+│   ├── CLR_PROFILER.md                # Native C profiler internals
+│   ├── INSTALLER.md                   # Tauri/Rust installer reference
+│   ├── INSTALLATION.md                # End-user install guide
+│   ├── BUILD.md                       # Build pipeline for all layers
+│   ├── ROADMAP.md                     # Known issues, planned features, future direction
+│   ├── HOW_IT_WORKS.md                # Complete technical walkthrough
+│   └── plugins/                       # Plugin author documentation
+│       ├── GETTING_STARTED.md         # Plugin quickstart tutorial
+│       ├── API_REFERENCE.md           # Plugin API surface
+│       ├── BRIDGE_REFERENCE.md        # Root bridge IPC reference
+│       ├── ROOT_ENVIRONMENT.md        # Root app internals (DOM, CSS, Chromium)
+│       └── EXAMPLES.md               # Annotated example plugins
+├── dist/                              # Prebuilt TypeScript bundle (from public repo)
+├── install-uprooted-linux.sh          # Standalone bash installer for Linux
+├── CONTRIBUTING.md                    # Contribution guidelines
+├── CLAUDE.md                          # AI contributor guide (this file)
+└── README.md                          # Repository landing page
 ```
 
 ## Build
@@ -73,16 +110,16 @@ powershell -File scripts/build_installer.ps1
 
 ## Critical Rules
 
-These cause real bugs — do not violate:
+These cause real bugs -- do not violate:
 
-- **Never use `Type.GetType()` for Avalonia types** — use `AvaloniaReflection`
-- **Never modify `ContentControl.Content` directly** — causes UI freeze, use Grid overlay
-- **Never use `System.Text.Json` in hook** — causes MissingMethodException in profiler context
-- **Never use `EventInfo.AddEventHandler` for RoutedEvents** — use Expression lambdas
-- **Never use localStorage** — Root runs Chromium with `--incognito`
+- **Never use `Type.GetType()` for Avalonia types** -- use `AvaloniaReflection`
+- **Never modify `ContentControl.Content` directly** -- causes UI freeze, use Grid overlay
+- **Never use `System.Text.Json` in hook** -- causes MissingMethodException in profiler context
+- **Never use `EventInfo.AddEventHandler` for RoutedEvents** -- use Expression lambdas
+- **Never use localStorage** -- Root runs Chromium with `--incognito`
 - **`DispatcherPriority` is a struct not enum** in Avalonia 11+
 
 ## Related Repos
 
-- **Public scaffold**: `watchthelight/uprooted` — TypeScript source, plugin API, theme engine
-- These repos are **strictly separate** — never copy, reference, or leak code/commits between them
+- **Public scaffold**: `watchthelight/uprooted` -- TypeScript source, plugin API, theme engine
+- These repos are **strictly separate** -- never copy, reference, or leak code/commits between them

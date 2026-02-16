@@ -2,6 +2,14 @@
 
 A step-by-step guide to building your first plugin for Root Communications using Uprooted.
 
+> **Related Docs:**
+> [API Reference](API_REFERENCE.md) |
+> [Bridge Reference](BRIDGE_REFERENCE.md) |
+> [Root Environment](ROOT_ENVIRONMENT.md) |
+> [Examples](EXAMPLES.md) |
+> [TypeScript Reference](../TYPESCRIPT_REFERENCE.md) |
+> [Build Guide](../BUILD.md)
+
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
@@ -10,6 +18,7 @@ A step-by-step guide to building your first plugin for Root Communications using
 - [Tutorial 2: CSS Injection](#tutorial-2-css-injection)
 - [Tutorial 3: Bridge Interception](#tutorial-3-bridge-interception)
 - [Tutorial 4: Plugin Settings](#tutorial-4-plugin-settings)
+- [Tutorial 5: DOM Injection](#tutorial-5-dom-injection)
 - [Build & Test Workflow](#build--test-workflow)
 - [Next Steps](#next-steps)
 
@@ -20,11 +29,17 @@ A step-by-step guide to building your first plugin for Root Communications using
 Before you start, you need:
 
 - **Node.js** (v18+)
-- **pnpm** (v8+) — `npm install -g pnpm`
+- **pnpm** (v8+) -- `npm install -g pnpm`
 - **Root Communications** v0.9.86 installed
-- **Uprooted** installed — run `powershell -File Install-Uprooted.ps1`
+- **Uprooted** installed -- run `powershell -File Install-Uprooted.ps1`
+
+For full dev environment setup instructions (including .NET SDK for the hook and Tauri for the installer), see [BUILD.md](../BUILD.md).
 
 Verify your Uprooted installation is working by launching Root and checking for the "UPROOTED" section in Root's settings sidebar.
+
+### What You Should Know
+
+This guide assumes you are comfortable with TypeScript and basic DOM manipulation. You do not need to know anything about Root's internals -- that is what Uprooted abstracts for you. If you want to understand the internals anyway, read [Root Environment](ROOT_ENVIRONMENT.md) and the [Framework Guide](../FRAMEWORK_GUIDE.md).
 
 ---
 
@@ -69,8 +84,11 @@ src/
 │   └── pluginLoader.ts # Plugin lifecycle manager
 └── plugins/
     ├── themes/        # Built-in theme plugin (good reference)
+    ├── sentry-blocker/# Built-in privacy plugin (good reference)
     └── settings-panel/# Built-in settings panel
 ```
+
+For a detailed breakdown of these files and their TypeScript types, see [TypeScript Reference](../TYPESCRIPT_REFERENCE.md).
 
 ---
 
@@ -139,6 +157,8 @@ Then reinstall Uprooted and restart Root. You should see a green badge in the bo
 3. Since there's no explicit setting, it defaults to enabled
 4. Your `start()` function runs, creating the badge and logging via the native bridge
 
+The `UprootedPlugin` interface (defined in `src/types/plugin.ts:29`) requires `name`, `description`, `version`, and `authors`. The `start()` and `stop()` lifecycle hooks are optional but recommended. See [API Reference -- UprootedPlugin Interface](API_REFERENCE.md#uprootedplugin-interface) for the full contract.
+
 ---
 
 ## Tutorial 2: CSS Injection
@@ -147,7 +167,7 @@ Add custom styles to Root's UI using the `css` field or the CSS API.
 
 ### Using the `css` Field (Static)
 
-The simplest approach — declare CSS as a string on your plugin object:
+The simplest approach -- declare CSS as a string on your plugin object:
 
 ```typescript
 import type { UprootedPlugin } from "../../types/plugin.js";
@@ -166,7 +186,7 @@ export default {
 } satisfies UprootedPlugin;
 ```
 
-The loader automatically injects this CSS when the plugin starts and removes it when the plugin stops. The `<style>` element gets the ID `uprooted-css-plugin-round-avatars`.
+The loader automatically injects this CSS when the plugin starts and removes it when the plugin stops. The `<style>` element gets the ID `uprooted-css-plugin-round-avatars`. This injection is handled by `injectCss()` in `src/api/css.ts:14`.
 
 ### Using the CSS API (Dynamic)
 
@@ -199,6 +219,8 @@ export default {
 } satisfies UprootedPlugin;
 ```
 
+See [API Reference -- CSS API](API_REFERENCE.md#css-api) for the full `injectCss` / `removeCss` / `removeAllCss` documentation.
+
 ### CSS Variable Overrides
 
 The most powerful theming approach uses Root's CSS variable system:
@@ -217,13 +239,13 @@ removeCssVariable("--rootsdk-brand-primary");
 removeCssVariable("--rootsdk-background-primary");
 ```
 
-See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#css-variable-system) for the full list of 25 CSS variables.
+See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#css-variable-system) for the full list of 25 CSS variables and how Root's two-layer variable system works.
 
 ---
 
 ## Tutorial 3: Bridge Interception
 
-Intercept communication between Root's C# host and WebRTC layer.
+Intercept communication between Root's C# host and WebRTC layer. This is the most powerful feature of Uprooted -- it lets you observe, modify, or cancel any bridge call.
 
 ### Before Handler (observe and optionally cancel)
 
@@ -286,7 +308,7 @@ patches: [
 ],
 ```
 
-See [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) for all 71 bridge methods you can intercept.
+The patch system is implemented in `src/core/pluginLoader.ts:118` (`installPatch`). The bridge proxying itself lives in `src/api/bridge.ts:21` (`createBridgeProxy`). For more on the `Patch` interface, see [API Reference -- Patch Interface](API_REFERENCE.md#patch-interface). For the complete list of all 71 bridge methods, see [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md).
 
 ---
 
@@ -363,10 +385,164 @@ export default {
 ### How Settings Work
 
 1. You define a `settings` object with field schemas (type, default, description)
-2. The Uprooted settings panel renders appropriate UI controls
+2. The Uprooted settings panel renders appropriate UI controls (see `src/plugins/settings-panel/components.ts`)
 3. Values are stored in the settings JSON under `plugins.{name}.config`
 4. In `start()`, read from `window.__UPROOTED_SETTINGS__?.plugins?.[name]?.config`
 5. Always provide fallback defaults in case the setting isn't configured yet
+
+The `SettingsDefinition` type is defined in `src/types/plugin.ts:19`. See [API Reference -- Settings Definition](API_REFERENCE.md#settings-definition) for the full type reference and all four field types.
+
+---
+
+## Tutorial 5: DOM Injection
+
+Inject custom HTML elements into Root's UI. This tutorial walks through the full pattern: waiting for a target element, injecting content, and re-injecting after React re-renders.
+
+### Understanding the Problem
+
+Root's call UI is rendered inside DotNetBrowser's Chromium. The DOM is available to you, but there are two challenges:
+
+1. **Timing** -- Elements may not exist when your plugin starts. Root's UI loads asynchronously, so you need to wait for elements to appear.
+2. **React re-renders** -- Parts of Root's UI are React apps that can destroy and recreate DOM nodes at any time, removing your injected content.
+
+Uprooted's DOM API (`src/api/dom.ts`) provides `waitForElement` and `observe` to handle both cases.
+
+### Step 1: Wait for a Target Element
+
+Use `waitForElement` to pause until a DOM element matching your CSS selector appears:
+
+```typescript
+import { waitForElement } from "../../api/dom.js";
+
+// Wait up to 15 seconds for a title element to appear
+const title = await waitForElement<HTMLElement>("h1, [class*='title']", 15000);
+```
+
+`waitForElement` (defined at `src/api/dom.ts:9`) checks the DOM immediately, and if the element is not found, sets up a `MutationObserver` on `document.body` to watch for it. It resolves as soon as a matching element appears, or rejects with an error after the timeout.
+
+### Step 2: Inject Your Content
+
+Create a DOM element and insert it relative to the target:
+
+```typescript
+function createBadge(): HTMLDivElement {
+  const badge = document.createElement("div");
+  badge.id = "my-injected-badge";
+  badge.textContent = "Modded";
+  badge.style.cssText =
+    "display: inline-flex; align-items: center; padding: 2px 8px; " +
+    "background: #2D7D46; color: #fff; font: 10px sans-serif; " +
+    "border-radius: 4px; margin-left: 8px;";
+  return badge;
+}
+
+// Insert the badge next to the title
+title.parentElement?.appendChild(createBadge());
+```
+
+Always give your injected elements a unique `id` so you can find and clean them up later.
+
+### Step 3: Watch for Re-renders
+
+Use `observe` (defined at `src/api/dom.ts:44`) to detect when React removes your element and re-inject it:
+
+```typescript
+import { observe } from "../../api/dom.js";
+
+let disconnect: (() => void) | null = null;
+
+// Watch the parent for child list changes
+if (title.parentElement) {
+  disconnect = observe(title.parentElement, () => {
+    if (!document.getElementById("my-injected-badge")) {
+      // Badge was removed by a React re-render, put it back
+      title.parentElement?.appendChild(createBadge());
+    }
+  });
+}
+```
+
+`observe` returns a disconnect function. Store it and call it in `stop()` to clean up the observer.
+
+### Step 4: Clean Up in stop()
+
+Always remove your injected content and disconnect observers when the plugin stops:
+
+```typescript
+stop() {
+  disconnect?.();
+  disconnect = null;
+  document.getElementById("my-injected-badge")?.remove();
+}
+```
+
+### Complete Working Example
+
+Putting it all together:
+
+```typescript
+import type { UprootedPlugin } from "../../types/plugin.js";
+import { waitForElement, observe } from "../../api/dom.js";
+import { nativeLog } from "../../api/native.js";
+
+let disconnect: (() => void) | null = null;
+
+function createStatusBar(): HTMLDivElement {
+  const bar = document.createElement("div");
+  bar.id = "status-bar-plugin";
+  bar.style.cssText =
+    "position: fixed; top: 0; left: 0; right: 0; z-index: 999999; " +
+    "height: 24px; display: flex; align-items: center; justify-content: center; " +
+    "background: #2D7D46; color: #fff; font: 11px monospace; pointer-events: none;";
+  bar.textContent = `Uprooted v${window.__UPROOTED_VERSION__ ?? "dev"} | ${new Date().toLocaleTimeString()}`;
+  return bar;
+}
+
+export default {
+  name: "status-bar",
+  description: "Injects a persistent status bar at the top of the page",
+  version: "0.1.0",
+  authors: [{ name: "YourName" }],
+
+  async start() {
+    try {
+      // Wait for body to be populated (should be nearly instant)
+      await waitForElement("body > *", 5000);
+
+      const inject = () => {
+        if (document.getElementById("status-bar-plugin")) return;
+        document.body.prepend(createStatusBar());
+      };
+
+      inject();
+
+      // Re-inject if removed
+      disconnect = observe(document.body, () => {
+        if (!document.getElementById("status-bar-plugin")) {
+          nativeLog("Status bar removed, re-injecting");
+          inject();
+        }
+      });
+    } catch (err) {
+      nativeLog(`Status bar plugin failed: ${err}`);
+    }
+  },
+
+  stop() {
+    disconnect?.();
+    disconnect = null;
+    document.getElementById("status-bar-plugin")?.remove();
+  },
+} satisfies UprootedPlugin;
+```
+
+### Tips for DOM Injection
+
+- **Use stable selectors.** Prefer data attributes, ARIA roles, and tag hierarchy over CSS class names, which can change between Root versions. See [Root Environment -- Obfuscated CSS Classes](ROOT_ENVIRONMENT.md#obfuscated-css-classes).
+- **Always set an `id` on injected elements** so you can locate them for re-injection checks and cleanup.
+- **Keep re-injection lightweight.** The `MutationObserver` callback fires frequently. Check for your element's existence before creating new nodes.
+- **Handle errors.** `waitForElement` can reject if the timeout expires. Wrap `async start()` in try/catch and log failures with `nativeLog`.
+- **Use `nextFrame()` for layout reads.** If you need to measure an element's position after injecting it, call `await nextFrame()` first to ensure the browser has painted. See [API Reference -- DOM API](API_REFERENCE.md#dom-api).
 
 ---
 
@@ -378,7 +554,7 @@ export default {
 pnpm build
 ```
 
-This runs esbuild to bundle everything into `dist/uprooted-preload.js`.
+This runs esbuild to bundle everything into `dist/uprooted-preload.js`. See [BUILD.md](../BUILD.md) for the full build system documentation.
 
 ### Install
 
@@ -392,7 +568,7 @@ This copies the built files to Root's installation directory.
 
 1. Launch Root Communications
 2. Join a voice channel (required for bridge objects to be available)
-3. Open Root's settings — look for the "UPROOTED" section in the sidebar
+3. Open Root's settings -- look for the "UPROOTED" section in the sidebar
 
 ### Debugging Without DevTools
 
@@ -405,6 +581,8 @@ Root does **not** expose Chrome DevTools, so you can't use the console or inspec
 import { nativeLog } from "../../api/native.js";
 nativeLog("Debug: reached checkpoint A");
 ```
+
+This function is defined in `src/api/native.ts:42`. The message is sent through `window.__webRtcToNative?.log()` and appears in Root's logs with the `[Uprooted]` prefix.
 
 **DOM Indicators:** Create visible elements to show state:
 ```typescript
@@ -420,14 +598,15 @@ debug.textContent += "Event received\n";
 
 **console.log:** Still works internally. If you ever get debugger access (external Chromium debugger), these logs will be there.
 
-See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more detail.
+See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more detail on debugging constraints.
 
 ---
 
 ## Next Steps
 
-- [API_REFERENCE.md](API_REFERENCE.md) — Complete API documentation for all interfaces and functions
-- [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) — All 71 bridge methods with type signatures
-- [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md) — Runtime constraints, CSS variables, and available APIs
-- [EXAMPLES.md](EXAMPLES.md) — Copy-paste example plugins covering common patterns
-- Study the built-in plugins at `src/plugins/themes/` and `src/plugins/settings-panel/` for real-world patterns
+- [API_REFERENCE.md](API_REFERENCE.md) -- Complete API documentation for all interfaces and functions
+- [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) -- All 71 bridge methods with type signatures
+- [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md) -- Runtime constraints, CSS variables, and available APIs
+- [EXAMPLES.md](EXAMPLES.md) -- Copy-paste example plugins covering common patterns
+- [Framework Guide](../FRAMEWORK_GUIDE.md) -- Authoritative reference for the full Uprooted system
+- Study the built-in plugins at `src/plugins/themes/` and `src/plugins/sentry-blocker/` for real-world patterns

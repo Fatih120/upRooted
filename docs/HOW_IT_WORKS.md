@@ -2,6 +2,9 @@
 
 A complete walkthrough of how we reverse-engineered Root Communications desktop app and built a client mod framework that injects custom UI into it at runtime. Every step, from opening the binary for the first time to seeing "UPROOTED" in the settings sidebar.
 
+> **Related docs:**
+> [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [CLR Profiler](CLR_PROFILER.md)
+
 ---
 
 ## Table of Contents
@@ -21,10 +24,11 @@ A complete walkthrough of how we reverse-engineered Root Communications desktop 
 13. [Walking the Visual Tree](#13-walking-the-visual-tree)
 14. [Injecting the Sidebar Section](#14-injecting-the-sidebar-section)
 15. [Building Content Pages](#15-building-content-pages)
-16. [The TypeScript Layer: Browser-Side Plugins](#16-the-typescript-layer-browser-side-plugins)
-17. [Bridge Proxies: Intercepting IPC](#17-bridge-proxies-intercepting-ipc)
-18. [Putting It All Together: The Install Flow](#18-putting-it-all-together-the-install-flow)
-19. [What Breaks and Why](#19-what-breaks-and-why)
+16. [Phase 3.5: The Theme Engine](#16-phase-35-the-theme-engine)
+17. [The TypeScript Layer: Browser-Side Plugins](#17-the-typescript-layer-browser-side-plugins)
+18. [Bridge Proxies: Intercepting IPC](#18-bridge-proxies-intercepting-ipc)
+19. [Putting It All Together: The Install Flow](#19-putting-it-all-together-the-install-flow)
+20. [What Breaks and Why](#20-what-breaks-and-why)
 
 ---
 
@@ -410,59 +414,11 @@ The key insight: the profiler can **modify IL (Intermediate Language) bytecode**
 
 ### Building the profiler
 
-We wrote `uprooted_profiler.dll` in C, implementing the `ICorProfilerCallback` COM interface. Here's what it does:
+We wrote `uprooted_profiler.dll` in C, implementing the `ICorProfilerCallback` COM interface. The profiler goes through a precise sequence: register via environment variables, guard against non-Root processes, wait for a suitable module with proper TypeRef metadata, create cross-module MemberRef tokens for `Assembly.LoadFrom` and `Assembly.CreateInstance`, then prepend 26 bytes of IL into the first available method body. That IL loads our managed DLL inside a try/catch wrapper so Root continues normally if anything fails.
 
-**Step 1: Registration**
+When the runtime JIT-compiles the targeted method, our injection runs first, loading `UprootedHook.dll` and creating an instance of `UprootedHook.Entry`. Root's original method body runs immediately after, completely unaware.
 
-The profiler is loaded via environment variables:
-
-```
-CORECLR_ENABLE_PROFILING=1
-CORECLR_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
-CORECLR_PROFILER_PATH=C:\...\uprooted_profiler.dll
-DOTNET_ReadyToRun=0
-```
-
-`DOTNET_ReadyToRun=0` is critical — it disables precompiled native images, forcing the runtime to JIT-compile all methods. Without this, our profiler never gets a chance to modify IL because the precompiled code is used directly.
-
-**Step 2: Process guard**
-
-In `Prof_Initialize`, we check the process name. If it's not `Root.exe`, we return `E_FAIL` and the profiler detaches. This prevents us from injecting into every .NET app on the system (the env vars are user-scoped).
-
-**Step 3: Find a target method**
-
-We can't inject into `System.Private.CoreLib` — its methods get called recursively during `Assembly.LoadFrom`, causing a stack overflow. Instead, we wait for a module that imports `System.Object` (proves it has proper metadata). Root's main assembly (`Root.dll`, single-file host) has no TypeRefs, so it's skipped automatically. The first suitable module is usually a library like `Sentry.dll` or `RootApp.*.dll`.
-
-**Step 4: Create metadata tokens**
-
-In the target module, we create cross-module references (MemberRefs) for:
-- `System.Reflection.Assembly.LoadFrom(string)` — to load our DLL
-- `System.Reflection.Assembly.CreateInstance(string)` — to instantiate our entry class
-- `System.Exception` — for the try/catch wrapper
-- User string tokens for the DLL path and type name `"UprootedHook.Entry"`
-
-**Step 5: Inject IL**
-
-We pick the first method in the target module that has a body (CodeRVA != 0, not abstract, not P/Invoke). We prepend 26 bytes of IL:
-
-```
-ldstr    <pathString>              // Push DLL path onto stack
-call     Assembly.LoadFrom         // Load UprootedHook.dll → Assembly
-ldstr    <typeString>              // Push "UprootedHook.Entry"
-callvirt Assembly.CreateInstance   // Instantiate → triggers ModuleInitializer
-pop                                // Discard return value
-leave.s  +3                       // Exit try block
-
-// Catch handler:
-pop                                // Pop exception off stack
-leave.s  +0                       // Exit catch (swallow error)
-```
-
-The injection is wrapped in a try/catch so that if our DLL fails to load, Root continues normally. We append the original method's IL after our injection, so the method still does what it was supposed to do.
-
-**Step 6: Replace the method body**
-
-We call `ICorProfilerInfo::SetILFunctionBody` with the new IL. When the runtime JIT-compiles this method, it compiles our injection first, which loads `UprootedHook.dll` and creates an instance of `UprootedHook.Entry`.
+For the full implementation -- environment variable setup, process guard logic, module selection criteria, metadata token creation, IL byte sequences, and the `SetILFunctionBody` call -- see [CLR Profiler Reference](CLR_PROFILER.md).
 
 ### The result
 
@@ -472,20 +428,15 @@ When Root.exe launches:
 3. Profiler injects IL into the first available method
 4. When that method is called, our managed DLL loads
 5. Our managed code starts a background thread
-6. Root continues loading normally — the user sees nothing
+6. Root continues loading normally -- the user sees nothing
 
 ---
 
 ## 11. Building the Managed Hook
 
-### Entry point
-
-`UprootedHook.dll` is a .NET 10 class library. It has two entry mechanisms:
+`UprootedHook.dll` is a .NET 10 class library with dual entry mechanisms:
 
 ```csharp
-// Entry.cs
-namespace UprootedHook;
-
 public class Entry
 {
     private static int _initialized = 0;
@@ -507,56 +458,33 @@ public class Entry
 
 `[ModuleInitializer]` runs when the assembly is loaded (before `CreateInstance` returns). The constructor is a fallback in case `ModuleInitializer` doesn't fire. `Interlocked.CompareExchange` ensures we only initialize once, even if both paths trigger.
 
-### Process guard
+The entry point performs a process name guard (bail out if we're not in Root.exe), then spawns a background thread named `"Uprooted-Injector"`. We must never block Root's startup -- that would cause a visible freeze or crash. The background thread runs through the phased startup sequence described in the next section.
 
-```csharp
-// StartupHook.cs
-public static void Initialize()
-{
-    var proc = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
-    if (!proc.Equals("Root", StringComparison.OrdinalIgnoreCase))
-        return;  // Not Root.exe, bail out
-
-    var thread = new Thread(InjectorLoop) { Name = "Uprooted-Injector", IsBackground = true };
-    thread.Start();
-}
-```
-
-We spawn a background thread immediately. We must never block Root's startup — that would cause a visible freeze or crash.
+For the complete process guard implementation and thread management details, see [Hook Reference](HOOK_REFERENCE.md).
 
 ---
 
 ## 12. Waiting for Avalonia to Load
 
-Root's Avalonia UI doesn't exist yet when our code runs. The profiler injects us very early — before Avalonia assemblies are even loaded. We need to wait through 4 phases:
+Root's Avalonia UI doesn't exist yet when our code runs. The profiler injects us very early -- before Avalonia assemblies are even loaded. We need to wait through multiple phases, each with its own timeout and failure mode.
+
+### Phase 0: Verify HTML patches
+
+Before we even think about Avalonia, the hook runs a filesystem-only check. `HtmlPatchVerifier` scans all target HTML files in Root's profile directory to confirm our `<script>` and `<link>` tags are still present. Root's auto-updater can silently overwrite these files, stripping our injections. If any patches are missing, Phase 0 re-applies them in place.
+
+The verifier then starts a `FileSystemWatcher` on the profile directory, held alive by a static reference for the lifetime of the process. If Root overwrites an HTML file while the app is running, the watcher detects it and re-patches within seconds -- a self-healing mechanism that prevents the TypeScript layer from silently disappearing.
+
+Phase 0 is non-fatal: if it fails (missing directories, permission errors), the hook logs the error and continues into the Avalonia phases. The native sidebar will still work; only the browser-side plugins would be affected.
 
 ### Phase 1: Wait for Avalonia assemblies (30s timeout)
 
-```csharp
-// Poll every 250ms for Avalonia.Controls assembly
-while (elapsed < 30000)
-{
-    var assemblies = AppDomain.CurrentDomain.GetAssemblies();
-    foreach (var asm in assemblies)
-    {
-        if (asm.GetName().Name == "Avalonia.Controls")
-            goto found;
-    }
-    Thread.Sleep(250);
-    elapsed += 250;
-}
-```
+Poll every 250ms for the `Avalonia.Controls` assembly to appear in the AppDomain. Single-file .NET 10 apps load assemblies lazily from memory, so we have to wait for Root to actually reference Avalonia types.
 
 ### Phase 2: Resolve all Avalonia types via reflection
 
-This is the critical step. Root.exe is a **single-file .NET 10 app**, which means:
-- `Type.GetType("Avalonia.Controls.TextBlock, Avalonia.Controls")` **does not work**
-- Assembly-qualified names can't be resolved because assemblies aren't on disk
-
-We solve this by scanning all loaded assemblies:
+This is the critical step. Because Root is a single-file app, `Type.GetType()` with assembly-qualified names does not work -- assemblies aren't on disk. We solve this by scanning all loaded assemblies:
 
 ```csharp
-// AvaloniaReflection.cs (simplified)
 var avaloniaTypes = new Dictionary<string, Type>();
 
 foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
@@ -572,164 +500,47 @@ foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
 Type textBlockType = avaloniaTypes["Avalonia.Controls.TextBlock"];
 ```
 
-We resolve and cache ~80 types, their properties, and their methods. All Avalonia control creation for the rest of the hook goes through this reflection cache. Direct `typeof()` is never used for Avalonia types.
+This gives us ~80 cached types, their properties, and their methods. All Avalonia control creation for the rest of the hook goes through this reflection cache. Direct `typeof()` is never used for Avalonia types.
 
-Key gotcha: **`DispatcherPriority` is a struct, not an enum** in Avalonia 11+. We handle this with a fallback chain:
-
-```csharp
-// Try static property .Normal, then static field, then Enum.Parse, then Activator.CreateInstance
-object? priority = null;
-priority ??= priorityType.GetProperty("Normal", Static)?.GetValue(null);
-priority ??= priorityType.GetField("Normal", Static)?.GetValue(null);
-// ... fallbacks
-```
+Key gotcha: `DispatcherPriority` is a struct, not an enum, in Avalonia 11+. We handle this with a fallback chain trying static properties, static fields, `Enum.Parse`, and `Activator.CreateInstance` in sequence.
 
 ### Phase 3: Wait for Application.Current (30s timeout)
 
-Avalonia's `Application.Current` is set after the app instance is created. We poll:
-
-```csharp
-var appCurrentProp = applicationType.GetProperty("Current", Static);
-while (appCurrentProp.GetValue(null) == null && elapsed < 30000)
-{
-    Thread.Sleep(500);
-    elapsed += 500;
-}
-```
+Avalonia's `Application.Current` is set after the app instance is created. We poll until it becomes non-null.
 
 ### Phase 4: Wait for MainWindow (60s timeout)
 
-The main window is created after `Application.Current`. We navigate through the application lifetime:
+The main window is created after `Application.Current`. We navigate through `Application.Current` -> `ApplicationLifetime` -> `MainWindow` via reflection, polling until the window reference materializes.
 
-```csharp
-// Application.Current → ApplicationLifetime → MainWindow
-var app = appCurrentProp.GetValue(null);
-var lifetime = app.GetType().GetProperty("ApplicationLifetime")?.GetValue(app);
-var mainWindow = lifetime?.GetType().GetProperty("MainWindow")?.GetValue(lifetime);
+Once we have the `MainWindow`, we start the sidebar monitoring timer and proceed to Phase 3.5 (theme engine initialization).
 
-while (mainWindow == null && elapsed < 60000)
-{
-    Thread.Sleep(500);
-    // re-check...
-}
-```
-
-Once we have the `MainWindow`, we're ready to start monitoring.
+For the full phase implementation with code, timeouts, and error handling, see [Hook Reference](HOOK_REFERENCE.md).
 
 ---
 
 ## 13. Walking the Visual Tree
 
-### The problem
+Root's settings page has no stable selectors -- no element IDs, no CSS classes, no automation IDs. We can't just call `FindControl("settingsSidebar")`. We have to discover the layout by its **structure**.
 
-Root's settings page has no stable selectors — no element IDs, no CSS classes, no automation IDs. We can't just call `FindControl("settingsSidebar")`. We have to discover the layout by its **structure**.
+`VisualTreeWalker.FindSettingsLayout()` runs a 6-step algorithm: depth-first search for a `TextBlock` with text `"APP SETTINGS"`, walk up to find a `StackPanel` with >= 8 children (the nav container), walk up again to find a `Grid` with >= 2 column definitions (the layout grid), identify the content area in the adjacent column, locate the `ListBox` inside the nav container, and find the back button by searching for a `TextBlock` containing `"<"`.
 
-### The algorithm
+The result is a `SettingsLayout` object with references to the nav container, content panel, ListBox, back button, and layout grid -- everything we need to inject our own section.
 
-`VisualTreeWalker.FindSettingsLayout()` discovers the settings page in 6 steps:
-
-**Step 1**: Depth-first search the entire visual tree for a `TextBlock` whose `Text` property equals `"APP SETTINGS"`.
-
-```csharp
-foreach (var node in DescendantsDepthFirst(mainWindow))
-{
-    if (node.GetType() == textBlockType)
-    {
-        var text = textProperty.GetValue(node) as string;
-        if (text == "APP SETTINGS")
-        {
-            anchor = node;
-            break;
-        }
-    }
-}
-```
-
-**Step 2**: Walk UP from the `"APP SETTINGS"` text to find a `StackPanel` with >= 8 children. That's the nav container (the sidebar list of settings categories).
-
-**Step 3**: Walk UP from the nav container to find a `Grid` with >= 2 column definitions. That's the layout grid (sidebar on the left, content on the right).
-
-**Step 4**: Identify the content area — the Grid child in the same row but a different (higher) column index as the nav container.
-
-**Step 5**: Find the `ListBox` inside the nav container (Root uses a ListBox for the settings navigation items).
-
-**Step 6**: Find the back button in Row 0 — search for a TextBlock containing `"<"`, then walk up to its nearest clickable ancestor.
-
-The result is a `SettingsLayout` object with references to the nav container, content panel, ListBox, back button, and layout grid.
+For the complete traversal algorithm, column detection logic, and the `SettingsLayout` data structure, see [Hook Reference](HOOK_REFERENCE.md).
 
 ---
 
 ## 14. Injecting the Sidebar Section
 
-### The monitoring loop
+`SidebarInjector` uses a `Timer` that fires every 200ms. Each tick dispatches to the UI thread and performs a lightweight alive check -- search for the `"APP SETTINGS"` TextBlock. If found and we haven't injected yet, proceed. If not found (settings page closed), clean up.
 
-`SidebarInjector` uses a `Timer` that fires every 200ms. Each tick dispatches to the UI thread:
+When the settings page opens, we inject four things: an `"UPROOTED"` section header matching Root's `"APP SETTINGS"` style, three clickable nav items ("Uprooted", "Plugins", "Themes") with hover and active states, a version text inside Root's existing grey version box, and re-ordering of Root's elements so our section sits between the settings items and the version/sign-out controls.
 
-```csharp
-_timer = new Timer(_ =>
-{
-    RunOnUIThread(() => CheckAndInject());
-}, null, 0, 200);
-```
+The most important pattern is the **overlay approach**: we never replace `ContentControl.Content` (that causes a UI freeze via `OnDetachedFromVisualTreeCore` deadlock). Instead, we add our content page as a sibling in the layout Grid with matching `Grid.Column`/`Grid.Row` and an opaque background, covering Root's content via z-order. When the user clicks a Root sidebar item, we remove our overlay.
 
-`CheckAndInject` does a lightweight "alive check" — search for `"APP SETTINGS"` TextBlock. If found and we haven't injected yet, proceed. If not found (settings page closed), clean up.
+Cleanup is equally critical. The back button gets a `PointerPressed` handler that calls `CleanupInjection()` before Root's handler fires. Everything we inject is tagged with `Control.Tag = "uprooted-injected"` so we can find and remove our own controls without touching Root's.
 
-### What gets injected
-
-When the settings page opens:
-
-**1. Section header**
-
-We create an `"UPROOTED"` text matching Root's `"APP SETTINGS"` style:
-- FontSize 12, FontWeight 500 (Medium), color `#66f2f2f2`, margin matching Root's header
-
-**2. Navigation items**
-
-Three clickable items: "Uprooted", "Plugins", "Themes". Each item is:
-
-```
-Border (highlight, CornerRadius=12, transparent background)
-  └── StackPanel (horizontal)
-        └── TextBlock ("Uprooted", FontSize=14, color #f2f2f2)
-```
-
-With event handlers:
-- `PointerEntered` → set highlight background to `#0Dffffff` (subtle hover)
-- `PointerExited` → set highlight background to transparent
-- `PointerPressed` → show content page, update active highlight
-
-**3. Version text**
-
-Inside Root's existing grey version box, we insert an `"Uprooted {version}"` TextBlock at index 0, using Root's own styling (FontSize 10, color `#66f2f2f2`).
-
-**4. Re-ordering**
-
-We temporarily remove Root's version box and sign-out button from the nav container, add our section after Root's items, then re-add the version box and sign-out at the bottom. This keeps our section visually grouped.
-
-### The overlay pattern (freeze prevention)
-
-We do NOT replace Root's content panel content. Early attempts to set `ContentControl.Content` caused the UI to freeze — Root's `OnDetachedFromVisualTreeCore` walks the modified tree and deadlocks.
-
-Instead, we add our content page as **a sibling in the layout Grid**:
-- Set `Grid.Column` and `Grid.Row` to match the content area's position
-- Give it an opaque background (`#0D1521`) so it covers Root's content via z-order
-- When the user clicks a Root sidebar item, we remove our overlay
-
-### Back button hook
-
-Clicking Root's back button triggers navigation teardown that walks the visual tree. If our injected controls are still in the tree during teardown, the app freezes. So we subscribe to `PointerPressed` on the back button and call `CleanupInjection()` **before** Root's handler fires.
-
-### Cleanup
-
-When the settings page closes (or back button is clicked):
-1. Unwrap ScrollViewer (if we added one)
-2. Remove all injected controls from nav container
-3. Re-add original version box and sign-out button
-4. Remove version text from grey box
-5. Remove active content page from Grid
-6. Null all state references
-
-Everything we inject is tagged (`Control.Tag = "uprooted-injected"`) so we can find and remove our own controls without touching Root's.
+For the injection sequence, event handler wiring, cleanup logic, and the overlay pattern implementation, see [Hook Reference](HOOK_REFERENCE.md).
 
 ---
 
@@ -747,6 +558,8 @@ fontSizeProperty.SetValue(tb, 14.0);
 foregroundProperty.SetValue(tb, ParseBrush("#fff2f2f2"));
 ```
 
+It's verbose, but it works and it's the only option when you can't reference Avalonia assemblies at compile time.
+
 ### What the pages look like
 
 **Uprooted page**: Framework info card with version, description, and status indicators. Matches Root's card styling exactly (background `#0f1923`, corner radius 12, border `#19ffffff` thickness 0.5, inner padding 24px).
@@ -757,11 +570,35 @@ foregroundProperty.SetValue(tb, ParseBrush("#fff2f2f2"));
 
 All pages are wrapped in a `ScrollViewer` and use the same spacing and typography as Root's native settings pages. The goal is that a user can't tell where Root's UI ends and ours begins.
 
+For the page builder code and Root style matching details, see [Hook Reference](HOOK_REFERENCE.md).
+
 ---
 
-## 16. The TypeScript Layer: Browser-Side Plugins
+## 16. Phase 3.5: The Theme Engine
 
-### A second injection layer
+### Why CSS wasn't enough
+
+The TypeScript layer can retheme Root's web UI by overriding `--rootsdk-*` CSS variables (see [Section 8](#8-understanding-roots-theme-system)). But Root's desktop app has native Avalonia controls that CSS can't reach: the title bar, the sidebar navigation, window chrome, and various overlay panels. A CSS-only approach left these elements stuck in Root's default dark blue, breaking the visual coherence of any custom theme.
+
+We needed to theme the native Avalonia layer from C# at runtime.
+
+### The approach: resource dictionary injection
+
+The discovery from Section 8 -- that Root's AXAML themes contain no color brush resources and instead use hardcoded hex colors in code -- meant we couldn't just swap a resource dictionary and call it done. The theme engine takes a two-pronged approach:
+
+1. **Direct resource override**: Root's `Application.Styles[0].Resources` contains the active `SimpleTheme` resources (`ThemeAccentColor`, `ThemeAccentBrush`, etc.). The theme engine saves the original values, then writes replacement colors directly into this dictionary. These resources aren't overridden by `MergedDictionaries`, so direct writes are the only way.
+
+2. **Injected ResourceDictionary**: For standard Fluent theme keys that Root doesn't override, the engine creates a new `ResourceDictionary` and adds it to `Application.Resources.MergedDictionaries`. This covers controls styled by Avalonia's built-in theme rather than Root's custom resources.
+
+3. **Title bar**: On Windows 11, the engine calls `DwmSetWindowAttribute(DWMWA_CAPTION_COLOR)` via P/Invoke to match the title bar to the active theme's background color.
+
+The engine maintains a persistent map from any theme replacement color back to Root's original, so switching themes or reverting doesn't lose track of what the original colors were -- even after multiple theme changes.
+
+For the full `ThemeEngine` implementation, resource key lists, color mapping logic, and revert behavior, see [Hook Reference](HOOK_REFERENCE.md).
+
+---
+
+## 17. The TypeScript Layer: Browser-Side Plugins
 
 The C# hook handles native Avalonia UI. But Root also has an entire web-based UI running in the embedded Chromium. For that, we have a TypeScript injection layer.
 
@@ -784,20 +621,13 @@ The `patcher.ts` script (run via `pnpm install-root`) modifies Root's profile HT
 </head>
 ```
 
-Target files:
-- `WebRtcBundle/index.html` (voice/video)
-- `RootApps/*/index.html` (all 7 sub-apps)
+Target files include `WebRtcBundle/index.html` (voice/video) and all 7 sub-app `RootApps/*/index.html` files. The `<!-- uprooted -->` comment is our marker for detection and cleanup.
 
-The `<!-- uprooted -->` comment is our marker for detection and cleanup.
+Phase 0 of the hook (see [Section 12](#12-waiting-for-avalonia-to-load)) ensures these patches survive Root's auto-updater.
 
 ### The preload script
 
-`preload.ts` runs before Root's own JavaScript bundles. It:
-
-1. Reads settings from `window.__UPROOTED_SETTINGS__` (inlined by the patcher)
-2. Installs bridge proxies on `window.__nativeToWebRtc` and `window.__webRtcToNative`
-3. Creates a `PluginLoader` and registers built-in plugins
-4. Starts all enabled plugins
+`preload.ts` runs before Root's own JavaScript bundles. It reads settings from `window.__UPROOTED_SETTINGS__` (inlined by the patcher), installs bridge proxies, creates a `PluginLoader`, registers built-in plugins, and starts all enabled plugins.
 
 ### The plugin system
 
@@ -818,50 +648,21 @@ interface UprootedPlugin {
 }
 ```
 
-Built-in plugins:
-- **themes**: Overrides `--rootsdk-*` CSS variables to retheme the entire web UI
-- **settings-panel**: Injects an UPROOTED section into the web-rendered settings (DOM manipulation)
+Built-in plugins include **themes** (CSS variable overrides) and **settings-panel** (DOM-based settings injection in the web UI).
 
 ### Settings persistence
 
-Root runs Chromium with `--incognito`, wiping `localStorage` on every launch. We persist settings to a JSON file and inline them into the HTML:
+Root runs Chromium with `--incognito`, wiping `localStorage` on every launch. We persist settings to a JSON file at `%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-settings.json` and inline them into the HTML at patch time.
 
-```
-%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-settings.json
-```
+For the full TypeScript architecture, plugin API, preload sequence, and settings system, see [TypeScript Reference](TYPESCRIPT_REFERENCE.md).
 
 ---
 
-## 17. Bridge Proxies: Intercepting IPC
+## 18. Bridge Proxies: Intercepting IPC
 
 ### The mechanism
 
-Root assigns bridge objects to `window.__nativeToWebRtc` and `window.__webRtcToNative`. We wrap them with ES6 Proxies before Root's code can use them:
-
-```typescript
-function createBridgeProxy<T extends object>(target: T, name: string): T {
-  return new Proxy(target, {
-    get(obj, prop, receiver) {
-      const value = Reflect.get(obj, prop, receiver);
-      if (typeof value !== "function") return value;
-
-      return function (...args: unknown[]) {
-        const event: BridgeEvent = {
-          method: String(prop),
-          args,
-          cancelled: false,
-          returnValue: undefined,
-        };
-
-        pluginLoader.emit(`bridge:${name}`, event);
-
-        if (event.cancelled) return event.returnValue;
-        return value.apply(obj, event.args);
-      };
-    },
-  });
-}
-```
+Root assigns bridge objects to `window.__nativeToWebRtc` and `window.__webRtcToNative`. We wrap them with ES6 Proxies before Root's code can use them. The proxy intercepts every method call, emits a `BridgeEvent` through the plugin loader, and lets plugins inspect, modify, or cancel the call before it reaches Root.
 
 ### Deferred installation
 
@@ -890,7 +691,6 @@ patches: [{
   method: "setTheme",
   before(args) {
     console.log("[Uprooted] Theme changing to:", args[0]);
-    // Return false to cancel the call entirely
   },
 }]
 
@@ -905,109 +705,86 @@ patches: [{
 }]
 ```
 
+For the full proxy implementation and plugin patch API, see [TypeScript Reference](TYPESCRIPT_REFERENCE.md).
+
 ---
 
-## 18. Putting It All Together: The Install Flow
+## 19. Putting It All Together: The Install Flow
 
-### What `Install-Uprooted.ps1` does
+### What the installer does
 
-```powershell
-# 1. Build the TypeScript bundle
-pnpm build
-# Output: dist/uprooted-preload.js + dist/uprooted.css
+The install process has three layers: build the TypeScript bundle (`pnpm build`), build the C# hook (`dotnet build hook/ -c Release`), deploy files and set environment variables, then patch HTML files. Environment variables are user-scoped and persist across reboots. `DOTNET_ReadyToRun=0` is critical -- it forces JIT compilation so our profiler gets a chance to modify IL.
 
-# 2. Build the C# hook
-dotnet build hook/ -c Release
-# Output: hook/bin/Release/net10.0/UprootedHook.dll
-
-# 3. Copy files to install directory
-$installDir = "$env:LOCALAPPDATA\Root\uprooted"
-mkdir $installDir -Force
-Copy-Item tools\uprooted_profiler.dll $installDir\
-Copy-Item hook\bin\Release\net10.0\UprootedHook.dll $installDir\
-
-# 4. Set environment variables (user-scoped, persist across reboots)
-[Environment]::SetEnvironmentVariable("CORECLR_ENABLE_PROFILING", "1", "User")
-[Environment]::SetEnvironmentVariable("CORECLR_PROFILER", "{D1A6F5A0-1234-4567-89AB-CDEF01234567}", "User")
-[Environment]::SetEnvironmentVariable("CORECLR_PROFILER_PATH", "$installDir\uprooted_profiler.dll", "User")
-[Environment]::SetEnvironmentVariable("DOTNET_ReadyToRun", "0", "User")
-
-# 5. Patch HTML files (inject <script> and <link> tags)
-pnpm install-root
-```
+For installer implementation details (Tauri/Rust detection, file deployment, environment variable management), see [Installer Reference](INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](INSTALLATION.md).
 
 ### The boot sequence
 
 After installation, every time Root.exe launches:
 
 ```
-1. Windows starts Root.exe
-2. .NET runtime sees CORECLR_ENABLE_PROFILING=1
-3. Runtime loads uprooted_profiler.dll as CLR profiler
-4. Profiler checks process name → "Root" ✓
-5. Profiler waits for a suitable module to load
-6. Profiler injects IL into first available method
-7. Injected IL calls Assembly.LoadFrom("UprootedHook.dll")
-8. UprootedHook.dll loads → Entry.ModuleInit() fires
-9. StartupHook.Initialize() → background thread starts
-10. Thread waits for Avalonia assemblies (Phase 1)
-11. Thread resolves all types via reflection (Phase 2)
-12. Thread waits for Application.Current (Phase 3)
-13. Thread waits for MainWindow (Phase 4)
-14. SidebarInjector.StartMonitoring() → 200ms timer begins
-15. Root finishes loading, user sees the app
+1.  Windows starts Root.exe
+2.  .NET runtime sees CORECLR_ENABLE_PROFILING=1
+3.  Runtime loads uprooted_profiler.dll as CLR profiler
+4.  Profiler checks process name -> "Root"
+5.  Profiler waits for a suitable module to load
+6.  Profiler injects IL into first available method
+7.  Injected IL calls Assembly.LoadFrom("UprootedHook.dll")
+8.  UprootedHook.dll loads -> Entry.ModuleInit() fires
+9.  StartupHook.Initialize() -> background thread starts
+10. Phase 0: HtmlPatchVerifier checks/repairs HTML patches + starts FileSystemWatcher
+11. Phase 1: Wait for Avalonia assemblies
+12. Phase 2: Resolve all types via reflection
+13. Phase 3: Wait for Application.Current
+14. Phase 3.5: Initialize theme engine, apply saved theme
+15. Phase 4: Wait for MainWindow
+16. SidebarInjector.StartMonitoring() -> 200ms timer begins
+17. Root finishes loading, user sees the app
 
      ... user opens Settings ...
 
-16. Timer tick finds "APP SETTINGS" TextBlock
-17. VisualTreeWalker discovers layout structure
-18. SidebarInjector injects UPROOTED section
-19. User sees "Uprooted", "Plugins", "Themes" in sidebar
+18. Timer tick finds "APP SETTINGS" TextBlock
+19. VisualTreeWalker discovers layout structure
+20. SidebarInjector injects UPROOTED section
+21. User sees "Uprooted", "Plugins", "Themes" in sidebar
 
      ... meanwhile, in Chromium ...
 
-20. DotNetBrowser loads WebRtcBundle/index.html
-21. <script> tag loads uprooted-preload.js before Root's bundles
-22. Bridge proxies installed on window.__nativeToWebRtc
-23. Theme plugin starts, overrides CSS variables
-24. Web UI is themed + bridge calls are interceptable
+22. DotNetBrowser loads WebRtcBundle/index.html
+23. <script> tag loads uprooted-preload.js before Root's bundles
+24. Bridge proxies installed on window.__nativeToWebRtc
+25. Theme plugin starts, overrides CSS variables
+26. Web UI is themed + bridge calls are interceptable
 ```
 
 ### Uninstall
 
-`Uninstall-Uprooted.ps1` reverses everything:
-1. Remove environment variables
-2. Restore HTML files from `.uprooted.bak` backups
-3. Delete installed DLLs from `%LOCALAPPDATA%\Root\uprooted\`
-4. Clean up settings file
-
-Root.exe is never modified. Uninstall leaves zero traces.
+Uninstall reverses everything: remove environment variables, restore HTML files from `.uprooted.bak` backups, delete installed DLLs, clean up settings. Root.exe is never modified. Uninstall leaves zero traces.
 
 ---
 
-## 19. What Breaks and Why
+## 20. What Breaks and Why
 
 ### Things that will break on Root updates
 
 | Change | Impact |
 |--------|--------|
-| Root renames "APP SETTINGS" text | Visual tree walker can't find anchor → no injection |
-| Root changes settings Grid layout | Content area detection fails → pages render in wrong position |
-| Root changes CSS variable names | Theme engine targets wrong variables → themes don't apply |
-| Root moves to AOT compilation | Profiler IL injection doesn't work → hook never loads |
-| Root moves HTML to different path | Patcher can't find files → TypeScript layer not injected |
-| Root adds HTML integrity checks | Patcher modifications detected → app refuses to load pages |
-| Root switches from DotNetBrowser | Bridge globals don't exist → proxy installation fails |
-| Root renames bridge globals | Proxy targets wrong property names → interception fails |
-| Root uses Object.freeze on bridges | Proxy can't wrap frozen objects → interception fails |
+| Root renames "APP SETTINGS" text | Visual tree walker can't find anchor -> no injection |
+| Root changes settings Grid layout | Content area detection fails -> pages render in wrong position |
+| Root changes CSS variable names | Theme engine targets wrong variables -> themes don't apply |
+| Root moves to AOT compilation | Profiler IL injection doesn't work -> hook never loads |
+| Root moves HTML to different path | Patcher can't find files -> TypeScript layer not injected |
+| Root adds HTML integrity checks | Patcher modifications detected -> app refuses to load pages |
+| Root switches from DotNetBrowser | Bridge globals don't exist -> proxy installation fails |
+| Root renames bridge globals | Proxy targets wrong property names -> interception fails |
+| Root uses Object.freeze on bridges | Proxy can't wrap frozen objects -> interception fails |
 
 ### Known limitations
 
-1. **C# settings can't load JSON** — `System.Text.Json` throws `MissingMethodException` in the profiler-injected context. Settings are hardcoded defaults.
-2. **Theme switching is display-only** — the Themes page shows themes but clicking them does nothing yet.
-3. **Plugin management is display-only** — can't toggle plugins from the native UI yet.
-4. **Environment variables are user-scoped** — the profiler env vars affect ALL .NET apps. We guard with a process name check, but the vars are still set globally.
-5. **No DevTools** — Root's Chromium has no remote debugging port. TypeScript errors show as a red banner; there's no console or inspector.
+1. **C# settings can't load JSON** -- `System.Text.Json` throws `MissingMethodException` in the profiler-injected context. Settings use INI-based persistence instead.
+2. **Theme switching is display-only** -- the Themes page shows themes but clicking them does nothing yet.
+3. **Plugin management is display-only** -- can't toggle plugins from the native UI yet.
+4. **Environment variables are user-scoped** -- the profiler env vars affect ALL .NET apps. We guard with a process name check, but the vars are still set globally.
+5. **No DevTools** -- Root's Chromium has no remote debugging port. TypeScript errors show as a red banner; there's no console or inspector.
 
 ---
 
@@ -1015,14 +792,15 @@ Root.exe is never modified. Uninstall leaves zero traces.
 
 We went from a closed 617 MB binary to a fully injected mod framework by:
 
-1. **Analyzing the binary** → discovered .NET 10 / Avalonia / DotNetBrowser
-2. **Finding the source map** → 802 original TypeScript files with full gRPC schemas
-3. **Reverse-engineering the protocol** → understood bridge IPC + gRPC-web + protobuf encoding
-4. **Scanning process memory** → extracted live authentication tokens
-5. **Trying binary patching** → worked but too fragile and destructive
-6. **Building a CLR profiler** → native C DLL that injects IL before any managed code
-7. **Writing a managed hook** → C# reflection-based Avalonia UI injection
-8. **Creating browser-side plugins** → TypeScript ES6 Proxy bridge interception + theme engine
-9. **Packaging it all** → PowerShell installer, env vars, HTML patching, clean uninstall
+1. **Analyzing the binary** -- discovered .NET 10 / Avalonia / DotNetBrowser
+2. **Finding the source map** -- 802 original TypeScript files with full gRPC schemas
+3. **Reverse-engineering the protocol** -- understood bridge IPC + gRPC-web + protobuf encoding
+4. **Scanning process memory** -- extracted live authentication tokens
+5. **Trying binary patching** -- worked but too fragile and destructive
+6. **Building a CLR profiler** -- native C DLL that injects IL before any managed code
+7. **Writing a managed hook** -- C# reflection-based Avalonia UI injection
+8. **Building a theme engine** -- native Avalonia resource dictionary injection + DWM title bar
+9. **Creating browser-side plugins** -- TypeScript ES6 Proxy bridge interception + CSS theme engine
+10. **Packaging it all** -- Tauri/Rust installer, env vars, HTML patching, clean uninstall
 
 Two independent injection layers. Zero binary modifications. Full cleanup on uninstall. The user sees "UPROOTED" in their settings sidebar, and Root doesn't know we're there.
