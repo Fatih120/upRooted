@@ -238,18 +238,23 @@ patch_html() {
 
     local script_tag="<script src=\"file://$js_path\"></script>"
     local css_tag="<link rel=\"stylesheet\" href=\"file://$css_path\">"
+    local marker_start="<!-- uprooted:start -->"
+    local marker_end="<!-- uprooted:end -->"
 
     for html in "${html_files[@]}"; do
-        if grep -q "uprooted-preload" "$html" 2>/dev/null; then
+        if grep -qE "(uprooted:start|uprooted-preload|<!-- uprooted -->)" "$html" 2>/dev/null; then
             log "Already patched: $(basename "$(dirname "$html")")/index.html"
             continue
         fi
 
         # Backup original
-        cp "$html" "${html}.uprooted-backup"
+        cp "$html" "${html}.uprooted.bak"
+
+        # Build injection block with markers
+        local injection="${marker_start}\n    ${css_tag}\n    ${script_tag}\n    ${marker_end}"
 
         # Insert before </head>
-        sed -i "s|</head>|${css_tag}\n${script_tag}\n</head>|" "$html"
+        sed -i "s|</head>|    ${injection}\n  </head>|" "$html"
         patched=$((patched + 1))
         log "Patched: $(basename "$(dirname "$html")")/index.html"
     done
