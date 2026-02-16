@@ -7,6 +7,9 @@ using Uprooted;
 /// </summary>
 internal class StartupHook
 {
+    // Static reference keeps FileSystemWatcher alive for process lifetime
+    private static HtmlPatchVerifier? s_patchVerifier;
+
     public static void Initialize()
     {
         // Process guard: only inject into Root.exe
@@ -32,6 +35,21 @@ internal class StartupHook
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
             Logger.Log("Startup", $".NET: {Environment.Version}");
+
+            // Phase 0: Verify HTML patches (filesystem only — no Avalonia needed)
+            Logger.Log("Startup", "Phase 0: Verifying HTML patches...");
+            try
+            {
+                var verifier = new HtmlPatchVerifier();
+                var repaired = verifier.VerifyAndRepair();
+                Logger.Log("Startup", $"Phase 0 OK: {repaired} file(s) repaired");
+                verifier.StartWatching();
+                s_patchVerifier = verifier; // prevent GC
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Startup", $"Phase 0 non-fatal error: {ex.Message}");
+            }
 
             // Phase 1: Wait for Avalonia assemblies to load
             Logger.Log("Startup", "Phase 1: Waiting for Avalonia assemblies...");
