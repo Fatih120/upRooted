@@ -17,4 +17,4 @@ This would require deep DOM manipulation of Root's Avalonia-hosted Chromium layo
 
 ---
 
-*To suggest a feature, open an issue on [GitHub](https://github.com/watchthelight/uprooted) or mention it in the Root server.*
+*To suggest a feature, open an issue on [GitHub](https://github.com/watchthelight/uprooted).*

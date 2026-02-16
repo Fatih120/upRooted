@@ -70,4 +70,4 @@ Use the [feature request template](https://github.com/watchthelight/uprooted/iss
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the GPL-3.0 license.
+By contributing, you agree that your contributions will be licensed under the [Uprooted License v1.0](LICENSE).
