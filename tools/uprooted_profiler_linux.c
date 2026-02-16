@@ -1,3 +1,5 @@
+#define _GNU_SOURCE  /* strcasestr */
+
 /*
  * Uprooted .NET CoreCLR Profiler - IL Injection (Linux)
  *
@@ -25,6 +27,7 @@
 #include <stdarg.h>
 #include <limits.h>
 #include <time.h>
+#include <strings.h>   /* strcasecmp */
 
 /* ---- Platform type mappings ---- */
 /* CoreCLR uses these types on all platforms. On Linux, we define them
@@ -995,7 +998,7 @@ static HRESULT Prof_Initialize(UprootedProfiler* self, void* pICorProfilerInfoUn
     PLog("=== Uprooted Profiler Initialize (Linux) ===");
     PLogFmt("PID: %d", getpid());
 
-    /* Process guard: only run in Root */
+    /* Process guard: only run in Root (including AppImage) */
     {
         char exePath[PATH_MAX];
         ssize_t len = readlink("/proc/self/exe", exePath, sizeof(exePath) - 1);
@@ -1008,11 +1011,35 @@ static HRESULT Prof_Initialize(UprootedProfiler* self, void* pICorProfilerInfoUn
         /* Extract basename */
         const char* lastSlash = strrchr(exePath, '/');
         const char* exeName = lastSlash ? lastSlash + 1 : exePath;
-        PLogFmt("Process: %s", exeName);
+        PLogFmt("Process: %s (full: %s)", exeName, exePath);
 
-        if (strcmp(exeName, "Root") != 0) {
-            PLogFmt("Not Root (got '%s'), detaching profiler", exeName);
-            return 0x80004005; /* E_FAIL = detach */
+        if (strcmp(exeName, "Root") != 0 && strcasecmp(exeName, "root") != 0) {
+            /* Not an exact match — check if we're inside an AppImage.
+             * AppImage runtime sets APPIMAGE env var to the .AppImage path.
+             * Also accept binary names like "Root-x86_64.AppImage". */
+            const char* appimage = getenv("APPIMAGE");
+            int isAppImage = 0;
+
+            if (appimage) {
+                /* Check if the APPIMAGE path contains "Root" (case-insensitive) */
+                const char* ai_base = strrchr(appimage, '/');
+                const char* ai_name = ai_base ? ai_base + 1 : appimage;
+                if (strcasestr(ai_name, "root") != NULL) {
+                    isAppImage = 1;
+                }
+            }
+
+            /* Also accept if the exe name starts with "Root" (e.g. Root-x86_64) */
+            if (!isAppImage && strncmp(exeName, "Root", 4) == 0) {
+                isAppImage = 1;
+            }
+
+            if (!isAppImage) {
+                PLogFmt("Not Root (got '%s'), detaching profiler", exeName);
+                return 0x80004005; /* E_FAIL = detach */
+            }
+            PLogFmt("AppImage detected (exe='%s', APPIMAGE='%s'), continuing",
+                    exeName, appimage ? appimage : "(unset)");
         }
     }
 

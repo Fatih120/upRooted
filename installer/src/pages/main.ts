@@ -107,7 +107,11 @@ async function runDetection(): Promise<void> {
 
   // Environment variables
   if (hs.env_ok) {
-    log("env vars: configured", "success");
+    if (isLinux && !hs.env_vars_active) {
+      log("env vars: configured (not active — restart session or use wrapper)", "warn");
+    } else {
+      log("env vars: configured", "success");
+    }
   } else {
     const missing: string[] = [];
     if (!hs.env_enable_profiling) missing.push("CORECLR_ENABLE_PROFILING");
@@ -143,6 +147,11 @@ function analyzeScenario(): void {
   const allGood = detection.root_found && hs.files_ok && hs.env_ok && detection.is_installed;
 
   if (allGood) {
+    if (isLinux && !hs.env_vars_active) {
+      log("status: installed (env vars not active)", "warn");
+      log("  log out and back in, or launch via 'Root (Uprooted)' in app menu", "warn");
+      return;
+    }
     log("status: fully installed", "success");
     log("  restart root to activate uprooted", "success");
     return;
@@ -209,9 +218,9 @@ function updateStatusDisplay(): void {
       <span class="status-value">${hs.files_ok ? "deployed" : "not deployed"}</span>
     </div>
     <div class="status-row">
-      ${statusDot(hs.env_ok ? "green" : (hs.env_enable_profiling ? "yellow" : "red"))}
+      ${statusDot(hs.env_ok ? (hs.env_vars_active ? "green" : "yellow") : (hs.env_enable_profiling ? "yellow" : "red"))}
       <span class="status-label">Env Vars</span>
-      <span class="status-value">${hs.env_ok ? "configured" : "not set"}</span>
+      <span class="status-value">${hs.env_ok ? (hs.env_vars_active ? "configured" : "configured (not active)") : "not set"}</span>
     </div>
     <div class="status-row">
       ${statusDot(detection.is_installed ? "green" : "red")}
@@ -444,7 +453,7 @@ function copyLogs(): void {
 // ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.1.96";
+  let version = "0.1.10";
   try {
     version = await getUprootedVersion();
   } catch {

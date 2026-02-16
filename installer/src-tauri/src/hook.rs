@@ -34,6 +34,9 @@ pub struct HookStatus {
     pub files_ok: bool,
     /// True if all env vars are set correctly
     pub env_ok: bool,
+    /// True if env vars are active in the current process environment (Linux only).
+    /// On Windows this always matches env_ok since registry changes apply immediately.
+    pub env_vars_active: bool,
 }
 
 // ==================== Platform-specific: install directory ====================
@@ -256,6 +259,29 @@ exec '{}' \"$@\"\n",
     // 3. .desktop file
     create_desktop_file(&wrapper)?;
 
+    // 4. ~/.profile fallback — for non-systemd sessions (X11 login shells, etc.)
+    let profile_path = PathBuf::from(&home).join(".profile");
+    let profile_content = fs::read_to_string(&profile_path).unwrap_or_default();
+    if !profile_content.contains("CORECLR_ENABLE_PROFILING") {
+        let block = format!(
+            "\n# Uprooted CLR profiler (remove these lines to disable)\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{}'\n\
+export CORECLR_PROFILER_PATH='{}'\n\
+export DOTNET_ReadyToRun=0\n",
+            PROFILER_GUID,
+            profiler_path.display()
+        );
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&profile_path)
+            .map_err(|e| format!("Failed to append to ~/.profile: {}", e))?;
+        use std::io::Write;
+        file.write_all(block.as_bytes())
+            .map_err(|e| format!("Failed to write to ~/.profile: {}", e))?;
+    }
+
     Ok(())
 }
 
@@ -277,6 +303,38 @@ pub fn remove_env_vars() -> Result<(), String> {
     let desktop_file = PathBuf::from(&home)
         .join(".local/share/applications/root-uprooted.desktop");
     let _ = fs::remove_file(&desktop_file);
+
+    // Remove env vars from ~/.profile if present
+    let profile_path = PathBuf::from(&home).join(".profile");
+    if let Ok(content) = fs::read_to_string(&profile_path) {
+        if content.contains("CORECLR_ENABLE_PROFILING") {
+            // Remove the Uprooted block (comment + 4 export lines + blank line before)
+            let cleaned: Vec<&str> = content
+                .lines()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .scan(false, |in_block, line| {
+                    if line.contains("# Uprooted CLR profiler") {
+                        *in_block = true;
+                        Some(None) // skip this line
+                    } else if *in_block && (line.starts_with("export CORECLR_")
+                        || line.starts_with("export DOTNET_")
+                        || line.is_empty())
+                    {
+                        if !line.starts_with("export") {
+                            *in_block = false;
+                        }
+                        Some(None) // skip
+                    } else {
+                        *in_block = false;
+                        Some(Some(line))
+                    }
+                })
+                .flatten()
+                .collect();
+            let _ = fs::write(&profile_path, cleaned.join("\n") + "\n");
+        }
+    }
 
     Ok(())
 }
@@ -328,6 +386,10 @@ fn check_env_vars() -> (bool, bool, bool, bool) {
             let dir = get_uprooted_dir();
             fs::read_to_string(dir.join("launch-root.sh"))
         })
+        .or_else(|_| {
+            // Fallback: check ~/.profile
+            fs::read_to_string(PathBuf::from(&home).join(".profile"))
+        })
         .unwrap_or_default();
 
     let enable = content.contains("CORECLR_ENABLE_PROFILING=1");
@@ -336,6 +398,34 @@ fn check_env_vars() -> (bool, bool, bool, bool) {
     let r2r = content.contains("DOTNET_ReadyToRun=0");
 
     (enable, guid, path, r2r)
+}
+
+// ==================== Common: runtime env var check ====================
+
+/// Check if CLR profiler env vars are active in the current process environment.
+/// On Windows, registry-based env vars propagate to new processes, so this mirrors
+/// the config check. On Linux, environment.d only takes effect after re-login,
+/// so this detects the gap between "configured" and "actually active".
+#[cfg(target_os = "windows")]
+fn check_env_vars_active() -> bool {
+    // On Windows, if the config (registry) says env vars are set, they'll be
+    // active for any newly launched process. Return true if configured.
+    let (enable, guid, path, _) = check_env_vars();
+    enable && guid && path
+}
+
+#[cfg(target_os = "linux")]
+fn check_env_vars_active() -> bool {
+    let enable = std::env::var("CORECLR_ENABLE_PROFILING")
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let guid = std::env::var("CORECLR_PROFILER")
+        .map(|v| v == PROFILER_GUID)
+        .unwrap_or(false);
+    let path = std::env::var("CORECLR_PROFILER_PATH")
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    enable && guid && path
 }
 
 // ==================== Common: file operations ====================
@@ -365,6 +455,8 @@ pub fn check_hook_status() -> HookStatus {
     let files_ok = profiler_dll && hook_dll && hook_deps && preload_js && theme_css;
     let env_ok = env_enable && env_guid && env_path;
 
+    let env_vars_active = check_env_vars_active();
+
     HookStatus {
         profiler_dll,
         hook_dll,
@@ -377,6 +469,7 @@ pub fn check_hook_status() -> HookStatus {
         env_ready_to_run: env_r2r,
         files_ok,
         env_ok,
+        env_vars_active,
     }
 }
 
