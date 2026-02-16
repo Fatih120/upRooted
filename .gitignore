@@ -50,3 +50,9 @@ hook/_out/
 
 # Windows junk
 nul
+
+# Research artifacts
+__pycache__/
+*.pyc
+LIVE_TOKEN.txt
+*.obj

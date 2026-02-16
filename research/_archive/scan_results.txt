@@ -1,0 +1,2453 @@
+====================================================================================================
+  ROOT.EXE AVALONIA BAML COLOR PATTERN SCANNER
+====================================================================================================
+
+  BACKUP size:  616,910,888 bytes
+  CURRENT size: 616,910,888 bytes
+  Computing SHA-256 hashes...
+  BACKUP SHA-256:  3735be024dcfa3c778a27961c5433f5b293c900c62cb667fd45c5c7ac71dc007
+  CURRENT SHA-256: 67f6d8c8028a53fa876010e75dc7f612b974a9ffe95a25031186720961022c56
+  >>> BINARIES DIFFER <<<
+
+====================================================================================================
+  SCANNING: BACKUP (original unpatched)
+  Path: C:/Users/bash/claude/Root_APP_BACKUP_20260212_172827/Root.exe
+  Size: 616,910,888 bytes (588.3 MB)
+====================================================================================================
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [1] KNOWN HEX COLOR STRINGS (UTF-8)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  FOUND: #FFF2F2F2 (text primary white) -- 5 occurrence(s)
+    Offset 0x1B5BE5F4 (459,007,476) -- matched: #FFF2F2F2
+    Context: ...$....0,0&.$....0,1&........$....#FFF2F2F2..$....0Q......$....#FFD5D5D5..$....1Q........$....0,0&.$....0,1&........$....#FFFFFFFF...
+    Offset 0x1B5F9153 (459,247,955) -- matched: #FFF2F2F2
+    Context: ...$....0,0&.$....0,1&........$....#FFF2F2F2..$....0Q......$....#FFD5D5D5..$....1Q........$....0,0&.$....0,1&........$....#FFFFFFFF...
+    Offset 0x1B6327DA (459,483,098) -- matched: #FFF2F2F2
+    Context: .........$....#FF84ACDD.......$....#FFF2F2F2.......$....#FFDADADA......."................@J..SnapsToDevicePixels$....True.............
+    Offset 0x1B69F5A7 (459,928,999) -- matched: #FFF2F2F2
+    Context: ............8.........8............#FFF2F2F2.......8.........8.........8....$....0.4Q......8....$....0.6Q......8....$....0.7Q.........
+    Offset 0x1B74FA88 (460,651,144) -- matched: #FFF2F2F2
+    Context: ............8.........8............#FFF2F2F2.......8.........8.........8....$....0.4Q......8....$....0.6Q......8....$....0.7Q.........
+
+  Retrying with UTF-16LE...
+  No known color strings found as UTF-16LE.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [2] BAML STREAM LOCATIONS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  [MSBAML] -- NOT FOUND
+
+  [BAML ASCII] (hex: 42414d4c) -- 406 occurrence(s)
+
+    Offset 0x009F96D9 (10,458,841):
+  00009F96B9  65 7A 6E C3 A1 6D C3 BD 20 74 79 70 20 C5 A1 74   |ezn..m.. typ ..t|
+  00009F96C9  C4 9B 74 63 65 20 76 20 73 6F 75 62 6F 72 75 20   |..tce v souboru |
+  00009F96D9  42 41 4D 4C 2E 01 49 4E 65 6E C3 AD 20 70 C5 99   |BAML..INen.. p..|
+  00009F96E9  C3 AD 73 74 75 70 20 6B 20 6E C3 A1 73 74 72 6F   |..stup k n..stro|
+  00009F96F9  6A 69 20 6E 61 C4 8D C3 AD 74 C3 A1 6E C3 AD 20   |ji na....t..n.. |
+  00009F9709  70 6F 75 C5 BE 69 74 C3 A9 68 6F 20 72 6F 7A 73   |pou..it..ho rozs|
+  00009F9719  61 68 75 20 62 61 6A 74 C5 AF 20 48 54 54 50 2E   |ahu bajt.. HTTP.|
+  00009F9729  01 3C 50 6F C5 BE 61 64 61 76 65 6B 20 6E 61 20   |.<Po..adavek na |
+  00009F9739  7A 6A 69 C5 A1 74 C4 9B 6E C3 AD 20 72 6F 7A 73   |zji..t..n.. rozs|
+  00009F9749  61 68 75 20 62 61 6A 74 C5 AF 20 6E 65 64 6F 73   |ahu bajt.. nedos|
+  00009F9759  74 61 6C 20 6F 64 70 6F 76 C4 9B C4 8F 2E 01 3C   |tal odpov......<|
+  00009F9769  53 65 72 76 65 72 20 6E 65 70 6F 64 70 6F 72 75   |Server nepodporu|
+  00009F9779  6A 65 20 70 6F C5 BE 61 64 61 76 65 6B 20 6E 61   |je po..adavek na|
+  00009F9789  20 7A 6A 69 C5 A1 74 C4 9B 6E C3 AD 20 72 6F 7A   | zji..t..n.. roz|
+  00009F9799  73 61 68 75 20 62 61 6A 74 C5 AF 2E 01 0C 5A 72   |sahu bajt.....Zr|
+  00009F97A9  75 C5 A1 69 74 20 74 69 73 6B 01 37 4E 65 6C 7A   |u..it tisk.7Nelz|
+  00009F97B9  65 20 70 C5 99 69 70 6F 6A 69 74 20 70 72 76 65   |e p..ipojit prve|
+  00009F97C9  6B 20 56 69 73 75 61 6C 2C 20 6B 74 65 72 C3 BD   |k Visual, kter..|
+  00009F97D9  20 6A 65 20 6A 69 C5 BE 20 70 C5 99 69 70 6F 6A   | je ji.. p..ipoj|
+  00009F97E9  65 6E 2E 01 29 48 6F 64 6E 6F 74 79 20 7B 30 7D   |en..)Hodnoty {0}|
+  00009F97F9  20 61 20 7B 31 7D 20 6E 65 6D 6F 68 6F 75 20 62   | a {1} nemohou b|
+  00009F9809  C3 BD 74 20 6F 62 C4 9B 20 6E 75 6C 6C 2E 01 31   |..t ob.. null..1|
+  00009F9819  48 6F 64 6E 6F 74 75 20 C5 99 65 74 C4 9B 7A 63   |Hodnotu ..et..zc|
+  00009F9829  65 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99 65   |e {0} nelze p..e|
+  00009F9839  76 C3 A9 73 74 20 6E 61 20 74 79 70 20 7B 31 7D   |v..st na typ {1}|
+  00009F9849  2E 01 26 54 79 70 20 7B 30 7D 20 73 65 20 6E 65   |..&Typ {0} se ne|
+  00009F9859  64 C3 A1 20 70 C5 99 65 76 C3 A9 73 74 20 6E 61   |d.. p..ev..st na|
+  00009F9869  20 74 79 70 20 7B 31 7D 2E 01 32 5A C3 A1 73 6F   | typ {1}..2Z..so|
+  00009F9879  62 6E C3 AD 6B 20 75 72 C4 8D 65 6E C3 BD 20 6A   |bn..k ur..en.. j|
+  00009F9889  65 6E 20 70 72 6F 20 C4 8D 74 65 6E C3 AD 20 6E   |en pro ..ten.. n|
+  00009F9899  65 6C 7A 65 20 75 70 72 61 76 69 74 2E 01 69 4E   |elze upravit..iN|
+  00009F98A9  65 6C 7A 65 20 75 70 72 61 76 6F 76 61 74 20 70   |elze upravovat p|
+  00009F98B9  6F 64 C5 99 61 7A 65 6E C3 A9 20 70 72 76 6B 79   |od..azen.. prvky|
+  00009F98C9  20 70 72 76 6B 75 20 56 69 73 75 61 6C 20 70 72   | prvku Visual pr|
+
+    Offset 0x009FBDAE (10,468,782):
+  00009FBD8E  01 23 4E 65 7A 6E C3 A1 6D C3 BD 20 74 79 70 20   |.#Nezn..m.. typ |
+  00009FBD9E  66 6C 6F 61 74 20 76 20 73 6F 75 62 6F 72 75 20   |float v souboru |
+  00009FBDAE  42 41 4D 4C 2E 01 20 44 61 74 6F 76 C3 BD 20 70   |BAML.. Datov.. p|
+  00009FBDBE  72 6F 75 64 20 6E 65 70 6F 64 70 6F 72 75 6A 65   |roud nepodporuje|
+  00009FBDCE  20 46 6C 75 73 68 2E 01 2F 50 6F 6A 6D 65 6E 6F   | Flush../Pojmeno|
+  00009FBDDE  76 61 6E C3 BD 20 6F 62 6A 65 6B 74 20 46 6F 6E   |van.. objekt Fon|
+  00009FBDEE  74 46 61 6D 69 6C 79 20 6E 65 6C 7A 65 20 75 70   |tFamily nelze up|
+  00009FBDFE  72 61 76 6F 76 61 74 2E 01 6F 5A 61 64 61 6E C3   |ravovat..oZadan.|
+  00009FBE0E  A1 20 68 6F 64 6E 6F 74 61 20 74 79 70 75 20 7B   |. hodnota typu {|
+  00009FBE1E  30 7D 20 6D 75 73 C3 AD 20 6D C3 AD 74 20 76 6C   |0} mus.. m..t vl|
+  00009FBE2E  61 73 74 6E 6F 73 74 20 49 73 46 72 6F 7A 65 6E   |astnost IsFrozen|
+  00009FBE3E  20 6E 61 73 74 61 76 65 6E 75 20 6E 61 20 68 6F   | nastavenu na ho|
+  00009FBE4E  64 6E 6F 74 75 20 66 61 6C 73 65 2C 20 61 62 79   |dnotu false, aby|
+  00009FBE5E  20 6A 69 20 62 79 6C 6F 20 6D 6F C5 BE 6E C3 A9   | ji bylo mo..n..|
+  00009FBE6E  20 75 70 72 61 76 69 74 2E 01 47 4B 6C 6F 6E 20   | upravit..GKlon |
+  00009FBE7E  69 6E 73 74 61 6E 63 65 20 74 79 70 75 20 7B 30   |instance typu {0|
+  00009FBE8E  7D 20 6A 65 20 6E 75 6C 6F 76 C3 BD 20 6E 65 62   |} je nulov.. neb|
+  00009FBE9E  6F 20 73 65 20 6E 65 6A 65 64 6E C3 A1 20 6F 20   |o se nejedn.. o |
+  00009FBEAE  69 6E 73 74 61 6E 63 69 20 74 79 70 75 20 7B 30   |instanci typu {0|
+  00009FBEBE  7D 2E 01 51 56 20 70 72 C5 AF 62 C4 9B 68 75 20   |}..QV pr..b..hu |
+  00009FBECE  75 64 C3 A1 6C 6F 73 74 69 20 43 6F 6C 6C 65 63   |ud..losti Collec|
+  00009FBEDE  74 69 6F 6E 43 68 61 6E 67 65 64 20 6E 65 6C 7A   |tionChanged nelz|
+  00009FBEEE  65 20 6D C4 9B 6E 69 74 20 6B 6F 6C 65 6B 63 69   |e m..nit kolekci|
+  00009FBEFE  20 46 72 65 65 7A 61 62 6C 65 43 6F 6C 6C 65 63   | FreezableCollec|
+  00009FBF0E  74 69 6F 6E 2E 01 37 44 6F C5 A1 6C 6F 20 6B 20   |tion..7Do..lo k |
+  00009FBF1E  6E 65 7A 6E C3 A1 6D C3 A9 20 6E 65 62 6F 20 6E   |nezn..m.. nebo n|
+  00009FBF2E  65 6F C4 8D 65 6B C3 A1 76 61 6E C3 A9 20 75 64   |eo..ek..van.. ud|
+  00009FBF3E  C3 A1 6C 6F 73 74 69 20 7A 6D C4 9B 6E 79 01 35   |..losti zm..ny.5|
+  00009FBF4E  50 72 6F 20 74 65 6E 74 6F 20 62 6F 64 20 6E 65   |Pro tento bod ne|
+  00009FBF5E  6E C3 AD 20 64 65 66 69 6E 6F 76 C3 A1 6E 61 20   |n.. definov..na |
+  00009FBF6E  68 6F 64 6E 6F 74 61 20 74 72 61 6E 73 66 6F 72   |hodnota transfor|
+  00009FBF7E  6D 61 63 65 2E 01 2C 4F 62 6A 65 6B 74 20 70 C5   |mace..,Objekt p.|
+  00009FBF8E  99 65 64 61 6E C3 BD 20 74 79 70 75 20 7B 30 7D   |.edan.. typu {0}|
+  00009FBF9E  20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 BD 20 74   | nen.. platn.. t|
+
+    Offset 0x00A1E640 (10,610,240):
+  0000A1E620  20 C3 BA 70 72 61 76 61 2E 01 53 50 C5 99 69 20   | ..prava..SP..i |
+  0000A1E630  61 6E 61 6C C3 BD 7A 65 20 6F 62 73 61 68 75 20   |anal..ze obsahu |
+  0000A1E640  42 41 4D 4C 20 64 6F C5 A1 6C 6F 20 6B 20 76 6E   |BAML do..lo k vn|
+  0000A1E650  69 74 C5 99 6E C3 AD 20 63 68 79 62 C4 9B 3A 20   |it..n.. chyb..: |
+  0000A1E660  61 73 73 65 6D 62 6C 79 49 64 20 6D C3 A1 20 62   |assemblyId m.. b|
+  0000A1E670  C3 BD 74 20 7A C3 A1 70 6F 72 6E C3 A9 2E 01 70   |..t z..porn....p|
+  0000A1E680  42 79 6C 20 70 6F 73 6B 79 74 6E 75 74 20 6E 65   |Byl poskytnut ne|
+  0000A1E690  6F C4 8D 65 6B C3 A1 76 61 6E C3 BD 20 69 64 65   |o..ek..van.. ide|
+  0000A1E6A0  6E 74 69 66 69 6B C3 A1 74 6F 72 20 73 65 73 74   |ntifik..tor sest|
+  0000A1E6B0  61 76 65 6E C3 AD 20 7B 30 7D 2E 20 49 64 65 6E   |aven.. {0}. Iden|
+  0000A1E6C0  74 69 66 69 6B C3 A1 74 6F 72 79 20 73 65 73 74   |tifik..tory sest|
+  0000A1E6D0  61 76 65 6E C3 AD 20 6D 75 73 65 6A C3 AD 20 62   |aven.. musej.. b|
+  0000A1E6E0  C3 BD 74 20 73 65 6B 76 65 6E C4 8D 6E C3 AD 2E   |..t sekven..n...|
+  0000A1E6F0  01 39 C4 8C C3 A1 73 74 20 6D 65 7A 69 20 7A 6E   |.9....st mezi zn|
+  0000A1E700  61 6B 79 20 3B 20 61 20 3D 20 6E 65 6E C3 AD 20   |aky ; a = nen.. |
+  0000A1E710  69 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20 55   |identifik..tor U|
+  0000A1E720  52 49 20 7B 30 7D 20 7B 31 7D 2E 01 2D 50 C5 99   |RI {0} {1}..-P..|
+  0000A1E730  69 70 6F 6A 69 74 65 6C 6E C3 A1 20 76 6C 61 73   |ipojiteln.. vlas|
+  0000A1E740  74 6E 6F 73 74 20 7B 30 7D 2E 7B 31 7D 20 73 65   |tnost {0}.{1} se|
+  0000A1E750  20 6E 65 6E 61 C5 A1 6C 61 2E 01 5C 4E 65 6C 7A   | nena..la..\Nelz|
+  0000A1E760  65 20 6F 76 6C C3 A1 64 61 74 20 6D C3 A9 64 69   |e ovl..dat m..di|
+  0000A1E770  61 2C 20 64 6F 6B 75 64 20 6E 65 6E C3 AD 20 4C   |a, dokud nen.. L|
+  0000A1E780  6F 61 64 65 64 42 65 68 61 76 69 6F 72 20 6E 65   |oadedBehavior ne|
+  0000A1E790  62 6F 20 55 6E 6C 6F 61 64 65 64 42 65 68 61 76   |bo UnloadedBehav|
+  0000A1E7A0  69 6F 72 20 6E 61 73 74 61 76 65 6E 6F 20 6E 61   |ior nastaveno na|
+  0000A1E7B0  20 4D 61 6E 75 61 6C 2E 01 25 54 79 70 20 7A C3   | Manual..%Typ z.|
+  0000A1E7C0  A1 76 69 73 6C C3 A9 68 6F 20 6F 62 6A 65 6B 74   |.visl..ho objekt|
+  0000A1E7D0  75 20 6A 65 20 6E 65 70 6C 61 74 6E C3 BD 2E 01   |u je neplatn....|
+  0000A1E7E0  26 50 6F C5 BE 61 64 6F 76 61 6E C3 A1 20 61 6B   |&Po..adovan.. ak|
+  0000A1E7F0  63 65 20 6D C3 A9 64 69 61 20 6A 65 20 6E 65 7A   |ce m..dia je nez|
+  0000A1E800  6E C3 A1 6D C3 A1 2E 01 6E 50 6F 6D 6F 63 6E C3   |n..m....nPomocn.|
+  0000A1E810  BD 20 66 69 6C 74 72 20 76 72 C3 A1 74 69 6C 20   |. filtr vr..til |
+  0000A1E820  70 6F C4 8D 65 74 20 7A 6E 61 6B C5 AF 2C 20 6B   |po..et znak.., k|
+  0000A1E830  74 65 72 C3 BD 20 6A 65 20 76 79 C5 A1 C5 A1 C3   |ter.. je vy.....|
+
+    Offset 0x00A1EB56 (10,611,542):
+  0000A1EB36  6C 65 64 6F 76 61 74 20 70 6F 20 7B 31 7D 2E 01   |ledovat po {1}..|
+  0000A1EB46  2F 49 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20   |/Identifik..tor |
+  0000A1EB56  42 41 4D 4C 20 41 73 73 65 6D 62 6C 79 49 64 20   |BAML AssemblyId |
+  0000A1EB66  7B 30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E   |{0} nen.. zn..m.|
+  0000A1EB76  01 52 4E 65 6C 7A 65 20 72 6F 7A 6C 69 C5 A1 69   |.RNelze rozli..i|
+  0000A1EB86  74 20 7A 6E C3 A1 6D 6F 75 20 68 6F 64 6E 6F 74   |t zn..mou hodnot|
+  0000A1EB96  75 20 4D 61 72 6B 75 70 45 78 74 65 6E 73 69 6F   |u MarkupExtensio|
+  0000A1EBA6  6E 2E 20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A   |n. Soubor BAML j|
+  0000A1EBB6  65 20 6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F   |e mo..n.. po..ko|
+  0000A1EBC6  7A 65 6E 2E 01 38 4E 61 6C 65 7A 65 6E C3 AD 20   |zen..8Nalezen.. |
+  0000A1EBD6  73 6F 75 62 6F 72 75 20 42 41 4D 4C 20 6D 69 6D   |souboru BAML mim|
+  0000A1EBE6  6F 20 61 70 6C 69 6B 61 63 69 20 6E 65 6E C3 AD   |o aplikaci nen..|
+  0000A1EBF6  20 70 6F 64 70 6F 72 6F 76 C3 A1 6E 6F 2E 01 3C   | podporov..no..<|
+  0000A1EC06  42 61 6D 6C 52 65 61 64 65 72 20 62 79 6C 20 75   |BamlReader byl u|
+  0000A1EC16  6B 6F 6E C4 8D 65 6E 20 6E 65 62 6F 20 62 79 6C   |kon..en nebo byl|
+  0000A1EC26  6F 20 64 6F 73 61 C5 BE 65 6E 6F 20 6B 6F 6E 63   |o dosa..eno konc|
+  0000A1EC36  65 20 64 6F 6B 75 6D 65 6E 74 75 2E 01 6E 4E 65   |e dokumentu..nNe|
+  0000A1EC46  6C 7A 65 20 6E 61 6A C3 AD 74 20 74 79 70 20 76   |lze naj..t typ v|
+  0000A1EC56  6C 61 73 74 6E C3 AD 6B 61 20 6E 65 62 6F 20 61   |lastn..ka nebo a|
+  0000A1EC66  74 72 69 62 75 74 75 20 7B 30 7D 20 7A 65 20 73   |tributu {0} ze s|
+  0000A1EC76  65 73 74 61 76 65 6E C3 AD 20 7B 31 7D 2E 20 53   |estaven.. {1}. S|
+  0000A1EC86  65 73 74 61 76 65 6E C3 AD 20 6D 6F C5 BE 6E C3   |estaven.. mo..n.|
+  0000A1EC96  A1 20 6E 65 62 79 6C 6F 20 73 70 72 C3 A1 76 6E   |. nebylo spr..vn|
+  0000A1ECA6  C4 9B 20 6E 61 C4 8D 74 65 6E 6F 2E 01 5E 42 79   |.. na..teno..^By|
+  0000A1ECB6  6C 20 6E 61 6C 65 7A 65 6E 20 7A C3 A1 7A 6E 61   |l nalezen z..zna|
+  0000A1ECC6  6D 20 7B 30 7D 2C 20 61 6C 65 20 70 72 6F 67 72   |m {0}, ale progr|
+  0000A1ECD6  61 6D 20 6F C4 8D 65 6B C3 A1 76 61 6C 20 7A C3   |am o..ek..val z.|
+  0000A1ECE6  A1 7A 6E 61 6D 20 7B 31 7D 2E 20 53 6F 75 62 6F   |.znam {1}. Soubo|
+  0000A1ECF6  72 20 42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3   |r BAML je mo..n.|
+  0000A1ED06  A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 2B 49 64   |. po..kozen..+Id|
+  0000A1ED16  65 6E 74 69 66 69 6B C3 A1 74 6F 72 20 42 41 4D   |entifik..tor BAM|
+  0000A1ED26  4C 20 54 79 70 65 49 64 20 7B 30 7D 20 6E 65 6E   |L TypeId {0} nen|
+  0000A1ED36  C3 AD 20 7A 6E C3 A1 6D 2E 01 52 53 65 73 74 61   |.. zn..m..RSesta|
+  0000A1ED46  76 65 6E C3 AD 20 7B 30 7D 20 6E 65 6C 7A 65 20   |ven.. {0} nelze |
+
+    Offset 0x00A1EBB0 (10,611,632):
+  0000A1EB90  68 6F 64 6E 6F 74 75 20 4D 61 72 6B 75 70 45 78   |hodnotu MarkupEx|
+  0000A1EBA0  74 65 6E 73 69 6F 6E 2E 20 53 6F 75 62 6F 72 20   |tension. Soubor |
+  0000A1EBB0  42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3 A1 20   |BAML je mo..n.. |
+  0000A1EBC0  70 6F C5 A1 6B 6F 7A 65 6E 2E 01 38 4E 61 6C 65   |po..kozen..8Nale|
+  0000A1EBD0  7A 65 6E C3 AD 20 73 6F 75 62 6F 72 75 20 42 41   |zen.. souboru BA|
+  0000A1EBE0  4D 4C 20 6D 69 6D 6F 20 61 70 6C 69 6B 61 63 69   |ML mimo aplikaci|
+  0000A1EBF0  20 6E 65 6E C3 AD 20 70 6F 64 70 6F 72 6F 76 C3   | nen.. podporov.|
+  0000A1EC00  A1 6E 6F 2E 01 3C 42 61 6D 6C 52 65 61 64 65 72   |.no..<BamlReader|
+  0000A1EC10  20 62 79 6C 20 75 6B 6F 6E C4 8D 65 6E 20 6E 65   | byl ukon..en ne|
+  0000A1EC20  62 6F 20 62 79 6C 6F 20 64 6F 73 61 C5 BE 65 6E   |bo bylo dosa..en|
+  0000A1EC30  6F 20 6B 6F 6E 63 65 20 64 6F 6B 75 6D 65 6E 74   |o konce dokument|
+  0000A1EC40  75 2E 01 6E 4E 65 6C 7A 65 20 6E 61 6A C3 AD 74   |u..nNelze naj..t|
+  0000A1EC50  20 74 79 70 20 76 6C 61 73 74 6E C3 AD 6B 61 20   | typ vlastn..ka |
+  0000A1EC60  6E 65 62 6F 20 61 74 72 69 62 75 74 75 20 7B 30   |nebo atributu {0|
+  0000A1EC70  7D 20 7A 65 20 73 65 73 74 61 76 65 6E C3 AD 20   |} ze sestaven.. |
+  0000A1EC80  7B 31 7D 2E 20 53 65 73 74 61 76 65 6E C3 AD 20   |{1}. Sestaven.. |
+  0000A1EC90  6D 6F C5 BE 6E C3 A1 20 6E 65 62 79 6C 6F 20 73   |mo..n.. nebylo s|
+  0000A1ECA0  70 72 C3 A1 76 6E C4 9B 20 6E 61 C4 8D 74 65 6E   |pr..vn.. na..ten|
+  0000A1ECB0  6F 2E 01 5E 42 79 6C 20 6E 61 6C 65 7A 65 6E 20   |o..^Byl nalezen |
+  0000A1ECC0  7A C3 A1 7A 6E 61 6D 20 7B 30 7D 2C 20 61 6C 65   |z..znam {0}, ale|
+  0000A1ECD0  20 70 72 6F 67 72 61 6D 20 6F C4 8D 65 6B C3 A1   | program o..ek..|
+  0000A1ECE0  76 61 6C 20 7A C3 A1 7A 6E 61 6D 20 7B 31 7D 2E   |val z..znam {1}.|
+  0000A1ECF0  20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A 65 20   | Soubor BAML je |
+  0000A1ED00  6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F 7A 65   |mo..n.. po..koze|
+  0000A1ED10  6E 2E 01 2B 49 64 65 6E 74 69 66 69 6B C3 A1 74   |n..+Identifik..t|
+  0000A1ED20  6F 72 20 42 41 4D 4C 20 54 79 70 65 49 64 20 7B   |or BAML TypeId {|
+  0000A1ED30  30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E 01   |0} nen.. zn..m..|
+  0000A1ED40  52 53 65 73 74 61 76 65 6E C3 AD 20 7B 30 7D 20   |RSestaven.. {0} |
+  0000A1ED50  6E 65 6C 7A 65 20 7A 65 20 73 74 C3 A1 76 61 6A   |nelze ze st..vaj|
+  0000A1ED60  C3 AD 63 C3 AD 68 6F 20 70 72 61 63 6F 76 6E C3   |..c..ho pracovn.|
+  0000A1ED70  AD 68 6F 20 61 64 72 65 73 C3 A1 C5 99 65 20 6E   |.ho adres....e n|
+  0000A1ED80  65 62 6F 20 7A 20 47 41 43 20 6E 61 C4 8D C3 AD   |ebo z GAC na....|
+  0000A1ED90  73 74 2E 01 6C 50 6F C4 8D C3 A1 74 65 C4 8D 6E   |st..lPo....te..n|
+  0000A1EDA0  C3 AD 20 61 20 6B 6F 6E 63 6F 76 C3 A1 20 76 6F   |.. a koncov.. vo|
+
+    Offset 0x00A1EBDE (10,611,678):
+  0000A1EBBE  A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 38 4E 61   |. po..kozen..8Na|
+  0000A1EBCE  6C 65 7A 65 6E C3 AD 20 73 6F 75 62 6F 72 75 20   |lezen.. souboru |
+  0000A1EBDE  42 41 4D 4C 20 6D 69 6D 6F 20 61 70 6C 69 6B 61   |BAML mimo aplika|
+  0000A1EBEE  63 69 20 6E 65 6E C3 AD 20 70 6F 64 70 6F 72 6F   |ci nen.. podporo|
+  0000A1EBFE  76 C3 A1 6E 6F 2E 01 3C 42 61 6D 6C 52 65 61 64   |v..no..<BamlRead|
+  0000A1EC0E  65 72 20 62 79 6C 20 75 6B 6F 6E C4 8D 65 6E 20   |er byl ukon..en |
+  0000A1EC1E  6E 65 62 6F 20 62 79 6C 6F 20 64 6F 73 61 C5 BE   |nebo bylo dosa..|
+  0000A1EC2E  65 6E 6F 20 6B 6F 6E 63 65 20 64 6F 6B 75 6D 65   |eno konce dokume|
+  0000A1EC3E  6E 74 75 2E 01 6E 4E 65 6C 7A 65 20 6E 61 6A C3   |ntu..nNelze naj.|
+  0000A1EC4E  AD 74 20 74 79 70 20 76 6C 61 73 74 6E C3 AD 6B   |.t typ vlastn..k|
+  0000A1EC5E  61 20 6E 65 62 6F 20 61 74 72 69 62 75 74 75 20   |a nebo atributu |
+  0000A1EC6E  7B 30 7D 20 7A 65 20 73 65 73 74 61 76 65 6E C3   |{0} ze sestaven.|
+  0000A1EC7E  AD 20 7B 31 7D 2E 20 53 65 73 74 61 76 65 6E C3   |. {1}. Sestaven.|
+  0000A1EC8E  AD 20 6D 6F C5 BE 6E C3 A1 20 6E 65 62 79 6C 6F   |. mo..n.. nebylo|
+  0000A1EC9E  20 73 70 72 C3 A1 76 6E C4 9B 20 6E 61 C4 8D 74   | spr..vn.. na..t|
+  0000A1ECAE  65 6E 6F 2E 01 5E 42 79 6C 20 6E 61 6C 65 7A 65   |eno..^Byl naleze|
+  0000A1ECBE  6E 20 7A C3 A1 7A 6E 61 6D 20 7B 30 7D 2C 20 61   |n z..znam {0}, a|
+  0000A1ECCE  6C 65 20 70 72 6F 67 72 61 6D 20 6F C4 8D 65 6B   |le program o..ek|
+  0000A1ECDE  C3 A1 76 61 6C 20 7A C3 A1 7A 6E 61 6D 20 7B 31   |..val z..znam {1|
+  0000A1ECEE  7D 2E 20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A   |}. Soubor BAML j|
+  0000A1ECFE  65 20 6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F   |e mo..n.. po..ko|
+  0000A1ED0E  7A 65 6E 2E 01 2B 49 64 65 6E 74 69 66 69 6B C3   |zen..+Identifik.|
+  0000A1ED1E  A1 74 6F 72 20 42 41 4D 4C 20 54 79 70 65 49 64   |.tor BAML TypeId|
+  0000A1ED2E  20 7B 30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D   | {0} nen.. zn..m|
+  0000A1ED3E  2E 01 52 53 65 73 74 61 76 65 6E C3 AD 20 7B 30   |..RSestaven.. {0|
+  0000A1ED4E  7D 20 6E 65 6C 7A 65 20 7A 65 20 73 74 C3 A1 76   |} nelze ze st..v|
+  0000A1ED5E  61 6A C3 AD 63 C3 AD 68 6F 20 70 72 61 63 6F 76   |aj..c..ho pracov|
+  0000A1ED6E  6E C3 AD 68 6F 20 61 64 72 65 73 C3 A1 C5 99 65   |n..ho adres....e|
+  0000A1ED7E  20 6E 65 62 6F 20 7A 20 47 41 43 20 6E 61 C4 8D   | nebo z GAC na..|
+  0000A1ED8E  C3 AD 73 74 2E 01 6C 50 6F C4 8D C3 A1 74 65 C4   |..st..lPo....te.|
+  0000A1ED9E  8D 6E C3 AD 20 61 20 6B 6F 6E 63 6F 76 C3 A1 20   |.n.. a koncov.. |
+  0000A1EDAE  76 6F 6C C3 A1 6E C3 AD 20 7A C3 A1 70 69 73 75   |vol..n.. z..pisu|
+  0000A1EDBE  20 73 65 20 6E 65 73 68 6F 64 75 6A C3 AD 2E 20   | se neshoduj... |
+  0000A1EDCE  50 6F C4 8D C3 A1 74 65 C4 8D 6E C3 AD 20 7A C3   |Po....te..n.. z.|
+
+    Offset 0x00A1ECF8 (10,611,960):
+  0000A1ECD8  20 6F C4 8D 65 6B C3 A1 76 61 6C 20 7A C3 A1 7A   | o..ek..val z..z|
+  0000A1ECE8  6E 61 6D 20 7B 31 7D 2E 20 53 6F 75 62 6F 72 20   |nam {1}. Soubor |
+  0000A1ECF8  42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3 A1 20   |BAML je mo..n.. |
+  0000A1ED08  70 6F C5 A1 6B 6F 7A 65 6E 2E 01 2B 49 64 65 6E   |po..kozen..+Iden|
+  0000A1ED18  74 69 66 69 6B C3 A1 74 6F 72 20 42 41 4D 4C 20   |tifik..tor BAML |
+  0000A1ED28  54 79 70 65 49 64 20 7B 30 7D 20 6E 65 6E C3 AD   |TypeId {0} nen..|
+  0000A1ED38  20 7A 6E C3 A1 6D 2E 01 52 53 65 73 74 61 76 65   | zn..m..RSestave|
+  0000A1ED48  6E C3 AD 20 7B 30 7D 20 6E 65 6C 7A 65 20 7A 65   |n.. {0} nelze ze|
+  0000A1ED58  20 73 74 C3 A1 76 61 6A C3 AD 63 C3 AD 68 6F 20   | st..vaj..c..ho |
+  0000A1ED68  70 72 61 63 6F 76 6E C3 AD 68 6F 20 61 64 72 65   |pracovn..ho adre|
+  0000A1ED78  73 C3 A1 C5 99 65 20 6E 65 62 6F 20 7A 20 47 41   |s....e nebo z GA|
+  0000A1ED88  43 20 6E 61 C4 8D C3 AD 73 74 2E 01 6C 50 6F C4   |C na....st..lPo.|
+  0000A1ED98  8D C3 A1 74 65 C4 8D 6E C3 AD 20 61 20 6B 6F 6E   |...te..n.. a kon|
+  0000A1EDA8  63 6F 76 C3 A1 20 76 6F 6C C3 A1 6E C3 AD 20 7A   |cov.. vol..n.. z|
+  0000A1EDB8  C3 A1 70 69 73 75 20 73 65 20 6E 65 73 68 6F 64   |..pisu se neshod|
+  0000A1EDC8  75 6A C3 AD 2E 20 50 6F C4 8D C3 A1 74 65 C4 8D   |uj... Po....te..|
+  0000A1EDD8  6E C3 AD 20 7A C3 A1 7A 6E 61 6D 20 3D 20 7B 30   |n.. z..znam = {0|
+  0000A1EDE8  7D 2C 20 6B 6F 6E 63 6F 76 C3 BD 20 7A C3 A1 7A   |}, koncov.. z..z|
+  0000A1EDF8  6E 61 6D 20 3D 20 7B 31 7D 01 4B 4E 75 74 6E 6F   |nam = {1}.KNutno|
+  0000A1EE08  20 70 C5 99 65 64 61 74 20 6B 6F 6E 73 74 72 75   | p..edat konstru|
+  0000A1EE18  6B 74 6F 72 75 20 42 61 6D 6C 57 72 69 74 65 72   |ktoru BamlWriter|
+  0000A1EE28  20 70 6C 61 74 6E C3 BD 20 7A 61 70 69 73 6F 76   | platn.. zapisov|
+  0000A1EE38  61 74 65 6C 6E C3 BD 20 64 61 74 6F 76 C3 BD 20   |ateln.. datov.. |
+  0000A1EE48  70 72 6F 75 64 2E 01 3E 4E 65 6C 7A 65 20 64 65   |proud..>Nelze de|
+  0000A1EE58  66 69 6E 6F 76 61 74 20 70 72 6F 68 6C C3 A1 C5   |finovat prohl...|
+  0000A1EE68  A1 65 6E C3 AD 20 78 6D 6C 6E 73 20 70 C5 99 69   |.en.. xmlns p..i|
+  0000A1EE78  20 7A C3 A1 70 69 73 75 20 7A C3 A1 7A 6E 61 6D   | z..pisu z..znam|
+  0000A1EE88  75 20 7B 30 7D 2E 01 3D 4F 70 65 72 61 63 69 20   |u {0}..=Operaci |
+  0000A1EE98  6E 65 6C 7A 65 20 70 72 6F 76 C3 A9 73 74 20 70   |nelze prov..st p|
+  0000A1EEA8  6F 20 76 79 76 6F 6C C3 A1 6E C3 AD 20 66 75 6E   |o vyvol..n.. fun|
+  0000A1EEB8  6B 63 65 20 42 61 6D 6C 57 72 69 74 65 72 2E 43   |kce BamlWriter.C|
+  0000A1EEC8  6C 6F 73 65 2E 01 5C 4D 65 74 6F 64 75 20 7B 30   |lose..\Metodu {0|
+  0000A1EED8  7D 20 6C 7A 65 20 7A 61 76 6F 6C 61 74 20 61 C5   |} lze zavolat a.|
+  0000A1EEE8  BE 20 70 6F 20 57 72 69 74 65 53 74 61 72 74 45   |. po WriteStartE|
+
+    Offset 0x00A1ED23 (10,612,003):
+  0000A1ED03  BE 6E C3 A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01   |.n.. po..kozen..|
+  0000A1ED13  2B 49 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20   |+Identifik..tor |
+  0000A1ED23  42 41 4D 4C 20 54 79 70 65 49 64 20 7B 30 7D 20   |BAML TypeId {0} |
+  0000A1ED33  6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E 01 52 53 65   |nen.. zn..m..RSe|
+  0000A1ED43  73 74 61 76 65 6E C3 AD 20 7B 30 7D 20 6E 65 6C   |staven.. {0} nel|
+  0000A1ED53  7A 65 20 7A 65 20 73 74 C3 A1 76 61 6A C3 AD 63   |ze ze st..vaj..c|
+  0000A1ED63  C3 AD 68 6F 20 70 72 61 63 6F 76 6E C3 AD 68 6F   |..ho pracovn..ho|
+  0000A1ED73  20 61 64 72 65 73 C3 A1 C5 99 65 20 6E 65 62 6F   | adres....e nebo|
+  0000A1ED83  20 7A 20 47 41 43 20 6E 61 C4 8D C3 AD 73 74 2E   | z GAC na....st.|
+  0000A1ED93  01 6C 50 6F C4 8D C3 A1 74 65 C4 8D 6E C3 AD 20   |.lPo....te..n.. |
+  0000A1EDA3  61 20 6B 6F 6E 63 6F 76 C3 A1 20 76 6F 6C C3 A1   |a koncov.. vol..|
+  0000A1EDB3  6E C3 AD 20 7A C3 A1 70 69 73 75 20 73 65 20 6E   |n.. z..pisu se n|
+  0000A1EDC3  65 73 68 6F 64 75 6A C3 AD 2E 20 50 6F C4 8D C3   |eshoduj... Po...|
+  0000A1EDD3  A1 74 65 C4 8D 6E C3 AD 20 7A C3 A1 7A 6E 61 6D   |.te..n.. z..znam|
+  0000A1EDE3  20 3D 20 7B 30 7D 2C 20 6B 6F 6E 63 6F 76 C3 BD   | = {0}, koncov..|
+  0000A1EDF3  20 7A C3 A1 7A 6E 61 6D 20 3D 20 7B 31 7D 01 4B   | z..znam = {1}.K|
+  0000A1EE03  4E 75 74 6E 6F 20 70 C5 99 65 64 61 74 20 6B 6F   |Nutno p..edat ko|
+  0000A1EE13  6E 73 74 72 75 6B 74 6F 72 75 20 42 61 6D 6C 57   |nstruktoru BamlW|
+  0000A1EE23  72 69 74 65 72 20 70 6C 61 74 6E C3 BD 20 7A 61   |riter platn.. za|
+  0000A1EE33  70 69 73 6F 76 61 74 65 6C 6E C3 BD 20 64 61 74   |pisovateln.. dat|
+  0000A1EE43  6F 76 C3 BD 20 70 72 6F 75 64 2E 01 3E 4E 65 6C   |ov.. proud..>Nel|
+  0000A1EE53  7A 65 20 64 65 66 69 6E 6F 76 61 74 20 70 72 6F   |ze definovat pro|
+  0000A1EE63  68 6C C3 A1 C5 A1 65 6E C3 AD 20 78 6D 6C 6E 73   |hl....en.. xmlns|
+  0000A1EE73  20 70 C5 99 69 20 7A C3 A1 70 69 73 75 20 7A C3   | p..i z..pisu z.|
+  0000A1EE83  A1 7A 6E 61 6D 75 20 7B 30 7D 2E 01 3D 4F 70 65   |.znamu {0}..=Ope|
+  0000A1EE93  72 61 63 69 20 6E 65 6C 7A 65 20 70 72 6F 76 C3   |raci nelze prov.|
+  0000A1EEA3  A9 73 74 20 70 6F 20 76 79 76 6F 6C C3 A1 6E C3   |.st po vyvol..n.|
+  0000A1EEB3  AD 20 66 75 6E 6B 63 65 20 42 61 6D 6C 57 72 69   |. funkce BamlWri|
+  0000A1EEC3  74 65 72 2E 43 6C 6F 73 65 2E 01 5C 4D 65 74 6F   |ter.Close..\Meto|
+  0000A1EED3  64 75 20 7B 30 7D 20 6C 7A 65 20 7A 61 76 6F 6C   |du {0} lze zavol|
+  0000A1EEE3  61 74 20 61 C5 BE 20 70 6F 20 57 72 69 74 65 53   |at a.. po WriteS|
+  0000A1EEF3  74 61 72 74 45 6C 65 6D 65 6E 74 2E 20 4E 65 6C   |tartElement. Nel|
+  0000A1EF03  7A 65 20 6A 69 20 7A 61 76 6F 6C 61 74 20 70 6F   |ze ji zavolat po|
+  0000A1EF13  20 70 72 6F 76 65 64 65 6E C3 AD 20 7A C3 A1 70   | proveden.. z..p|
+
+    Offset 0x00A25C08 (10,640,392):
+  0000A25BE8  61 74 65 6C 73 6B C3 A9 20 73 65 72 69 61 6C 69   |atelsk.. seriali|
+  0000A25BF8  7A 61 C4 8D 6E C3 AD 20 6F 70 65 72 61 63 65 20   |za..n.. operace |
+  0000A25C08  42 41 4D 4C 2E 01 35 4E 65 70 6C 61 74 6E C3 BD   |BAML..5Neplatn..|
+  0000A25C18  20 74 79 70 20 6F 62 73 61 68 75 20 70 72 6F 20   | typ obsahu pro |
+  0000A25C28  73 6F 75 C4 8D C3 A1 73 74 20 44 6F 63 75 6D 65   |sou....st Docume|
+  0000A25C38  6E 74 53 74 72 75 63 74 75 72 65 2E 01 2A 53 65   |ntStructure..*Se|
+  0000A25C48  72 69 61 6C 69 7A C3 A1 74 6F 72 20 6E 65 70 6F   |rializ..tor nepo|
+  0000A25C58  64 70 6F 72 75 6A 65 20 6F 70 65 72 61 63 65 20   |dporuje operace |
+  0000A25C68  43 6F 6E 76 65 72 74 2E 01 71 50 72 6F 62 6C C3   |Convert..qProbl.|
+  0000A25C78  A9 6D 20 6A 65 20 76 65 20 76 79 73 74 61 76 C4   |.m je ve vystav.|
+  0000A25C88  9B 6E C3 AD 20 6E 65 62 6F 20 70 75 62 6C 69 6B   |.n.. nebo publik|
+  0000A25C98  6F 76 C3 A1 6E C3 AD 20 61 70 6C 69 6B 61 63 65   |ov..n.. aplikace|
+  0000A25CA8  2E 20 4B 6F 6E 74 61 6B 74 75 6A 74 65 20 76 79   |. Kontaktujte vy|
+  0000A25CB8  64 61 76 61 74 65 6C 65 20 61 70 6C 69 6B 61 63   |davatele aplikac|
+  0000A25CC8  65 20 61 20 70 6F C5 BE C3 A1 64 65 6A 74 65 20   |e a po....dejte |
+  0000A25CD8  68 6F 20 6F 20 70 6F 6D 6F 63 2E 01 1C 53 6F 75   |ho o pomoc...Sou|
+  0000A25CE8  62 6F 72 20 61 70 6C 69 6B 61 63 65 20 6A 65 20   |bor aplikace je |
+  0000A25CF8  6E 65 70 6C 61 74 6E C3 BD 01 14 48 6F 64 6E 6F   |neplatn....Hodno|
+  0000A25D08  74 61 20 6D 69 6D 6F 20 72 6F 7A 73 61 68 2E 01   |ta mimo rozsah..|
+  0000A25D18  26 55 72 C4 8D 65 6E C3 A9 20 70 6F 6C 65 20 6E   |&Ur..en.. pole n|
+  0000A25D28  65 6D C5 AF C5 BE 65 20 62 C3 BD 74 20 70 72 C3   |em....e b..t pr.|
+  0000A25D38  A1 7A 64 6E C3 A9 2E 01 49 55 72 C4 8D 65 6E C3   |.zdn....IUr..en.|
+  0000A25D48  A1 20 6B 6F 6C 65 6B 63 65 20 53 74 72 6F 6B 65   |. kolekce Stroke|
+  0000A25D58  43 6F 6C 6C 65 63 74 69 6F 6E 20 6D 75 73 C3 AD   |Collection mus..|
+  0000A25D68  20 6F 62 73 61 68 6F 76 61 74 20 61 6C 65 73 70   | obsahovat alesp|
+  0000A25D78  6F C5 88 20 6A 65 64 65 6E 20 7A C3 A1 62 C4 9B   |o.. jeden z..b..|
+  0000A25D88  72 2E 01 3E 50 6F 73 6C 65 64 6E C3 AD 6D 20 75   |r..>Posledn..m u|
+  0000A25D98  7A 6C 65 6D 20 42 41 4D 4C 20 76 20 64 6F 6B 75   |zlem BAML v doku|
+  0000A25DA8  6D 65 6E 74 75 20 42 41 4D 4C 20 6D 75 73 C3 AD   |mentu BAML mus..|
+  0000A25DB8  20 62 C3 BD 74 20 45 6E 64 44 6F 63 75 6D 65 6E   | b..t EndDocumen|
+  0000A25DC8  74 2E 01 28 54 65 6E 74 6F 20 6F 76 6C 61 64 61   |t..(Tento ovlada|
+  0000A25DD8  C4 8D 20 75 64 C3 A1 6C 6F 73 74 69 20 6E 65 6C   |.. ud..losti nel|
+  0000A25DE8  7A 65 20 70 6F 75 C5 BE C3 AD 74 2E 01 21 47 75   |ze pou....t..!Gu|
+  0000A25DF8  69 64 2E 45 6D 70 74 79 20 6E 65 6E C3 AD 20 70   |id.Empty nen.. p|
+
+    Offset 0x00A25D9D (10,640,797):
+  0000A25D7D  65 64 65 6E 20 7A C3 A1 62 C4 9B 72 2E 01 3E 50   |eden z..b..r..>P|
+  0000A25D8D  6F 73 6C 65 64 6E C3 AD 6D 20 75 7A 6C 65 6D 20   |osledn..m uzlem |
+  0000A25D9D  42 41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75   |BAML v dokumentu|
+  0000A25DAD  20 42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74   | BAML mus.. b..t|
+  0000A25DBD  20 45 6E 64 44 6F 63 75 6D 65 6E 74 2E 01 28 54   | EndDocument..(T|
+  0000A25DCD  65 6E 74 6F 20 6F 76 6C 61 64 61 C4 8D 20 75 64   |ento ovlada.. ud|
+  0000A25DDD  C3 A1 6C 6F 73 74 69 20 6E 65 6C 7A 65 20 70 6F   |..losti nelze po|
+  0000A25DED  75 C5 BE C3 AD 74 2E 01 21 47 75 69 64 2E 45 6D   |u....t..!Guid.Em|
+  0000A25DFD  70 74 79 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3   |pty nen.. platn.|
+  0000A25E0D  A1 20 68 6F 64 6E 6F 74 61 2E 01 36 42 61 72 76   |. hodnota..6Barv|
+  0000A25E1D  79 20 7A 76 C3 BD 72 61 7A 6E C4 9B 6E C3 AD 20   |y zv..razn..n.. |
+  0000A25E2D  6D 75 73 65 6A C3 AD 20 62 C3 BD 74 20 74 79 70   |musej.. b..t typ|
+  0000A25E3D  75 20 53 6F 6C 69 64 43 6F 6C 6F 72 42 72 75 73   |u SolidColorBrus|
+  0000A25E4D  68 2E 01 61 50 6F 75 7A 65 20 53 6F 6C 69 64 43   |h..aPouze SolidC|
+  0000A25E5D  6F 6C 6F 72 42 72 75 73 68 20 6C 7A 65 20 70 6F   |olorBrush lze po|
+  0000A25E6D  75 C5 BE C3 AD 74 20 6A 61 6B 6F 20 46 6F 72 65   |u....t jako Fore|
+  0000A25E7D  67 72 6F 75 6E 64 20 70 72 6F 20 53 74 69 63 6B   |ground pro Stick|
+  0000A25E8D  79 4E 6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70   |yNoteControl typ|
+  0000A25E9D  75 20 53 74 69 63 6B 79 4E 6F 74 65 54 79 70 65   |u StickyNoteType|
+  0000A25EAD  2E 49 6E 6B 2E 01 4B 7B 30 7D 20 6D C5 AF C5 BE   |.Ink..K{0} m....|
+  0000A25EBD  65 20 68 6F 73 74 6F 76 61 74 20 70 6F 75 7A 65   |e hostovat pouze|
+  0000A25ECD  20 6F 62 6A 65 6B 74 79 20 7B 31 7D 20 6E 65 62   | objekty {1} neb|
+  0000A25EDD  6F 20 7B 32 7D 2E 20 7B 33 7D 20 6A 65 20 6E 65   |o {2}. {3} je ne|
+  0000A25EED  70 6C 61 74 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65   |platn.. kontejne|
+  0000A25EFD  72 2E 01 49 43 C3 AD 6C 6F 76 C3 A1 20 76 6C 61   |r..IC..lov.. vla|
+  0000A25F0D  73 74 6E 6F 73 74 20 6C 6F 6B 61 6C 69 7A 61 C4   |stnost lokaliza.|
+  0000A25F1D  8D 6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E   |.n.. pozn..mky n|
+  0000A25F2D  65 6E C3 AD 20 76 20 C5 99 65 74 C4 9B 7A 63 69   |en.. v ..et..zci|
+  0000A25F3D  20 7B 30 7D 20 70 6C 61 74 6E C3 A1 2E 01 59 48   | {0} platn....YH|
+  0000A25F4D  6F 64 6E 6F 74 61 20 6C 6F 6B 61 6C 69 7A 61 C4   |odnota lokaliza.|
+  0000A25F5D  8D 6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E   |.n.. pozn..mky n|
+  0000A25F6D  65 6E C3 AD 20 70 6C 61 74 6E C3 A1 20 70 72 6F   |en.. platn.. pro|
+  0000A25F7D  20 63 C3 AD 6C 6F 76 6F 75 20 76 6C 61 73 74 6E   | c..lovou vlastn|
+  0000A25F8D  6F 73 74 20 7B 30 7D 20 76 20 C5 99 65 74 C4 9B   |ost {0} v ..et..|
+
+    Offset 0x00A25DAE (10,640,814):
+  0000A25D8E  73 6C 65 64 6E C3 AD 6D 20 75 7A 6C 65 6D 20 42   |sledn..m uzlem B|
+  0000A25D9E  41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75 20   |AML v dokumentu |
+  0000A25DAE  42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74 20   |BAML mus.. b..t |
+  0000A25DBE  45 6E 64 44 6F 63 75 6D 65 6E 74 2E 01 28 54 65   |EndDocument..(Te|
+  0000A25DCE  6E 74 6F 20 6F 76 6C 61 64 61 C4 8D 20 75 64 C3   |nto ovlada.. ud.|
+  0000A25DDE  A1 6C 6F 73 74 69 20 6E 65 6C 7A 65 20 70 6F 75   |.losti nelze pou|
+  0000A25DEE  C5 BE C3 AD 74 2E 01 21 47 75 69 64 2E 45 6D 70   |....t..!Guid.Emp|
+  0000A25DFE  74 79 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 A1   |ty nen.. platn..|
+  0000A25E0E  20 68 6F 64 6E 6F 74 61 2E 01 36 42 61 72 76 79   | hodnota..6Barvy|
+  0000A25E1E  20 7A 76 C3 BD 72 61 7A 6E C4 9B 6E C3 AD 20 6D   | zv..razn..n.. m|
+  0000A25E2E  75 73 65 6A C3 AD 20 62 C3 BD 74 20 74 79 70 75   |usej.. b..t typu|
+  0000A25E3E  20 53 6F 6C 69 64 43 6F 6C 6F 72 42 72 75 73 68   | SolidColorBrush|
+  0000A25E4E  2E 01 61 50 6F 75 7A 65 20 53 6F 6C 69 64 43 6F   |..aPouze SolidCo|
+  0000A25E5E  6C 6F 72 42 72 75 73 68 20 6C 7A 65 20 70 6F 75   |lorBrush lze pou|
+  0000A25E6E  C5 BE C3 AD 74 20 6A 61 6B 6F 20 46 6F 72 65 67   |....t jako Foreg|
+  0000A25E7E  72 6F 75 6E 64 20 70 72 6F 20 53 74 69 63 6B 79   |round pro Sticky|
+  0000A25E8E  4E 6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75   |NoteControl typu|
+  0000A25E9E  20 53 74 69 63 6B 79 4E 6F 74 65 54 79 70 65 2E   | StickyNoteType.|
+  0000A25EAE  49 6E 6B 2E 01 4B 7B 30 7D 20 6D C5 AF C5 BE 65   |Ink..K{0} m....e|
+  0000A25EBE  20 68 6F 73 74 6F 76 61 74 20 70 6F 75 7A 65 20   | hostovat pouze |
+  0000A25ECE  6F 62 6A 65 6B 74 79 20 7B 31 7D 20 6E 65 62 6F   |objekty {1} nebo|
+  0000A25EDE  20 7B 32 7D 2E 20 7B 33 7D 20 6A 65 20 6E 65 70   | {2}. {3} je nep|
+  0000A25EEE  6C 61 74 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65 72   |latn.. kontejner|
+  0000A25EFE  2E 01 49 43 C3 AD 6C 6F 76 C3 A1 20 76 6C 61 73   |..IC..lov.. vlas|
+  0000A25F0E  74 6E 6F 73 74 20 6C 6F 6B 61 6C 69 7A 61 C4 8D   |tnost lokaliza..|
+  0000A25F1E  6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E 65   |n.. pozn..mky ne|
+  0000A25F2E  6E C3 AD 20 76 20 C5 99 65 74 C4 9B 7A 63 69 20   |n.. v ..et..zci |
+  0000A25F3E  7B 30 7D 20 70 6C 61 74 6E C3 A1 2E 01 59 48 6F   |{0} platn....YHo|
+  0000A25F4E  64 6E 6F 74 61 20 6C 6F 6B 61 6C 69 7A 61 C4 8D   |dnota lokaliza..|
+  0000A25F5E  6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E 65   |n.. pozn..mky ne|
+  0000A25F6E  6E C3 AD 20 70 6C 61 74 6E C3 A1 20 70 72 6F 20   |n.. platn.. pro |
+  0000A25F7E  63 C3 AD 6C 6F 76 6F 75 20 76 6C 61 73 74 6E 6F   |c..lovou vlastno|
+  0000A25F8E  73 74 20 7B 30 7D 20 76 20 C5 99 65 74 C4 9B 7A   |st {0} v ..et..z|
+  0000A25F9E  63 69 20 7B 31 7D 2E 01 39 4E 61 73 74 61 76 65   |ci {1}..9Nastave|
+
+    Offset 0x00A264DA (10,642,650):
+  0000A264BA  72 61 6E 69 63 65 20 76 C3 BD 62 C4 9B 72 75 2E   |ranice v..b..ru.|
+  0000A264CA  01 3D 50 72 76 6E C3 AD 6D 20 75 7A 6C 65 6D 20   |.=Prvn..m uzlem |
+  0000A264DA  42 41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75   |BAML v dokumentu|
+  0000A264EA  20 42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74   | BAML mus.. b..t|
+  0000A264FA  20 53 74 61 72 74 44 6F 63 75 6D 65 6E 74 2E 01   | StartDocument..|
+  0000A2650A  5E 53 74 69 63 6B 79 4E 6F 74 65 43 6F 6E 74 72   |^StickyNoteContr|
+  0000A2651A  6F 6C 20 6E 65 6D C5 AF C5 BE 65 20 61 6B 63 65   |ol nem....e akce|
+  0000A2652A  70 74 6F 76 61 74 20 61 6E 6F 74 61 63 69 2C 20   |ptovat anotaci, |
+  0000A2653A  6B 74 65 72 C3 A1 20 6F 62 73 61 68 75 6A 65 20   |kter.. obsahuje |
+  0000A2654A  6A 61 6B 20 C4 8D C3 A1 72 79 20 69 6E 6B 6F 75   |jak ....ry inkou|
+  0000A2655A  73 74 65 6D 2C 20 74 61 6B 20 74 65 78 74 2E 01   |stem, tak text..|
+  0000A2656A  6E C5 A0 61 62 6C 6F 6E 61 20 49 73 45 78 70 61   |n..ablona IsExpa|
+  0000A2657A  6E 64 65 64 20 70 72 6F 20 53 74 69 63 6B 79 4E   |nded pro StickyN|
+  0000A2658A  6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75 20   |oteControl typu |
+  0000A2659A  7B 30 7D 20 6D 75 73 C3 AD 20 6F 62 73 61 68 6F   |{0} mus.. obsaho|
+  0000A265AA  76 61 74 20 65 6C 65 6D 65 6E 74 20 74 79 70 75   |vat element typu|
+  0000A265BA  20 7B 31 7D 20 73 20 4E 61 6D 65 20 6E 61 73 74   | {1} s Name nast|
+  0000A265CA  61 76 65 6E C3 BD 6D 20 6E 61 20 7B 32 7D 2E 01   |aven..m na {2}..|
+  0000A265DA  27 53 6F 75 C4 8D C3 A1 73 74 20 53 74 6F 72 79   |'Sou....st Story|
+  0000A265EA  46 72 61 67 6D 65 6E 74 73 20 73 65 20 6E 65 6E   |Fragments se nen|
+  0000A265FA  61 C4 8D 65 74 6C 61 2E 01 4D 48 6F 64 6E 6F 74   |a..etla..MHodnot|
+  0000A2660A  61 20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E   |a {0} je neplatn|
+  0000A2661A  C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F   |... Mus.. obsaho|
+  0000A2662A  76 61 74 20 6A 65 64 6E 75 20 6E 65 62 6F 20 C4   |vat jednu nebo .|
+  0000A2663A  8D 74 79 C5 99 69 20 75 72 C4 8D 65 6E C3 A9 20   |.ty..i ur..en.. |
+  0000A2664A  64 C3 A9 6C 6B 79 2E 01 53 48 6F 64 6E 6F 74 61   |d..lky..SHodnota|
+  0000A2665A  20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3   | {0} je neplatn.|
+  0000A2666A  A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |.. Mus.. obsahov|
+  0000A2667A  61 74 20 6A 65 64 6E 75 2C 20 64 76 C4 9B 20 6E   |at jednu, dv.. n|
+  0000A2668A  65 62 6F 20 C4 8D 74 79 C5 99 69 20 75 72 C4 8D   |ebo ..ty..i ur..|
+  0000A2669A  65 6E C3 A9 20 64 C3 A9 6C 6B 79 2E 01 4C 48 6F   |en.. d..lky..LHo|
+  0000A266AA  64 6E 6F 74 61 20 7B 30 7D 20 6A 65 20 6E 65 70   |dnota {0} je nep|
+  0000A266BA  6C 61 74 6E C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62   |latn... Mus.. ob|
+  0000A266CA  73 61 68 6F 76 61 74 20 6A 65 64 6E 75 20 6E 65   |sahovat jednu ne|
+
+    Offset 0x00A264EB (10,642,667):
+  0000A264CB  3D 50 72 76 6E C3 AD 6D 20 75 7A 6C 65 6D 20 42   |=Prvn..m uzlem B|
+  0000A264DB  41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75 20   |AML v dokumentu |
+  0000A264EB  42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74 20   |BAML mus.. b..t |
+  0000A264FB  53 74 61 72 74 44 6F 63 75 6D 65 6E 74 2E 01 5E   |StartDocument..^|
+  0000A2650B  53 74 69 63 6B 79 4E 6F 74 65 43 6F 6E 74 72 6F   |StickyNoteContro|
+  0000A2651B  6C 20 6E 65 6D C5 AF C5 BE 65 20 61 6B 63 65 70   |l nem....e akcep|
+  0000A2652B  74 6F 76 61 74 20 61 6E 6F 74 61 63 69 2C 20 6B   |tovat anotaci, k|
+  0000A2653B  74 65 72 C3 A1 20 6F 62 73 61 68 75 6A 65 20 6A   |ter.. obsahuje j|
+  0000A2654B  61 6B 20 C4 8D C3 A1 72 79 20 69 6E 6B 6F 75 73   |ak ....ry inkous|
+  0000A2655B  74 65 6D 2C 20 74 61 6B 20 74 65 78 74 2E 01 6E   |tem, tak text..n|
+  0000A2656B  C5 A0 61 62 6C 6F 6E 61 20 49 73 45 78 70 61 6E   |..ablona IsExpan|
+  0000A2657B  64 65 64 20 70 72 6F 20 53 74 69 63 6B 79 4E 6F   |ded pro StickyNo|
+  0000A2658B  74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75 20 7B   |teControl typu {|
+  0000A2659B  30 7D 20 6D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |0} mus.. obsahov|
+  0000A265AB  61 74 20 65 6C 65 6D 65 6E 74 20 74 79 70 75 20   |at element typu |
+  0000A265BB  7B 31 7D 20 73 20 4E 61 6D 65 20 6E 61 73 74 61   |{1} s Name nasta|
+  0000A265CB  76 65 6E C3 BD 6D 20 6E 61 20 7B 32 7D 2E 01 27   |ven..m na {2}..'|
+  0000A265DB  53 6F 75 C4 8D C3 A1 73 74 20 53 74 6F 72 79 46   |Sou....st StoryF|
+  0000A265EB  72 61 67 6D 65 6E 74 73 20 73 65 20 6E 65 6E 61   |ragments se nena|
+  0000A265FB  C4 8D 65 74 6C 61 2E 01 4D 48 6F 64 6E 6F 74 61   |..etla..MHodnota|
+  0000A2660B  20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3   | {0} je neplatn.|
+  0000A2661B  A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |.. Mus.. obsahov|
+  0000A2662B  61 74 20 6A 65 64 6E 75 20 6E 65 62 6F 20 C4 8D   |at jednu nebo ..|
+  0000A2663B  74 79 C5 99 69 20 75 72 C4 8D 65 6E C3 A9 20 64   |ty..i ur..en.. d|
+  0000A2664B  C3 A9 6C 6B 79 2E 01 53 48 6F 64 6E 6F 74 61 20   |..lky..SHodnota |
+  0000A2665B  7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3 A1   |{0} je neplatn..|
+  0000A2666B  2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76 61   |. Mus.. obsahova|
+  0000A2667B  74 20 6A 65 64 6E 75 2C 20 64 76 C4 9B 20 6E 65   |t jednu, dv.. ne|
+  0000A2668B  62 6F 20 C4 8D 74 79 C5 99 69 20 75 72 C4 8D 65   |bo ..ty..i ur..e|
+  0000A2669B  6E C3 A9 20 64 C3 A9 6C 6B 79 2E 01 4C 48 6F 64   |n.. d..lky..LHod|
+  0000A266AB  6E 6F 74 61 20 7B 30 7D 20 6A 65 20 6E 65 70 6C   |nota {0} je nepl|
+  0000A266BB  61 74 6E C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62 73   |atn... Mus.. obs|
+  0000A266CB  61 68 6F 76 61 74 20 6A 65 64 6E 75 20 6E 65 62   |ahovat jednu neb|
+  0000A266DB  6F 20 64 76 C4 9B 20 6F 64 64 C4 9B 6C 65 6E C3   |o dv.. odd..len.|
+
+    Offset 0x00A27223 (10,646,051):
+  0000A27203  73 74 61 76 65 6E C3 AD 3A 01 65 50 C5 99 69 20   |staven..:.eP..i |
+  0000A27213  61 6E 61 6C C3 BD 7A 65 20 6F 62 73 61 68 75 20   |anal..ze obsahu |
+  0000A27223  42 41 4D 4C 20 64 6F C5 A1 6C 6F 20 6B 20 76 6E   |BAML do..lo k vn|
+  0000A27233  69 74 C5 99 6E C3 AD 20 63 68 79 62 C4 9B 3A 20   |it..n.. chyb..: |
+  0000A27243  7A 6E C3 A1 6D C3 A1 20 49 44 20 74 79 70 C5 AF   |zn..m.. ID typ..|
+  0000A27253  20 28 74 79 70 65 49 64 73 29 20 6D 75 73 C3 AD   | (typeIds) mus..|
+  0000A27263  20 62 C3 BD 74 20 7A C3 A1 70 6F 72 6E C3 A1 2E   | b..t z..porn...|
+  0000A27273  01 28 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20   |.(..et..zec {0} |
+  0000A27283  6E 65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20   |nelze p..ev..st |
+  0000A27293  6E 61 20 4C 65 6E 67 74 68 2E 01 4C 56 6C 61 73   |na Length..LVlas|
+  0000A272A3  74 6E 6F 73 74 20 41 6E 63 68 6F 72 49 74 65 6D   |tnost AnchorItem|
+  0000A272B3  20 7B 30 7D 20 6E 65 6D C3 A1 20 72 65 61 6C 69   | {0} nem.. reali|
+  0000A272C3  7A 6F 76 61 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65   |zovan.. kontejne|
+  0000A272D3  72 2C 20 61 20 70 72 6F 74 6F 20 6A 65 20 6E 65   |r, a proto je ne|
+  0000A272E3  70 6C 61 74 6E C3 A1 2E 01 06 43 74 72 6C 2B 41   |platn.....Ctrl+A|
+  0000A272F3  01 5A 53 65 6C 65 63 74 41 6C 6C 20 6C 7A 65 20   |.ZSelectAll lze |
+  0000A27303  76 79 76 6F 6C 61 74 20 70 6F 75 7A 65 20 76 20   |vyvolat pouze v |
+  0000A27313  72 65 C5 BE 69 6D 75 20 53 65 6C 65 63 74 69 6F   |re..imu Selectio|
+  0000A27323  6E 4D 6F 64 65 20 6E 61 73 74 61 76 65 6E C3 A9   |nMode nastaven..|
+  0000A27333  6D 20 6E 61 20 4D 75 6C 74 69 70 6C 65 20 6E 65   |m na Multiple ne|
+  0000A27343  62 6F 20 45 78 74 65 6E 64 65 64 2E 01 0B 56 79   |bo Extended...Vy|
+  0000A27353  62 72 61 74 20 76 C5 A1 65 01 54 47 65 74 4C 69   |brat v..e.TGetLi|
+  0000A27363  73 74 49 74 65 6D 49 6E 64 65 78 20 6A 65 20 70   |stItemIndex je p|
+  0000A27373  6C 61 74 6E C3 BD 20 70 6F 75 7A 65 20 70 72 6F   |latn.. pouze pro|
+  0000A27383  20 70 C5 99 C3 AD 6D C3 A9 20 70 6F 64 C5 99 C3   | p....m.. pod...|
+  0000A27393  AD 7A 65 6E C3 A9 20 70 72 76 6B 79 20 74 6F 68   |.zen.. prvky toh|
+  0000A273A3  6F 74 6F 20 70 72 76 6B 75 20 4C 69 73 74 2E 01   |oto prvku List..|
+  0000A273B3  39 47 72 69 64 56 69 65 77 43 6F 6C 75 6D 6E 43   |9GridViewColumnC|
+  0000A273C3  6F 6C 6C 65 63 74 69 6F 6E 20 6A 65 20 6E 79 6E   |ollection je nyn|
+  0000A273D3  C3 AD 20 75 72 C4 8D 65 6E 20 6A 65 6E 20 70 72   |.. ur..en jen pr|
+  0000A273E3  6F 20 C4 8D 74 65 6E C3 AD 2E 01 36 4E 65 6C 7A   |o ..ten....6Nelz|
+  0000A273F3  65 20 70 C5 99 69 64 61 74 20 64 61 74 61 20 6F   |e p..idat data o|
+  0000A27403  62 6A 65 6B 74 75 20 6B 72 6F 6D C4 9B 20 74 79   |bjektu krom.. ty|
+  0000A27413  70 75 20 47 72 69 64 56 69 65 77 43 6F 6C 75 6D   |pu GridViewColum|
+
+    Offset 0x00A28EB2 (10,653,362):
+  0000A28E92  6E 61 64 C5 99 61 7A 65 6E C3 BD 20 75 7A 65 6C   |nad..azen.. uzel|
+  0000A28EA2  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A28EB2  42 41 4D 4C 20 6D C5 AF C5 BE 65 20 62 C3 BD 74   |BAML m....e b..t|
+  0000A28EC2  20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 27 56 79 C5   | po..kozen..'Vy.|
+  0000A28ED2  BE 61 64 75 6A 65 20 73 65 20 6E 65 6E 75 6C 6F   |.aduje se nenulo|
+  0000A28EE2  76 C3 A1 20 68 6F 64 6E 6F 74 61 20 70 72 6F 20   |v.. hodnota pro |
+  0000A28EF2  7B 30 7D 2E 01 1B 56 79 C5 BE 61 64 75 6A 65 20   |{0}...Vy..aduje |
+  0000A28F02  73 65 20 6E 65 6E 75 6C 6F 76 C3 BD 20 74 79 70   |se nenulov.. typ|
+  0000A28F12  2E 01 42 4E 75 6C 6F 76 C3 BD 20 69 64 65 6E 74   |..BNulov.. ident|
+  0000A28F22  69 66 69 6B C3 A1 74 6F 72 20 55 52 49 20 76 20   |ifik..tor URI v |
+  0000A28F32  70 6F 64 70 6F 72 6F 76 61 6E C3 A9 6D 20 73 65   |podporovan..m se|
+  0000A28F42  7A 6E 61 6D 75 20 6F 62 6F 72 C5 AF 20 6E C3 A1   |znamu obor.. n..|
+  0000A28F52  7A 76 C5 AF 2E 01 5E 4F 62 6A 65 63 74 44 61 74   |zv....^ObjectDat|
+  0000A28F62  61 50 72 6F 76 69 64 65 72 20 6D C5 AF C5 BE 65   |aProvider m....e|
+  0000A28F72  20 6D C3 AD 74 20 70 C5 99 69 64 C4 9B 6C 65 6E   | m..t p..id..len|
+  0000A28F82  20 70 6F 75 7A 65 20 4F 62 6A 65 63 74 54 79 70   | pouze ObjectTyp|
+  0000A28F92  65 20 6E 65 62 6F 20 4F 62 6A 65 63 74 49 6E 73   |e nebo ObjectIns|
+  0000A28FA2  74 61 6E 63 65 2C 20 6E 69 6B 6F 6C 69 76 20 6F   |tance, nikoliv o|
+  0000A28FB2  62 6F 6A 65 2E 01 43 4F 62 6A 65 63 74 44 61 74   |boje..CObjectDat|
+  0000A28FC2  61 50 72 6F 76 69 64 65 72 20 70 6F 74 C5 99 65   |aProvider pot..e|
+  0000A28FD2  62 75 6A 65 20 62 75 C4 8F 20 4F 62 6A 65 63 74   |buje bu.. Object|
+  0000A28FE2  54 79 70 65 2C 20 6E 65 62 6F 20 4F 62 6A 65 63   |Type, nebo Objec|
+  0000A28FF2  74 49 6E 73 74 61 6E 63 65 2E 01 44 4E 65 7A 6E   |tInstance..DNezn|
+  0000A29002  C3 A1 6D C3 A1 20 76 C3 BD 6A 69 6D 6B 61 20 70   |..m.. v..jimka p|
+  0000A29012  72 6F 20 76 79 74 76 C3 A1 C5 99 65 6E C3 AD 20   |ro vytv....en.. |
+  0000A29022  74 79 70 75 20 7B 30 7D 20 70 72 6F 20 4F 62 6A   |typu {0} pro Obj|
+  0000A29032  65 63 74 44 61 74 61 50 72 6F 76 69 64 65 72 2E   |ectDataProvider.|
+  0000A29042  01 52 4E 65 7A 6E C3 A1 6D C3 A1 20 76 C3 BD 6A   |.RNezn..m.. v..j|
+  0000A29052  69 6D 6B 61 20 70 72 6F 20 76 79 76 6F 6C C3 A1   |imka pro vyvol..|
+  0000A29062  76 C3 A1 6E C3 AD 20 6D 65 74 6F 64 79 20 7B 30   |v..n.. metody {0|
+  0000A29072  7D 20 75 20 74 79 70 75 20 7B 31 7D 20 70 72 6F   |} u typu {1} pro|
+  0000A29082  20 4F 62 6A 65 63 74 44 61 74 61 50 72 6F 76 69   | ObjectDataProvi|
+  0000A29092  64 65 72 2E 01 7E 50 61 72 61 6D 65 74 72 79 20   |der..~Parametry |
+  0000A290A2  43 6F 6E 73 74 72 75 63 74 6F 72 50 61 72 61 6D   |ConstructorParam|
+
+    Offset 0x00A29DD6 (10,657,238):
+  0000A29DB6  74 79 70 20 7B 30 7D 20 6E 65 70 6C 61 74 6E C3   |typ {0} neplatn.|
+  0000A29DC6  BD 2E 01 5C 56 20 73 6F 75 62 6F 72 65 63 68 20   |...\V souborech |
+  0000A29DD6  42 41 4D 4C 20 6E 65 6A 73 6F 75 20 70 6F 64 70   |BAML nejsou podp|
+  0000A29DE6  6F 72 6F 76 C3 A1 6E 79 20 75 64 C3 A1 6C 6F 73   |orov..ny ud..los|
+  0000A29DF6  74 69 2E 20 50 72 6F 74 6F 20 6F 76 6C 61 64 61   |ti. Proto ovlada|
+  0000A29E06  C4 8D 20 75 64 C3 A1 6C 6F 73 74 C3 AD 20 7B 30   |.. ud..lost.. {0|
+  0000A29E16  7D 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 BD 2E   |} nen.. platn...|
+  0000A29E26  01 69 4E 65 73 6F 75 6C 61 64 20 76 65 72 7A C3   |.iNesoulad verz.|
+  0000A29E36  AD 2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64   |.. Datov.. proud|
+  0000A29E46  20 42 41 4D 4C 20 6D C3 A1 20 C4 8D C3 AD 73 6C   | BAML m.. ....sl|
+  0000A29E56  6F 20 76 65 72 7A 65 20 7B 30 7D 2C 20 61 6C 65   |o verze {0}, ale|
+  0000A29E66  20 61 6E 61 6C 79 7A C3 A1 74 6F 72 20 6D C5 AF   | analyz..tor m..|
+  0000A29E76  C5 BE 65 20 C4 8D C3 AD 73 74 20 70 6F 75 7A 65   |..e ....st pouze|
+  0000A29E86  20 76 65 72 7A 69 20 7B 31 7D 2E 01 81 01 45 6C   | verzi {1}....El|
+  0000A29E96  65 6D 65 6E 74 20 7B 30 7D 20 6A 69 C5 BE 20 6D   |ement {0} ji.. m|
+  0000A29EA6  C3 A1 20 70 6F 64 C5 99 C3 AD 7A 65 6E C3 BD 20   |.. pod....zen.. |
+  0000A29EB6  65 6C 65 6D 65 6E 74 20 61 20 6E 65 6D C5 AF C5   |element a nem...|
+  0000A29EC6  BE 65 20 70 C5 99 69 64 61 74 20 65 6C 65 6D 65   |.e p..idat eleme|
+  0000A29ED6  6E 74 20 7B 31 7D 2E 20 45 6C 65 6D 65 6E 74 20   |nt {1}. Element |
+  0000A29EE6  7B 30 7D 20 6D C5 AF C5 BE 65 20 6D C3 AD 74 20   |{0} m....e m..t |
+  0000A29EF6  6A 65 6E 20 6A 65 64 65 6E 20 70 6F 64 C5 99 C3   |jen jeden pod...|
+  0000A29F06  AD 7A 65 6E C3 BD 20 65 6C 65 6D 65 6E 74 2E 01   |.zen.. element..|
+  0000A29F16  27 4E 65 6C 7A 65 20 70 C5 99 69 64 61 74 20 6F   |'Nelze p..idat o|
+  0000A29F26  62 73 61 68 20 6B 20 6F 62 6A 65 6B 74 75 20 74   |bsah k objektu t|
+  0000A29F36  79 70 75 20 7B 30 7D 2E 01 30 4E 65 6C 7A 65 20   |ypu {0}..0Nelze |
+  0000A29F46  70 C5 99 69 64 61 74 20 6F 62 73 61 68 20 74 79   |p..idat obsah ty|
+  0000A29F56  70 75 20 7B 31 7D 20 6B 20 6F 62 6A 65 6B 74 75   |pu {1} k objektu|
+  0000A29F66  20 74 79 70 75 20 7B 30 7D 2E 01 24 4F 62 6A 65   | typu {0}..$Obje|
+  0000A29F76  6B 74 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99   |kt {0} nelze p..|
+  0000A29F86  69 64 61 74 20 6B 20 74 79 70 75 20 7B 31 7D 2E   |idat k typu {1}.|
+  0000A29F96  01 31 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20   |.1..et..zec {0} |
+  0000A29FA6  6E 65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20   |nelze p..ev..st |
+  0000A29FB6  6E 61 20 6F 62 6A 65 6B 74 20 74 79 70 75 20 7B   |na objekt typu {|
+  0000A29FC6  31 7D 2E 01 38 4E 65 6C 7A 65 20 70 C5 99 65 76   |1}..8Nelze p..ev|
+
+    Offset 0x00A29E47 (10,657,351):
+  0000A29E27  69 4E 65 73 6F 75 6C 61 64 20 76 65 72 7A C3 AD   |iNesoulad verz..|
+  0000A29E37  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A29E47  42 41 4D 4C 20 6D C3 A1 20 C4 8D C3 AD 73 6C 6F   |BAML m.. ....slo|
+  0000A29E57  20 76 65 72 7A 65 20 7B 30 7D 2C 20 61 6C 65 20   | verze {0}, ale |
+  0000A29E67  61 6E 61 6C 79 7A C3 A1 74 6F 72 20 6D C5 AF C5   |analyz..tor m...|
+  0000A29E77  BE 65 20 C4 8D C3 AD 73 74 20 70 6F 75 7A 65 20   |.e ....st pouze |
+  0000A29E87  76 65 72 7A 69 20 7B 31 7D 2E 01 81 01 45 6C 65   |verzi {1}....Ele|
+  0000A29E97  6D 65 6E 74 20 7B 30 7D 20 6A 69 C5 BE 20 6D C3   |ment {0} ji.. m.|
+  0000A29EA7  A1 20 70 6F 64 C5 99 C3 AD 7A 65 6E C3 BD 20 65   |. pod....zen.. e|
+  0000A29EB7  6C 65 6D 65 6E 74 20 61 20 6E 65 6D C5 AF C5 BE   |lement a nem....|
+  0000A29EC7  65 20 70 C5 99 69 64 61 74 20 65 6C 65 6D 65 6E   |e p..idat elemen|
+  0000A29ED7  74 20 7B 31 7D 2E 20 45 6C 65 6D 65 6E 74 20 7B   |t {1}. Element {|
+  0000A29EE7  30 7D 20 6D C5 AF C5 BE 65 20 6D C3 AD 74 20 6A   |0} m....e m..t j|
+  0000A29EF7  65 6E 20 6A 65 64 65 6E 20 70 6F 64 C5 99 C3 AD   |en jeden pod....|
+  0000A29F07  7A 65 6E C3 BD 20 65 6C 65 6D 65 6E 74 2E 01 27   |zen.. element..'|
+  0000A29F17  4E 65 6C 7A 65 20 70 C5 99 69 64 61 74 20 6F 62   |Nelze p..idat ob|
+  0000A29F27  73 61 68 20 6B 20 6F 62 6A 65 6B 74 75 20 74 79   |sah k objektu ty|
+  0000A29F37  70 75 20 7B 30 7D 2E 01 30 4E 65 6C 7A 65 20 70   |pu {0}..0Nelze p|
+  0000A29F47  C5 99 69 64 61 74 20 6F 62 73 61 68 20 74 79 70   |..idat obsah typ|
+  0000A29F57  75 20 7B 31 7D 20 6B 20 6F 62 6A 65 6B 74 75 20   |u {1} k objektu |
+  0000A29F67  74 79 70 75 20 7B 30 7D 2E 01 24 4F 62 6A 65 6B   |typu {0}..$Objek|
+  0000A29F77  74 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99 69   |t {0} nelze p..i|
+  0000A29F87  64 61 74 20 6B 20 74 79 70 75 20 7B 31 7D 2E 01   |dat k typu {1}..|
+  0000A29F97  31 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20 6E   |1..et..zec {0} n|
+  0000A29FA7  65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20 6E   |elze p..ev..st n|
+  0000A29FB7  61 20 6F 62 6A 65 6B 74 20 74 79 70 75 20 7B 31   |a objekt typu {1|
+  0000A29FC7  7D 2E 01 38 4E 65 6C 7A 65 20 70 C5 99 65 76 C3   |}..8Nelze p..ev.|
+  0000A29FD7  A9 73 74 20 68 6F 64 6E 6F 74 75 20 61 74 72 69   |.st hodnotu atri|
+  0000A29FE7  62 75 74 75 20 7B 30 7D 20 6E 61 20 6F 62 6A 65   |butu {0} na obje|
+  0000A29FF7  6B 74 20 74 79 70 75 20 7B 31 7D 2E 01 40 4E 65   |kt typu {1}..@Ne|
+  0000A2A007  6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20 C5 99   |lze p..ev..st ..|
+  0000A2A017  65 74 C4 9B 7A 65 63 20 7B 30 7D 20 76 20 61 74   |et..zec {0} v at|
+  0000A2A027  72 69 62 75 74 75 20 7B 31 7D 20 6E 61 20 6F 62   |ributu {1} na ob|
+  0000A2A037  6A 65 6B 74 20 74 79 70 75 20 7B 32 7D 2E 01 31   |jekt typu {2}..1|
+
+    Offset 0x00A2A835 (10,659,893):
+  0000A2A815  61 73 79 6E 63 68 72 6F 6E 6E C3 AD 68 6F 20 64   |asynchronn..ho d|
+  0000A2A825  61 74 6F 76 C3 A9 68 6F 20 70 72 6F 75 64 75 20   |atov..ho proudu |
+  0000A2A835  42 41 4D 4C 2E 01 40 4E 65 6C 7A 65 20 75 70 72   |BAML..@Nelze upr|
+  0000A2A845  61 76 6F 76 61 74 20 64 61 74 61 20 76 20 7A 61   |avovat data v za|
+  0000A2A855  70 65 C4 8D 65 74 C4 9B 6E C3 A9 6D 20 73 6C 6F   |pe..et..n..m slo|
+  0000A2A865  76 6E C3 AD 6B 75 20 58 6D 6C 6E 73 44 69 63 74   |vn..ku XmlnsDict|
+  0000A2A875  69 6F 6E 61 72 79 2E 01 54 4B 6C C3 AD C4 8D 20   |ionary..TKl.... |
+  0000A2A885  73 6C 6F 76 6E C3 AD 6B 75 20 7B 30 7D 20 6A 65   |slovn..ku {0} je|
+  0000A2A895  20 6A 69 C5 BE 20 70 6F 75 C5 BE C3 AD 76 C3 A1   | ji.. pou....v..|
+  0000A2A8A5  6E 2E 20 41 74 72 69 62 75 74 79 20 6B 6C C3 AD   |n. Atributy kl..|
+  0000A2A8B5  C4 8D 65 20 6D 75 73 65 6A C3 AD 20 62 C3 BD 74   |..e musej.. b..t|
+  0000A2A8C5  20 6A 65 64 69 6E 65 C4 8D 6E C3 A9 2E 01 53 56   | jedine..n....SV|
+  0000A2A8D5  6C 61 73 74 6E 6F 73 74 20 7B 30 7D 20 6A 65 20   |lastnost {0} je |
+  0000A2A8E5  6A 69 C5 BE 20 76 20 74 C3 A9 74 6F 20 70 C5 99   |ji.. v t..to p..|
+  0000A2A8F5  C3 AD 70 6F 6E C4 9B 20 6F 7A 6E 61 C4 8D 65 6E   |..pon.. ozna..en|
+  0000A2A905  C3 AD 20 6E 61 73 74 61 76 65 6E 61 20 61 20 6E   |.. nastavena a n|
+  0000A2A915  65 6C 7A 65 20 6A 69 20 7A 64 76 6F 6A 6F 76 61   |elze ji zdvojova|
+  0000A2A925  74 2E 01 41 56 6C 61 73 74 6E 6F 73 74 20 7B 30   |t..AVlastnost {0|
+  0000A2A935  7D 20 62 79 6C 61 20 6A 69 C5 BE 20 6E 61 73 74   |} byla ji.. nast|
+  0000A2A945  61 76 65 6E 61 20 61 20 6C 7A 65 20 6A 69 20 6E   |avena a lze ji n|
+  0000A2A955  61 73 74 61 76 69 74 20 70 6F 75 7A 65 20 6A 65   |astavit pouze je|
+  0000A2A965  64 6E 6F 75 2E 01 67 56 6C 61 73 74 6E 6F 73 74   |dnou..gVlastnost|
+  0000A2A975  69 20 7B 30 7D 20 61 20 7B 31 7D 20 6F 64 6B 61   |i {0} a {1} odka|
+  0000A2A985  7A 75 6A C3 AD 20 6E 61 20 73 74 65 6A 6E 6F 75   |zuj.. na stejnou|
+  0000A2A995  20 76 6C 61 73 74 6E 6F 73 74 2E 20 44 75 70 6C   | vlastnost. Dupl|
+  0000A2A9A5  69 63 69 74 6E C3 AD 20 6E 61 73 74 61 76 65 6E   |icitn.. nastaven|
+  0000A2A9B5  C3 AD 20 76 6C 61 73 74 6E 6F 73 74 69 20 6E 65   |.. vlastnosti ne|
+  0000A2A9C5  6A 73 6F 75 20 70 6F 76 6F 6C 65 6E 61 2E 01 60   |jsou povolena..`|
+  0000A2A9D5  45 6C 65 6D 65 6E 74 20 76 6C 61 73 74 6E 6F 73   |Element vlastnos|
+  0000A2A9E5  74 69 20 7B 30 7D 20 6E 65 6D C5 AF C5 BE 65 20   |ti {0} nem....e |
+  0000A2A9F5  62 C3 BD 74 20 70 72 C3 A1 7A 64 6E C3 BD 2E 20   |b..t pr..zdn... |
+  0000A2AA05  4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76 61 74 20   |Mus.. obsahovat |
+  0000A2AA15  70 6F 64 C5 99 C3 AD 7A 65 6E C3 A9 20 65 6C 65   |pod....zen.. ele|
+  0000A2AA25  6D 65 6E 74 79 20 6E 65 62 6F 20 74 65 78 74 2E   |menty nebo text.|
+
+    Offset 0x00A2B178 (10,662,264):
+  0000A2B158  6E 65 63 68 20 70 72 6F 20 4D 61 70 70 69 6E 67   |nech pro Mapping|
+  0000A2B168  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A2B178  42 41 4D 4C 20 6D C5 AF C5 BE 65 20 62 C3 BD 74   |BAML m....e b..t|
+  0000A2B188  20 70 6F C5 A1 6B 6F 7A 65 6E 20 6E 65 62 6F 20   | po..kozen nebo |
+  0000A2B198  76 65 72 7A 65 20 42 41 4D 4C 20 6E 65 6E C3 AD   |verze BAML nen..|
+  0000A2B1A8  20 6B 6F 6D 70 61 74 69 62 69 6C 6E C3 AD 20 73   | kompatibiln.. s|
+  0000A2B1B8  20 74 6F 75 74 6F 20 76 65 72 7A C3 AD 20 61 6E   | touto verz.. an|
+  0000A2B1C8  61 6C C3 BD 7A 79 2E 01 42 56 20 4D 61 70 70 69   |al..zy..BV Mappi|
+  0000A2B1D8  6E 67 20 70 6F 6B 79 6E 65 63 68 20 63 68 79 62   |ng pokynech chyb|
+  0000A2B1E8  C3 AD 20 58 6D 6C 4E 61 6D 65 73 70 61 63 65 2C   |.. XmlNamespace,|
+  0000A2B1F8  41 73 73 65 6D 62 6C 79 20 6E 65 62 6F 20 43 6C   |Assembly nebo Cl|
+  0000A2B208  72 4E 61 6D 65 73 70 61 63 65 2E 01 30 4D 61 70   |rNamespace..0Map|
+  0000A2B218  6F 76 C3 A1 6E C3 AD 20 69 64 65 6E 74 69 66 69   |ov..n.. identifi|
+  0000A2B228  6B C3 A1 74 6F 72 75 20 55 52 49 20 7B 30 7D 20   |k..toru URI {0} |
+  0000A2B238  6A 65 20 6E 65 70 6C 61 74 6E C3 A9 2E 01 66 54   |je neplatn....fT|
+  0000A2B248  65 6E 74 6F 20 66 6F 72 6D C3 A1 74 20 6E 65 6E   |ento form..t nen|
+  0000A2B258  C3 AD 20 70 6C 61 74 6E C3 BD 20 70 72 6F 20 70   |.. platn.. pro p|
+  0000A2B268  C5 99 C3 AD 70 6F 6E 75 20 75 72 C4 8D 65 6E C3   |....ponu ur..en.|
+  0000A2B278  AD 2C 20 6B 74 65 72 C3 A1 20 75 72 C4 8D 75 6A   |., kter.. ur..uj|
+  0000A2B288  65 20 61 72 67 75 6D 65 6E 74 79 20 6B 6F 6E 73   |e argumenty kons|
+  0000A2B298  74 72 75 6B 74 6F 72 75 20 76 20 70 72 76 6B 75   |truktoru v prvku|
+  0000A2B2A8  20 7B 30 7D 2E 01 AD 01 41 72 67 75 6D 65 6E 74   | {0}....Argument|
+  0000A2B2B8  79 20 7B 30 7D 20 6A 73 6F 75 20 6E 65 70 6C 61   |y {0} jsou nepla|
+  0000A2B2C8  74 6E C3 A9 2E 20 50 C5 99 C3 AD 70 6F 6E 79 20   |tn... P....pony |
+  0000A2B2D8  6F 7A 6E 61 C4 8D 65 6E C3 AD 20 76 79 C5 BE 61   |ozna..en.. vy..a|
+  0000A2B2E8  64 75 6A C3 AD 20 6A 65 64 6E 6F 20 72 6F 76 6E   |duj.. jedno rovn|
+  0000A2B2F8  C3 AD 74 6B 6F 20 6D 65 7A 69 20 6E C3 A1 7A 76   |..tko mezi n..zv|
+  0000A2B308  65 6D 20 61 20 68 6F 64 6E 6F 74 6F 75 20 61 20   |em a hodnotou a |
+  0000A2B318  6A 65 64 6E 75 20 C4 8D C3 A1 72 6B 75 20 6D 65   |jednu ....rku me|
+  0000A2B328  7A 69 20 70 61 72 61 6D 65 74 72 79 20 6B 6F 6E   |zi parametry kon|
+  0000A2B338  73 74 72 75 6B 74 6F 72 75 20 61 20 64 76 6F 6A   |struktoru a dvoj|
+  0000A2B348  69 63 65 6D 69 20 6E C3 A1 7A 65 76 2F 68 6F 64   |icemi n..zev/hod|
+  0000A2B358  6E 6F 74 61 2E 01 AC 01 41 72 67 75 6D 65 6E 74   |nota....Argument|
+  0000A2B368  79 20 7B 30 7D 20 6A 73 6F 75 20 6E 65 70 6C 61   |y {0} jsou nepla|
+
+    Offset 0x00A2B19E (10,662,302):
+  0000A2B17E  C5 AF C5 BE 65 20 62 C3 BD 74 20 70 6F C5 A1 6B   |....e b..t po..k|
+  0000A2B18E  6F 7A 65 6E 20 6E 65 62 6F 20 76 65 72 7A 65 20   |ozen nebo verze |
+  0000A2B19E  42 41 4D 4C 20 6E 65 6E C3 AD 20 6B 6F 6D 70 61   |BAML nen.. kompa|
+  0000A2B1AE  74 69 62 69 6C 6E C3 AD 20 73 20 74 6F 75 74 6F   |tibiln.. s touto|
+  0000A2B1BE  20 76 65 72 7A C3 AD 20 61 6E 61 6C C3 BD 7A 79   | verz.. anal..zy|
+  0000A2B1CE  2E 01 42 56 20 4D 61 70 70 69 6E 67 20 70 6F 6B   |..BV Mapping pok|
+  0000A2B1DE  79 6E 65 63 68 20 63 68 79 62 C3 AD 20 58 6D 6C   |ynech chyb.. Xml|
+  0000A2B1EE  4E 61 6D 65 73 70 61 63 65 2C 41 73 73 65 6D 62   |Namespace,Assemb|
+  0000A2B1FE  6C 79 20 6E 65 62 6F 20 43 6C 72 4E 61 6D 65 73   |ly nebo ClrNames|
+  0000A2B20E  70 61 63 65 2E 01 30 4D 61 70 6F 76 C3 A1 6E C3   |pace..0Mapov..n.|
+  0000A2B21E  AD 20 69 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72   |. identifik..tor|
+  0000A2B22E  75 20 55 52 49 20 7B 30 7D 20 6A 65 20 6E 65 70   |u URI {0} je nep|
+  0000A2B23E  6C 61 74 6E C3 A9 2E 01 66 54 65 6E 74 6F 20 66   |latn....fTento f|
+  0000A2B24E  6F 72 6D C3 A1 74 20 6E 65 6E C3 AD 20 70 6C 61   |orm..t nen.. pla|
+  0000A2B25E  74 6E C3 BD 20 70 72 6F 20 70 C5 99 C3 AD 70 6F   |tn.. pro p....po|
+  0000A2B26E  6E 75 20 75 72 C4 8D 65 6E C3 AD 2C 20 6B 74 65   |nu ur..en.., kte|
+  0000A2B27E  72 C3 A1 20 75 72 C4 8D 75 6A 65 20 61 72 67 75   |r.. ur..uje argu|
+  0000A2B28E  6D 65 6E 74 79 20 6B 6F 6E 73 74 72 75 6B 74 6F   |menty konstrukto|
+  0000A2B29E  72 75 20 76 20 70 72 76 6B 75 20 7B 30 7D 2E 01   |ru v prvku {0}..|
+  0000A2B2AE  AD 01 41 72 67 75 6D 65 6E 74 79 20 7B 30 7D 20   |..Argumenty {0} |
+  0000A2B2BE  6A 73 6F 75 20 6E 65 70 6C 61 74 6E C3 A9 2E 20   |jsou neplatn... |
+  0000A2B2CE  50 C5 99 C3 AD 70 6F 6E 79 20 6F 7A 6E 61 C4 8D   |P....pony ozna..|
+  0000A2B2DE  65 6E C3 AD 20 76 79 C5 BE 61 64 75 6A C3 AD 20   |en.. vy..aduj.. |
+  0000A2B2EE  6A 65 64 6E 6F 20 72 6F 76 6E C3 AD 74 6B 6F 20   |jedno rovn..tko |
+  0000A2B2FE  6D 65 7A 69 20 6E C3 A1 7A 76 65 6D 20 61 20 68   |mezi n..zvem a h|
+  0000A2B30E  6F 64 6E 6F 74 6F 75 20 61 20 6A 65 64 6E 75 20   |odnotou a jednu |
+  0000A2B31E  C4 8D C3 A1 72 6B 75 20 6D 65 7A 69 20 70 61 72   |....rku mezi par|
+  0000A2B32E  61 6D 65 74 72 79 20 6B 6F 6E 73 74 72 75 6B 74   |ametry konstrukt|
+  0000A2B33E  6F 72 75 20 61 20 64 76 6F 6A 69 63 65 6D 69 20   |oru a dvojicemi |
+  0000A2B34E  6E C3 A1 7A 65 76 2F 68 6F 64 6E 6F 74 61 2E 01   |n..zev/hodnota..|
+  0000A2B35E  AC 01 41 72 67 75 6D 65 6E 74 79 20 7B 30 7D 20   |..Argumenty {0} |
+  0000A2B36E  6A 73 6F 75 20 6E 65 70 6C 61 74 6E C3 A9 2E 20   |jsou neplatn... |
+  0000A2B37E  50 C5 99 C3 AD 70 6F 6E 79 20 6F 7A 6E 61 C4 8D   |P....pony ozna..|
+  0000A2B38E  65 6E C3 AD 20 76 79 C5 BE 61 64 75 6A C3 AD 20   |en.. vy..aduj.. |
+    ... and 386 more
+
+  XAML marker '.axaml' -- 668 occurrence(s)
+    0x0173B7DF: ...MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:KeyValueOfstringstring><a:Key>Avalonia.Media.Themes.Simple.SimpleFluentTheme</a:Ke...
+    0x0173B888: ...impleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></ClassToResourcePathIndex></AvaloniaResourceXamlInfo>................lSystem.Resourc...
+    0x01766A5D: ...MediaFluentTheme.axaml.Build:/FluentTheme/Internal/_Custom.axaml.Populate:/FluentTheme/Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Interna...
+    0x01766A87: ...Internal/_Custom.axaml.Populate:/FluentTheme/Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Internal/_Custom.axaml.Build:/FluentTheme/MediaFl...
+    0x01766AB4: ...Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Internal/_Custom.axaml.Build:/FluentTheme/MediaFluentControls.axaml.Populate:/FluentTheme/Medi...
+    0x01766AE6: ...Internal/_Custom.axaml.Build:/FluentTheme/MediaFluentControls.axaml.Populate:/FluentTheme/MediaFluentControls.axaml.NamespaceInfo:/FluentTheme/M...
+    0x01766B13: ...iaFluentControls.axaml.Populate:/FluentTheme/MediaFluentControls.axaml.NamespaceInfo:/FluentTheme/MediaFluentControls.axaml.Build:/FluentTheme/I...
+    0x01766B43: ...iaFluentControls.axaml.NamespaceInfo:/FluentTheme/MediaFluentControls.axaml.Build:/FluentTheme/Internal/Animations.axaml.Populate:/FluentTheme/I...
+    ... and 660 more
+
+  XAML marker '.xaml' -- 78 occurrence(s)
+    0x015B9E64: ...utAvaloniaDialog.xaml</a:Value></a:KeyValueOfstringstring></ClassToResourcePathIndex></AvaloniaResourceXamlInfo>Root.r2r.dll.....r...ps....z.r.....
+    0x016361CD: ...;.xfrm;.targets;.xaml;.xpt;.xft;.map;.wsdl;.disco;.ps1xml;.nuspec" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">...<Color f...
+    0x016A6859: ...Editing/TextArea.xaml.Populate:/Editing/TextArea.xaml.NamespaceInfo:/Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.Na...
+    0x016A6879: ...Editing/TextArea.xaml.NamespaceInfo:/Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Bu...
+    0x016A689E: ...Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate...
+    0x016A68B6: ...ild:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xam...
+    0x016A68D1: ...ate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xaml.NamespaceInfo:/Search/Sea...
+    0x016A68F1: ...nfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xaml.NamespaceInfo:/Search/SearchPanel.xaml.Build:/CodeComplet...
+    ... and 70 more
+
+  XAML marker 'avares://' -- 10 occurrence(s)
+    0x016E156D: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorPreviewer.xaml" />..        <MergeResourceInclude Source="avares://Ava...
+    0x016E15E1: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorSlider.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016E1652: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorSpectrum.xaml" />....        <!-- Controls -->..        <MergeResource...
+    0x016E16E2: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorPicker.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016E1753: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorView.xaml" />....      </ResourceDictionary.MergedDictionaries>..    <...
+    0x016FBD82: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorPreviewer.xaml" />..        <MergeResourceInclude Source="avares://Ava...
+    0x016FBDF6: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorSlider.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016FBE67: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorSpectrum.xaml" />....        <!-- Controls -->..        <MergeResource...
+    ... and 2 more
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [3] HEX COLOR PATTERNS NEAR BAML (+/-100KB)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  No hex color patterns found near BAML.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [4] ROOT-SPECIFIC RESOURCE NAMES
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  'RootTheme' -- 74 UTF-8 + 0 UTF-16LE = 74 total
+    [UTF-8] 0x19D73C77 (433,536,119):
+      ...ntsPropInit>b__94_10.<>9__4_10.<RootThemeCssPropInit>b__4_10.<>9__25_10.<GlobalUserPropInit>b__25_10.<>9__145_10.<LocalCommunity...
+    [UTF-8] 0x19D74925 (433,539,365):
+      ...ntsPropInit>b__94_20.<>9__4_20.<RootThemeCssPropInit>b__4_20.<>9__25_20.<GlobalUserPropInit>b__25_20.<>9__145_20.<LocalCommunity...
+    [UTF-8] 0x19D750D6 (433,541,334):
+      ...oadPropInit>b__64_30.<>9__4_30.<RootThemeCssPropInit>b__4_30.<>9__145_30.<LocalCommunityPermissionPropInit>b__145_30.<>9__165_30...
+    [UTF-8] 0x19D755DE (433,542,622):
+      ...oadPropInit>b__64_40.<>9__4_40.<RootThemeCssPropInit>b__4_40.<>9__145_40.<LocalCommunityPermissionPropInit>b__145_40.<>9__165_40...
+    [UTF-8] 0x19D7594A (433,543,498):
+      ...oadPropInit>b__64_50.<>9__4_50.<RootThemeCssPropInit>b__4_50.<>9__165_50.<RolePropInit>b__165_50.<>9__106_50.<CommunityPropInit>...
+    [UTF-8] 0x19D75BA5 (433,544,101):
+      ...oadPropInit>b__64_60.<>9__4_60.<RootThemeCssPropInit>b__4_60.<>9__165_60.<RolePropInit>b__165_60.<>9__237_60.<MessagePropInit>b_...
+    [UTF-8] 0x19D79D46 (433,560,902):
+      ...t_MessageReplies>b__3_0.<Create_RootThemeCss>b__3_0.<Create_AppRegistry>b__3_0.<>c__DisplayClass3_0.<>c__DisplayClass1104_0.<>9_...
+    [UTF-8] 0x19D7ABED (433,564,653):
+      ...eUploadResponsePropInit>b__4_0.<RootThemeCssPropInit>b__4_0.<AppRegistryPropInit>b__4_0.<>c__DisplayClass4_0.<GetWindowLongPtr>g...
+    ... and 66 more UTF-8
+
+  'DarkTheme' -- 4 UTF-8 + 6 UTF-16LE = 10 total
+    [UTF-8] 0x0F0DE621 (252,569,121):
+      .../Assets/SVGs/Dark Theme/Theming/DarkThemePreview.svg..Z.#...?/Resources/Assets/SVGs/Dark Theme/Theming/LightThemePreview.svg..Z....
+    [UTF-8] 0x0F0DE6B4 (252,569,268):
+      ...ets/SVGs/Dark Theme/Theming/PureDarkThemePreview.svg..Z.....</Resources/Assets/SVGs/Dark Theme/Theming/RadioButtonOff.svg..Z.y.....
+    [UTF-8] 0x0F0E1521 (252,581,153):
+      ...Assets/SVGs/Light Theme/Theming/DarkThemePreview.svg..^.#...@/Resources/Assets/SVGs/Light Theme/Theming/LightThemePreview.svg=.^...
+    [UTF-8] 0x0F0E15B6 (252,581,302):
+      ...ts/SVGs/Light Theme/Theming/PureDarkThemePreview.svgS.^.....=/Resources/Assets/SVGs/Light Theme/Theming/RadioButtonOff.svg..^.y....
+    [UTF-16LE] 0x19EC781B (434,927,643):
+      ...ToBoolConverter.DarkThemePreviewSVG.LightThemePreviewSVG.PureDarkThemePre...
+    [UTF-16LE] 0x19EC7875 (434,927,733):
+      ...ePreviewSVG.PureDarkThemePreviewSVG.SyncThemePreviewSVG.TitleTextBlock......
+    [UTF-16LE] 0x19EF2C8D (435,104,909):
+      ...t Theme/Theming/DarkThemePreview.svg........................................
+    [UTF-16LE] 0x19EF2E19 (435,105,305):
+      ...eme/Theming/PureDarkThemePreview.svg.SyncDarkSVG./Resources/Assets/SVGs/L...
+    [UTF-16LE] 0x19EF82FB (435,127,035):
+      ...k Theme/Theming/DarkThemePreview.svg./Resources/Assets/SVGs/Dark Theme/Th...
+    [UTF-16LE] 0x19EF8480 (435,127,424):
+      ...eme/Theming/PureDarkThemePreview.svg./Resources/Assets/SVGs/Dark Theme/Th...
+
+  'RootColors' -- NOT FOUND
+
+  'SidebarBackground' -- NOT FOUND
+
+  'ChannelList' -- 51 UTF-8 + 1 UTF-16LE = 52 total
+    [UTF-8] 0x0146174F (21,370,703):
+      ...sableToNotifyProcessedList.MediaChannelList.ThreeItemList.SingleItemList._currentItemList.SixItemList.ChooseBestFocusableElement...
+    [UTF-8] 0x01A3B06A (27,504,746):
+      ...ol.Viewport.IList.ReadList.MediaChannelList.ArrayList._list.Cut.Avalonia.Remote.Protocol.Input.DbeCodeInput.DbeNoCodeInput.MoveN...
+    [UTF-8] 0x0E683B32 (241,711,922):
+      ...uirements cannot be met by the IChannelListener for Binding '{0}' since the contract requires support for one of these channel t...
+    [UTF-8] 0x0E687A5A (241,728,090):
+      ...to create a ChannelFactory or a ChannelListener because it appears to be missing a TransportBindingElement.  Every binding must ...
+    [UTF-8] 0x0E687E13 (241,729,043):
+      ...n building the ChannelFactory / ChannelListener.  This may be have been caused by the binding elements being misordered.  The re...
+    [UTF-8] 0x0E6895A5 (241,735,077):
+      ...at '{0}' is unable to open its IChannelListener as there are no endpoints for the ChannelDispatcher..]The ChannelDispatcher at '...
+    [UTF-8] 0x0E689638 (241,735,224):
+      ...s) '{1}' is unable to open its IChannelListener....CreateFactory requires that the Endpoint property be initialized. Either prov...
+    [UTF-8] 0x0E7AC57B (242,926,971):
+      ...ger`1.EventHandler`1.IOTimer`1.IChannelListener`1.OutWrapper`1.IComparer`1.IEqualityComparer`1.TaskAwaiter`1.GenericAdapter`1.No...
+    ... and 43 more UTF-8
+    [UTF-16LE] 0x19EBADAF (434,875,823):
+      ...ing.IsCollapsed.ChannelListItemId.Type.PermissionsSyncedToChannelGroup.Medi...
+
+  'MessageBackground' -- 8 UTF-8 + 2 UTF-16LE = 10 total
+    [UTF-8] 0x19D803BC (433,587,132):
+      ...remoteAudioTrackStarted>b__0.<onMessageBackgroundBorderContextRequested>b__0.<onSelectTabMessageReceived>b__0.<onSwitchChannelMe...
+    [UTF-8] 0x19D85456 (433,607,766):
+      ...PropInit>b__1253_1.<>9__53_1.<onMessageBackgroundBorderContextRequested>b__53_1.<>c__DisplayClass53_1.<>9__63_1.<CommunityRolePr...
+    [UTF-8] 0x19D90DAA (433,655,210):
+      ...ommunityPropertyChanged>b__2.<onMessageBackgroundBorderContextRequested>b__2.<.ctor>b__2.<loadEmojis>b__2.<GetClosestMatchingEmo...
+    [UTF-8] 0x19DB43C8 (433,800,136):
+      ...interEntered.onPointerEntered.onMessageBackgroundBorderPointerEntered.onMainBorderPointerEntered.onChannelGridSplitterPointerEnt...
+    [UTF-8] 0x19DB5D0A (433,806,602):
+      ...PointerExited.onPointerExited.onMessageBackgroundBorderPointerExited.onMainBorderPointerExited.onChannelGridSplitterPointerExite...
+    [UTF-8] 0x19DB6767 (433,809,255):
+      ...ested.remove_RepaintRequested.onMessageBackgroundBorderContextRequested.editorContextRequested.add_CloseWindowRequested.remove_C...
+    [UTF-8] 0x19E13B60 (434,191,200):
+      ...Border.DisabledBackgroundBorder.MessageBackgroundBorder.WideBorder.ImageBorder.PrimaryRoleBorder.OnlineBorder.MainPictureBorder....
+    [UTF-8] 0x19E13DA6 (434,191,782):
+      ...tWidgetBorder._chatWidgetBorder.MessageBackgroundHighlightBorder.RootBorder.HexInputBorder.SystemTrayBorder.BodyBorder.PropName_...
+    [UTF-16LE] 0x19EC3587 (434,910,599):
+      ...MessageMenuItem.MessageBackgroundBorder.MessageBackgroundHighlightBorder.SystemMe...
+    [UTF-16LE] 0x19EC35B7 (434,910,647):
+      ...ackgroundBorder.MessageBackgroundHighlightBorder.SystemMessageSvgImage.UsernameTe...
+
+  'NavigationBackground' -- NOT FOUND
+
+  'ChatBackground' -- NOT FOUND
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [5] AVALONIA COLOR CONSTRUCTOR / METHOD STRINGS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  'Color.FromArgb' -- NOT FOUND
+  'Color.Parse' -- NOT FOUND
+  'Color.FromRgb' -- NOT FOUND
+  'Color.FromUInt32' -- NOT FOUND
+
+  'SolidColorBrush' -- 230 UTF-8 + 3 UTF-16LE = 233 total
+    [UTF-8] 0x00A25E3F (10,640,959):
+      ...zv..razn..n.. musej.. b..t typu SolidColorBrush..aPouze SolidColorBrush lze pou....t jako Foreground pro Sticky...
+    [UTF-8] 0x00A25E57 (10,640,983):
+      ....t typu SolidColorBrush..aPouze SolidColorBrush lze pou....t jako Foreground pro StickyNoteControl typu StickyN...
+    [UTF-8] 0x00ACD2FA (11,326,202):
+      ...rhebungsfarben m..ssen vom Typ "SolidColorBrush" sein..sNur "SolidColorBrush" kann f..r "StickyNoteControl" vom...
+    [UTF-8] 0x00ACD317 (11,326,231):
+      ...p "SolidColorBrush" sein..sNur "SolidColorBrush" kann f..r "StickyNoteControl" vom Typ "StickyNoteType.Ink" als...
+    [UTF-8] 0x00B78576 (12,027,254):
+      ... de resaltado deben ser de tipo SolidColorBrush..fS..lo SolidColorBrush se puede usar como Foreground para Stic...
+    ... and 225 more UTF-8
+    [UTF-16LE] 0x1BD61CDD (467,016,925):
+      ...toryboardToFill.SolidColorBrush.SpecularMaterial.SplineByteKeyF...
+    [UTF-16LE] 0x1BF1C23E (468,828,734):
+      ...onvertedBitmap .SolidColorBrush.LinearGradientBrush.Transform.S...
+    [UTF-16LE] 0x1C0CE26F (470,606,447):
+      ...en converted to SolidColorBrush.Brush should've been made absol...
+
+  'LinearGradientBrush' -- 133 UTF-8 + 4 UTF-16LE = 137 total
+    [UTF-8] 0x01450CE1 (21,302,497):
+      ...itionSimpleRadialGradientBrush.ILinearGradientBrush.ImmutableLinearGradientBrush.ServerCompositionSimpleLinearGradi...
+    [UTF-8] 0x01450CFE (21,302,526):
+      ...h.ILinearGradientBrush.ImmutableLinearGradientBrush.ServerCompositionSimpleLinearGradientBrush.ServerCompositionSim...
+    [UTF-8] 0x01450D29 (21,302,569):
+      ...entBrush.ServerCompositionSimpleLinearGradientBrush.ServerCompositionSimpleContentBrush._brush.Math.get_Path.set_Pa...
+    [UTF-8] 0x01459F7D (21,340,029):
+      ...hChangedFields.CompositionSimpleLinearGradientBrushChangedFields.CompositionVisualChangedFields.CompositionSimpleTr...
+    [UTF-8] 0x017665FA (24,536,570):
+      ...idColorBrush.ConicGradientBrush.LinearGradientBrush.Math.get_Path.CompiledBindingPath.DllImportSearchPath.get_Width...
+    ... and 128 more UTF-8
+    [UTF-16LE] 0x1BD604FF (467,010,815):
+      ...rDoubleKeyFrame.LinearGradientBrush.LinearInt16KeyFrame.LinearInt32...
+    [UTF-16LE] 0x1BF1C25E (468,828,766):
+      ...SolidColorBrush.LinearGradientBrush.Transform.StartPoint.EndPoint.C...
+    [UTF-16LE] 0x1C0CE19E (470,606,238):
+      ...->Length..Empty LinearGradientBrush, should've been culled............
+    [UTF-16LE] 0x1C0CE20D (470,606,349):
+      .......Single-stop LinearGradientBrush, should've been converted to So...
+
+  'IBrush' -- 17 UTF-8 + 0 UTF-16LE = 17 total
+    [UTF-8] 0x014509E9 (21,301,737):
+      ...sh._autoFlush.TryDiscardOrFlush.IBrush.get_Brush.set_Brush.get_ForegroundBrush.get_BackgroundBrush.IIm...
+    [UTF-8] 0x01452D8A (21,310,858):
+      ...rm.get_IsUniform.Avalonia.Media.IBrush.Transform.Rotate3DTransform.ITransform.Avalonia.Media.IBrush.ge...
+    [UTF-8] 0x01452DC7 (21,310,919):
+      ...sform.ITransform.Avalonia.Media.IBrush.get_Transform.set_Transform.ComputeDecomposedTransform.TryGetIn...
+    [UTF-8] 0x0145997C (21,338,492):
+      ...onRenderResource<Avalonia.Media.IBrush>.GetForCompositor.Avalonia.Rendering.Composition.Drawing.ICompo...
+    [UTF-8] 0x0152FA6D (22,215,277):
+      ...TextEndOfParagraph.Refresh.Push.IBrush.get_SelectionForegroundBrush.IImmutableBrush.TileBrush.VisualBr...
+    ... and 12 more UTF-8
+
+  'ThemeColor' -- 20 UTF-8 + 4 UTF-16LE = 24 total
+    [UTF-8] 0x01B6B1A7 (28,750,247):
+      ...Color.set_BackgroundColor.TryGetThemeColor.NormalizeColor.color.GetLineTerminator.GetLineTextIncludingTerm...
+    [UTF-8] 0x0D4A2C96 (222,964,886):
+      ...EnterRequest.DragOverRequest.SetThemeColorRequest.SetForcedScaleFactorRequest.GetElementsByCssSelectorRequ...
+    [UTF-8] 0x1B76BD46 (460,766,534):
+      ...ButtonChrome........Name........ThemeColor........BorderBrush........Fill........IsDefaulted........Render...
+    [UTF-8] 0x1B76CD3D (460,770,621):
+      ...ion........SortDirection........ThemeColor........IsHovered........IsPressed........CanUserSort........IsC...
+    [UTF-8] 0x1B76D495 (460,772,501):
+      ...ScrollChrome....!...Name....!...ThemeColor....!...RenderMouseOver....!...RenderPressed....!...ScrollGlyph ...
+    ... and 15 more UTF-8
+    [UTF-16LE] 0x0D4ADDB0 (223,010,224):
+      ...olorResponse.SetThemeColorRequest{EngineId: .rpc.SetThemeC...
+    [UTF-16LE] 0x0D4ADDF8 (223,010,296):
+      ...gineId: .rpc.SetThemeColorRequest.rpc.NativeTheme.SetColor...
+    [UTF-16LE] 0x1B7DED4E (461,237,582):
+      ...ratorVisibility.ThemeColor.BulletChrome.ButtonChrome.Scrol...
+    [UTF-16LE] 0x1BD5B974 (466,991,476):
+      ...d.UxThemeName.UxThemeColor.WindowCornerRadius.WindowGlassC...
+
+  'ColorResource' -- 1 UTF-8 + 0 UTF-16LE = 1 total
+    [UTF-8] 0x1B5110B5 (458,297,525):
+      ....MilCmdQuaternionResource.MilCmdColorResource.MilCmdRectResource.AddDependentResource.MilCmdEtwEventResource....
+
+  'DynamicResource' -- 301 UTF-8 + 9 UTF-16LE = 310 total
+    [UTF-8] 0x00A2EB96 (10,677,142):
+      ...n..mi typy MarkupExtension jsou DynamicResourceExtension a BindingBase nebo odvozen.. typy....Sd..len.. atribut...
+    [UTF-8] 0x00AD7C14 (11,369,492):
+      ... nur die MarkupExtension-Typen "DynamicResourceExtension" und "BindingBase" oder abgeleitete Typen....Das freig...
+    [UTF-8] 0x00B81E21 (12,066,337):
+      ...e MarkupExtension admitidos son DynamicResourceExtension y BindingBase o tipos derivados....El atributo compart...
+    [UTF-8] 0x00C2A91D (12,757,277):
+      ...upExtension pris en charge sont DynamicResourceExtension et BindingBase ou les types d..riv..s....L'attribut pa...
+    [UTF-8] 0x00CD355F (13,448,543):
+      ...MarkupExtension supportati sono DynamicResourceExtension e BindingBase o tipi derivati....L'attributo condiviso...
+    ... and 296 more UTF-8
+    [UTF-16LE] 0x015CA100 (22,847,744):
+      ...ce must be set..DynamicResource ..................................
+    [UTF-16LE] 0x015CA289 (22,848,137):
+      ...n this context..DynamicResource must have a ResourceKey..Static...
+    [UTF-16LE] 0x1BD39F35 (466,853,685):
+      ...Controls.DisableDynamicResourceOptimization.NULL.Call to Framew...
+    [UTF-16LE] 0x1BD42B70 (466,889,584):
+      ...ox.ToolBarPanel.DynamicResourceExtension.FontSizeConverter.Sepa...
+    [UTF-16LE] 0x1BD43224 (466,891,300):
+      ...enuItem.Section.DynamicResourceExtensionConverter.Underline.Tem...
+    ... and 4 more UTF-16LE
+
+  'StaticResource' -- 241 UTF-8 + 20 UTF-16LE = 261 total
+    [UTF-8] 0x00A2EF84 (10,678,148):
+      ...ixedPageProxy..WP....pona prvku StaticResource m....e b..t pou..ita pouze v kontextu na....t..n.. XAML..eObjek...
+    [UTF-8] 0x00AD80B7 (11,370,679):
+      ... "FixedPageProxy" handeln..QDie StaticResource-Erweiterung kann nur im Ladekontext von XAML verwendet werden.....
+    [UTF-8] 0x00B8222C (12,067,372):
+      ... FixedPageProxy..QLa extensi..n StaticResource s..lo se puede usar en el contexto de carga de XAML..vEl objeto...
+    [UTF-8] 0x00C2AD6A (12,758,378):
+      ...un FixedPageProxy..^L'extension StaticResource ne peut ..tre utilis..e que dans le contexte de chargement de X...
+    [UTF-8] 0x00CD39A6 (13,449,638):
+      ...ssibile utilizzare l'estensione StaticResource sono nel contesto di caricamento del file XAML....Non .. possib...
+    ... and 236 more UTF-8
+    [UTF-16LE] 0x00A18FEA (10,588,138):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00ABEFEE (11,268,078):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00B6AFEA (11,972,586):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00C12FEE (12,660,718):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00CBBFEE (13,352,942):
+      ...................StaticResourceInXamlOnly.........................
+    ... and 15 more UTF-16LE
+
+  'ThemeVariant' -- 77 UTF-8 + 7 UTF-16LE = 84 total
+    [UTF-8] 0x01443134 (21,246,260):
+      ...Changed.HeightChanged.add_ActualThemeVariantChanged.remove_ActualThemeVariantChanged.OnTemplatedParentChange...
+    [UTF-8] 0x01443155 (21,246,293):
+      ...hemeVariantChanged.remove_ActualThemeVariantChanged.OnTemplatedParentChanged.OnVisualParentChanged.OnParentC...
+    [UTF-8] 0x01448E29 (21,270,057):
+      ...tHitTestResult>k__BackingField.<ThemeVariant>k__BackingField.<GetVariant>k__BackingField.<InheritVariant>k__...
+    [UTF-8] 0x0144973A (21,272,378):
+      ...ackingField.<Avalonia.Controls.IThemeVariantProvider.Key>k__BackingField.<Key>k__BackingField.<PhysicalKey>k...
+    [UTF-8] 0x01456AFB (21,326,587):
+      ...FormatProvider._formatProvider.IThemeVariantProvider.IDataContextProvider.IChildIndexProvider.UpdateQueryPro...
+    ... and 72 more UTF-8
+    [UTF-16LE] 0x01467743 (21,395,267):
+      ....inheritVariant.ThemeVariant { Key = . }.themeVariant.Actual...
+    [UTF-16LE] 0x0146779B (21,395,355):
+      ...meVariant.ActualThemeVariant.RequestedThemeVariant.Light.Dar...
+    [UTF-16LE] 0x014677C7 (21,395,399):
+      ...ariant.RequestedThemeVariant.Light.Dark........................
+    [UTF-16LE] 0x014677F8 (21,395,448):
+      ...................ThemeVariant type converter supports only bu...
+    [UTF-16LE] 0x01468B90 (21,400,464):
+      ...formColorValues.ThemeVariant = ., ContrastPreference = ., Ac...
+    ... and 2 more UTF-16LE
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [6] BONUS: RAW ARGB BYTE PATTERNS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  bg primary (LE/BGRA: 21150dff) -- 396134 hits (noise)
+
+  bg secondary (LE/BGRA: 261a12ff) -- 32 hit(s)
+    0x0083D204 (8,638,980): FF FF FF FF 40 36 2F FF 14 07 00 FF 1D 11 09 FF 26 1A 12 FF 6A 62 5D FF 76 6F 6A FF 7C 75 70 FF 84 7D 79 FF
+    0x0085CA34 (8,768,052): FF FF FF FF FF FF FF FF FF FF FF FF 95 8F 8B FF 26 1A 12 FF 0A 00 00 FF 1A 0D 05 FF 21 15 0D FF 21 15 0D FF
+    0x0087AF20 (8,892,192): FF FF FF FF FF FF FF FF FF FF FF FF FD FD FD FF 26 1A 12 FF 18 0C 03 FF 21 15 0D FF 21 15 0D FF 21 15 0D FF
+    0x0087B5A4 (8,893,860): 21 15 0D FF 1C 10 08 FF 35 2A 23 FF 61 59 53 FF 26 1A 12 FF 0E 01 00 FF 0F 02 00 FF 19 0C 04 FF 1F 12 0A FF
+    0x0087FA00 (8,911,360): ED EC EB FF BC B8 B6 FF 88 82 7D FF 55 4C 46 FF 26 1A 12 FF 17 0A 02 FF 0C 00 00 FF 0F 02 00 FF 17 0A 02 FF
+    ... and 27 more
+
+  bg tertiary (LE/BGRA: 1b1007ff) -- 2 hit(s)
+    0x19BB42E4 (431,702,756): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 1B 10 07 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E2F1 (536,208,113): FF 15 C1 81 08 04 FF 15 1B 03 F3 03 48 8B D8 B9 1B 10 07 FF FF 15 25 D7 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  input bg (LE/BGRA: 130e09ff) -- 2 hit(s)
+    0x19BB4304 (431,702,788): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 13 0E 09 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E341 (536,208,193): FF 15 71 81 08 04 FF 15 CB 02 F3 03 48 8B D8 B9 13 0E 09 FF FF 15 D5 D6 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  brand blue (LE/BGRA: f86a3bff) -- 8 hit(s)
+    0x19AA9AA3 (430,611,107): 00 0A 25 6F BC 2B 00 0A 73 BD 2B 00 0A 25 25 20 F8 6A 3B FF 28 BE 2B 00 0A 6F BF 2B 00 0A 23 00 00 00 00 00
+    0x19BB41C4 (431,702,468): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4BF8 (431,705,080): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5628 (431,707,688): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FD267B8 (533,882,808): 00 48 8B 8C 24 B0 05 00 00 FF 15 F9 02 23 04 B9 F8 6A 3B FF FF 15 86 52 23 04 89 84 24 18 07 00 00 FF 15 39
+    ... and 3 more
+
+  brand lime (LE/BGRA: 5dffa8ff) -- 4 hit(s)
+    0x19BB41E4 (431,702,500): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 5D FF A8 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5648 (431,707,720): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 5D FF A8 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E071 (536,207,473): FF 15 41 84 08 04 FF 15 9B 05 F3 03 48 8B D8 B9 5D FF A8 FF FF 15 A5 D9 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF60CB1 (536,218,801): FF 15 31 58 08 04 FF 15 5B D9 F2 03 48 8B D8 B9 5D FF A8 FF FF 15 65 AD FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  border (LE/BGRA: 362c24ff) -- 8 hit(s)
+    0x008377E4 (8,615,908): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x0F036C9C (251,882,652): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x0F0E9B98 (252,615,576): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x111D91D5 (287,150,549): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x19BB4324 (431,702,820): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 36 2C 24 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    ... and 3 more
+
+  text white (BE/ARGB: fff2f2f2) -- 3 hit(s)
+    0x1BFE2BA9 (469,642,153): 01 00 00 00 03 00 00 00 0B B3 B3 B4 9B A2 A2 A3 FF F2 F2 F2 FF F4 F1 ED FF B7 9E 78 FF E6 C7 9A FF E1 C0 90
+    0x1BFE3A85 (469,645,957): 00 00 00 00 00 00 00 00 04 96 95 96 D4 CA CA CA FF F2 F2 F2 FF 71 71 A6 FF 8C 8D E1 FF 6E 71 DE FF 5D 63 DE
+    0x1BFE4849 (469,649,481): 0F AD AD AD DF A1 A1 A1 FF CC CC CC FF EC EC EC FF F2 F2 F2 FF E0 E0 E0 FF B8 B8 B9 FF 96 96 97 FD A4 A3 A4
+
+  text white (LE/BGRA: f2f2f2ff) -- 13 hit(s)
+    0x19BB4224 (431,702,564): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4284 (431,702,660): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4CB8 (431,705,272): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5688 (431,707,784): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB56E8 (431,707,880): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    ... and 8 more
+
+  text gray (BE/ARGB: ffa7a7a8) -- 2 hit(s)
+    0x1BFE3BD1 (469,646,289): FF 73 B2 7D FF 6C A7 74 FF C6 D3 C8 FF C7 C7 C8 FF A7 A7 A8 EB 00 00 00 21 00 00 00 0F 00 00 00 04 00 00 00
+    0x1BFE5E71 (469,655,153): FF 31 DB FF FF 8C ED FF FF 3C 9F BC FF F6 F6 F6 FF A7 A7 A8 F0 00 00 00 00 00 00 00 00 8E 8E 90 F7 F6 F6 F6
+
+  muted (LE/BGRA: 6f5c4fff) -- 4 hit(s)
+    0x19BB4404 (431,703,044): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 6F 5C 4F FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5868 (431,708,264): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 6F 5C 4F FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E5C1 (536,208,833): FF 15 F1 7E 08 04 FF 15 4B 00 F3 03 48 8B D8 B9 6F 5C 4F FF FF 15 55 D4 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF61201 (536,220,161): FF 15 E1 52 08 04 FF 15 0B D4 F2 03 48 8B D8 B9 6F 5C 4F FF FF 15 15 A8 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  link blue (BE/ARGB: ff88a5ff) -- 12 hit(s)
+    0x11399564 (288,986,468): AF FF 26 B0 FF 2B AC FF 2A AD FF F0 A8 FF 42 AA FF 88 A5 FF CE A6 FF 37 A2 FF 65 A3 FF 36 9F FF 64 A0 FF DF
+    0x11830775 (293,799,797): B0 FF F0 BD FF 07 AC FF 3B B7 FF AF A6 FF B1 B5 FF 88 A5 FF C8 B8 FF 12 A9 FF E6 BB FF 39 AD FF 73 B9 FF C8
+    0x11BD2980 (297,609,600): CE FF 63 E0 FF AF C0 FF 9E D2 FF 00 B3 FF 26 C4 FF 88 A5 FF 97 B6 FF D3 98 FF B4 A9 FF 00 8C FF FC 9C FF 98
+    0x11C4B06C (298,102,892): 92 FF 8D C3 FF 9C 98 FF 20 BC FF FE 9E FF 55 B4 FF 88 A5 FF DA AC FF 82 AC FF 95 A5 FF 7C B3 FF CB 9E FF 7F
+    0x11CB8190 (298,549,648): DE FF FC 79 FF A7 C9 FF B5 67 FF F2 B6 FF 7A 57 FF 88 A5 FF E2 49 FF FA 95 FF 36 3F FF DF 88 FF 5A 37 FF 5C
+    ... and 7 more
+
+  link blue (LE/BGRA: ffa588ff) -- 9 hit(s)
+    0x1139E712 (289,007,378): 87 FF 65 88 FF 13 88 FF 52 88 FF 60 88 FF DC 88 FF A5 88 FF 54 89 FF 94 89 FF DB 89 FF DC 89 FF 56 8A FF 57
+    0x114B3DE6 (290,143,718): A9 FF 3E B1 FF 60 9E FF 82 A6 FF 5B 93 FF D6 9B FF A5 88 FF 56 91 FF D9 7D FF B7 86 FF E3 72 FF 8E 7C FF 00
+    0x11631131 (291,705,137): 7E FF 09 82 FF F2 81 FF 1D 85 FF 28 85 FF 79 88 FF A5 88 FF B9 8B FF 78 8B FF F0 8E FF E5 8E FF EA 91 FF 33
+    0x11744162 (292,831,586): 5D FF 5E 5C FF 0F 6C FF 77 6A FF F4 79 FF A3 78 FF A5 88 FF 3A 87 FF 59 96 FF F5 95 FF D5 A4 FF 36 A4 FF CA
+    0x11D451AD (299,127,213): A1 FF F7 98 FF E4 98 FF D0 90 FF E9 90 FF C2 88 FF A5 88 FF 45 81 FF 0E 81 FF A9 79 FF C4 79 FF 67 72 FF 66
+    ... and 4 more
+
+  error red (LE/BGRA: 363ff0ff) -- 6 hit(s)
+    0x19BB43E4 (431,703,012): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4E14 (431,705,620): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5848 (431,708,232): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E571 (536,208,753): FF 15 41 7F 08 04 FF 15 9B 00 F3 03 48 8B D8 B9 36 3F F0 FF FF 15 A5 D4 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF5FB91 (536,214,417): FF 15 39 69 08 04 FF 15 7B EA F2 03 48 8B D8 B9 36 3F F0 FF FF 15 85 BE FF 03 89 43 18 48 B8 00 00 00 00 00
+    ... and 1 more
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [7] BONUS: AVALONIA-SPECIFIC STRINGS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  'Avalonia.Media.Color' -- NOT FOUND
+  'Avalonia.Media.SolidColorBrush' -- NOT FOUND
+
+  'Avalonia.Media.IBrush' -- 3 UTF-8 hit(s)
+    0x01452D7B: ...m.get_IsUniform.Avalonia.Media.IBrush.Transform.Rotate3DTransform.ITransform.Avalonia...
+    0x01452DB8: ...form.ITransform.Avalonia.Media.IBrush.get_Transform.set_Transform.ComputeDecomposedTr...
+    0x0145996D: ...nRenderResource<Avalonia.Media.IBrush>.GetForCompositor.Avalonia.Rendering.Compositio...
+
+  'Avalonia.Themes' -- 20 UTF-8 hit(s)
+    0x0173B78A: ...ngstring><a:Key>Avalonia.Themes.Fluent.MediaFluentTheme</a:Key><a:Value>/Fluent...
+    0x01768AA4: ...Data.Converters.Avalonia.Themes.Converters.get_Setters.XamlDynamicSetters.VkIma...
+    0x01768B03: ...ers.arrayLayers.Avalonia.Themes.MiniBehaviors.Selectors.get_Hours.get_Pss.BindC...
+    0x017692DC: ...dContent.extent.Avalonia.Themes.Fluent.MediaEvent.MediaEngineEvent.ManualResetE...
+    0x0177DAD8: ....com/avaloniaui.Avalonia.Themes.Fluent..?...https://github.com/avaloniaui.Avalo...
+    ... and 15 more
+  'Avalonia.Themes' -- 10 UTF-16LE hit(s)
+    0x0176C8AE: ...aPlayer.Avalonia.Themes.Fluent.Avalonia.Media.T...
+    0x01817ABA: ...mplates.Avalonia.Themes.Simple.Avalonia.Diagnos...
+    0x01A5B188: ...iption..Avalonia.Themes.Simple..4..FileVersion....
+
+  'FluentTheme' -- 43 UTF-8 hit(s)
+    0x0173B7A6: ...mes.Fluent.MediaFluentTheme</a:Key><a:Value>/FluentTheme/MediaFluentTheme.a...
+    0x0173B7C3: ...a:Key><a:Value>/FluentTheme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfs...
+    0x0173B7D4: ...luentTheme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:Ke...
+    0x0173B84E: ...es.Simple.SimpleFluentTheme</a:Key><a:Value>/SimpleTheme/SimpleFluentTheme....
+    0x0173B87D: ...mpleTheme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></Cla...
+    ... and 38 more
+  'FluentTheme' -- 8 UTF-16LE hit(s)
+    0x0176B6F3: ...aPlayer/FluentTheme/MediaFluentTheme.axaml....
+    0x0176B715: ...me/MediaFluentTheme.axaml.mm\:ss.hh\:mm\:ss...
+    0x0176B9DE: ...aPlayer/FluentTheme/Internal/_Custom.axaml....
+
+  'SimpleTheme' -- 7 UTF-8 hit(s)
+    0x0173B86B: ...a:Key><a:Value>/SimpleTheme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOf...
+    0x017FB1B8: ...Theme.set_Theme.SimpleTheme._cellTextBlockTheme.get_CellTheme.set_CellTheme...
+    0x01A5B61D: ...a.Themes.Simple.SimpleTheme</a:Key><a:Value>/SimpleTheme.xaml</a:Value></a:...
+    0x01A5B63A: ...a:Key><a:Value>/SimpleTheme.xaml</a:Value></a:KeyValueOfstringstring></Clas...
+    0x01A91747: ...lyName.KeyFrame.SimpleTheme.ControlTheme.DateTime.Avalonia.Markup.Xaml.Xaml...
+    ... and 2 more
+  'SimpleTheme' -- 1 UTF-16LE hit(s)
+    0x01A968F2: ....Simple/SimpleTheme.xaml.ThemeBackgroundCol...
+  'ThemeVariant.Dark' -- NOT FOUND
+  'ThemeVariant.Light' -- NOT FOUND
+
+  'ResourceDictionary' -- 238 UTF-8 hit(s)
+    0x00A285A8: ...v..ny v rozsahu ResourceDictionary...Aktu..ln.. str..nka.kTyp objektu nen.. pro mo...
+    0x00A2E020: ...omuto slovn..ku ResourceDictionary nelze p....mo p..idat obsah, proto..e byla ji.....
+    0x00A2E0A2: ...izovat instanci ResourceDictionary....Slou..en.. slovn..k je neplatn... Bu.. byl R...
+    0x00A2E0E3: ...atn... Bu.. byl ResourceDictionary um..st..n do sv.. vlastn.. kolekce MergedDictio...
+    0x00A2E16E: ...nary dvakr..t..BResourceDictionary je ur..en jen pro ..ten.. a nelze ho upravovat....
+    ... and 233 more
+  'ResourceDictionary' -- 114 UTF-16LE hit(s)
+    0x00A0F057: ...ExpectedResourceDictionaryTarget.....................
+    0x00A1466E: ...edInsideResourceDictionary...........................
+    0x00A17F9A: ...........ResourceDictionaryDeferredContentFailure.....
+
+  'MergedDictionaries' -- 34 UTF-8 hit(s)
+    0x00A2E119: ...lastn.. kolekce MergedDictionaries, nebo byl p..id..n do stejn.. kolekce MergedDic...
+    0x00AD6ED2: ... in der eigenen MergedDictionaries-Sammlung zu platzieren, oder es wurde versucht,...
+    0x00B812B2: ...opia colecci..n MergedDictionaries o bien se est.. agregando dos veces a la misma ...
+    0x00C29D36: ...opre collection MergedDictionaries ou est ajout.. deux fois .. la m..me collection...
+    0x00CD2A09: ... nella raccolta MergedDictionaries di appartenenza oppure si .. tentato di aggiung...
+    ... and 29 more
+  'MergedDictionaries' -- 1 UTF-16LE hit(s)
+    0x1BD5DFFF: ...Content.MergedDictionaries.AncestorType.FallbackVa...
+
+  'ThemeDictionaries' -- 8 UTF-8 hit(s)
+    0x0143E1F9: ...r>b__108_0.<get_ThemeDictionaries>b__18_0.<>c__DisplayClass18_0.<TryGetGlyphTypef...
+    0x0143EE56: ...r>b__108_1.<get_ThemeDictionaries>b__18_1.<UpdateCore>b__28_1.<.cctor>b__28_1.<.c...
+    0x014400A7: ....<>9__18_2.<get_ThemeDictionaries>b__18_2.<.cctor>b__48_2.<.cctor>b__29_2.<.cctor...
+    0x0145A8A2: ...ictionaries.get_ThemeDictionaries.TryJoinContiguousMemories.trimEntries.get_HasEn...
+    0x016AB134: ...ictionaries.get_ThemeDictionaries._deliveries.entries.TextUtilities.get_Propertie...
+    ... and 3 more
+  'Application.Resources' -- NOT FOUND
+  'Styles.xaml' -- NOT FOUND
+
+  'Theme.axaml' -- 8 UTF-8 hit(s)
+    0x0173B7DA: ...heme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:KeyValue...
+    0x0173B883: ...eme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></ClassToRe...
+    0x01766A58: ...heme/MediaFluentTheme.axaml.Build:/FluentTheme/Internal/_Custom.axaml.Popul...
+    0x19E069D2: ...rces/Styles/TabsTheme.axaml.Populate:/Resources/Styles/TabsTheme.axaml.Name...
+    0x19E069FD: ...rces/Styles/TabsTheme.axaml.NamespaceInfo:/Resources/Styles/TabsTheme.axaml...
+    ... and 3 more
+  'Theme.axaml' -- 2 UTF-16LE hit(s)
+    0x0176B721: ...iaFluentTheme.axaml.mm\:ss.hh\:mm\:ss.d\:hh...
+    0x19EFB436: ...les/TabsTheme.axaml...........................
+  'Colors.axaml' -- NOT FOUND
+  'Brushes.axaml' -- NOT FOUND
+
+====================================================================================================
+  SCAN COMPLETE: BACKUP (original unpatched)
+====================================================================================================
+
+
+====================================================================================================
+  SCANNING: CURRENT (potentially patched)
+  Path: C:/Users/bash/AppData/Local/Root/current/Root.exe
+  Size: 616,910,888 bytes (588.3 MB)
+====================================================================================================
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [1] KNOWN HEX COLOR STRINGS (UTF-8)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  FOUND: #FFF2F2F2 (text primary white) -- 1 occurrence(s)
+    Offset 0x1B74FA88 (460,651,144) -- matched: #FFF2F2F2
+    Context: ............8.........8............#FFF2F2F2.......8.........8.........8....$....0.4Q......8....$....0.6Q......8....$....0.7Q.........
+
+  Retrying with UTF-16LE...
+  No known color strings found as UTF-16LE.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [2] BAML STREAM LOCATIONS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  [MSBAML] -- NOT FOUND
+
+  [BAML ASCII] (hex: 42414d4c) -- 406 occurrence(s)
+
+    Offset 0x009F96D9 (10,458,841):
+  00009F96B9  65 7A 6E C3 A1 6D C3 BD 20 74 79 70 20 C5 A1 74   |ezn..m.. typ ..t|
+  00009F96C9  C4 9B 74 63 65 20 76 20 73 6F 75 62 6F 72 75 20   |..tce v souboru |
+  00009F96D9  42 41 4D 4C 2E 01 49 4E 65 6E C3 AD 20 70 C5 99   |BAML..INen.. p..|
+  00009F96E9  C3 AD 73 74 75 70 20 6B 20 6E C3 A1 73 74 72 6F   |..stup k n..stro|
+  00009F96F9  6A 69 20 6E 61 C4 8D C3 AD 74 C3 A1 6E C3 AD 20   |ji na....t..n.. |
+  00009F9709  70 6F 75 C5 BE 69 74 C3 A9 68 6F 20 72 6F 7A 73   |pou..it..ho rozs|
+  00009F9719  61 68 75 20 62 61 6A 74 C5 AF 20 48 54 54 50 2E   |ahu bajt.. HTTP.|
+  00009F9729  01 3C 50 6F C5 BE 61 64 61 76 65 6B 20 6E 61 20   |.<Po..adavek na |
+  00009F9739  7A 6A 69 C5 A1 74 C4 9B 6E C3 AD 20 72 6F 7A 73   |zji..t..n.. rozs|
+  00009F9749  61 68 75 20 62 61 6A 74 C5 AF 20 6E 65 64 6F 73   |ahu bajt.. nedos|
+  00009F9759  74 61 6C 20 6F 64 70 6F 76 C4 9B C4 8F 2E 01 3C   |tal odpov......<|
+  00009F9769  53 65 72 76 65 72 20 6E 65 70 6F 64 70 6F 72 75   |Server nepodporu|
+  00009F9779  6A 65 20 70 6F C5 BE 61 64 61 76 65 6B 20 6E 61   |je po..adavek na|
+  00009F9789  20 7A 6A 69 C5 A1 74 C4 9B 6E C3 AD 20 72 6F 7A   | zji..t..n.. roz|
+  00009F9799  73 61 68 75 20 62 61 6A 74 C5 AF 2E 01 0C 5A 72   |sahu bajt.....Zr|
+  00009F97A9  75 C5 A1 69 74 20 74 69 73 6B 01 37 4E 65 6C 7A   |u..it tisk.7Nelz|
+  00009F97B9  65 20 70 C5 99 69 70 6F 6A 69 74 20 70 72 76 65   |e p..ipojit prve|
+  00009F97C9  6B 20 56 69 73 75 61 6C 2C 20 6B 74 65 72 C3 BD   |k Visual, kter..|
+  00009F97D9  20 6A 65 20 6A 69 C5 BE 20 70 C5 99 69 70 6F 6A   | je ji.. p..ipoj|
+  00009F97E9  65 6E 2E 01 29 48 6F 64 6E 6F 74 79 20 7B 30 7D   |en..)Hodnoty {0}|
+  00009F97F9  20 61 20 7B 31 7D 20 6E 65 6D 6F 68 6F 75 20 62   | a {1} nemohou b|
+  00009F9809  C3 BD 74 20 6F 62 C4 9B 20 6E 75 6C 6C 2E 01 31   |..t ob.. null..1|
+  00009F9819  48 6F 64 6E 6F 74 75 20 C5 99 65 74 C4 9B 7A 63   |Hodnotu ..et..zc|
+  00009F9829  65 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99 65   |e {0} nelze p..e|
+  00009F9839  76 C3 A9 73 74 20 6E 61 20 74 79 70 20 7B 31 7D   |v..st na typ {1}|
+  00009F9849  2E 01 26 54 79 70 20 7B 30 7D 20 73 65 20 6E 65   |..&Typ {0} se ne|
+  00009F9859  64 C3 A1 20 70 C5 99 65 76 C3 A9 73 74 20 6E 61   |d.. p..ev..st na|
+  00009F9869  20 74 79 70 20 7B 31 7D 2E 01 32 5A C3 A1 73 6F   | typ {1}..2Z..so|
+  00009F9879  62 6E C3 AD 6B 20 75 72 C4 8D 65 6E C3 BD 20 6A   |bn..k ur..en.. j|
+  00009F9889  65 6E 20 70 72 6F 20 C4 8D 74 65 6E C3 AD 20 6E   |en pro ..ten.. n|
+  00009F9899  65 6C 7A 65 20 75 70 72 61 76 69 74 2E 01 69 4E   |elze upravit..iN|
+  00009F98A9  65 6C 7A 65 20 75 70 72 61 76 6F 76 61 74 20 70   |elze upravovat p|
+  00009F98B9  6F 64 C5 99 61 7A 65 6E C3 A9 20 70 72 76 6B 79   |od..azen.. prvky|
+  00009F98C9  20 70 72 76 6B 75 20 56 69 73 75 61 6C 20 70 72   | prvku Visual pr|
+
+    Offset 0x009FBDAE (10,468,782):
+  00009FBD8E  01 23 4E 65 7A 6E C3 A1 6D C3 BD 20 74 79 70 20   |.#Nezn..m.. typ |
+  00009FBD9E  66 6C 6F 61 74 20 76 20 73 6F 75 62 6F 72 75 20   |float v souboru |
+  00009FBDAE  42 41 4D 4C 2E 01 20 44 61 74 6F 76 C3 BD 20 70   |BAML.. Datov.. p|
+  00009FBDBE  72 6F 75 64 20 6E 65 70 6F 64 70 6F 72 75 6A 65   |roud nepodporuje|
+  00009FBDCE  20 46 6C 75 73 68 2E 01 2F 50 6F 6A 6D 65 6E 6F   | Flush../Pojmeno|
+  00009FBDDE  76 61 6E C3 BD 20 6F 62 6A 65 6B 74 20 46 6F 6E   |van.. objekt Fon|
+  00009FBDEE  74 46 61 6D 69 6C 79 20 6E 65 6C 7A 65 20 75 70   |tFamily nelze up|
+  00009FBDFE  72 61 76 6F 76 61 74 2E 01 6F 5A 61 64 61 6E C3   |ravovat..oZadan.|
+  00009FBE0E  A1 20 68 6F 64 6E 6F 74 61 20 74 79 70 75 20 7B   |. hodnota typu {|
+  00009FBE1E  30 7D 20 6D 75 73 C3 AD 20 6D C3 AD 74 20 76 6C   |0} mus.. m..t vl|
+  00009FBE2E  61 73 74 6E 6F 73 74 20 49 73 46 72 6F 7A 65 6E   |astnost IsFrozen|
+  00009FBE3E  20 6E 61 73 74 61 76 65 6E 75 20 6E 61 20 68 6F   | nastavenu na ho|
+  00009FBE4E  64 6E 6F 74 75 20 66 61 6C 73 65 2C 20 61 62 79   |dnotu false, aby|
+  00009FBE5E  20 6A 69 20 62 79 6C 6F 20 6D 6F C5 BE 6E C3 A9   | ji bylo mo..n..|
+  00009FBE6E  20 75 70 72 61 76 69 74 2E 01 47 4B 6C 6F 6E 20   | upravit..GKlon |
+  00009FBE7E  69 6E 73 74 61 6E 63 65 20 74 79 70 75 20 7B 30   |instance typu {0|
+  00009FBE8E  7D 20 6A 65 20 6E 75 6C 6F 76 C3 BD 20 6E 65 62   |} je nulov.. neb|
+  00009FBE9E  6F 20 73 65 20 6E 65 6A 65 64 6E C3 A1 20 6F 20   |o se nejedn.. o |
+  00009FBEAE  69 6E 73 74 61 6E 63 69 20 74 79 70 75 20 7B 30   |instanci typu {0|
+  00009FBEBE  7D 2E 01 51 56 20 70 72 C5 AF 62 C4 9B 68 75 20   |}..QV pr..b..hu |
+  00009FBECE  75 64 C3 A1 6C 6F 73 74 69 20 43 6F 6C 6C 65 63   |ud..losti Collec|
+  00009FBEDE  74 69 6F 6E 43 68 61 6E 67 65 64 20 6E 65 6C 7A   |tionChanged nelz|
+  00009FBEEE  65 20 6D C4 9B 6E 69 74 20 6B 6F 6C 65 6B 63 69   |e m..nit kolekci|
+  00009FBEFE  20 46 72 65 65 7A 61 62 6C 65 43 6F 6C 6C 65 63   | FreezableCollec|
+  00009FBF0E  74 69 6F 6E 2E 01 37 44 6F C5 A1 6C 6F 20 6B 20   |tion..7Do..lo k |
+  00009FBF1E  6E 65 7A 6E C3 A1 6D C3 A9 20 6E 65 62 6F 20 6E   |nezn..m.. nebo n|
+  00009FBF2E  65 6F C4 8D 65 6B C3 A1 76 61 6E C3 A9 20 75 64   |eo..ek..van.. ud|
+  00009FBF3E  C3 A1 6C 6F 73 74 69 20 7A 6D C4 9B 6E 79 01 35   |..losti zm..ny.5|
+  00009FBF4E  50 72 6F 20 74 65 6E 74 6F 20 62 6F 64 20 6E 65   |Pro tento bod ne|
+  00009FBF5E  6E C3 AD 20 64 65 66 69 6E 6F 76 C3 A1 6E 61 20   |n.. definov..na |
+  00009FBF6E  68 6F 64 6E 6F 74 61 20 74 72 61 6E 73 66 6F 72   |hodnota transfor|
+  00009FBF7E  6D 61 63 65 2E 01 2C 4F 62 6A 65 6B 74 20 70 C5   |mace..,Objekt p.|
+  00009FBF8E  99 65 64 61 6E C3 BD 20 74 79 70 75 20 7B 30 7D   |.edan.. typu {0}|
+  00009FBF9E  20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 BD 20 74   | nen.. platn.. t|
+
+    Offset 0x00A1E640 (10,610,240):
+  0000A1E620  20 C3 BA 70 72 61 76 61 2E 01 53 50 C5 99 69 20   | ..prava..SP..i |
+  0000A1E630  61 6E 61 6C C3 BD 7A 65 20 6F 62 73 61 68 75 20   |anal..ze obsahu |
+  0000A1E640  42 41 4D 4C 20 64 6F C5 A1 6C 6F 20 6B 20 76 6E   |BAML do..lo k vn|
+  0000A1E650  69 74 C5 99 6E C3 AD 20 63 68 79 62 C4 9B 3A 20   |it..n.. chyb..: |
+  0000A1E660  61 73 73 65 6D 62 6C 79 49 64 20 6D C3 A1 20 62   |assemblyId m.. b|
+  0000A1E670  C3 BD 74 20 7A C3 A1 70 6F 72 6E C3 A9 2E 01 70   |..t z..porn....p|
+  0000A1E680  42 79 6C 20 70 6F 73 6B 79 74 6E 75 74 20 6E 65   |Byl poskytnut ne|
+  0000A1E690  6F C4 8D 65 6B C3 A1 76 61 6E C3 BD 20 69 64 65   |o..ek..van.. ide|
+  0000A1E6A0  6E 74 69 66 69 6B C3 A1 74 6F 72 20 73 65 73 74   |ntifik..tor sest|
+  0000A1E6B0  61 76 65 6E C3 AD 20 7B 30 7D 2E 20 49 64 65 6E   |aven.. {0}. Iden|
+  0000A1E6C0  74 69 66 69 6B C3 A1 74 6F 72 79 20 73 65 73 74   |tifik..tory sest|
+  0000A1E6D0  61 76 65 6E C3 AD 20 6D 75 73 65 6A C3 AD 20 62   |aven.. musej.. b|
+  0000A1E6E0  C3 BD 74 20 73 65 6B 76 65 6E C4 8D 6E C3 AD 2E   |..t sekven..n...|
+  0000A1E6F0  01 39 C4 8C C3 A1 73 74 20 6D 65 7A 69 20 7A 6E   |.9....st mezi zn|
+  0000A1E700  61 6B 79 20 3B 20 61 20 3D 20 6E 65 6E C3 AD 20   |aky ; a = nen.. |
+  0000A1E710  69 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20 55   |identifik..tor U|
+  0000A1E720  52 49 20 7B 30 7D 20 7B 31 7D 2E 01 2D 50 C5 99   |RI {0} {1}..-P..|
+  0000A1E730  69 70 6F 6A 69 74 65 6C 6E C3 A1 20 76 6C 61 73   |ipojiteln.. vlas|
+  0000A1E740  74 6E 6F 73 74 20 7B 30 7D 2E 7B 31 7D 20 73 65   |tnost {0}.{1} se|
+  0000A1E750  20 6E 65 6E 61 C5 A1 6C 61 2E 01 5C 4E 65 6C 7A   | nena..la..\Nelz|
+  0000A1E760  65 20 6F 76 6C C3 A1 64 61 74 20 6D C3 A9 64 69   |e ovl..dat m..di|
+  0000A1E770  61 2C 20 64 6F 6B 75 64 20 6E 65 6E C3 AD 20 4C   |a, dokud nen.. L|
+  0000A1E780  6F 61 64 65 64 42 65 68 61 76 69 6F 72 20 6E 65   |oadedBehavior ne|
+  0000A1E790  62 6F 20 55 6E 6C 6F 61 64 65 64 42 65 68 61 76   |bo UnloadedBehav|
+  0000A1E7A0  69 6F 72 20 6E 61 73 74 61 76 65 6E 6F 20 6E 61   |ior nastaveno na|
+  0000A1E7B0  20 4D 61 6E 75 61 6C 2E 01 25 54 79 70 20 7A C3   | Manual..%Typ z.|
+  0000A1E7C0  A1 76 69 73 6C C3 A9 68 6F 20 6F 62 6A 65 6B 74   |.visl..ho objekt|
+  0000A1E7D0  75 20 6A 65 20 6E 65 70 6C 61 74 6E C3 BD 2E 01   |u je neplatn....|
+  0000A1E7E0  26 50 6F C5 BE 61 64 6F 76 61 6E C3 A1 20 61 6B   |&Po..adovan.. ak|
+  0000A1E7F0  63 65 20 6D C3 A9 64 69 61 20 6A 65 20 6E 65 7A   |ce m..dia je nez|
+  0000A1E800  6E C3 A1 6D C3 A1 2E 01 6E 50 6F 6D 6F 63 6E C3   |n..m....nPomocn.|
+  0000A1E810  BD 20 66 69 6C 74 72 20 76 72 C3 A1 74 69 6C 20   |. filtr vr..til |
+  0000A1E820  70 6F C4 8D 65 74 20 7A 6E 61 6B C5 AF 2C 20 6B   |po..et znak.., k|
+  0000A1E830  74 65 72 C3 BD 20 6A 65 20 76 79 C5 A1 C5 A1 C3   |ter.. je vy.....|
+
+    Offset 0x00A1EB56 (10,611,542):
+  0000A1EB36  6C 65 64 6F 76 61 74 20 70 6F 20 7B 31 7D 2E 01   |ledovat po {1}..|
+  0000A1EB46  2F 49 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20   |/Identifik..tor |
+  0000A1EB56  42 41 4D 4C 20 41 73 73 65 6D 62 6C 79 49 64 20   |BAML AssemblyId |
+  0000A1EB66  7B 30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E   |{0} nen.. zn..m.|
+  0000A1EB76  01 52 4E 65 6C 7A 65 20 72 6F 7A 6C 69 C5 A1 69   |.RNelze rozli..i|
+  0000A1EB86  74 20 7A 6E C3 A1 6D 6F 75 20 68 6F 64 6E 6F 74   |t zn..mou hodnot|
+  0000A1EB96  75 20 4D 61 72 6B 75 70 45 78 74 65 6E 73 69 6F   |u MarkupExtensio|
+  0000A1EBA6  6E 2E 20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A   |n. Soubor BAML j|
+  0000A1EBB6  65 20 6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F   |e mo..n.. po..ko|
+  0000A1EBC6  7A 65 6E 2E 01 38 4E 61 6C 65 7A 65 6E C3 AD 20   |zen..8Nalezen.. |
+  0000A1EBD6  73 6F 75 62 6F 72 75 20 42 41 4D 4C 20 6D 69 6D   |souboru BAML mim|
+  0000A1EBE6  6F 20 61 70 6C 69 6B 61 63 69 20 6E 65 6E C3 AD   |o aplikaci nen..|
+  0000A1EBF6  20 70 6F 64 70 6F 72 6F 76 C3 A1 6E 6F 2E 01 3C   | podporov..no..<|
+  0000A1EC06  42 61 6D 6C 52 65 61 64 65 72 20 62 79 6C 20 75   |BamlReader byl u|
+  0000A1EC16  6B 6F 6E C4 8D 65 6E 20 6E 65 62 6F 20 62 79 6C   |kon..en nebo byl|
+  0000A1EC26  6F 20 64 6F 73 61 C5 BE 65 6E 6F 20 6B 6F 6E 63   |o dosa..eno konc|
+  0000A1EC36  65 20 64 6F 6B 75 6D 65 6E 74 75 2E 01 6E 4E 65   |e dokumentu..nNe|
+  0000A1EC46  6C 7A 65 20 6E 61 6A C3 AD 74 20 74 79 70 20 76   |lze naj..t typ v|
+  0000A1EC56  6C 61 73 74 6E C3 AD 6B 61 20 6E 65 62 6F 20 61   |lastn..ka nebo a|
+  0000A1EC66  74 72 69 62 75 74 75 20 7B 30 7D 20 7A 65 20 73   |tributu {0} ze s|
+  0000A1EC76  65 73 74 61 76 65 6E C3 AD 20 7B 31 7D 2E 20 53   |estaven.. {1}. S|
+  0000A1EC86  65 73 74 61 76 65 6E C3 AD 20 6D 6F C5 BE 6E C3   |estaven.. mo..n.|
+  0000A1EC96  A1 20 6E 65 62 79 6C 6F 20 73 70 72 C3 A1 76 6E   |. nebylo spr..vn|
+  0000A1ECA6  C4 9B 20 6E 61 C4 8D 74 65 6E 6F 2E 01 5E 42 79   |.. na..teno..^By|
+  0000A1ECB6  6C 20 6E 61 6C 65 7A 65 6E 20 7A C3 A1 7A 6E 61   |l nalezen z..zna|
+  0000A1ECC6  6D 20 7B 30 7D 2C 20 61 6C 65 20 70 72 6F 67 72   |m {0}, ale progr|
+  0000A1ECD6  61 6D 20 6F C4 8D 65 6B C3 A1 76 61 6C 20 7A C3   |am o..ek..val z.|
+  0000A1ECE6  A1 7A 6E 61 6D 20 7B 31 7D 2E 20 53 6F 75 62 6F   |.znam {1}. Soubo|
+  0000A1ECF6  72 20 42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3   |r BAML je mo..n.|
+  0000A1ED06  A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 2B 49 64   |. po..kozen..+Id|
+  0000A1ED16  65 6E 74 69 66 69 6B C3 A1 74 6F 72 20 42 41 4D   |entifik..tor BAM|
+  0000A1ED26  4C 20 54 79 70 65 49 64 20 7B 30 7D 20 6E 65 6E   |L TypeId {0} nen|
+  0000A1ED36  C3 AD 20 7A 6E C3 A1 6D 2E 01 52 53 65 73 74 61   |.. zn..m..RSesta|
+  0000A1ED46  76 65 6E C3 AD 20 7B 30 7D 20 6E 65 6C 7A 65 20   |ven.. {0} nelze |
+
+    Offset 0x00A1EBB0 (10,611,632):
+  0000A1EB90  68 6F 64 6E 6F 74 75 20 4D 61 72 6B 75 70 45 78   |hodnotu MarkupEx|
+  0000A1EBA0  74 65 6E 73 69 6F 6E 2E 20 53 6F 75 62 6F 72 20   |tension. Soubor |
+  0000A1EBB0  42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3 A1 20   |BAML je mo..n.. |
+  0000A1EBC0  70 6F C5 A1 6B 6F 7A 65 6E 2E 01 38 4E 61 6C 65   |po..kozen..8Nale|
+  0000A1EBD0  7A 65 6E C3 AD 20 73 6F 75 62 6F 72 75 20 42 41   |zen.. souboru BA|
+  0000A1EBE0  4D 4C 20 6D 69 6D 6F 20 61 70 6C 69 6B 61 63 69   |ML mimo aplikaci|
+  0000A1EBF0  20 6E 65 6E C3 AD 20 70 6F 64 70 6F 72 6F 76 C3   | nen.. podporov.|
+  0000A1EC00  A1 6E 6F 2E 01 3C 42 61 6D 6C 52 65 61 64 65 72   |.no..<BamlReader|
+  0000A1EC10  20 62 79 6C 20 75 6B 6F 6E C4 8D 65 6E 20 6E 65   | byl ukon..en ne|
+  0000A1EC20  62 6F 20 62 79 6C 6F 20 64 6F 73 61 C5 BE 65 6E   |bo bylo dosa..en|
+  0000A1EC30  6F 20 6B 6F 6E 63 65 20 64 6F 6B 75 6D 65 6E 74   |o konce dokument|
+  0000A1EC40  75 2E 01 6E 4E 65 6C 7A 65 20 6E 61 6A C3 AD 74   |u..nNelze naj..t|
+  0000A1EC50  20 74 79 70 20 76 6C 61 73 74 6E C3 AD 6B 61 20   | typ vlastn..ka |
+  0000A1EC60  6E 65 62 6F 20 61 74 72 69 62 75 74 75 20 7B 30   |nebo atributu {0|
+  0000A1EC70  7D 20 7A 65 20 73 65 73 74 61 76 65 6E C3 AD 20   |} ze sestaven.. |
+  0000A1EC80  7B 31 7D 2E 20 53 65 73 74 61 76 65 6E C3 AD 20   |{1}. Sestaven.. |
+  0000A1EC90  6D 6F C5 BE 6E C3 A1 20 6E 65 62 79 6C 6F 20 73   |mo..n.. nebylo s|
+  0000A1ECA0  70 72 C3 A1 76 6E C4 9B 20 6E 61 C4 8D 74 65 6E   |pr..vn.. na..ten|
+  0000A1ECB0  6F 2E 01 5E 42 79 6C 20 6E 61 6C 65 7A 65 6E 20   |o..^Byl nalezen |
+  0000A1ECC0  7A C3 A1 7A 6E 61 6D 20 7B 30 7D 2C 20 61 6C 65   |z..znam {0}, ale|
+  0000A1ECD0  20 70 72 6F 67 72 61 6D 20 6F C4 8D 65 6B C3 A1   | program o..ek..|
+  0000A1ECE0  76 61 6C 20 7A C3 A1 7A 6E 61 6D 20 7B 31 7D 2E   |val z..znam {1}.|
+  0000A1ECF0  20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A 65 20   | Soubor BAML je |
+  0000A1ED00  6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F 7A 65   |mo..n.. po..koze|
+  0000A1ED10  6E 2E 01 2B 49 64 65 6E 74 69 66 69 6B C3 A1 74   |n..+Identifik..t|
+  0000A1ED20  6F 72 20 42 41 4D 4C 20 54 79 70 65 49 64 20 7B   |or BAML TypeId {|
+  0000A1ED30  30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E 01   |0} nen.. zn..m..|
+  0000A1ED40  52 53 65 73 74 61 76 65 6E C3 AD 20 7B 30 7D 20   |RSestaven.. {0} |
+  0000A1ED50  6E 65 6C 7A 65 20 7A 65 20 73 74 C3 A1 76 61 6A   |nelze ze st..vaj|
+  0000A1ED60  C3 AD 63 C3 AD 68 6F 20 70 72 61 63 6F 76 6E C3   |..c..ho pracovn.|
+  0000A1ED70  AD 68 6F 20 61 64 72 65 73 C3 A1 C5 99 65 20 6E   |.ho adres....e n|
+  0000A1ED80  65 62 6F 20 7A 20 47 41 43 20 6E 61 C4 8D C3 AD   |ebo z GAC na....|
+  0000A1ED90  73 74 2E 01 6C 50 6F C4 8D C3 A1 74 65 C4 8D 6E   |st..lPo....te..n|
+  0000A1EDA0  C3 AD 20 61 20 6B 6F 6E 63 6F 76 C3 A1 20 76 6F   |.. a koncov.. vo|
+
+    Offset 0x00A1EBDE (10,611,678):
+  0000A1EBBE  A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 38 4E 61   |. po..kozen..8Na|
+  0000A1EBCE  6C 65 7A 65 6E C3 AD 20 73 6F 75 62 6F 72 75 20   |lezen.. souboru |
+  0000A1EBDE  42 41 4D 4C 20 6D 69 6D 6F 20 61 70 6C 69 6B 61   |BAML mimo aplika|
+  0000A1EBEE  63 69 20 6E 65 6E C3 AD 20 70 6F 64 70 6F 72 6F   |ci nen.. podporo|
+  0000A1EBFE  76 C3 A1 6E 6F 2E 01 3C 42 61 6D 6C 52 65 61 64   |v..no..<BamlRead|
+  0000A1EC0E  65 72 20 62 79 6C 20 75 6B 6F 6E C4 8D 65 6E 20   |er byl ukon..en |
+  0000A1EC1E  6E 65 62 6F 20 62 79 6C 6F 20 64 6F 73 61 C5 BE   |nebo bylo dosa..|
+  0000A1EC2E  65 6E 6F 20 6B 6F 6E 63 65 20 64 6F 6B 75 6D 65   |eno konce dokume|
+  0000A1EC3E  6E 74 75 2E 01 6E 4E 65 6C 7A 65 20 6E 61 6A C3   |ntu..nNelze naj.|
+  0000A1EC4E  AD 74 20 74 79 70 20 76 6C 61 73 74 6E C3 AD 6B   |.t typ vlastn..k|
+  0000A1EC5E  61 20 6E 65 62 6F 20 61 74 72 69 62 75 74 75 20   |a nebo atributu |
+  0000A1EC6E  7B 30 7D 20 7A 65 20 73 65 73 74 61 76 65 6E C3   |{0} ze sestaven.|
+  0000A1EC7E  AD 20 7B 31 7D 2E 20 53 65 73 74 61 76 65 6E C3   |. {1}. Sestaven.|
+  0000A1EC8E  AD 20 6D 6F C5 BE 6E C3 A1 20 6E 65 62 79 6C 6F   |. mo..n.. nebylo|
+  0000A1EC9E  20 73 70 72 C3 A1 76 6E C4 9B 20 6E 61 C4 8D 74   | spr..vn.. na..t|
+  0000A1ECAE  65 6E 6F 2E 01 5E 42 79 6C 20 6E 61 6C 65 7A 65   |eno..^Byl naleze|
+  0000A1ECBE  6E 20 7A C3 A1 7A 6E 61 6D 20 7B 30 7D 2C 20 61   |n z..znam {0}, a|
+  0000A1ECCE  6C 65 20 70 72 6F 67 72 61 6D 20 6F C4 8D 65 6B   |le program o..ek|
+  0000A1ECDE  C3 A1 76 61 6C 20 7A C3 A1 7A 6E 61 6D 20 7B 31   |..val z..znam {1|
+  0000A1ECEE  7D 2E 20 53 6F 75 62 6F 72 20 42 41 4D 4C 20 6A   |}. Soubor BAML j|
+  0000A1ECFE  65 20 6D 6F C5 BE 6E C3 A1 20 70 6F C5 A1 6B 6F   |e mo..n.. po..ko|
+  0000A1ED0E  7A 65 6E 2E 01 2B 49 64 65 6E 74 69 66 69 6B C3   |zen..+Identifik.|
+  0000A1ED1E  A1 74 6F 72 20 42 41 4D 4C 20 54 79 70 65 49 64   |.tor BAML TypeId|
+  0000A1ED2E  20 7B 30 7D 20 6E 65 6E C3 AD 20 7A 6E C3 A1 6D   | {0} nen.. zn..m|
+  0000A1ED3E  2E 01 52 53 65 73 74 61 76 65 6E C3 AD 20 7B 30   |..RSestaven.. {0|
+  0000A1ED4E  7D 20 6E 65 6C 7A 65 20 7A 65 20 73 74 C3 A1 76   |} nelze ze st..v|
+  0000A1ED5E  61 6A C3 AD 63 C3 AD 68 6F 20 70 72 61 63 6F 76   |aj..c..ho pracov|
+  0000A1ED6E  6E C3 AD 68 6F 20 61 64 72 65 73 C3 A1 C5 99 65   |n..ho adres....e|
+  0000A1ED7E  20 6E 65 62 6F 20 7A 20 47 41 43 20 6E 61 C4 8D   | nebo z GAC na..|
+  0000A1ED8E  C3 AD 73 74 2E 01 6C 50 6F C4 8D C3 A1 74 65 C4   |..st..lPo....te.|
+  0000A1ED9E  8D 6E C3 AD 20 61 20 6B 6F 6E 63 6F 76 C3 A1 20   |.n.. a koncov.. |
+  0000A1EDAE  76 6F 6C C3 A1 6E C3 AD 20 7A C3 A1 70 69 73 75   |vol..n.. z..pisu|
+  0000A1EDBE  20 73 65 20 6E 65 73 68 6F 64 75 6A C3 AD 2E 20   | se neshoduj... |
+  0000A1EDCE  50 6F C4 8D C3 A1 74 65 C4 8D 6E C3 AD 20 7A C3   |Po....te..n.. z.|
+
+    Offset 0x00A1ECF8 (10,611,960):
+  0000A1ECD8  20 6F C4 8D 65 6B C3 A1 76 61 6C 20 7A C3 A1 7A   | o..ek..val z..z|
+  0000A1ECE8  6E 61 6D 20 7B 31 7D 2E 20 53 6F 75 62 6F 72 20   |nam {1}. Soubor |
+  0000A1ECF8  42 41 4D 4C 20 6A 65 20 6D 6F C5 BE 6E C3 A1 20   |BAML je mo..n.. |
+  0000A1ED08  70 6F C5 A1 6B 6F 7A 65 6E 2E 01 2B 49 64 65 6E   |po..kozen..+Iden|
+  0000A1ED18  74 69 66 69 6B C3 A1 74 6F 72 20 42 41 4D 4C 20   |tifik..tor BAML |
+  0000A1ED28  54 79 70 65 49 64 20 7B 30 7D 20 6E 65 6E C3 AD   |TypeId {0} nen..|
+  0000A1ED38  20 7A 6E C3 A1 6D 2E 01 52 53 65 73 74 61 76 65   | zn..m..RSestave|
+  0000A1ED48  6E C3 AD 20 7B 30 7D 20 6E 65 6C 7A 65 20 7A 65   |n.. {0} nelze ze|
+  0000A1ED58  20 73 74 C3 A1 76 61 6A C3 AD 63 C3 AD 68 6F 20   | st..vaj..c..ho |
+  0000A1ED68  70 72 61 63 6F 76 6E C3 AD 68 6F 20 61 64 72 65   |pracovn..ho adre|
+  0000A1ED78  73 C3 A1 C5 99 65 20 6E 65 62 6F 20 7A 20 47 41   |s....e nebo z GA|
+  0000A1ED88  43 20 6E 61 C4 8D C3 AD 73 74 2E 01 6C 50 6F C4   |C na....st..lPo.|
+  0000A1ED98  8D C3 A1 74 65 C4 8D 6E C3 AD 20 61 20 6B 6F 6E   |...te..n.. a kon|
+  0000A1EDA8  63 6F 76 C3 A1 20 76 6F 6C C3 A1 6E C3 AD 20 7A   |cov.. vol..n.. z|
+  0000A1EDB8  C3 A1 70 69 73 75 20 73 65 20 6E 65 73 68 6F 64   |..pisu se neshod|
+  0000A1EDC8  75 6A C3 AD 2E 20 50 6F C4 8D C3 A1 74 65 C4 8D   |uj... Po....te..|
+  0000A1EDD8  6E C3 AD 20 7A C3 A1 7A 6E 61 6D 20 3D 20 7B 30   |n.. z..znam = {0|
+  0000A1EDE8  7D 2C 20 6B 6F 6E 63 6F 76 C3 BD 20 7A C3 A1 7A   |}, koncov.. z..z|
+  0000A1EDF8  6E 61 6D 20 3D 20 7B 31 7D 01 4B 4E 75 74 6E 6F   |nam = {1}.KNutno|
+  0000A1EE08  20 70 C5 99 65 64 61 74 20 6B 6F 6E 73 74 72 75   | p..edat konstru|
+  0000A1EE18  6B 74 6F 72 75 20 42 61 6D 6C 57 72 69 74 65 72   |ktoru BamlWriter|
+  0000A1EE28  20 70 6C 61 74 6E C3 BD 20 7A 61 70 69 73 6F 76   | platn.. zapisov|
+  0000A1EE38  61 74 65 6C 6E C3 BD 20 64 61 74 6F 76 C3 BD 20   |ateln.. datov.. |
+  0000A1EE48  70 72 6F 75 64 2E 01 3E 4E 65 6C 7A 65 20 64 65   |proud..>Nelze de|
+  0000A1EE58  66 69 6E 6F 76 61 74 20 70 72 6F 68 6C C3 A1 C5   |finovat prohl...|
+  0000A1EE68  A1 65 6E C3 AD 20 78 6D 6C 6E 73 20 70 C5 99 69   |.en.. xmlns p..i|
+  0000A1EE78  20 7A C3 A1 70 69 73 75 20 7A C3 A1 7A 6E 61 6D   | z..pisu z..znam|
+  0000A1EE88  75 20 7B 30 7D 2E 01 3D 4F 70 65 72 61 63 69 20   |u {0}..=Operaci |
+  0000A1EE98  6E 65 6C 7A 65 20 70 72 6F 76 C3 A9 73 74 20 70   |nelze prov..st p|
+  0000A1EEA8  6F 20 76 79 76 6F 6C C3 A1 6E C3 AD 20 66 75 6E   |o vyvol..n.. fun|
+  0000A1EEB8  6B 63 65 20 42 61 6D 6C 57 72 69 74 65 72 2E 43   |kce BamlWriter.C|
+  0000A1EEC8  6C 6F 73 65 2E 01 5C 4D 65 74 6F 64 75 20 7B 30   |lose..\Metodu {0|
+  0000A1EED8  7D 20 6C 7A 65 20 7A 61 76 6F 6C 61 74 20 61 C5   |} lze zavolat a.|
+  0000A1EEE8  BE 20 70 6F 20 57 72 69 74 65 53 74 61 72 74 45   |. po WriteStartE|
+
+    Offset 0x00A1ED23 (10,612,003):
+  0000A1ED03  BE 6E C3 A1 20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01   |.n.. po..kozen..|
+  0000A1ED13  2B 49 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72 20   |+Identifik..tor |
+  0000A1ED23  42 41 4D 4C 20 54 79 70 65 49 64 20 7B 30 7D 20   |BAML TypeId {0} |
+  0000A1ED33  6E 65 6E C3 AD 20 7A 6E C3 A1 6D 2E 01 52 53 65   |nen.. zn..m..RSe|
+  0000A1ED43  73 74 61 76 65 6E C3 AD 20 7B 30 7D 20 6E 65 6C   |staven.. {0} nel|
+  0000A1ED53  7A 65 20 7A 65 20 73 74 C3 A1 76 61 6A C3 AD 63   |ze ze st..vaj..c|
+  0000A1ED63  C3 AD 68 6F 20 70 72 61 63 6F 76 6E C3 AD 68 6F   |..ho pracovn..ho|
+  0000A1ED73  20 61 64 72 65 73 C3 A1 C5 99 65 20 6E 65 62 6F   | adres....e nebo|
+  0000A1ED83  20 7A 20 47 41 43 20 6E 61 C4 8D C3 AD 73 74 2E   | z GAC na....st.|
+  0000A1ED93  01 6C 50 6F C4 8D C3 A1 74 65 C4 8D 6E C3 AD 20   |.lPo....te..n.. |
+  0000A1EDA3  61 20 6B 6F 6E 63 6F 76 C3 A1 20 76 6F 6C C3 A1   |a koncov.. vol..|
+  0000A1EDB3  6E C3 AD 20 7A C3 A1 70 69 73 75 20 73 65 20 6E   |n.. z..pisu se n|
+  0000A1EDC3  65 73 68 6F 64 75 6A C3 AD 2E 20 50 6F C4 8D C3   |eshoduj... Po...|
+  0000A1EDD3  A1 74 65 C4 8D 6E C3 AD 20 7A C3 A1 7A 6E 61 6D   |.te..n.. z..znam|
+  0000A1EDE3  20 3D 20 7B 30 7D 2C 20 6B 6F 6E 63 6F 76 C3 BD   | = {0}, koncov..|
+  0000A1EDF3  20 7A C3 A1 7A 6E 61 6D 20 3D 20 7B 31 7D 01 4B   | z..znam = {1}.K|
+  0000A1EE03  4E 75 74 6E 6F 20 70 C5 99 65 64 61 74 20 6B 6F   |Nutno p..edat ko|
+  0000A1EE13  6E 73 74 72 75 6B 74 6F 72 75 20 42 61 6D 6C 57   |nstruktoru BamlW|
+  0000A1EE23  72 69 74 65 72 20 70 6C 61 74 6E C3 BD 20 7A 61   |riter platn.. za|
+  0000A1EE33  70 69 73 6F 76 61 74 65 6C 6E C3 BD 20 64 61 74   |pisovateln.. dat|
+  0000A1EE43  6F 76 C3 BD 20 70 72 6F 75 64 2E 01 3E 4E 65 6C   |ov.. proud..>Nel|
+  0000A1EE53  7A 65 20 64 65 66 69 6E 6F 76 61 74 20 70 72 6F   |ze definovat pro|
+  0000A1EE63  68 6C C3 A1 C5 A1 65 6E C3 AD 20 78 6D 6C 6E 73   |hl....en.. xmlns|
+  0000A1EE73  20 70 C5 99 69 20 7A C3 A1 70 69 73 75 20 7A C3   | p..i z..pisu z.|
+  0000A1EE83  A1 7A 6E 61 6D 75 20 7B 30 7D 2E 01 3D 4F 70 65   |.znamu {0}..=Ope|
+  0000A1EE93  72 61 63 69 20 6E 65 6C 7A 65 20 70 72 6F 76 C3   |raci nelze prov.|
+  0000A1EEA3  A9 73 74 20 70 6F 20 76 79 76 6F 6C C3 A1 6E C3   |.st po vyvol..n.|
+  0000A1EEB3  AD 20 66 75 6E 6B 63 65 20 42 61 6D 6C 57 72 69   |. funkce BamlWri|
+  0000A1EEC3  74 65 72 2E 43 6C 6F 73 65 2E 01 5C 4D 65 74 6F   |ter.Close..\Meto|
+  0000A1EED3  64 75 20 7B 30 7D 20 6C 7A 65 20 7A 61 76 6F 6C   |du {0} lze zavol|
+  0000A1EEE3  61 74 20 61 C5 BE 20 70 6F 20 57 72 69 74 65 53   |at a.. po WriteS|
+  0000A1EEF3  74 61 72 74 45 6C 65 6D 65 6E 74 2E 20 4E 65 6C   |tartElement. Nel|
+  0000A1EF03  7A 65 20 6A 69 20 7A 61 76 6F 6C 61 74 20 70 6F   |ze ji zavolat po|
+  0000A1EF13  20 70 72 6F 76 65 64 65 6E C3 AD 20 7A C3 A1 70   | proveden.. z..p|
+
+    Offset 0x00A25C08 (10,640,392):
+  0000A25BE8  61 74 65 6C 73 6B C3 A9 20 73 65 72 69 61 6C 69   |atelsk.. seriali|
+  0000A25BF8  7A 61 C4 8D 6E C3 AD 20 6F 70 65 72 61 63 65 20   |za..n.. operace |
+  0000A25C08  42 41 4D 4C 2E 01 35 4E 65 70 6C 61 74 6E C3 BD   |BAML..5Neplatn..|
+  0000A25C18  20 74 79 70 20 6F 62 73 61 68 75 20 70 72 6F 20   | typ obsahu pro |
+  0000A25C28  73 6F 75 C4 8D C3 A1 73 74 20 44 6F 63 75 6D 65   |sou....st Docume|
+  0000A25C38  6E 74 53 74 72 75 63 74 75 72 65 2E 01 2A 53 65   |ntStructure..*Se|
+  0000A25C48  72 69 61 6C 69 7A C3 A1 74 6F 72 20 6E 65 70 6F   |rializ..tor nepo|
+  0000A25C58  64 70 6F 72 75 6A 65 20 6F 70 65 72 61 63 65 20   |dporuje operace |
+  0000A25C68  43 6F 6E 76 65 72 74 2E 01 71 50 72 6F 62 6C C3   |Convert..qProbl.|
+  0000A25C78  A9 6D 20 6A 65 20 76 65 20 76 79 73 74 61 76 C4   |.m je ve vystav.|
+  0000A25C88  9B 6E C3 AD 20 6E 65 62 6F 20 70 75 62 6C 69 6B   |.n.. nebo publik|
+  0000A25C98  6F 76 C3 A1 6E C3 AD 20 61 70 6C 69 6B 61 63 65   |ov..n.. aplikace|
+  0000A25CA8  2E 20 4B 6F 6E 74 61 6B 74 75 6A 74 65 20 76 79   |. Kontaktujte vy|
+  0000A25CB8  64 61 76 61 74 65 6C 65 20 61 70 6C 69 6B 61 63   |davatele aplikac|
+  0000A25CC8  65 20 61 20 70 6F C5 BE C3 A1 64 65 6A 74 65 20   |e a po....dejte |
+  0000A25CD8  68 6F 20 6F 20 70 6F 6D 6F 63 2E 01 1C 53 6F 75   |ho o pomoc...Sou|
+  0000A25CE8  62 6F 72 20 61 70 6C 69 6B 61 63 65 20 6A 65 20   |bor aplikace je |
+  0000A25CF8  6E 65 70 6C 61 74 6E C3 BD 01 14 48 6F 64 6E 6F   |neplatn....Hodno|
+  0000A25D08  74 61 20 6D 69 6D 6F 20 72 6F 7A 73 61 68 2E 01   |ta mimo rozsah..|
+  0000A25D18  26 55 72 C4 8D 65 6E C3 A9 20 70 6F 6C 65 20 6E   |&Ur..en.. pole n|
+  0000A25D28  65 6D C5 AF C5 BE 65 20 62 C3 BD 74 20 70 72 C3   |em....e b..t pr.|
+  0000A25D38  A1 7A 64 6E C3 A9 2E 01 49 55 72 C4 8D 65 6E C3   |.zdn....IUr..en.|
+  0000A25D48  A1 20 6B 6F 6C 65 6B 63 65 20 53 74 72 6F 6B 65   |. kolekce Stroke|
+  0000A25D58  43 6F 6C 6C 65 63 74 69 6F 6E 20 6D 75 73 C3 AD   |Collection mus..|
+  0000A25D68  20 6F 62 73 61 68 6F 76 61 74 20 61 6C 65 73 70   | obsahovat alesp|
+  0000A25D78  6F C5 88 20 6A 65 64 65 6E 20 7A C3 A1 62 C4 9B   |o.. jeden z..b..|
+  0000A25D88  72 2E 01 3E 50 6F 73 6C 65 64 6E C3 AD 6D 20 75   |r..>Posledn..m u|
+  0000A25D98  7A 6C 65 6D 20 42 41 4D 4C 20 76 20 64 6F 6B 75   |zlem BAML v doku|
+  0000A25DA8  6D 65 6E 74 75 20 42 41 4D 4C 20 6D 75 73 C3 AD   |mentu BAML mus..|
+  0000A25DB8  20 62 C3 BD 74 20 45 6E 64 44 6F 63 75 6D 65 6E   | b..t EndDocumen|
+  0000A25DC8  74 2E 01 28 54 65 6E 74 6F 20 6F 76 6C 61 64 61   |t..(Tento ovlada|
+  0000A25DD8  C4 8D 20 75 64 C3 A1 6C 6F 73 74 69 20 6E 65 6C   |.. ud..losti nel|
+  0000A25DE8  7A 65 20 70 6F 75 C5 BE C3 AD 74 2E 01 21 47 75   |ze pou....t..!Gu|
+  0000A25DF8  69 64 2E 45 6D 70 74 79 20 6E 65 6E C3 AD 20 70   |id.Empty nen.. p|
+
+    Offset 0x00A25D9D (10,640,797):
+  0000A25D7D  65 64 65 6E 20 7A C3 A1 62 C4 9B 72 2E 01 3E 50   |eden z..b..r..>P|
+  0000A25D8D  6F 73 6C 65 64 6E C3 AD 6D 20 75 7A 6C 65 6D 20   |osledn..m uzlem |
+  0000A25D9D  42 41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75   |BAML v dokumentu|
+  0000A25DAD  20 42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74   | BAML mus.. b..t|
+  0000A25DBD  20 45 6E 64 44 6F 63 75 6D 65 6E 74 2E 01 28 54   | EndDocument..(T|
+  0000A25DCD  65 6E 74 6F 20 6F 76 6C 61 64 61 C4 8D 20 75 64   |ento ovlada.. ud|
+  0000A25DDD  C3 A1 6C 6F 73 74 69 20 6E 65 6C 7A 65 20 70 6F   |..losti nelze po|
+  0000A25DED  75 C5 BE C3 AD 74 2E 01 21 47 75 69 64 2E 45 6D   |u....t..!Guid.Em|
+  0000A25DFD  70 74 79 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3   |pty nen.. platn.|
+  0000A25E0D  A1 20 68 6F 64 6E 6F 74 61 2E 01 36 42 61 72 76   |. hodnota..6Barv|
+  0000A25E1D  79 20 7A 76 C3 BD 72 61 7A 6E C4 9B 6E C3 AD 20   |y zv..razn..n.. |
+  0000A25E2D  6D 75 73 65 6A C3 AD 20 62 C3 BD 74 20 74 79 70   |musej.. b..t typ|
+  0000A25E3D  75 20 53 6F 6C 69 64 43 6F 6C 6F 72 42 72 75 73   |u SolidColorBrus|
+  0000A25E4D  68 2E 01 61 50 6F 75 7A 65 20 53 6F 6C 69 64 43   |h..aPouze SolidC|
+  0000A25E5D  6F 6C 6F 72 42 72 75 73 68 20 6C 7A 65 20 70 6F   |olorBrush lze po|
+  0000A25E6D  75 C5 BE C3 AD 74 20 6A 61 6B 6F 20 46 6F 72 65   |u....t jako Fore|
+  0000A25E7D  67 72 6F 75 6E 64 20 70 72 6F 20 53 74 69 63 6B   |ground pro Stick|
+  0000A25E8D  79 4E 6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70   |yNoteControl typ|
+  0000A25E9D  75 20 53 74 69 63 6B 79 4E 6F 74 65 54 79 70 65   |u StickyNoteType|
+  0000A25EAD  2E 49 6E 6B 2E 01 4B 7B 30 7D 20 6D C5 AF C5 BE   |.Ink..K{0} m....|
+  0000A25EBD  65 20 68 6F 73 74 6F 76 61 74 20 70 6F 75 7A 65   |e hostovat pouze|
+  0000A25ECD  20 6F 62 6A 65 6B 74 79 20 7B 31 7D 20 6E 65 62   | objekty {1} neb|
+  0000A25EDD  6F 20 7B 32 7D 2E 20 7B 33 7D 20 6A 65 20 6E 65   |o {2}. {3} je ne|
+  0000A25EED  70 6C 61 74 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65   |platn.. kontejne|
+  0000A25EFD  72 2E 01 49 43 C3 AD 6C 6F 76 C3 A1 20 76 6C 61   |r..IC..lov.. vla|
+  0000A25F0D  73 74 6E 6F 73 74 20 6C 6F 6B 61 6C 69 7A 61 C4   |stnost lokaliza.|
+  0000A25F1D  8D 6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E   |.n.. pozn..mky n|
+  0000A25F2D  65 6E C3 AD 20 76 20 C5 99 65 74 C4 9B 7A 63 69   |en.. v ..et..zci|
+  0000A25F3D  20 7B 30 7D 20 70 6C 61 74 6E C3 A1 2E 01 59 48   | {0} platn....YH|
+  0000A25F4D  6F 64 6E 6F 74 61 20 6C 6F 6B 61 6C 69 7A 61 C4   |odnota lokaliza.|
+  0000A25F5D  8D 6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E   |.n.. pozn..mky n|
+  0000A25F6D  65 6E C3 AD 20 70 6C 61 74 6E C3 A1 20 70 72 6F   |en.. platn.. pro|
+  0000A25F7D  20 63 C3 AD 6C 6F 76 6F 75 20 76 6C 61 73 74 6E   | c..lovou vlastn|
+  0000A25F8D  6F 73 74 20 7B 30 7D 20 76 20 C5 99 65 74 C4 9B   |ost {0} v ..et..|
+
+    Offset 0x00A25DAE (10,640,814):
+  0000A25D8E  73 6C 65 64 6E C3 AD 6D 20 75 7A 6C 65 6D 20 42   |sledn..m uzlem B|
+  0000A25D9E  41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75 20   |AML v dokumentu |
+  0000A25DAE  42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74 20   |BAML mus.. b..t |
+  0000A25DBE  45 6E 64 44 6F 63 75 6D 65 6E 74 2E 01 28 54 65   |EndDocument..(Te|
+  0000A25DCE  6E 74 6F 20 6F 76 6C 61 64 61 C4 8D 20 75 64 C3   |nto ovlada.. ud.|
+  0000A25DDE  A1 6C 6F 73 74 69 20 6E 65 6C 7A 65 20 70 6F 75   |.losti nelze pou|
+  0000A25DEE  C5 BE C3 AD 74 2E 01 21 47 75 69 64 2E 45 6D 70   |....t..!Guid.Emp|
+  0000A25DFE  74 79 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 A1   |ty nen.. platn..|
+  0000A25E0E  20 68 6F 64 6E 6F 74 61 2E 01 36 42 61 72 76 79   | hodnota..6Barvy|
+  0000A25E1E  20 7A 76 C3 BD 72 61 7A 6E C4 9B 6E C3 AD 20 6D   | zv..razn..n.. m|
+  0000A25E2E  75 73 65 6A C3 AD 20 62 C3 BD 74 20 74 79 70 75   |usej.. b..t typu|
+  0000A25E3E  20 53 6F 6C 69 64 43 6F 6C 6F 72 42 72 75 73 68   | SolidColorBrush|
+  0000A25E4E  2E 01 61 50 6F 75 7A 65 20 53 6F 6C 69 64 43 6F   |..aPouze SolidCo|
+  0000A25E5E  6C 6F 72 42 72 75 73 68 20 6C 7A 65 20 70 6F 75   |lorBrush lze pou|
+  0000A25E6E  C5 BE C3 AD 74 20 6A 61 6B 6F 20 46 6F 72 65 67   |....t jako Foreg|
+  0000A25E7E  72 6F 75 6E 64 20 70 72 6F 20 53 74 69 63 6B 79   |round pro Sticky|
+  0000A25E8E  4E 6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75   |NoteControl typu|
+  0000A25E9E  20 53 74 69 63 6B 79 4E 6F 74 65 54 79 70 65 2E   | StickyNoteType.|
+  0000A25EAE  49 6E 6B 2E 01 4B 7B 30 7D 20 6D C5 AF C5 BE 65   |Ink..K{0} m....e|
+  0000A25EBE  20 68 6F 73 74 6F 76 61 74 20 70 6F 75 7A 65 20   | hostovat pouze |
+  0000A25ECE  6F 62 6A 65 6B 74 79 20 7B 31 7D 20 6E 65 62 6F   |objekty {1} nebo|
+  0000A25EDE  20 7B 32 7D 2E 20 7B 33 7D 20 6A 65 20 6E 65 70   | {2}. {3} je nep|
+  0000A25EEE  6C 61 74 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65 72   |latn.. kontejner|
+  0000A25EFE  2E 01 49 43 C3 AD 6C 6F 76 C3 A1 20 76 6C 61 73   |..IC..lov.. vlas|
+  0000A25F0E  74 6E 6F 73 74 20 6C 6F 6B 61 6C 69 7A 61 C4 8D   |tnost lokaliza..|
+  0000A25F1E  6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E 65   |n.. pozn..mky ne|
+  0000A25F2E  6E C3 AD 20 76 20 C5 99 65 74 C4 9B 7A 63 69 20   |n.. v ..et..zci |
+  0000A25F3E  7B 30 7D 20 70 6C 61 74 6E C3 A1 2E 01 59 48 6F   |{0} platn....YHo|
+  0000A25F4E  64 6E 6F 74 61 20 6C 6F 6B 61 6C 69 7A 61 C4 8D   |dnota lokaliza..|
+  0000A25F5E  6E C3 AD 20 70 6F 7A 6E C3 A1 6D 6B 79 20 6E 65   |n.. pozn..mky ne|
+  0000A25F6E  6E C3 AD 20 70 6C 61 74 6E C3 A1 20 70 72 6F 20   |n.. platn.. pro |
+  0000A25F7E  63 C3 AD 6C 6F 76 6F 75 20 76 6C 61 73 74 6E 6F   |c..lovou vlastno|
+  0000A25F8E  73 74 20 7B 30 7D 20 76 20 C5 99 65 74 C4 9B 7A   |st {0} v ..et..z|
+  0000A25F9E  63 69 20 7B 31 7D 2E 01 39 4E 61 73 74 61 76 65   |ci {1}..9Nastave|
+
+    Offset 0x00A264DA (10,642,650):
+  0000A264BA  72 61 6E 69 63 65 20 76 C3 BD 62 C4 9B 72 75 2E   |ranice v..b..ru.|
+  0000A264CA  01 3D 50 72 76 6E C3 AD 6D 20 75 7A 6C 65 6D 20   |.=Prvn..m uzlem |
+  0000A264DA  42 41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75   |BAML v dokumentu|
+  0000A264EA  20 42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74   | BAML mus.. b..t|
+  0000A264FA  20 53 74 61 72 74 44 6F 63 75 6D 65 6E 74 2E 01   | StartDocument..|
+  0000A2650A  5E 53 74 69 63 6B 79 4E 6F 74 65 43 6F 6E 74 72   |^StickyNoteContr|
+  0000A2651A  6F 6C 20 6E 65 6D C5 AF C5 BE 65 20 61 6B 63 65   |ol nem....e akce|
+  0000A2652A  70 74 6F 76 61 74 20 61 6E 6F 74 61 63 69 2C 20   |ptovat anotaci, |
+  0000A2653A  6B 74 65 72 C3 A1 20 6F 62 73 61 68 75 6A 65 20   |kter.. obsahuje |
+  0000A2654A  6A 61 6B 20 C4 8D C3 A1 72 79 20 69 6E 6B 6F 75   |jak ....ry inkou|
+  0000A2655A  73 74 65 6D 2C 20 74 61 6B 20 74 65 78 74 2E 01   |stem, tak text..|
+  0000A2656A  6E C5 A0 61 62 6C 6F 6E 61 20 49 73 45 78 70 61   |n..ablona IsExpa|
+  0000A2657A  6E 64 65 64 20 70 72 6F 20 53 74 69 63 6B 79 4E   |nded pro StickyN|
+  0000A2658A  6F 74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75 20   |oteControl typu |
+  0000A2659A  7B 30 7D 20 6D 75 73 C3 AD 20 6F 62 73 61 68 6F   |{0} mus.. obsaho|
+  0000A265AA  76 61 74 20 65 6C 65 6D 65 6E 74 20 74 79 70 75   |vat element typu|
+  0000A265BA  20 7B 31 7D 20 73 20 4E 61 6D 65 20 6E 61 73 74   | {1} s Name nast|
+  0000A265CA  61 76 65 6E C3 BD 6D 20 6E 61 20 7B 32 7D 2E 01   |aven..m na {2}..|
+  0000A265DA  27 53 6F 75 C4 8D C3 A1 73 74 20 53 74 6F 72 79   |'Sou....st Story|
+  0000A265EA  46 72 61 67 6D 65 6E 74 73 20 73 65 20 6E 65 6E   |Fragments se nen|
+  0000A265FA  61 C4 8D 65 74 6C 61 2E 01 4D 48 6F 64 6E 6F 74   |a..etla..MHodnot|
+  0000A2660A  61 20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E   |a {0} je neplatn|
+  0000A2661A  C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F   |... Mus.. obsaho|
+  0000A2662A  76 61 74 20 6A 65 64 6E 75 20 6E 65 62 6F 20 C4   |vat jednu nebo .|
+  0000A2663A  8D 74 79 C5 99 69 20 75 72 C4 8D 65 6E C3 A9 20   |.ty..i ur..en.. |
+  0000A2664A  64 C3 A9 6C 6B 79 2E 01 53 48 6F 64 6E 6F 74 61   |d..lky..SHodnota|
+  0000A2665A  20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3   | {0} je neplatn.|
+  0000A2666A  A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |.. Mus.. obsahov|
+  0000A2667A  61 74 20 6A 65 64 6E 75 2C 20 64 76 C4 9B 20 6E   |at jednu, dv.. n|
+  0000A2668A  65 62 6F 20 C4 8D 74 79 C5 99 69 20 75 72 C4 8D   |ebo ..ty..i ur..|
+  0000A2669A  65 6E C3 A9 20 64 C3 A9 6C 6B 79 2E 01 4C 48 6F   |en.. d..lky..LHo|
+  0000A266AA  64 6E 6F 74 61 20 7B 30 7D 20 6A 65 20 6E 65 70   |dnota {0} je nep|
+  0000A266BA  6C 61 74 6E C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62   |latn... Mus.. ob|
+  0000A266CA  73 61 68 6F 76 61 74 20 6A 65 64 6E 75 20 6E 65   |sahovat jednu ne|
+
+    Offset 0x00A264EB (10,642,667):
+  0000A264CB  3D 50 72 76 6E C3 AD 6D 20 75 7A 6C 65 6D 20 42   |=Prvn..m uzlem B|
+  0000A264DB  41 4D 4C 20 76 20 64 6F 6B 75 6D 65 6E 74 75 20   |AML v dokumentu |
+  0000A264EB  42 41 4D 4C 20 6D 75 73 C3 AD 20 62 C3 BD 74 20   |BAML mus.. b..t |
+  0000A264FB  53 74 61 72 74 44 6F 63 75 6D 65 6E 74 2E 01 5E   |StartDocument..^|
+  0000A2650B  53 74 69 63 6B 79 4E 6F 74 65 43 6F 6E 74 72 6F   |StickyNoteContro|
+  0000A2651B  6C 20 6E 65 6D C5 AF C5 BE 65 20 61 6B 63 65 70   |l nem....e akcep|
+  0000A2652B  74 6F 76 61 74 20 61 6E 6F 74 61 63 69 2C 20 6B   |tovat anotaci, k|
+  0000A2653B  74 65 72 C3 A1 20 6F 62 73 61 68 75 6A 65 20 6A   |ter.. obsahuje j|
+  0000A2654B  61 6B 20 C4 8D C3 A1 72 79 20 69 6E 6B 6F 75 73   |ak ....ry inkous|
+  0000A2655B  74 65 6D 2C 20 74 61 6B 20 74 65 78 74 2E 01 6E   |tem, tak text..n|
+  0000A2656B  C5 A0 61 62 6C 6F 6E 61 20 49 73 45 78 70 61 6E   |..ablona IsExpan|
+  0000A2657B  64 65 64 20 70 72 6F 20 53 74 69 63 6B 79 4E 6F   |ded pro StickyNo|
+  0000A2658B  74 65 43 6F 6E 74 72 6F 6C 20 74 79 70 75 20 7B   |teControl typu {|
+  0000A2659B  30 7D 20 6D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |0} mus.. obsahov|
+  0000A265AB  61 74 20 65 6C 65 6D 65 6E 74 20 74 79 70 75 20   |at element typu |
+  0000A265BB  7B 31 7D 20 73 20 4E 61 6D 65 20 6E 61 73 74 61   |{1} s Name nasta|
+  0000A265CB  76 65 6E C3 BD 6D 20 6E 61 20 7B 32 7D 2E 01 27   |ven..m na {2}..'|
+  0000A265DB  53 6F 75 C4 8D C3 A1 73 74 20 53 74 6F 72 79 46   |Sou....st StoryF|
+  0000A265EB  72 61 67 6D 65 6E 74 73 20 73 65 20 6E 65 6E 61   |ragments se nena|
+  0000A265FB  C4 8D 65 74 6C 61 2E 01 4D 48 6F 64 6E 6F 74 61   |..etla..MHodnota|
+  0000A2660B  20 7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3   | {0} je neplatn.|
+  0000A2661B  A1 2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76   |.. Mus.. obsahov|
+  0000A2662B  61 74 20 6A 65 64 6E 75 20 6E 65 62 6F 20 C4 8D   |at jednu nebo ..|
+  0000A2663B  74 79 C5 99 69 20 75 72 C4 8D 65 6E C3 A9 20 64   |ty..i ur..en.. d|
+  0000A2664B  C3 A9 6C 6B 79 2E 01 53 48 6F 64 6E 6F 74 61 20   |..lky..SHodnota |
+  0000A2665B  7B 30 7D 20 6A 65 20 6E 65 70 6C 61 74 6E C3 A1   |{0} je neplatn..|
+  0000A2666B  2E 20 4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76 61   |. Mus.. obsahova|
+  0000A2667B  74 20 6A 65 64 6E 75 2C 20 64 76 C4 9B 20 6E 65   |t jednu, dv.. ne|
+  0000A2668B  62 6F 20 C4 8D 74 79 C5 99 69 20 75 72 C4 8D 65   |bo ..ty..i ur..e|
+  0000A2669B  6E C3 A9 20 64 C3 A9 6C 6B 79 2E 01 4C 48 6F 64   |n.. d..lky..LHod|
+  0000A266AB  6E 6F 74 61 20 7B 30 7D 20 6A 65 20 6E 65 70 6C   |nota {0} je nepl|
+  0000A266BB  61 74 6E C3 A1 2E 20 4D 75 73 C3 AD 20 6F 62 73   |atn... Mus.. obs|
+  0000A266CB  61 68 6F 76 61 74 20 6A 65 64 6E 75 20 6E 65 62   |ahovat jednu neb|
+  0000A266DB  6F 20 64 76 C4 9B 20 6F 64 64 C4 9B 6C 65 6E C3   |o dv.. odd..len.|
+
+    Offset 0x00A27223 (10,646,051):
+  0000A27203  73 74 61 76 65 6E C3 AD 3A 01 65 50 C5 99 69 20   |staven..:.eP..i |
+  0000A27213  61 6E 61 6C C3 BD 7A 65 20 6F 62 73 61 68 75 20   |anal..ze obsahu |
+  0000A27223  42 41 4D 4C 20 64 6F C5 A1 6C 6F 20 6B 20 76 6E   |BAML do..lo k vn|
+  0000A27233  69 74 C5 99 6E C3 AD 20 63 68 79 62 C4 9B 3A 20   |it..n.. chyb..: |
+  0000A27243  7A 6E C3 A1 6D C3 A1 20 49 44 20 74 79 70 C5 AF   |zn..m.. ID typ..|
+  0000A27253  20 28 74 79 70 65 49 64 73 29 20 6D 75 73 C3 AD   | (typeIds) mus..|
+  0000A27263  20 62 C3 BD 74 20 7A C3 A1 70 6F 72 6E C3 A1 2E   | b..t z..porn...|
+  0000A27273  01 28 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20   |.(..et..zec {0} |
+  0000A27283  6E 65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20   |nelze p..ev..st |
+  0000A27293  6E 61 20 4C 65 6E 67 74 68 2E 01 4C 56 6C 61 73   |na Length..LVlas|
+  0000A272A3  74 6E 6F 73 74 20 41 6E 63 68 6F 72 49 74 65 6D   |tnost AnchorItem|
+  0000A272B3  20 7B 30 7D 20 6E 65 6D C3 A1 20 72 65 61 6C 69   | {0} nem.. reali|
+  0000A272C3  7A 6F 76 61 6E C3 BD 20 6B 6F 6E 74 65 6A 6E 65   |zovan.. kontejne|
+  0000A272D3  72 2C 20 61 20 70 72 6F 74 6F 20 6A 65 20 6E 65   |r, a proto je ne|
+  0000A272E3  70 6C 61 74 6E C3 A1 2E 01 06 43 74 72 6C 2B 41   |platn.....Ctrl+A|
+  0000A272F3  01 5A 53 65 6C 65 63 74 41 6C 6C 20 6C 7A 65 20   |.ZSelectAll lze |
+  0000A27303  76 79 76 6F 6C 61 74 20 70 6F 75 7A 65 20 76 20   |vyvolat pouze v |
+  0000A27313  72 65 C5 BE 69 6D 75 20 53 65 6C 65 63 74 69 6F   |re..imu Selectio|
+  0000A27323  6E 4D 6F 64 65 20 6E 61 73 74 61 76 65 6E C3 A9   |nMode nastaven..|
+  0000A27333  6D 20 6E 61 20 4D 75 6C 74 69 70 6C 65 20 6E 65   |m na Multiple ne|
+  0000A27343  62 6F 20 45 78 74 65 6E 64 65 64 2E 01 0B 56 79   |bo Extended...Vy|
+  0000A27353  62 72 61 74 20 76 C5 A1 65 01 54 47 65 74 4C 69   |brat v..e.TGetLi|
+  0000A27363  73 74 49 74 65 6D 49 6E 64 65 78 20 6A 65 20 70   |stItemIndex je p|
+  0000A27373  6C 61 74 6E C3 BD 20 70 6F 75 7A 65 20 70 72 6F   |latn.. pouze pro|
+  0000A27383  20 70 C5 99 C3 AD 6D C3 A9 20 70 6F 64 C5 99 C3   | p....m.. pod...|
+  0000A27393  AD 7A 65 6E C3 A9 20 70 72 76 6B 79 20 74 6F 68   |.zen.. prvky toh|
+  0000A273A3  6F 74 6F 20 70 72 76 6B 75 20 4C 69 73 74 2E 01   |oto prvku List..|
+  0000A273B3  39 47 72 69 64 56 69 65 77 43 6F 6C 75 6D 6E 43   |9GridViewColumnC|
+  0000A273C3  6F 6C 6C 65 63 74 69 6F 6E 20 6A 65 20 6E 79 6E   |ollection je nyn|
+  0000A273D3  C3 AD 20 75 72 C4 8D 65 6E 20 6A 65 6E 20 70 72   |.. ur..en jen pr|
+  0000A273E3  6F 20 C4 8D 74 65 6E C3 AD 2E 01 36 4E 65 6C 7A   |o ..ten....6Nelz|
+  0000A273F3  65 20 70 C5 99 69 64 61 74 20 64 61 74 61 20 6F   |e p..idat data o|
+  0000A27403  62 6A 65 6B 74 75 20 6B 72 6F 6D C4 9B 20 74 79   |bjektu krom.. ty|
+  0000A27413  70 75 20 47 72 69 64 56 69 65 77 43 6F 6C 75 6D   |pu GridViewColum|
+
+    Offset 0x00A28EB2 (10,653,362):
+  0000A28E92  6E 61 64 C5 99 61 7A 65 6E C3 BD 20 75 7A 65 6C   |nad..azen.. uzel|
+  0000A28EA2  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A28EB2  42 41 4D 4C 20 6D C5 AF C5 BE 65 20 62 C3 BD 74   |BAML m....e b..t|
+  0000A28EC2  20 70 6F C5 A1 6B 6F 7A 65 6E 2E 01 27 56 79 C5   | po..kozen..'Vy.|
+  0000A28ED2  BE 61 64 75 6A 65 20 73 65 20 6E 65 6E 75 6C 6F   |.aduje se nenulo|
+  0000A28EE2  76 C3 A1 20 68 6F 64 6E 6F 74 61 20 70 72 6F 20   |v.. hodnota pro |
+  0000A28EF2  7B 30 7D 2E 01 1B 56 79 C5 BE 61 64 75 6A 65 20   |{0}...Vy..aduje |
+  0000A28F02  73 65 20 6E 65 6E 75 6C 6F 76 C3 BD 20 74 79 70   |se nenulov.. typ|
+  0000A28F12  2E 01 42 4E 75 6C 6F 76 C3 BD 20 69 64 65 6E 74   |..BNulov.. ident|
+  0000A28F22  69 66 69 6B C3 A1 74 6F 72 20 55 52 49 20 76 20   |ifik..tor URI v |
+  0000A28F32  70 6F 64 70 6F 72 6F 76 61 6E C3 A9 6D 20 73 65   |podporovan..m se|
+  0000A28F42  7A 6E 61 6D 75 20 6F 62 6F 72 C5 AF 20 6E C3 A1   |znamu obor.. n..|
+  0000A28F52  7A 76 C5 AF 2E 01 5E 4F 62 6A 65 63 74 44 61 74   |zv....^ObjectDat|
+  0000A28F62  61 50 72 6F 76 69 64 65 72 20 6D C5 AF C5 BE 65   |aProvider m....e|
+  0000A28F72  20 6D C3 AD 74 20 70 C5 99 69 64 C4 9B 6C 65 6E   | m..t p..id..len|
+  0000A28F82  20 70 6F 75 7A 65 20 4F 62 6A 65 63 74 54 79 70   | pouze ObjectTyp|
+  0000A28F92  65 20 6E 65 62 6F 20 4F 62 6A 65 63 74 49 6E 73   |e nebo ObjectIns|
+  0000A28FA2  74 61 6E 63 65 2C 20 6E 69 6B 6F 6C 69 76 20 6F   |tance, nikoliv o|
+  0000A28FB2  62 6F 6A 65 2E 01 43 4F 62 6A 65 63 74 44 61 74   |boje..CObjectDat|
+  0000A28FC2  61 50 72 6F 76 69 64 65 72 20 70 6F 74 C5 99 65   |aProvider pot..e|
+  0000A28FD2  62 75 6A 65 20 62 75 C4 8F 20 4F 62 6A 65 63 74   |buje bu.. Object|
+  0000A28FE2  54 79 70 65 2C 20 6E 65 62 6F 20 4F 62 6A 65 63   |Type, nebo Objec|
+  0000A28FF2  74 49 6E 73 74 61 6E 63 65 2E 01 44 4E 65 7A 6E   |tInstance..DNezn|
+  0000A29002  C3 A1 6D C3 A1 20 76 C3 BD 6A 69 6D 6B 61 20 70   |..m.. v..jimka p|
+  0000A29012  72 6F 20 76 79 74 76 C3 A1 C5 99 65 6E C3 AD 20   |ro vytv....en.. |
+  0000A29022  74 79 70 75 20 7B 30 7D 20 70 72 6F 20 4F 62 6A   |typu {0} pro Obj|
+  0000A29032  65 63 74 44 61 74 61 50 72 6F 76 69 64 65 72 2E   |ectDataProvider.|
+  0000A29042  01 52 4E 65 7A 6E C3 A1 6D C3 A1 20 76 C3 BD 6A   |.RNezn..m.. v..j|
+  0000A29052  69 6D 6B 61 20 70 72 6F 20 76 79 76 6F 6C C3 A1   |imka pro vyvol..|
+  0000A29062  76 C3 A1 6E C3 AD 20 6D 65 74 6F 64 79 20 7B 30   |v..n.. metody {0|
+  0000A29072  7D 20 75 20 74 79 70 75 20 7B 31 7D 20 70 72 6F   |} u typu {1} pro|
+  0000A29082  20 4F 62 6A 65 63 74 44 61 74 61 50 72 6F 76 69   | ObjectDataProvi|
+  0000A29092  64 65 72 2E 01 7E 50 61 72 61 6D 65 74 72 79 20   |der..~Parametry |
+  0000A290A2  43 6F 6E 73 74 72 75 63 74 6F 72 50 61 72 61 6D   |ConstructorParam|
+
+    Offset 0x00A29DD6 (10,657,238):
+  0000A29DB6  74 79 70 20 7B 30 7D 20 6E 65 70 6C 61 74 6E C3   |typ {0} neplatn.|
+  0000A29DC6  BD 2E 01 5C 56 20 73 6F 75 62 6F 72 65 63 68 20   |...\V souborech |
+  0000A29DD6  42 41 4D 4C 20 6E 65 6A 73 6F 75 20 70 6F 64 70   |BAML nejsou podp|
+  0000A29DE6  6F 72 6F 76 C3 A1 6E 79 20 75 64 C3 A1 6C 6F 73   |orov..ny ud..los|
+  0000A29DF6  74 69 2E 20 50 72 6F 74 6F 20 6F 76 6C 61 64 61   |ti. Proto ovlada|
+  0000A29E06  C4 8D 20 75 64 C3 A1 6C 6F 73 74 C3 AD 20 7B 30   |.. ud..lost.. {0|
+  0000A29E16  7D 20 6E 65 6E C3 AD 20 70 6C 61 74 6E C3 BD 2E   |} nen.. platn...|
+  0000A29E26  01 69 4E 65 73 6F 75 6C 61 64 20 76 65 72 7A C3   |.iNesoulad verz.|
+  0000A29E36  AD 2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64   |.. Datov.. proud|
+  0000A29E46  20 42 41 4D 4C 20 6D C3 A1 20 C4 8D C3 AD 73 6C   | BAML m.. ....sl|
+  0000A29E56  6F 20 76 65 72 7A 65 20 7B 30 7D 2C 20 61 6C 65   |o verze {0}, ale|
+  0000A29E66  20 61 6E 61 6C 79 7A C3 A1 74 6F 72 20 6D C5 AF   | analyz..tor m..|
+  0000A29E76  C5 BE 65 20 C4 8D C3 AD 73 74 20 70 6F 75 7A 65   |..e ....st pouze|
+  0000A29E86  20 76 65 72 7A 69 20 7B 31 7D 2E 01 81 01 45 6C   | verzi {1}....El|
+  0000A29E96  65 6D 65 6E 74 20 7B 30 7D 20 6A 69 C5 BE 20 6D   |ement {0} ji.. m|
+  0000A29EA6  C3 A1 20 70 6F 64 C5 99 C3 AD 7A 65 6E C3 BD 20   |.. pod....zen.. |
+  0000A29EB6  65 6C 65 6D 65 6E 74 20 61 20 6E 65 6D C5 AF C5   |element a nem...|
+  0000A29EC6  BE 65 20 70 C5 99 69 64 61 74 20 65 6C 65 6D 65   |.e p..idat eleme|
+  0000A29ED6  6E 74 20 7B 31 7D 2E 20 45 6C 65 6D 65 6E 74 20   |nt {1}. Element |
+  0000A29EE6  7B 30 7D 20 6D C5 AF C5 BE 65 20 6D C3 AD 74 20   |{0} m....e m..t |
+  0000A29EF6  6A 65 6E 20 6A 65 64 65 6E 20 70 6F 64 C5 99 C3   |jen jeden pod...|
+  0000A29F06  AD 7A 65 6E C3 BD 20 65 6C 65 6D 65 6E 74 2E 01   |.zen.. element..|
+  0000A29F16  27 4E 65 6C 7A 65 20 70 C5 99 69 64 61 74 20 6F   |'Nelze p..idat o|
+  0000A29F26  62 73 61 68 20 6B 20 6F 62 6A 65 6B 74 75 20 74   |bsah k objektu t|
+  0000A29F36  79 70 75 20 7B 30 7D 2E 01 30 4E 65 6C 7A 65 20   |ypu {0}..0Nelze |
+  0000A29F46  70 C5 99 69 64 61 74 20 6F 62 73 61 68 20 74 79   |p..idat obsah ty|
+  0000A29F56  70 75 20 7B 31 7D 20 6B 20 6F 62 6A 65 6B 74 75   |pu {1} k objektu|
+  0000A29F66  20 74 79 70 75 20 7B 30 7D 2E 01 24 4F 62 6A 65   | typu {0}..$Obje|
+  0000A29F76  6B 74 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99   |kt {0} nelze p..|
+  0000A29F86  69 64 61 74 20 6B 20 74 79 70 75 20 7B 31 7D 2E   |idat k typu {1}.|
+  0000A29F96  01 31 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20   |.1..et..zec {0} |
+  0000A29FA6  6E 65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20   |nelze p..ev..st |
+  0000A29FB6  6E 61 20 6F 62 6A 65 6B 74 20 74 79 70 75 20 7B   |na objekt typu {|
+  0000A29FC6  31 7D 2E 01 38 4E 65 6C 7A 65 20 70 C5 99 65 76   |1}..8Nelze p..ev|
+
+    Offset 0x00A29E47 (10,657,351):
+  0000A29E27  69 4E 65 73 6F 75 6C 61 64 20 76 65 72 7A C3 AD   |iNesoulad verz..|
+  0000A29E37  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A29E47  42 41 4D 4C 20 6D C3 A1 20 C4 8D C3 AD 73 6C 6F   |BAML m.. ....slo|
+  0000A29E57  20 76 65 72 7A 65 20 7B 30 7D 2C 20 61 6C 65 20   | verze {0}, ale |
+  0000A29E67  61 6E 61 6C 79 7A C3 A1 74 6F 72 20 6D C5 AF C5   |analyz..tor m...|
+  0000A29E77  BE 65 20 C4 8D C3 AD 73 74 20 70 6F 75 7A 65 20   |.e ....st pouze |
+  0000A29E87  76 65 72 7A 69 20 7B 31 7D 2E 01 81 01 45 6C 65   |verzi {1}....Ele|
+  0000A29E97  6D 65 6E 74 20 7B 30 7D 20 6A 69 C5 BE 20 6D C3   |ment {0} ji.. m.|
+  0000A29EA7  A1 20 70 6F 64 C5 99 C3 AD 7A 65 6E C3 BD 20 65   |. pod....zen.. e|
+  0000A29EB7  6C 65 6D 65 6E 74 20 61 20 6E 65 6D C5 AF C5 BE   |lement a nem....|
+  0000A29EC7  65 20 70 C5 99 69 64 61 74 20 65 6C 65 6D 65 6E   |e p..idat elemen|
+  0000A29ED7  74 20 7B 31 7D 2E 20 45 6C 65 6D 65 6E 74 20 7B   |t {1}. Element {|
+  0000A29EE7  30 7D 20 6D C5 AF C5 BE 65 20 6D C3 AD 74 20 6A   |0} m....e m..t j|
+  0000A29EF7  65 6E 20 6A 65 64 65 6E 20 70 6F 64 C5 99 C3 AD   |en jeden pod....|
+  0000A29F07  7A 65 6E C3 BD 20 65 6C 65 6D 65 6E 74 2E 01 27   |zen.. element..'|
+  0000A29F17  4E 65 6C 7A 65 20 70 C5 99 69 64 61 74 20 6F 62   |Nelze p..idat ob|
+  0000A29F27  73 61 68 20 6B 20 6F 62 6A 65 6B 74 75 20 74 79   |sah k objektu ty|
+  0000A29F37  70 75 20 7B 30 7D 2E 01 30 4E 65 6C 7A 65 20 70   |pu {0}..0Nelze p|
+  0000A29F47  C5 99 69 64 61 74 20 6F 62 73 61 68 20 74 79 70   |..idat obsah typ|
+  0000A29F57  75 20 7B 31 7D 20 6B 20 6F 62 6A 65 6B 74 75 20   |u {1} k objektu |
+  0000A29F67  74 79 70 75 20 7B 30 7D 2E 01 24 4F 62 6A 65 6B   |typu {0}..$Objek|
+  0000A29F77  74 20 7B 30 7D 20 6E 65 6C 7A 65 20 70 C5 99 69   |t {0} nelze p..i|
+  0000A29F87  64 61 74 20 6B 20 74 79 70 75 20 7B 31 7D 2E 01   |dat k typu {1}..|
+  0000A29F97  31 C5 98 65 74 C4 9B 7A 65 63 20 7B 30 7D 20 6E   |1..et..zec {0} n|
+  0000A29FA7  65 6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20 6E   |elze p..ev..st n|
+  0000A29FB7  61 20 6F 62 6A 65 6B 74 20 74 79 70 75 20 7B 31   |a objekt typu {1|
+  0000A29FC7  7D 2E 01 38 4E 65 6C 7A 65 20 70 C5 99 65 76 C3   |}..8Nelze p..ev.|
+  0000A29FD7  A9 73 74 20 68 6F 64 6E 6F 74 75 20 61 74 72 69   |.st hodnotu atri|
+  0000A29FE7  62 75 74 75 20 7B 30 7D 20 6E 61 20 6F 62 6A 65   |butu {0} na obje|
+  0000A29FF7  6B 74 20 74 79 70 75 20 7B 31 7D 2E 01 40 4E 65   |kt typu {1}..@Ne|
+  0000A2A007  6C 7A 65 20 70 C5 99 65 76 C3 A9 73 74 20 C5 99   |lze p..ev..st ..|
+  0000A2A017  65 74 C4 9B 7A 65 63 20 7B 30 7D 20 76 20 61 74   |et..zec {0} v at|
+  0000A2A027  72 69 62 75 74 75 20 7B 31 7D 20 6E 61 20 6F 62   |ributu {1} na ob|
+  0000A2A037  6A 65 6B 74 20 74 79 70 75 20 7B 32 7D 2E 01 31   |jekt typu {2}..1|
+
+    Offset 0x00A2A835 (10,659,893):
+  0000A2A815  61 73 79 6E 63 68 72 6F 6E 6E C3 AD 68 6F 20 64   |asynchronn..ho d|
+  0000A2A825  61 74 6F 76 C3 A9 68 6F 20 70 72 6F 75 64 75 20   |atov..ho proudu |
+  0000A2A835  42 41 4D 4C 2E 01 40 4E 65 6C 7A 65 20 75 70 72   |BAML..@Nelze upr|
+  0000A2A845  61 76 6F 76 61 74 20 64 61 74 61 20 76 20 7A 61   |avovat data v za|
+  0000A2A855  70 65 C4 8D 65 74 C4 9B 6E C3 A9 6D 20 73 6C 6F   |pe..et..n..m slo|
+  0000A2A865  76 6E C3 AD 6B 75 20 58 6D 6C 6E 73 44 69 63 74   |vn..ku XmlnsDict|
+  0000A2A875  69 6F 6E 61 72 79 2E 01 54 4B 6C C3 AD C4 8D 20   |ionary..TKl.... |
+  0000A2A885  73 6C 6F 76 6E C3 AD 6B 75 20 7B 30 7D 20 6A 65   |slovn..ku {0} je|
+  0000A2A895  20 6A 69 C5 BE 20 70 6F 75 C5 BE C3 AD 76 C3 A1   | ji.. pou....v..|
+  0000A2A8A5  6E 2E 20 41 74 72 69 62 75 74 79 20 6B 6C C3 AD   |n. Atributy kl..|
+  0000A2A8B5  C4 8D 65 20 6D 75 73 65 6A C3 AD 20 62 C3 BD 74   |..e musej.. b..t|
+  0000A2A8C5  20 6A 65 64 69 6E 65 C4 8D 6E C3 A9 2E 01 53 56   | jedine..n....SV|
+  0000A2A8D5  6C 61 73 74 6E 6F 73 74 20 7B 30 7D 20 6A 65 20   |lastnost {0} je |
+  0000A2A8E5  6A 69 C5 BE 20 76 20 74 C3 A9 74 6F 20 70 C5 99   |ji.. v t..to p..|
+  0000A2A8F5  C3 AD 70 6F 6E C4 9B 20 6F 7A 6E 61 C4 8D 65 6E   |..pon.. ozna..en|
+  0000A2A905  C3 AD 20 6E 61 73 74 61 76 65 6E 61 20 61 20 6E   |.. nastavena a n|
+  0000A2A915  65 6C 7A 65 20 6A 69 20 7A 64 76 6F 6A 6F 76 61   |elze ji zdvojova|
+  0000A2A925  74 2E 01 41 56 6C 61 73 74 6E 6F 73 74 20 7B 30   |t..AVlastnost {0|
+  0000A2A935  7D 20 62 79 6C 61 20 6A 69 C5 BE 20 6E 61 73 74   |} byla ji.. nast|
+  0000A2A945  61 76 65 6E 61 20 61 20 6C 7A 65 20 6A 69 20 6E   |avena a lze ji n|
+  0000A2A955  61 73 74 61 76 69 74 20 70 6F 75 7A 65 20 6A 65   |astavit pouze je|
+  0000A2A965  64 6E 6F 75 2E 01 67 56 6C 61 73 74 6E 6F 73 74   |dnou..gVlastnost|
+  0000A2A975  69 20 7B 30 7D 20 61 20 7B 31 7D 20 6F 64 6B 61   |i {0} a {1} odka|
+  0000A2A985  7A 75 6A C3 AD 20 6E 61 20 73 74 65 6A 6E 6F 75   |zuj.. na stejnou|
+  0000A2A995  20 76 6C 61 73 74 6E 6F 73 74 2E 20 44 75 70 6C   | vlastnost. Dupl|
+  0000A2A9A5  69 63 69 74 6E C3 AD 20 6E 61 73 74 61 76 65 6E   |icitn.. nastaven|
+  0000A2A9B5  C3 AD 20 76 6C 61 73 74 6E 6F 73 74 69 20 6E 65   |.. vlastnosti ne|
+  0000A2A9C5  6A 73 6F 75 20 70 6F 76 6F 6C 65 6E 61 2E 01 60   |jsou povolena..`|
+  0000A2A9D5  45 6C 65 6D 65 6E 74 20 76 6C 61 73 74 6E 6F 73   |Element vlastnos|
+  0000A2A9E5  74 69 20 7B 30 7D 20 6E 65 6D C5 AF C5 BE 65 20   |ti {0} nem....e |
+  0000A2A9F5  62 C3 BD 74 20 70 72 C3 A1 7A 64 6E C3 BD 2E 20   |b..t pr..zdn... |
+  0000A2AA05  4D 75 73 C3 AD 20 6F 62 73 61 68 6F 76 61 74 20   |Mus.. obsahovat |
+  0000A2AA15  70 6F 64 C5 99 C3 AD 7A 65 6E C3 A9 20 65 6C 65   |pod....zen.. ele|
+  0000A2AA25  6D 65 6E 74 79 20 6E 65 62 6F 20 74 65 78 74 2E   |menty nebo text.|
+
+    Offset 0x00A2B178 (10,662,264):
+  0000A2B158  6E 65 63 68 20 70 72 6F 20 4D 61 70 70 69 6E 67   |nech pro Mapping|
+  0000A2B168  2E 20 44 61 74 6F 76 C3 BD 20 70 72 6F 75 64 20   |. Datov.. proud |
+  0000A2B178  42 41 4D 4C 20 6D C5 AF C5 BE 65 20 62 C3 BD 74   |BAML m....e b..t|
+  0000A2B188  20 70 6F C5 A1 6B 6F 7A 65 6E 20 6E 65 62 6F 20   | po..kozen nebo |
+  0000A2B198  76 65 72 7A 65 20 42 41 4D 4C 20 6E 65 6E C3 AD   |verze BAML nen..|
+  0000A2B1A8  20 6B 6F 6D 70 61 74 69 62 69 6C 6E C3 AD 20 73   | kompatibiln.. s|
+  0000A2B1B8  20 74 6F 75 74 6F 20 76 65 72 7A C3 AD 20 61 6E   | touto verz.. an|
+  0000A2B1C8  61 6C C3 BD 7A 79 2E 01 42 56 20 4D 61 70 70 69   |al..zy..BV Mappi|
+  0000A2B1D8  6E 67 20 70 6F 6B 79 6E 65 63 68 20 63 68 79 62   |ng pokynech chyb|
+  0000A2B1E8  C3 AD 20 58 6D 6C 4E 61 6D 65 73 70 61 63 65 2C   |.. XmlNamespace,|
+  0000A2B1F8  41 73 73 65 6D 62 6C 79 20 6E 65 62 6F 20 43 6C   |Assembly nebo Cl|
+  0000A2B208  72 4E 61 6D 65 73 70 61 63 65 2E 01 30 4D 61 70   |rNamespace..0Map|
+  0000A2B218  6F 76 C3 A1 6E C3 AD 20 69 64 65 6E 74 69 66 69   |ov..n.. identifi|
+  0000A2B228  6B C3 A1 74 6F 72 75 20 55 52 49 20 7B 30 7D 20   |k..toru URI {0} |
+  0000A2B238  6A 65 20 6E 65 70 6C 61 74 6E C3 A9 2E 01 66 54   |je neplatn....fT|
+  0000A2B248  65 6E 74 6F 20 66 6F 72 6D C3 A1 74 20 6E 65 6E   |ento form..t nen|
+  0000A2B258  C3 AD 20 70 6C 61 74 6E C3 BD 20 70 72 6F 20 70   |.. platn.. pro p|
+  0000A2B268  C5 99 C3 AD 70 6F 6E 75 20 75 72 C4 8D 65 6E C3   |....ponu ur..en.|
+  0000A2B278  AD 2C 20 6B 74 65 72 C3 A1 20 75 72 C4 8D 75 6A   |., kter.. ur..uj|
+  0000A2B288  65 20 61 72 67 75 6D 65 6E 74 79 20 6B 6F 6E 73   |e argumenty kons|
+  0000A2B298  74 72 75 6B 74 6F 72 75 20 76 20 70 72 76 6B 75   |truktoru v prvku|
+  0000A2B2A8  20 7B 30 7D 2E 01 AD 01 41 72 67 75 6D 65 6E 74   | {0}....Argument|
+  0000A2B2B8  79 20 7B 30 7D 20 6A 73 6F 75 20 6E 65 70 6C 61   |y {0} jsou nepla|
+  0000A2B2C8  74 6E C3 A9 2E 20 50 C5 99 C3 AD 70 6F 6E 79 20   |tn... P....pony |
+  0000A2B2D8  6F 7A 6E 61 C4 8D 65 6E C3 AD 20 76 79 C5 BE 61   |ozna..en.. vy..a|
+  0000A2B2E8  64 75 6A C3 AD 20 6A 65 64 6E 6F 20 72 6F 76 6E   |duj.. jedno rovn|
+  0000A2B2F8  C3 AD 74 6B 6F 20 6D 65 7A 69 20 6E C3 A1 7A 76   |..tko mezi n..zv|
+  0000A2B308  65 6D 20 61 20 68 6F 64 6E 6F 74 6F 75 20 61 20   |em a hodnotou a |
+  0000A2B318  6A 65 64 6E 75 20 C4 8D C3 A1 72 6B 75 20 6D 65   |jednu ....rku me|
+  0000A2B328  7A 69 20 70 61 72 61 6D 65 74 72 79 20 6B 6F 6E   |zi parametry kon|
+  0000A2B338  73 74 72 75 6B 74 6F 72 75 20 61 20 64 76 6F 6A   |struktoru a dvoj|
+  0000A2B348  69 63 65 6D 69 20 6E C3 A1 7A 65 76 2F 68 6F 64   |icemi n..zev/hod|
+  0000A2B358  6E 6F 74 61 2E 01 AC 01 41 72 67 75 6D 65 6E 74   |nota....Argument|
+  0000A2B368  79 20 7B 30 7D 20 6A 73 6F 75 20 6E 65 70 6C 61   |y {0} jsou nepla|
+
+    Offset 0x00A2B19E (10,662,302):
+  0000A2B17E  C5 AF C5 BE 65 20 62 C3 BD 74 20 70 6F C5 A1 6B   |....e b..t po..k|
+  0000A2B18E  6F 7A 65 6E 20 6E 65 62 6F 20 76 65 72 7A 65 20   |ozen nebo verze |
+  0000A2B19E  42 41 4D 4C 20 6E 65 6E C3 AD 20 6B 6F 6D 70 61   |BAML nen.. kompa|
+  0000A2B1AE  74 69 62 69 6C 6E C3 AD 20 73 20 74 6F 75 74 6F   |tibiln.. s touto|
+  0000A2B1BE  20 76 65 72 7A C3 AD 20 61 6E 61 6C C3 BD 7A 79   | verz.. anal..zy|
+  0000A2B1CE  2E 01 42 56 20 4D 61 70 70 69 6E 67 20 70 6F 6B   |..BV Mapping pok|
+  0000A2B1DE  79 6E 65 63 68 20 63 68 79 62 C3 AD 20 58 6D 6C   |ynech chyb.. Xml|
+  0000A2B1EE  4E 61 6D 65 73 70 61 63 65 2C 41 73 73 65 6D 62   |Namespace,Assemb|
+  0000A2B1FE  6C 79 20 6E 65 62 6F 20 43 6C 72 4E 61 6D 65 73   |ly nebo ClrNames|
+  0000A2B20E  70 61 63 65 2E 01 30 4D 61 70 6F 76 C3 A1 6E C3   |pace..0Mapov..n.|
+  0000A2B21E  AD 20 69 64 65 6E 74 69 66 69 6B C3 A1 74 6F 72   |. identifik..tor|
+  0000A2B22E  75 20 55 52 49 20 7B 30 7D 20 6A 65 20 6E 65 70   |u URI {0} je nep|
+  0000A2B23E  6C 61 74 6E C3 A9 2E 01 66 54 65 6E 74 6F 20 66   |latn....fTento f|
+  0000A2B24E  6F 72 6D C3 A1 74 20 6E 65 6E C3 AD 20 70 6C 61   |orm..t nen.. pla|
+  0000A2B25E  74 6E C3 BD 20 70 72 6F 20 70 C5 99 C3 AD 70 6F   |tn.. pro p....po|
+  0000A2B26E  6E 75 20 75 72 C4 8D 65 6E C3 AD 2C 20 6B 74 65   |nu ur..en.., kte|
+  0000A2B27E  72 C3 A1 20 75 72 C4 8D 75 6A 65 20 61 72 67 75   |r.. ur..uje argu|
+  0000A2B28E  6D 65 6E 74 79 20 6B 6F 6E 73 74 72 75 6B 74 6F   |menty konstrukto|
+  0000A2B29E  72 75 20 76 20 70 72 76 6B 75 20 7B 30 7D 2E 01   |ru v prvku {0}..|
+  0000A2B2AE  AD 01 41 72 67 75 6D 65 6E 74 79 20 7B 30 7D 20   |..Argumenty {0} |
+  0000A2B2BE  6A 73 6F 75 20 6E 65 70 6C 61 74 6E C3 A9 2E 20   |jsou neplatn... |
+  0000A2B2CE  50 C5 99 C3 AD 70 6F 6E 79 20 6F 7A 6E 61 C4 8D   |P....pony ozna..|
+  0000A2B2DE  65 6E C3 AD 20 76 79 C5 BE 61 64 75 6A C3 AD 20   |en.. vy..aduj.. |
+  0000A2B2EE  6A 65 64 6E 6F 20 72 6F 76 6E C3 AD 74 6B 6F 20   |jedno rovn..tko |
+  0000A2B2FE  6D 65 7A 69 20 6E C3 A1 7A 76 65 6D 20 61 20 68   |mezi n..zvem a h|
+  0000A2B30E  6F 64 6E 6F 74 6F 75 20 61 20 6A 65 64 6E 75 20   |odnotou a jednu |
+  0000A2B31E  C4 8D C3 A1 72 6B 75 20 6D 65 7A 69 20 70 61 72   |....rku mezi par|
+  0000A2B32E  61 6D 65 74 72 79 20 6B 6F 6E 73 74 72 75 6B 74   |ametry konstrukt|
+  0000A2B33E  6F 72 75 20 61 20 64 76 6F 6A 69 63 65 6D 69 20   |oru a dvojicemi |
+  0000A2B34E  6E C3 A1 7A 65 76 2F 68 6F 64 6E 6F 74 61 2E 01   |n..zev/hodnota..|
+  0000A2B35E  AC 01 41 72 67 75 6D 65 6E 74 79 20 7B 30 7D 20   |..Argumenty {0} |
+  0000A2B36E  6A 73 6F 75 20 6E 65 70 6C 61 74 6E C3 A9 2E 20   |jsou neplatn... |
+  0000A2B37E  50 C5 99 C3 AD 70 6F 6E 79 20 6F 7A 6E 61 C4 8D   |P....pony ozna..|
+  0000A2B38E  65 6E C3 AD 20 76 79 C5 BE 61 64 75 6A C3 AD 20   |en.. vy..aduj.. |
+    ... and 386 more
+
+  XAML marker '.axaml' -- 668 occurrence(s)
+    0x0173B7DF: ...MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:KeyValueOfstringstring><a:Key>Avalonia.Media.Themes.Simple.SimpleFluentTheme</a:Ke...
+    0x0173B888: ...impleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></ClassToResourcePathIndex></AvaloniaResourceXamlInfo>................lSystem.Resourc...
+    0x01766A5D: ...MediaFluentTheme.axaml.Build:/FluentTheme/Internal/_Custom.axaml.Populate:/FluentTheme/Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Interna...
+    0x01766A87: ...Internal/_Custom.axaml.Populate:/FluentTheme/Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Internal/_Custom.axaml.Build:/FluentTheme/MediaFl...
+    0x01766AB4: ...Internal/_Custom.axaml.NamespaceInfo:/FluentTheme/Internal/_Custom.axaml.Build:/FluentTheme/MediaFluentControls.axaml.Populate:/FluentTheme/Medi...
+    0x01766AE6: ...Internal/_Custom.axaml.Build:/FluentTheme/MediaFluentControls.axaml.Populate:/FluentTheme/MediaFluentControls.axaml.NamespaceInfo:/FluentTheme/M...
+    0x01766B13: ...iaFluentControls.axaml.Populate:/FluentTheme/MediaFluentControls.axaml.NamespaceInfo:/FluentTheme/MediaFluentControls.axaml.Build:/FluentTheme/I...
+    0x01766B43: ...iaFluentControls.axaml.NamespaceInfo:/FluentTheme/MediaFluentControls.axaml.Build:/FluentTheme/Internal/Animations.axaml.Populate:/FluentTheme/I...
+    ... and 660 more
+
+  XAML marker '.xaml' -- 78 occurrence(s)
+    0x015B9E64: ...utAvaloniaDialog.xaml</a:Value></a:KeyValueOfstringstring></ClassToResourcePathIndex></AvaloniaResourceXamlInfo>Root.r2r.dll.....r...ps....z.r.....
+    0x016361CD: ...;.xfrm;.targets;.xaml;.xpt;.xft;.map;.wsdl;.disco;.ps1xml;.nuspec" xmlns="http://icsharpcode.net/sharpdevelop/syntaxdefinition/2008">...<Color f...
+    0x016A6859: ...Editing/TextArea.xaml.Populate:/Editing/TextArea.xaml.NamespaceInfo:/Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.Na...
+    0x016A6879: ...Editing/TextArea.xaml.NamespaceInfo:/Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Bu...
+    0x016A689E: ...Editing/TextArea.xaml.Build:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate...
+    0x016A68B6: ...ild:/Themes/Base.xaml.Populate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xam...
+    0x016A68D1: ...ate:/Themes/Base.xaml.NamespaceInfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xaml.NamespaceInfo:/Search/Sea...
+    0x016A68F1: ...nfo:/Themes/Base.xaml.Build:/Search/SearchPanel.xaml.Populate:/Search/SearchPanel.xaml.NamespaceInfo:/Search/SearchPanel.xaml.Build:/CodeComplet...
+    ... and 70 more
+
+  XAML marker 'avares://' -- 10 occurrence(s)
+    0x016E156D: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorPreviewer.xaml" />..        <MergeResourceInclude Source="avares://Ava...
+    0x016E15E1: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorSlider.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016E1652: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorSpectrum.xaml" />....        <!-- Controls -->..        <MergeResource...
+    0x016E16E2: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorPicker.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016E1753: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Fluent/ColorView.xaml" />....      </ResourceDictionary.MergedDictionaries>..    <...
+    0x016FBD82: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorPreviewer.xaml" />..        <MergeResourceInclude Source="avares://Ava...
+    0x016FBDF6: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorSlider.xaml" />..        <MergeResourceInclude Source="avares://Avalon...
+    0x016FBE67: ...Include Source="avares://Avalonia.Controls.ColorPicker/Themes/Simple/ColorSpectrum.xaml" />....        <!-- Controls -->..        <MergeResource...
+    ... and 2 more
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [3] HEX COLOR PATTERNS NEAR BAML (+/-100KB)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  No hex color patterns found near BAML.
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [4] ROOT-SPECIFIC RESOURCE NAMES
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  'RootTheme' -- 74 UTF-8 + 0 UTF-16LE = 74 total
+    [UTF-8] 0x19D73C77 (433,536,119):
+      ...ntsPropInit>b__94_10.<>9__4_10.<RootThemeCssPropInit>b__4_10.<>9__25_10.<GlobalUserPropInit>b__25_10.<>9__145_10.<LocalCommunity...
+    [UTF-8] 0x19D74925 (433,539,365):
+      ...ntsPropInit>b__94_20.<>9__4_20.<RootThemeCssPropInit>b__4_20.<>9__25_20.<GlobalUserPropInit>b__25_20.<>9__145_20.<LocalCommunity...
+    [UTF-8] 0x19D750D6 (433,541,334):
+      ...oadPropInit>b__64_30.<>9__4_30.<RootThemeCssPropInit>b__4_30.<>9__145_30.<LocalCommunityPermissionPropInit>b__145_30.<>9__165_30...
+    [UTF-8] 0x19D755DE (433,542,622):
+      ...oadPropInit>b__64_40.<>9__4_40.<RootThemeCssPropInit>b__4_40.<>9__145_40.<LocalCommunityPermissionPropInit>b__145_40.<>9__165_40...
+    [UTF-8] 0x19D7594A (433,543,498):
+      ...oadPropInit>b__64_50.<>9__4_50.<RootThemeCssPropInit>b__4_50.<>9__165_50.<RolePropInit>b__165_50.<>9__106_50.<CommunityPropInit>...
+    [UTF-8] 0x19D75BA5 (433,544,101):
+      ...oadPropInit>b__64_60.<>9__4_60.<RootThemeCssPropInit>b__4_60.<>9__165_60.<RolePropInit>b__165_60.<>9__237_60.<MessagePropInit>b_...
+    [UTF-8] 0x19D79D46 (433,560,902):
+      ...t_MessageReplies>b__3_0.<Create_RootThemeCss>b__3_0.<Create_AppRegistry>b__3_0.<>c__DisplayClass3_0.<>c__DisplayClass1104_0.<>9_...
+    [UTF-8] 0x19D7ABED (433,564,653):
+      ...eUploadResponsePropInit>b__4_0.<RootThemeCssPropInit>b__4_0.<AppRegistryPropInit>b__4_0.<>c__DisplayClass4_0.<GetWindowLongPtr>g...
+    ... and 66 more UTF-8
+
+  'DarkTheme' -- 4 UTF-8 + 6 UTF-16LE = 10 total
+    [UTF-8] 0x0F0DE621 (252,569,121):
+      .../Assets/SVGs/Dark Theme/Theming/DarkThemePreview.svg..Z.#...?/Resources/Assets/SVGs/Dark Theme/Theming/LightThemePreview.svg..Z....
+    [UTF-8] 0x0F0DE6B4 (252,569,268):
+      ...ets/SVGs/Dark Theme/Theming/PureDarkThemePreview.svg..Z.....</Resources/Assets/SVGs/Dark Theme/Theming/RadioButtonOff.svg..Z.y.....
+    [UTF-8] 0x0F0E1521 (252,581,153):
+      ...Assets/SVGs/Light Theme/Theming/DarkThemePreview.svg..^.#...@/Resources/Assets/SVGs/Light Theme/Theming/LightThemePreview.svg=.^...
+    [UTF-8] 0x0F0E15B6 (252,581,302):
+      ...ts/SVGs/Light Theme/Theming/PureDarkThemePreview.svgS.^.....=/Resources/Assets/SVGs/Light Theme/Theming/RadioButtonOff.svg..^.y....
+    [UTF-16LE] 0x19EC781B (434,927,643):
+      ...ToBoolConverter.DarkThemePreviewSVG.LightThemePreviewSVG.PureDarkThemePre...
+    [UTF-16LE] 0x19EC7875 (434,927,733):
+      ...ePreviewSVG.PureDarkThemePreviewSVG.SyncThemePreviewSVG.TitleTextBlock......
+    [UTF-16LE] 0x19EF2C8D (435,104,909):
+      ...t Theme/Theming/DarkThemePreview.svg........................................
+    [UTF-16LE] 0x19EF2E19 (435,105,305):
+      ...eme/Theming/PureDarkThemePreview.svg.SyncDarkSVG./Resources/Assets/SVGs/L...
+    [UTF-16LE] 0x19EF82FB (435,127,035):
+      ...k Theme/Theming/DarkThemePreview.svg./Resources/Assets/SVGs/Dark Theme/Th...
+    [UTF-16LE] 0x19EF8480 (435,127,424):
+      ...eme/Theming/PureDarkThemePreview.svg./Resources/Assets/SVGs/Dark Theme/Th...
+
+  'RootColors' -- NOT FOUND
+
+  'SidebarBackground' -- NOT FOUND
+
+  'ChannelList' -- 51 UTF-8 + 1 UTF-16LE = 52 total
+    [UTF-8] 0x0146174F (21,370,703):
+      ...sableToNotifyProcessedList.MediaChannelList.ThreeItemList.SingleItemList._currentItemList.SixItemList.ChooseBestFocusableElement...
+    [UTF-8] 0x01A3B06A (27,504,746):
+      ...ol.Viewport.IList.ReadList.MediaChannelList.ArrayList._list.Cut.Avalonia.Remote.Protocol.Input.DbeCodeInput.DbeNoCodeInput.MoveN...
+    [UTF-8] 0x0E683B32 (241,711,922):
+      ...uirements cannot be met by the IChannelListener for Binding '{0}' since the contract requires support for one of these channel t...
+    [UTF-8] 0x0E687A5A (241,728,090):
+      ...to create a ChannelFactory or a ChannelListener because it appears to be missing a TransportBindingElement.  Every binding must ...
+    [UTF-8] 0x0E687E13 (241,729,043):
+      ...n building the ChannelFactory / ChannelListener.  This may be have been caused by the binding elements being misordered.  The re...
+    [UTF-8] 0x0E6895A5 (241,735,077):
+      ...at '{0}' is unable to open its IChannelListener as there are no endpoints for the ChannelDispatcher..]The ChannelDispatcher at '...
+    [UTF-8] 0x0E689638 (241,735,224):
+      ...s) '{1}' is unable to open its IChannelListener....CreateFactory requires that the Endpoint property be initialized. Either prov...
+    [UTF-8] 0x0E7AC57B (242,926,971):
+      ...ger`1.EventHandler`1.IOTimer`1.IChannelListener`1.OutWrapper`1.IComparer`1.IEqualityComparer`1.TaskAwaiter`1.GenericAdapter`1.No...
+    ... and 43 more UTF-8
+    [UTF-16LE] 0x19EBADAF (434,875,823):
+      ...ing.IsCollapsed.ChannelListItemId.Type.PermissionsSyncedToChannelGroup.Medi...
+
+  'MessageBackground' -- 8 UTF-8 + 2 UTF-16LE = 10 total
+    [UTF-8] 0x19D803BC (433,587,132):
+      ...remoteAudioTrackStarted>b__0.<onMessageBackgroundBorderContextRequested>b__0.<onSelectTabMessageReceived>b__0.<onSwitchChannelMe...
+    [UTF-8] 0x19D85456 (433,607,766):
+      ...PropInit>b__1253_1.<>9__53_1.<onMessageBackgroundBorderContextRequested>b__53_1.<>c__DisplayClass53_1.<>9__63_1.<CommunityRolePr...
+    [UTF-8] 0x19D90DAA (433,655,210):
+      ...ommunityPropertyChanged>b__2.<onMessageBackgroundBorderContextRequested>b__2.<.ctor>b__2.<loadEmojis>b__2.<GetClosestMatchingEmo...
+    [UTF-8] 0x19DB43C8 (433,800,136):
+      ...interEntered.onPointerEntered.onMessageBackgroundBorderPointerEntered.onMainBorderPointerEntered.onChannelGridSplitterPointerEnt...
+    [UTF-8] 0x19DB5D0A (433,806,602):
+      ...PointerExited.onPointerExited.onMessageBackgroundBorderPointerExited.onMainBorderPointerExited.onChannelGridSplitterPointerExite...
+    [UTF-8] 0x19DB6767 (433,809,255):
+      ...ested.remove_RepaintRequested.onMessageBackgroundBorderContextRequested.editorContextRequested.add_CloseWindowRequested.remove_C...
+    [UTF-8] 0x19E13B60 (434,191,200):
+      ...Border.DisabledBackgroundBorder.MessageBackgroundBorder.WideBorder.ImageBorder.PrimaryRoleBorder.OnlineBorder.MainPictureBorder....
+    [UTF-8] 0x19E13DA6 (434,191,782):
+      ...tWidgetBorder._chatWidgetBorder.MessageBackgroundHighlightBorder.RootBorder.HexInputBorder.SystemTrayBorder.BodyBorder.PropName_...
+    [UTF-16LE] 0x19EC3587 (434,910,599):
+      ...MessageMenuItem.MessageBackgroundBorder.MessageBackgroundHighlightBorder.SystemMe...
+    [UTF-16LE] 0x19EC35B7 (434,910,647):
+      ...ackgroundBorder.MessageBackgroundHighlightBorder.SystemMessageSvgImage.UsernameTe...
+
+  'NavigationBackground' -- NOT FOUND
+
+  'ChatBackground' -- NOT FOUND
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [5] AVALONIA COLOR CONSTRUCTOR / METHOD STRINGS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  'Color.FromArgb' -- NOT FOUND
+  'Color.Parse' -- NOT FOUND
+  'Color.FromRgb' -- NOT FOUND
+  'Color.FromUInt32' -- NOT FOUND
+
+  'SolidColorBrush' -- 230 UTF-8 + 3 UTF-16LE = 233 total
+    [UTF-8] 0x00A25E3F (10,640,959):
+      ...zv..razn..n.. musej.. b..t typu SolidColorBrush..aPouze SolidColorBrush lze pou....t jako Foreground pro Sticky...
+    [UTF-8] 0x00A25E57 (10,640,983):
+      ....t typu SolidColorBrush..aPouze SolidColorBrush lze pou....t jako Foreground pro StickyNoteControl typu StickyN...
+    [UTF-8] 0x00ACD2FA (11,326,202):
+      ...rhebungsfarben m..ssen vom Typ "SolidColorBrush" sein..sNur "SolidColorBrush" kann f..r "StickyNoteControl" vom...
+    [UTF-8] 0x00ACD317 (11,326,231):
+      ...p "SolidColorBrush" sein..sNur "SolidColorBrush" kann f..r "StickyNoteControl" vom Typ "StickyNoteType.Ink" als...
+    [UTF-8] 0x00B78576 (12,027,254):
+      ... de resaltado deben ser de tipo SolidColorBrush..fS..lo SolidColorBrush se puede usar como Foreground para Stic...
+    ... and 225 more UTF-8
+    [UTF-16LE] 0x1BD61CDD (467,016,925):
+      ...toryboardToFill.SolidColorBrush.SpecularMaterial.SplineByteKeyF...
+    [UTF-16LE] 0x1BF1C23E (468,828,734):
+      ...onvertedBitmap .SolidColorBrush.LinearGradientBrush.Transform.S...
+    [UTF-16LE] 0x1C0CE26F (470,606,447):
+      ...en converted to SolidColorBrush.Brush should've been made absol...
+
+  'LinearGradientBrush' -- 133 UTF-8 + 4 UTF-16LE = 137 total
+    [UTF-8] 0x01450CE1 (21,302,497):
+      ...itionSimpleRadialGradientBrush.ILinearGradientBrush.ImmutableLinearGradientBrush.ServerCompositionSimpleLinearGradi...
+    [UTF-8] 0x01450CFE (21,302,526):
+      ...h.ILinearGradientBrush.ImmutableLinearGradientBrush.ServerCompositionSimpleLinearGradientBrush.ServerCompositionSim...
+    [UTF-8] 0x01450D29 (21,302,569):
+      ...entBrush.ServerCompositionSimpleLinearGradientBrush.ServerCompositionSimpleContentBrush._brush.Math.get_Path.set_Pa...
+    [UTF-8] 0x01459F7D (21,340,029):
+      ...hChangedFields.CompositionSimpleLinearGradientBrushChangedFields.CompositionVisualChangedFields.CompositionSimpleTr...
+    [UTF-8] 0x017665FA (24,536,570):
+      ...idColorBrush.ConicGradientBrush.LinearGradientBrush.Math.get_Path.CompiledBindingPath.DllImportSearchPath.get_Width...
+    ... and 128 more UTF-8
+    [UTF-16LE] 0x1BD604FF (467,010,815):
+      ...rDoubleKeyFrame.LinearGradientBrush.LinearInt16KeyFrame.LinearInt32...
+    [UTF-16LE] 0x1BF1C25E (468,828,766):
+      ...SolidColorBrush.LinearGradientBrush.Transform.StartPoint.EndPoint.C...
+    [UTF-16LE] 0x1C0CE19E (470,606,238):
+      ...->Length..Empty LinearGradientBrush, should've been culled............
+    [UTF-16LE] 0x1C0CE20D (470,606,349):
+      .......Single-stop LinearGradientBrush, should've been converted to So...
+
+  'IBrush' -- 17 UTF-8 + 0 UTF-16LE = 17 total
+    [UTF-8] 0x014509E9 (21,301,737):
+      ...sh._autoFlush.TryDiscardOrFlush.IBrush.get_Brush.set_Brush.get_ForegroundBrush.get_BackgroundBrush.IIm...
+    [UTF-8] 0x01452D8A (21,310,858):
+      ...rm.get_IsUniform.Avalonia.Media.IBrush.Transform.Rotate3DTransform.ITransform.Avalonia.Media.IBrush.ge...
+    [UTF-8] 0x01452DC7 (21,310,919):
+      ...sform.ITransform.Avalonia.Media.IBrush.get_Transform.set_Transform.ComputeDecomposedTransform.TryGetIn...
+    [UTF-8] 0x0145997C (21,338,492):
+      ...onRenderResource<Avalonia.Media.IBrush>.GetForCompositor.Avalonia.Rendering.Composition.Drawing.ICompo...
+    [UTF-8] 0x0152FA6D (22,215,277):
+      ...TextEndOfParagraph.Refresh.Push.IBrush.get_SelectionForegroundBrush.IImmutableBrush.TileBrush.VisualBr...
+    ... and 12 more UTF-8
+
+  'ThemeColor' -- 20 UTF-8 + 4 UTF-16LE = 24 total
+    [UTF-8] 0x01B6B1A7 (28,750,247):
+      ...Color.set_BackgroundColor.TryGetThemeColor.NormalizeColor.color.GetLineTerminator.GetLineTextIncludingTerm...
+    [UTF-8] 0x0D4A2C96 (222,964,886):
+      ...EnterRequest.DragOverRequest.SetThemeColorRequest.SetForcedScaleFactorRequest.GetElementsByCssSelectorRequ...
+    [UTF-8] 0x1B76BD46 (460,766,534):
+      ...ButtonChrome........Name........ThemeColor........BorderBrush........Fill........IsDefaulted........Render...
+    [UTF-8] 0x1B76CD3D (460,770,621):
+      ...ion........SortDirection........ThemeColor........IsHovered........IsPressed........CanUserSort........IsC...
+    [UTF-8] 0x1B76D495 (460,772,501):
+      ...ScrollChrome....!...Name....!...ThemeColor....!...RenderMouseOver....!...RenderPressed....!...ScrollGlyph ...
+    ... and 15 more UTF-8
+    [UTF-16LE] 0x0D4ADDB0 (223,010,224):
+      ...olorResponse.SetThemeColorRequest{EngineId: .rpc.SetThemeC...
+    [UTF-16LE] 0x0D4ADDF8 (223,010,296):
+      ...gineId: .rpc.SetThemeColorRequest.rpc.NativeTheme.SetColor...
+    [UTF-16LE] 0x1B7DED4E (461,237,582):
+      ...ratorVisibility.ThemeColor.BulletChrome.ButtonChrome.Scrol...
+    [UTF-16LE] 0x1BD5B974 (466,991,476):
+      ...d.UxThemeName.UxThemeColor.WindowCornerRadius.WindowGlassC...
+
+  'ColorResource' -- 1 UTF-8 + 0 UTF-16LE = 1 total
+    [UTF-8] 0x1B5110B5 (458,297,525):
+      ....MilCmdQuaternionResource.MilCmdColorResource.MilCmdRectResource.AddDependentResource.MilCmdEtwEventResource....
+
+  'DynamicResource' -- 301 UTF-8 + 9 UTF-16LE = 310 total
+    [UTF-8] 0x00A2EB96 (10,677,142):
+      ...n..mi typy MarkupExtension jsou DynamicResourceExtension a BindingBase nebo odvozen.. typy....Sd..len.. atribut...
+    [UTF-8] 0x00AD7C14 (11,369,492):
+      ... nur die MarkupExtension-Typen "DynamicResourceExtension" und "BindingBase" oder abgeleitete Typen....Das freig...
+    [UTF-8] 0x00B81E21 (12,066,337):
+      ...e MarkupExtension admitidos son DynamicResourceExtension y BindingBase o tipos derivados....El atributo compart...
+    [UTF-8] 0x00C2A91D (12,757,277):
+      ...upExtension pris en charge sont DynamicResourceExtension et BindingBase ou les types d..riv..s....L'attribut pa...
+    [UTF-8] 0x00CD355F (13,448,543):
+      ...MarkupExtension supportati sono DynamicResourceExtension e BindingBase o tipi derivati....L'attributo condiviso...
+    ... and 296 more UTF-8
+    [UTF-16LE] 0x015CA100 (22,847,744):
+      ...ce must be set..DynamicResource ..................................
+    [UTF-16LE] 0x015CA289 (22,848,137):
+      ...n this context..DynamicResource must have a ResourceKey..Static...
+    [UTF-16LE] 0x1BD39F35 (466,853,685):
+      ...Controls.DisableDynamicResourceOptimization.NULL.Call to Framew...
+    [UTF-16LE] 0x1BD42B70 (466,889,584):
+      ...ox.ToolBarPanel.DynamicResourceExtension.FontSizeConverter.Sepa...
+    [UTF-16LE] 0x1BD43224 (466,891,300):
+      ...enuItem.Section.DynamicResourceExtensionConverter.Underline.Tem...
+    ... and 4 more UTF-16LE
+
+  'StaticResource' -- 241 UTF-8 + 20 UTF-16LE = 261 total
+    [UTF-8] 0x00A2EF84 (10,678,148):
+      ...ixedPageProxy..WP....pona prvku StaticResource m....e b..t pou..ita pouze v kontextu na....t..n.. XAML..eObjek...
+    [UTF-8] 0x00AD80B7 (11,370,679):
+      ... "FixedPageProxy" handeln..QDie StaticResource-Erweiterung kann nur im Ladekontext von XAML verwendet werden.....
+    [UTF-8] 0x00B8222C (12,067,372):
+      ... FixedPageProxy..QLa extensi..n StaticResource s..lo se puede usar en el contexto de carga de XAML..vEl objeto...
+    [UTF-8] 0x00C2AD6A (12,758,378):
+      ...un FixedPageProxy..^L'extension StaticResource ne peut ..tre utilis..e que dans le contexte de chargement de X...
+    [UTF-8] 0x00CD39A6 (13,449,638):
+      ...ssibile utilizzare l'estensione StaticResource sono nel contesto di caricamento del file XAML....Non .. possib...
+    ... and 236 more UTF-8
+    [UTF-16LE] 0x00A18FEA (10,588,138):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00ABEFEE (11,268,078):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00B6AFEA (11,972,586):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00C12FEE (12,660,718):
+      ...................StaticResourceInXamlOnly.........................
+    [UTF-16LE] 0x00CBBFEE (13,352,942):
+      ...................StaticResourceInXamlOnly.........................
+    ... and 15 more UTF-16LE
+
+  'ThemeVariant' -- 77 UTF-8 + 7 UTF-16LE = 84 total
+    [UTF-8] 0x01443134 (21,246,260):
+      ...Changed.HeightChanged.add_ActualThemeVariantChanged.remove_ActualThemeVariantChanged.OnTemplatedParentChange...
+    [UTF-8] 0x01443155 (21,246,293):
+      ...hemeVariantChanged.remove_ActualThemeVariantChanged.OnTemplatedParentChanged.OnVisualParentChanged.OnParentC...
+    [UTF-8] 0x01448E29 (21,270,057):
+      ...tHitTestResult>k__BackingField.<ThemeVariant>k__BackingField.<GetVariant>k__BackingField.<InheritVariant>k__...
+    [UTF-8] 0x0144973A (21,272,378):
+      ...ackingField.<Avalonia.Controls.IThemeVariantProvider.Key>k__BackingField.<Key>k__BackingField.<PhysicalKey>k...
+    [UTF-8] 0x01456AFB (21,326,587):
+      ...FormatProvider._formatProvider.IThemeVariantProvider.IDataContextProvider.IChildIndexProvider.UpdateQueryPro...
+    ... and 72 more UTF-8
+    [UTF-16LE] 0x01467743 (21,395,267):
+      ....inheritVariant.ThemeVariant { Key = . }.themeVariant.Actual...
+    [UTF-16LE] 0x0146779B (21,395,355):
+      ...meVariant.ActualThemeVariant.RequestedThemeVariant.Light.Dar...
+    [UTF-16LE] 0x014677C7 (21,395,399):
+      ...ariant.RequestedThemeVariant.Light.Dark........................
+    [UTF-16LE] 0x014677F8 (21,395,448):
+      ...................ThemeVariant type converter supports only bu...
+    [UTF-16LE] 0x01468B90 (21,400,464):
+      ...formColorValues.ThemeVariant = ., ContrastPreference = ., Ac...
+    ... and 2 more UTF-16LE
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [6] BONUS: RAW ARGB BYTE PATTERNS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+  bg primary (LE/BGRA: 21150dff) -- 396134 hits (noise)
+
+  bg tertiary (LE/BGRA: 1b1007ff) -- 2 hit(s)
+    0x19BB42E4 (431,702,756): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 1B 10 07 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E2F1 (536,208,113): FF 15 C1 81 08 04 FF 15 1B 03 F3 03 48 8B D8 B9 1B 10 07 FF FF 15 25 D7 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  input bg (LE/BGRA: 130e09ff) -- 2 hit(s)
+    0x19BB4304 (431,702,788): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 13 0E 09 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E341 (536,208,193): FF 15 71 81 08 04 FF 15 CB 02 F3 03 48 8B D8 B9 13 0E 09 FF FF 15 D5 D6 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  brand blue (LE/BGRA: f86a3bff) -- 8 hit(s)
+    0x19AA9AA3 (430,611,107): 00 0A 25 6F BC 2B 00 0A 73 BD 2B 00 0A 25 25 20 F8 6A 3B FF 28 BE 2B 00 0A 6F BF 2B 00 0A 23 00 00 00 00 00
+    0x19BB41C4 (431,702,468): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4BF8 (431,705,080): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5628 (431,707,688): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F8 6A 3B FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FD267B8 (533,882,808): 00 48 8B 8C 24 B0 05 00 00 FF 15 F9 02 23 04 B9 F8 6A 3B FF FF 15 86 52 23 04 89 84 24 18 07 00 00 FF 15 39
+    ... and 3 more
+
+  brand lime (LE/BGRA: 5dffa8ff) -- 4 hit(s)
+    0x19BB41E4 (431,702,500): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 5D FF A8 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5648 (431,707,720): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 5D FF A8 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E071 (536,207,473): FF 15 41 84 08 04 FF 15 9B 05 F3 03 48 8B D8 B9 5D FF A8 FF FF 15 A5 D9 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF60CB1 (536,218,801): FF 15 31 58 08 04 FF 15 5B D9 F2 03 48 8B D8 B9 5D FF A8 FF FF 15 65 AD FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  border (LE/BGRA: 362c24ff) -- 8 hit(s)
+    0x008377E4 (8,615,908): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x0F036C9C (251,882,652): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x0F0E9B98 (252,615,576): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x111D91D5 (287,150,549): 15 08 00 FF 0D 00 00 FF 0B 00 00 FF 16 09 01 FF 36 2C 24 FF 36 2B 24 FF 16 09 01 FF 0B 00 00 FF 0D 00 00 FF
+    0x19BB4324 (431,702,820): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 36 2C 24 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    ... and 3 more
+
+  text white (BE/ARGB: fff2f2f2) -- 3 hit(s)
+    0x1BFE2BA9 (469,642,153): 01 00 00 00 03 00 00 00 0B B3 B3 B4 9B A2 A2 A3 FF F2 F2 F2 FF F4 F1 ED FF B7 9E 78 FF E6 C7 9A FF E1 C0 90
+    0x1BFE3A85 (469,645,957): 00 00 00 00 00 00 00 00 04 96 95 96 D4 CA CA CA FF F2 F2 F2 FF 71 71 A6 FF 8C 8D E1 FF 6E 71 DE FF 5D 63 DE
+    0x1BFE4849 (469,649,481): 0F AD AD AD DF A1 A1 A1 FF CC CC CC FF EC EC EC FF F2 F2 F2 FF E0 E0 E0 FF B8 B8 B9 FF 96 96 97 FD A4 A3 A4
+
+  text white (LE/BGRA: f2f2f2ff) -- 13 hit(s)
+    0x19BB4224 (431,702,564): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4284 (431,702,660): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4CB8 (431,705,272): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5688 (431,707,784): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB56E8 (431,707,880): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 F2 F2 F2 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    ... and 8 more
+
+  text gray (BE/ARGB: ffa7a7a8) -- 2 hit(s)
+    0x1BFE3BD1 (469,646,289): FF 73 B2 7D FF 6C A7 74 FF C6 D3 C8 FF C7 C7 C8 FF A7 A7 A8 EB 00 00 00 21 00 00 00 0F 00 00 00 04 00 00 00
+    0x1BFE5E71 (469,655,153): FF 31 DB FF FF 8C ED FF FF 3C 9F BC FF F6 F6 F6 FF A7 A7 A8 F0 00 00 00 00 00 00 00 00 8E 8E 90 F7 F6 F6 F6
+
+  muted (LE/BGRA: 6f5c4fff) -- 4 hit(s)
+    0x19BB4404 (431,703,044): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 6F 5C 4F FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5868 (431,708,264): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 6F 5C 4F FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E5C1 (536,208,833): FF 15 F1 7E 08 04 FF 15 4B 00 F3 03 48 8B D8 B9 6F 5C 4F FF FF 15 55 D4 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF61201 (536,220,161): FF 15 E1 52 08 04 FF 15 0B D4 F2 03 48 8B D8 B9 6F 5C 4F FF FF 15 15 A8 FF 03 89 43 18 48 B8 00 00 00 00 00
+
+  link blue (LE/BGRA: ffa588ff) -- 9 hit(s)
+    0x1139E712 (289,007,378): 87 FF 65 88 FF 13 88 FF 52 88 FF 60 88 FF DC 88 FF A5 88 FF 54 89 FF 94 89 FF DB 89 FF DC 89 FF 56 8A FF 57
+    0x114B3DE6 (290,143,718): A9 FF 3E B1 FF 60 9E FF 82 A6 FF 5B 93 FF D6 9B FF A5 88 FF 56 91 FF D9 7D FF B7 86 FF E3 72 FF 8E 7C FF 00
+    0x11631131 (291,705,137): 7E FF 09 82 FF F2 81 FF 1D 85 FF 28 85 FF 79 88 FF A5 88 FF B9 8B FF 78 8B FF F0 8E FF E5 8E FF EA 91 FF 33
+    0x11744162 (292,831,586): 5D FF 5E 5C FF 0F 6C FF 77 6A FF F4 79 FF A3 78 FF A5 88 FF 3A 87 FF 59 96 FF F5 95 FF D5 A4 FF 36 A4 FF CA
+    0x11D451AD (299,127,213): A1 FF F7 98 FF E4 98 FF D0 90 FF E9 90 FF C2 88 FF A5 88 FF 45 81 FF 0E 81 FF A9 79 FF C4 79 FF 67 72 FF 66
+    ... and 4 more
+
+  error red (LE/BGRA: 363ff0ff) -- 6 hit(s)
+    0x19BB43E4 (431,703,012): 12 00 00 00 20 0E 00 11 02 28 40 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB4E14 (431,705,620): 12 00 00 00 20 0E 00 11 02 28 66 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x19BB5848 (431,708,232): 12 00 00 00 20 0E 00 11 02 28 8C 63 00 06 0A 20 36 3F F0 FF 73 94 19 00 0A 2A CC CC 13 30 01 00 12 00 00 00
+    0x1FF5E571 (536,208,753): FF 15 41 7F 08 04 FF 15 9B 00 F3 03 48 8B D8 B9 36 3F F0 FF FF 15 A5 D4 FF 03 89 43 18 48 B8 00 00 00 00 00
+    0x1FF5FB91 (536,214,417): FF 15 39 69 08 04 FF 15 7B EA F2 03 48 8B D8 B9 36 3F F0 FF FF 15 85 BE FF 03 89 43 18 48 B8 00 00 00 00 00
+    ... and 1 more
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  [7] BONUS: AVALONIA-SPECIFIC STRINGS
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+  'Avalonia.Media.Color' -- NOT FOUND
+  'Avalonia.Media.SolidColorBrush' -- NOT FOUND
+
+  'Avalonia.Media.IBrush' -- 3 UTF-8 hit(s)
+    0x01452D7B: ...m.get_IsUniform.Avalonia.Media.IBrush.Transform.Rotate3DTransform.ITransform.Avalonia...
+    0x01452DB8: ...form.ITransform.Avalonia.Media.IBrush.get_Transform.set_Transform.ComputeDecomposedTr...
+    0x0145996D: ...nRenderResource<Avalonia.Media.IBrush>.GetForCompositor.Avalonia.Rendering.Compositio...
+
+  'Avalonia.Themes' -- 20 UTF-8 hit(s)
+    0x0173B78A: ...ngstring><a:Key>Avalonia.Themes.Fluent.MediaFluentTheme</a:Key><a:Value>/Fluent...
+    0x01768AA4: ...Data.Converters.Avalonia.Themes.Converters.get_Setters.XamlDynamicSetters.VkIma...
+    0x01768B03: ...ers.arrayLayers.Avalonia.Themes.MiniBehaviors.Selectors.get_Hours.get_Pss.BindC...
+    0x017692DC: ...dContent.extent.Avalonia.Themes.Fluent.MediaEvent.MediaEngineEvent.ManualResetE...
+    0x0177DAD8: ....com/avaloniaui.Avalonia.Themes.Fluent..?...https://github.com/avaloniaui.Avalo...
+    ... and 15 more
+  'Avalonia.Themes' -- 10 UTF-16LE hit(s)
+    0x0176C8AE: ...aPlayer.Avalonia.Themes.Fluent.Avalonia.Media.T...
+    0x01817ABA: ...mplates.Avalonia.Themes.Simple.Avalonia.Diagnos...
+    0x01A5B188: ...iption..Avalonia.Themes.Simple..4..FileVersion....
+
+  'FluentTheme' -- 43 UTF-8 hit(s)
+    0x0173B7A6: ...mes.Fluent.MediaFluentTheme</a:Key><a:Value>/FluentTheme/MediaFluentTheme.a...
+    0x0173B7C3: ...a:Key><a:Value>/FluentTheme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfs...
+    0x0173B7D4: ...luentTheme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:Ke...
+    0x0173B84E: ...es.Simple.SimpleFluentTheme</a:Key><a:Value>/SimpleTheme/SimpleFluentTheme....
+    0x0173B87D: ...mpleTheme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></Cla...
+    ... and 38 more
+  'FluentTheme' -- 8 UTF-16LE hit(s)
+    0x0176B6F3: ...aPlayer/FluentTheme/MediaFluentTheme.axaml....
+    0x0176B715: ...me/MediaFluentTheme.axaml.mm\:ss.hh\:mm\:ss...
+    0x0176B9DE: ...aPlayer/FluentTheme/Internal/_Custom.axaml....
+
+  'SimpleTheme' -- 7 UTF-8 hit(s)
+    0x0173B86B: ...a:Key><a:Value>/SimpleTheme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOf...
+    0x017FB1B8: ...Theme.set_Theme.SimpleTheme._cellTextBlockTheme.get_CellTheme.set_CellTheme...
+    0x01A5B61D: ...a.Themes.Simple.SimpleTheme</a:Key><a:Value>/SimpleTheme.xaml</a:Value></a:...
+    0x01A5B63A: ...a:Key><a:Value>/SimpleTheme.xaml</a:Value></a:KeyValueOfstringstring></Clas...
+    0x01A91747: ...lyName.KeyFrame.SimpleTheme.ControlTheme.DateTime.Avalonia.Markup.Xaml.Xaml...
+    ... and 2 more
+  'SimpleTheme' -- 1 UTF-16LE hit(s)
+    0x01A968F2: ....Simple/SimpleTheme.xaml.ThemeBackgroundCol...
+  'ThemeVariant.Dark' -- NOT FOUND
+  'ThemeVariant.Light' -- NOT FOUND
+
+  'ResourceDictionary' -- 238 UTF-8 hit(s)
+    0x00A285A8: ...v..ny v rozsahu ResourceDictionary...Aktu..ln.. str..nka.kTyp objektu nen.. pro mo...
+    0x00A2E020: ...omuto slovn..ku ResourceDictionary nelze p....mo p..idat obsah, proto..e byla ji.....
+    0x00A2E0A2: ...izovat instanci ResourceDictionary....Slou..en.. slovn..k je neplatn... Bu.. byl R...
+    0x00A2E0E3: ...atn... Bu.. byl ResourceDictionary um..st..n do sv.. vlastn.. kolekce MergedDictio...
+    0x00A2E16E: ...nary dvakr..t..BResourceDictionary je ur..en jen pro ..ten.. a nelze ho upravovat....
+    ... and 233 more
+  'ResourceDictionary' -- 114 UTF-16LE hit(s)
+    0x00A0F057: ...ExpectedResourceDictionaryTarget.....................
+    0x00A1466E: ...edInsideResourceDictionary...........................
+    0x00A17F9A: ...........ResourceDictionaryDeferredContentFailure.....
+
+  'MergedDictionaries' -- 34 UTF-8 hit(s)
+    0x00A2E119: ...lastn.. kolekce MergedDictionaries, nebo byl p..id..n do stejn.. kolekce MergedDic...
+    0x00AD6ED2: ... in der eigenen MergedDictionaries-Sammlung zu platzieren, oder es wurde versucht,...
+    0x00B812B2: ...opia colecci..n MergedDictionaries o bien se est.. agregando dos veces a la misma ...
+    0x00C29D36: ...opre collection MergedDictionaries ou est ajout.. deux fois .. la m..me collection...
+    0x00CD2A09: ... nella raccolta MergedDictionaries di appartenenza oppure si .. tentato di aggiung...
+    ... and 29 more
+  'MergedDictionaries' -- 1 UTF-16LE hit(s)
+    0x1BD5DFFF: ...Content.MergedDictionaries.AncestorType.FallbackVa...
+
+  'ThemeDictionaries' -- 8 UTF-8 hit(s)
+    0x0143E1F9: ...r>b__108_0.<get_ThemeDictionaries>b__18_0.<>c__DisplayClass18_0.<TryGetGlyphTypef...
+    0x0143EE56: ...r>b__108_1.<get_ThemeDictionaries>b__18_1.<UpdateCore>b__28_1.<.cctor>b__28_1.<.c...
+    0x014400A7: ....<>9__18_2.<get_ThemeDictionaries>b__18_2.<.cctor>b__48_2.<.cctor>b__29_2.<.cctor...
+    0x0145A8A2: ...ictionaries.get_ThemeDictionaries.TryJoinContiguousMemories.trimEntries.get_HasEn...
+    0x016AB134: ...ictionaries.get_ThemeDictionaries._deliveries.entries.TextUtilities.get_Propertie...
+    ... and 3 more
+  'Application.Resources' -- NOT FOUND
+  'Styles.xaml' -- NOT FOUND
+
+  'Theme.axaml' -- 8 UTF-8 hit(s)
+    0x0173B7DA: ...heme/MediaFluentTheme.axaml</a:Value></a:KeyValueOfstringstring><a:KeyValue...
+    0x0173B883: ...eme/SimpleFluentTheme.axaml</a:Value></a:KeyValueOfstringstring></ClassToRe...
+    0x01766A58: ...heme/MediaFluentTheme.axaml.Build:/FluentTheme/Internal/_Custom.axaml.Popul...
+    0x19E069D2: ...rces/Styles/TabsTheme.axaml.Populate:/Resources/Styles/TabsTheme.axaml.Name...
+    0x19E069FD: ...rces/Styles/TabsTheme.axaml.NamespaceInfo:/Resources/Styles/TabsTheme.axaml...
+    ... and 3 more
+  'Theme.axaml' -- 2 UTF-16LE hit(s)
+    0x0176B721: ...iaFluentTheme.axaml.mm\:ss.hh\:mm\:ss.d\:hh...
+    0x19EFB436: ...les/TabsTheme.axaml...........................
+  'Colors.axaml' -- NOT FOUND
+  'Brushes.axaml' -- NOT FOUND
+
+====================================================================================================
+  SCAN COMPLETE: CURRENT (potentially patched)
+====================================================================================================
