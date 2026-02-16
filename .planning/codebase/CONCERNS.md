@@ -136,6 +136,33 @@
 - Limit: If settings panel is opened/closed many times, event listeners leak (only cleaned up via global cleanup function)
 - Scaling path: Use event delegation instead of attaching listeners to each item; properly clean up listeners in `stopObserving()`
 
+## C# Hook Layer Concerns
+
+**Environment Variables Affect ALL .NET Apps:**
+- Risk: CLR profiler env vars (`CORECLR_ENABLE_PROFILING`, etc.) are user-scoped and persistent. They apply to every .NET process the user launches, not just Root.
+- Files: `Install-Uprooted.ps1`, `installer/src-tauri/src/`
+- Current mitigation: Profiler has a process name guard — checks for "Root" and returns `E_FAIL` for other processes
+- Impact: Other .NET apps may see slight startup overhead from profiler loading/unloading
+- Recommendations: Consider process-specific env var injection or use `DOTNET_STARTUP_HOOKS` method instead
+
+**AvaloniaReflection Brittleness:**
+- Risk: The reflection cache (`hook/AvaloniaReflection.cs`, 815 lines) assumes specific Avalonia type names, property names, and method signatures. Avalonia version updates could rename or remove any of these.
+- Files: `hook/AvaloniaReflection.cs`
+- Impact: Any Avalonia API change breaks all UI injection — entire C# layer becomes non-functional
+- Recommendations: Add version detection and graceful degradation per-feature
+
+**Settings Page Text-Based Detection:**
+- Risk: Sidebar injector finds the settings page by searching for exact text "APP SETTINGS" in the visual tree. If Root renames this text, injection silently fails.
+- Files: `hook/VisualTreeWalker.cs`, `hook/SidebarInjector.cs`
+- Impact: Complete loss of native UI injection with no error visible to user
+- Recommendations: Add multiple fallback detection strategies (structural analysis without text anchor)
+
+**Back Button Freeze Risk:**
+- Risk: If injected controls are still in the visual tree when Root's back button triggers navigation teardown, the app freezes
+- Files: `hook/SidebarInjector.cs`
+- Current mitigation: PointerPressed subscription on back button calls `CleanupInjection()` before Root's handler fires
+- Impact: If the event subscription fails or fires too late, Root freezes
+
 ## Dependencies at Risk
 
 **No External Dependencies - Single Points of Failure:**
@@ -153,20 +180,36 @@
 
 ## Missing Critical Features
 
-**No Settings Persistence Across Sessions:**
-- Problem: Plugin enable/disable state and theme changes are session-only (resets on Root restart)
-- Blocks: Long-term theme/plugin preferences, user must reconfigure every session
-- Current workaround: Patcher can set defaults, but no UI-based persistence mechanism
+**C# Hook Cannot Load Settings from JSON:**
+- Problem: `System.Text.Json` causes `MissingMethodException` in profiler-injected context, preventing JSON deserialization in the C# hook layer
+- Files: `hook/UprootedSettings.cs`
+- Impact: The C# hook returns hardcoded defaults only — cannot read user preferences from `uprooted-settings.json`. Native Avalonia UI (themes page, plugins page) cannot reflect actual user configuration.
+- Blocks: C# settings pages are display-only, cannot show actual enabled/disabled state or selected theme
+- Workaround needed: Manual JSON parsing, or loading from a different assembly context
 
-**No Plugin Configuration Storage:**
-- Problem: Plugin settings (defined in `settings?: SettingsDefinition`) have no persistence mechanism
-- Blocks: Plugins cannot store user-configured settings beyond current session
-- Workaround: Plugins must implement their own localStorage/file storage if needed
+**C# Theme Switching and Plugin Management are Display-Only:**
+- Problem: The native Avalonia Themes page shows themes with "ACTIVE" badges but has no click handlers. The Plugins page lists plugins but cannot toggle them.
+- Files: `hook/ContentPages.cs`
+- Impact: Users cannot manage plugins or themes from the native settings UI
+- Blocks: Full native UI functionality for plugin/theme management
 
 **No Error Recovery in Plugin Lifecycle:**
 - Problem: If `plugin.start()` rejects, error is logged but plugin is marked active anyway (line 65 in pluginLoader.ts)
+- Files: `src/core/pluginLoader.ts`
 - Blocks: Plugin state becomes inconsistent if start fails partway through
 - Workaround: None - manually call `stop()` to attempt recovery
+
+**`after` Patch Handler Not Yet Implemented:**
+- Problem: The `after` callback is defined in the `Patch` interface but the loader does not invoke it
+- Files: `src/types/plugin.ts`, `src/core/pluginLoader.ts`
+- Impact: Plugins defining `after` handlers get no runtime behavior — the handler is silently ignored
+- Blocks: Post-execution observation patterns (e.g., logging return values)
+
+**Browser-Side Settings Not Written Back to Disk:**
+- Problem: While settings ARE persisted to `uprooted-settings.json` and inlined into HTML by the patcher, runtime changes made via the browser-side settings panel only update the in-memory `window.__UPROOTED_SETTINGS__` object. The browser layer (running in DotNetBrowser's incognito Chromium) has no file system access to write changes back.
+- Files: `src/plugins/settings-panel/`, `src/core/settings.ts`
+- Impact: Settings changed at runtime (e.g., toggling a plugin) take effect immediately but revert on Root restart
+- Note: The installer/CLI CAN write settings to disk. Initial configuration persists. Only runtime UI changes are session-only.
 
 ## Test Coverage Gaps
 

@@ -4,21 +4,110 @@
 
 ## Pattern Overview
 
-**Overall:** Plugin-based mod framework with bridge interception pattern
+**Overall:** Dual-layer client modification framework with bridge interception and native UI injection
+
+Uprooted has two independent injection layers that operate in parallel:
+
+1. **C# .NET hook** (`hook/`) — Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar.
+2. **TypeScript browser injection** (`src/`) — Injects into Root's embedded Chromium (DotNetBrowser) context via HTML `<script>` tags. Provides the plugin/theme runtime and bridge proxy system.
+
+The C# layer handles native UI integration. The TypeScript layer handles web content modification. They share no runtime state but target the same application. The only shared state is the settings JSON file and the visual result (both layers inject into the same app).
 
 **Key Characteristics:**
-- Layered injection architecture: HTML file patching → preload script → plugin loader → runtime patches
-- Dual-bridge proxy pattern: intercepts both native→webrtc and webrtc→native calls
+- Dual-layer architecture: C# native injection + TypeScript browser injection
+- CLR profiler IL injection for process entry (no binary modification)
+- Reflection-based Avalonia control creation (single-file .NET app constraint)
+- ES6 Proxy bridge interception for plugin patches
 - Plugin system with lifecycle hooks (start/stop) and declarative patches
 - Settings persistence via file-based JSON outside browser (localStorage unavailable in incognito mode)
 - Modular plugin API exposing DOM, CSS, native, and bridge utilities
 
 ## Layers
 
+### C# Native Injection Layers
+
+**CLR Profiler Layer:**
+- Purpose: Get managed code executing inside Root's .NET process
+- Location: `tools/uprooted_profiler.dll` (C/MSVC source)
+- Contains: `ICorProfilerCallback` implementation, IL injection into first suitable method
+- Mechanism: Prepends IL to a target method that calls `Assembly.LoadFrom("UprootedHook.dll")` + `CreateInstance("UprootedHook.Entry")`, wrapped in try/catch
+- Depends on: Environment variables (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, `CORECLR_PROFILER_PATH`, `DOTNET_ReadyToRun=0`)
+- Critical constraint: `DOTNET_ReadyToRun=0` disables precompiled native images, forcing JIT compilation so the profiler can modify IL
+
+**Hook Entry Layer:**
+- Purpose: Initialize Uprooted inside Root's .NET process
+- Location: `hook/Entry.cs`, `hook/NativeEntry.cs`, `hook/StartupHook.cs`
+- Contains: `[ModuleInitializer]` + constructor entry (both guarded by `Interlocked.CompareExchange` for one-time init), process name guard, background thread spawning
+- Pattern: Background thread runs 4-phase wait sequence:
+  1. Wait for Avalonia assemblies to load (30s timeout, poll 250ms)
+  2. Resolve all Avalonia types via reflection into `AvaloniaReflection` cache
+  3. Wait for `Application.Current` (30s timeout, poll 500ms)
+  4. Wait for `MainWindow` via `ApplicationLifetime` (60s timeout, poll 500ms)
+- Critical rule: Must never block Root's startup — all heavy work on background thread
+
+**Avalonia Reflection Layer:**
+- Purpose: Resolve and cache Avalonia types, properties, and methods via reflection
+- Location: `hook/AvaloniaReflection.cs` (815 lines — largest and most critical file)
+- Contains: Dictionary of ~80 Avalonia types built by scanning loaded assemblies filtered by `"Avalonia"` prefix, cached `PropertyInfo`/`MethodInfo` handles, control creation helpers
+- Why needed: Root.exe is a single-file .NET 10 binary — `Type.GetType("Avalonia.Controls.TextBlock, Avalonia.Controls")` does NOT work because assembly-qualified names can't be resolved
+- Key design decisions:
+  - `DispatcherPriority` is a struct (not an enum) in Avalonia 11+ — resolved via fallback chain (static property → static field → Enum.Parse → Activator.CreateInstance)
+  - Event subscription uses `Expression.Lambda` because CLR `EventInfo.AddEventHandler` doesn't work for Avalonia `RoutedEvent`s
+  - `ClearValue(AvaloniaProperty)` removes local value overrides to re-enable data bindings — calling `SetValue` overrides bindings permanently
+- Critical rule: ALL Avalonia type access must go through this class. Never use `typeof()`, `Type.GetType()`, or direct assembly references for Avalonia types.
+
+**Visual Tree Walker Layer:**
+- Purpose: Discover Root's settings page structure by walking the Avalonia visual tree
+- Location: `hook/VisualTreeWalker.cs` (331 lines)
+- Contains: `FindSettingsLayout()` algorithm that discovers settings page via structural analysis
+- Algorithm:
+  1. Depth-first search for TextBlock with `Text == "APP SETTINGS"` (anchor point)
+  2. Walk UP to find StackPanel with >= 8 children (nav container)
+  3. Walk UP to find multi-column Grid (skip single-column Grids) — layout grid
+  4. Identify content area as Grid child in same row but different (higher) column
+  5. Find ListBox inside nav container
+  6. Find back button (TextBlock containing `"<"`, walk up to clickable ancestor)
+- Fragile: Root provides no stable selectors — layout discovered by structure, not IDs/class names
+
+**Sidebar Injector Layer:**
+- Purpose: Monitor settings page state and inject/remove UPROOTED section
+- Location: `hook/SidebarInjector.cs` (610 lines)
+- Contains: 200ms timer-based polling, injection/cleanup logic, click event handling, content page management
+- Mechanism: Timer fires on UI thread, lightweight check for "APP SETTINGS" TextBlock, inject if found and not already injected, cleanup if not found
+- Injected controls:
+  - "UPROOTED" section header (matches Root's "APP SETTINGS" style)
+  - Three nav items: "Uprooted", "Plugins", "Themes" (with pointer event handlers)
+  - Version text inserted into Root's grey version box
+- Content overlay pattern: Does NOT modify Root's content panel. Adds Uprooted page as a sibling in the layout Grid with matching Column/Row and opaque background (`#0D1521`). Avoids freeze caused by modifying `ContentControl.Content` or `ScrollContentPresenter.Content`.
+- Tag-based identification: All injected Avalonia controls use `Control.Tag` strings starting with `"uprooted-"` (e.g., `"uprooted-injected"`, `"uprooted-content"`, `"uprooted-item-{page}"`)
+- Threading: `_injecting` interlocked flag prevents concurrent `CheckAndInject` calls. `_ourItemClicked` flag coordinates between `PointerPressed` handlers on custom items and the ListBox.
+
+**Content Pages Layer:**
+- Purpose: Build native Avalonia settings pages through reflection
+- Location: `hook/ContentPages.cs` (443 lines)
+- Contains: Page builders for Uprooted, Plugins, Themes pages — all via reflection-based control creation matching Root's exact card styling
+- Styling invariants: card background `#081408`, corner radius 12, border `#19ffffff` thickness 0.5, inner padding 24px, page margin 24/24/24/0
+- Current limitations: Theme switching and plugin management are display-only (no click handlers yet)
+
+**Hook Settings Layer:**
+- Purpose: Settings for the C# hook (placeholder)
+- Location: `hook/UprootedSettings.cs` (42 lines)
+- Contains: Returns hardcoded defaults only
+- Known bug: `System.Text.Json` causes `MissingMethodException` in profiler-injected context, preventing JSON deserialization. Workaround needed (manual parsing or different assembly context).
+
+**Hook Logging Layer:**
+- Purpose: Thread-safe file logging for the C# hook
+- Location: `hook/Logger.cs` (30 lines)
+- Contains: Writes to `uprooted-hook.log` in profile directory with timestamps and categories
+- Critical rule: Logger swallows its own exceptions to avoid crashing Root
+
+### TypeScript Browser Injection Layers
+
 **Installation Layer:**
 - Purpose: Inject Uprooted into Root Communications' profile HTML files
 - Location: `src/core/patcher.ts`, installation scripts in `scripts/`
 - Contains: File system operations, HTML injection logic, backup/restore functionality
+- Injects: `<!-- uprooted -->` comment markers for detection and cleanup
 - Depends on: Node.js filesystem APIs, settings module
 - Used by: Installation CLI and Tauri desktop application
 
@@ -37,11 +126,12 @@
 - Used by: Preload script and settings panel plugin
 
 **Bridge Interception Layer:**
-- Purpose: Proxy Root's native↔WebRTC bridge to enable plugin patches
+- Purpose: Proxy Root's native<->WebRTC bridge to enable plugin patches
 - Location: `src/api/bridge.ts`
-- Contains: ES6 Proxy wrappers around __nativeToWebRtc and __webRtcToNative globals
+- Contains: ES6 Proxy wrappers around `__nativeToWebRtc` and `__webRtcToNative` globals
+- Deferred installation: Uses `Object.defineProperty` getter/setter traps to automatically wrap any value assigned to bridge globals after preload runs
 - Depends on: PluginLoader (for event emission), bridge type definitions
-- Used by: Plugins applying patches, all native→JS communications
+- Used by: Plugins applying patches, all native<->JS communications
 
 **Plugin API Layer:**
 - Purpose: Provide public APIs for plugin authors
@@ -56,7 +146,7 @@
 - Contains:
   - `sentry-blocker`: Intercepts fetch/XHR/sendBeacon to block Sentry telemetry
   - `themes`: Applies CSS variable overrides for theme customization
-  - `settings-panel`: Injects settings UI into Root's sidebar
+  - `settings-panel`: Injects settings UI into Root's web-rendered sidebar
 - Depends on: Plugin API, types, settings
 - Used by: Preload script during initialization
 
@@ -71,51 +161,73 @@
 - Purpose: Store configuration outside browser localStorage (unavailable in Root's incognito mode)
 - Location: `src/core/settings.ts` (CLI), `installer/src/lib/tauri.ts` (Tauri backend bridges)
 - Contains: Settings file I/O, defaults, per-plugin configuration
+- File: `%LOCALAPPDATA%/Root Communications/Root/profile/default/uprooted-settings.json`
+- Mechanism: Patcher inlines settings as `window.__UPROOTED_SETTINGS__` in HTML at install/patch time. Runtime changes from the settings panel update the in-memory object; the installer/CLI writes changes back to disk.
 - Depends on: File system access, JSON serialization
 - Used by: All other layers for configuration state
 
 ## Data Flow
 
-**Installation Flow:**
+**C# Hook Lifecycle:**
 
-1. User runs installer application (desktop app built with Tauri)
-2. Installer detects Root Communications installation directory
-3. Patcher reads Root's profile HTML files
-4. Injects three elements into `<head>` before `</head>`:
-   - Settings script tag: `window.__UPROOTED_SETTINGS__ = {...}`
-   - Preload script tag: `<script src="file:///path/to/uprooted-preload.js">`
-   - CSS link tag: `<link rel="stylesheet" href="file:///path/to/uprooted.css">`
-5. Settings JSON loaded from `%LOCALAPPDATA%/Root Communications/Root/profile/default/uprooted-settings.json`
+1. Windows starts Root.exe
+2. .NET runtime sees `CORECLR_ENABLE_PROFILING=1`, loads `uprooted_profiler.dll`
+3. Profiler checks process name — if not "Root", returns `E_FAIL` and detaches
+4. Profiler waits for suitable module to load (one that imports `System.Object`)
+5. Profiler creates cross-module MemberRefs for `Assembly.LoadFrom` + `CreateInstance`
+6. Profiler prepends 26 bytes of IL to first method with a body (wrapped in try/catch)
+7. When that method is JIT-compiled and called, IL loads `UprootedHook.dll`
+8. `Entry.ModuleInit()` fires via `[ModuleInitializer]` (or constructor fallback)
+9. `StartupHook.Initialize()` spawns background thread
+10. Thread runs 4-phase wait: Avalonia assemblies -> type resolution -> Application.Current -> MainWindow
+11. `SidebarInjector.StartMonitoring()` begins 200ms timer
+12. Timer detects settings page open -> `VisualTreeWalker` discovers layout -> injects UPROOTED section
+13. User sees "Uprooted", "Plugins", "Themes" in the settings sidebar
 
-**Runtime Flow:**
+**TypeScript Injection Lifecycle:**
 
-1. Root's browser loads with injected preload script
-2. Preload script checks if `window.__UPROOTED_SETTINGS__.enabled` is true
-3. Preload installs bridge proxies on `__nativeToWebRtc` and `__webRtcToNative`
-4. PluginLoader initializes with settings, registers built-in plugins
-5. Built-in plugins start in order:
+1. Patcher inserts `<script>` and `<link>` tags into profile HTML files (before `</head>`)
+2. On page load, `preload.ts` runs before Root's bundles
+3. Reads settings from `window.__UPROOTED_SETTINGS__` (inlined by patcher)
+4. Installs ES6 Proxy wrappers on `window.__nativeToWebRtc` and `window.__webRtcToNative`
+5. Creates `PluginLoader`, registers built-in plugins, starts enabled ones
+6. Built-in plugins start in order:
    - sentry-blocker: wraps fetch/XHR/sendBeacon earliest (before Sentry init)
    - themes: applies CSS variables based on settings
    - settings-panel: injects UI components into DOM
-6. When plugins are disabled via settings panel, they can be stopped and restarted at runtime
+7. When plugins are disabled via settings panel, they can be stopped and restarted at runtime
 
 **Bridge Event Flow (Plugin Patching):**
 
 1. Root's C# host calls `__nativeToWebRtc.setMute(true)`
 2. ES6 Proxy intercepts the property access, returns wrapped function
-3. Wrapped function creates BridgeEvent with method name and arguments
-4. PluginLoader.emit() is called with the event
-5. Plugin handlers fire in registration order
-6. If patch has `replace()`, it sets returnValue and cancels original call
-7. If patch has `before()`, it can inspect/modify args or cancel call by returning false
-8. Original method is called only if not cancelled
+3. Wrapped function creates BridgeEvent: `{ method, args, cancelled: false, returnValue: undefined }`
+4. `PluginLoader.emit()` fires the event to all registered handlers for that method
+5. Handlers execute in plugin registration order
+6. Execution priority: `replace` takes priority over `before` — if `replace` is set, it runs instead of the original and `before` is ignored
+7. If `before` runs (no `replace`), returning `false` cancels the original call
+8. If any plugin cancels the call, later plugins' handlers for that method are skipped
+9. Original method is called only if not cancelled, with (potentially modified) args
+10. **Note:** `after` handler is defined in the `Patch` interface but is **not yet implemented** by the loader
+
+**Installation Flow (Installer App):**
+
+1. User runs Uprooted Installer (Tauri desktop app)
+2. Installer deploys 5 files to `%LOCALAPPDATA%\Root\uprooted\`:
+   - `uprooted_profiler.dll` (CLR profiler, native C DLL)
+   - `UprootedHook.dll` + `UprootedHook.deps.json` (managed hook assembly)
+   - `uprooted-preload.js` + `uprooted.css` (TypeScript injection payload)
+3. Sets user-scoped CLR profiler env vars via Windows registry + broadcasts `WM_SETTINGCHANGE`
+4. Patches HTML files in Root's profile directory (WebRtcBundle + RootApps)
+5. Uninstall reverses all three steps: removes env vars, restores HTML backups, deletes deployed files
 
 **State Management:**
 
-- **Global Settings:** Loaded from disk at startup, accessed via `window.__UPROOTED_SETTINGS__`
+- **Global Settings:** Persisted to `uprooted-settings.json`, inlined into HTML by patcher, accessed at runtime via `window.__UPROOTED_SETTINGS__`
 - **Plugin State:** Each plugin manages its own state via closure variables (e.g., sentry-blocker tracks blockedCount)
 - **Active Plugins:** PluginLoader maintains Set of started plugin names
-- **Event Handlers:** PluginLoader maintains Map of `[eventName:methodName] → handler[]` for efficient dispatch
+- **Event Handlers:** PluginLoader maintains Map of `[eventName:methodName] -> handler[]` for efficient dispatch
+- **C# Hook State:** `SidebarInjector` maintains injection state with interlocked flags for thread safety
 
 ## Key Abstractions
 
@@ -127,34 +239,59 @@
 **Patch System:**
 - Purpose: Declaratively intercept bridge method calls
 - Pattern: Plugin defines `patches` array with bridge ("nativeToWebRtc" or "webRtcToNative"), method name, and optional before/replace callbacks
+- Priority: `replace` > `before`. If `replace` is set, `before` is ignored. `after` is defined but not yet invoked by the loader.
 - Examples: Sentry-blocker wraps fetch at platform level; themes sets CSS variables; settings panel observes DOM
 
 **Settings Schema:**
 - Purpose: Global settings + per-plugin config with defaults
-- Examples: `src/types/settings.ts` defines UprootedSettings, plugins.themes.config contains selected theme name
-- Pattern: Plugin settings are keyed by plugin name, each plugin's schema defined in its `settings` field
+- Location: `src/types/settings.ts` defines `UprootedSettings`, `PluginSettings`, `DEFAULT_SETTINGS`
+- Pattern: Plugin settings keyed by plugin name under `plugins.{name}.config`, persisted to disk via settings JSON file
+- Runtime access: `window.__UPROOTED_SETTINGS__?.plugins?.["name"]?.config`
 
 **Bridge Type System:**
-- Purpose: TypeScript interfaces for native↔WebRTC communication contracts
-- Examples: `INativeToWebRtc` (C# → JS), `IWebRtcToNative` (JS → C#) in `src/types/bridge.ts`
+- Purpose: TypeScript interfaces for native<->WebRTC communication contracts
+- Examples: `INativeToWebRtc` (42 methods, C# -> JS), `IWebRtcToNative` (29 methods, JS -> C#) in `src/types/bridge.ts`
 - Pattern: Branded string types (UserGuid, DeviceGuid) prevent accidental GUID type confusion
+
+**AvaloniaReflection Pattern (C#):**
+- Purpose: Cached reflection access to Avalonia types in single-file .NET app context
+- Location: `hook/AvaloniaReflection.cs`
+- Pattern: Scan loaded assemblies -> build type dictionary -> cache PropertyInfo/MethodInfo -> create controls via Activator.CreateInstance + cached setters
+
+**Content Overlay Pattern (C#):**
+- Purpose: Display Uprooted pages without modifying Root's content panel (which causes freezes)
+- Pattern: Add Uprooted page as Grid sibling with matching Column/Row and opaque background -> remove on Root sidebar click
+
+**Tag-Based Identification:**
+- C# layer: `Control.Tag` strings starting with `"uprooted-"` (e.g., `"uprooted-injected"`, `"uprooted-content"`)
+- TS layer: `data-uprooted` attributes on DOM elements (e.g., `data-uprooted="section"`, `data-uprooted-page="..."`)
 
 ## Entry Points
 
-**Installation Entry:**
-- Location: `scripts/install.ts`
-- Triggers: User runs `npm run install-root` command or Tauri installer UI
-- Responsibilities: Load settings, find Root's profile directory, patch HTML files, create backups
+**CLR Profiler Entry (C#):**
+- Location: `uprooted_profiler.dll` (C/MSVC)
+- Triggers: .NET runtime loads profiler via `CORECLR_ENABLE_PROFILING` env var at Root.exe startup
+- Responsibilities: Process guard, wait for suitable module, inject IL to load `UprootedHook.dll`
 
-**Uninstallation Entry:**
-- Location: `scripts/uninstall.ts`
-- Triggers: User runs uninstall command
-- Responsibilities: Restore backup HTML files or strip injection markers
+**Managed Hook Entry (C#):**
+- Location: `hook/Entry.cs` -> `hook/StartupHook.cs`
+- Triggers: Profiler-injected IL calls `Assembly.LoadFrom` + `CreateInstance`
+- Responsibilities: One-time init guard, process name check, spawn background thread, 4-phase Avalonia wait, start sidebar monitoring
 
-**Browser Runtime Entry:**
+**Browser Runtime Entry (TS):**
 - Location: `src/core/preload.ts`
 - Triggers: Root's browser loads, preload script executes in Chromium context
 - Responsibilities: Check enabled flag, set up bridge proxies, initialize plugin loader, start plugins
+
+**Installation Entry (TS):**
+- Location: `scripts/install.ts`
+- Triggers: User runs `pnpm install-root` or Tauri installer UI
+- Responsibilities: Load settings, find Root's profile directory, patch HTML files, create backups
+
+**Uninstallation Entry (TS):**
+- Location: `scripts/uninstall.ts`
+- Triggers: User runs uninstall command
+- Responsibilities: Restore backup HTML files or strip injection markers
 
 **Installer UI Entry:**
 - Location: `installer/src/main.ts`
@@ -163,33 +300,57 @@
 
 ## Error Handling
 
-**Strategy:** Try-catch with visible error banner for preload failures
+**Strategy:** Never throw from injected code. Catch and log. Both layers prioritize stability over error reporting.
 
-**Patterns:**
-- **Installation:** Errors logged to console, process exits with status 1
+**C# Hook Patterns:**
+- Logger swallows its own exceptions to avoid crashing Root
+- All reflection calls handle null gracefully (types/properties may not exist)
+- Profiler IL injection wrapped in try/catch — if DLL fails to load, Root continues normally
+- One-time init via `Interlocked.CompareExchange` prevents double execution
+- Background thread for all heavy work — never block Root's startup or UI thread
+
+**TypeScript Patterns:**
 - **Preload:** Errors caught at top level, displayed in red banner at top of page with stack trace
 - **Plugin Lifecycle:** Plugin start/stop errors logged and caught, don't prevent other plugins from starting
 - **Bridge Events:** Handler errors logged but don't interrupt event chain
-- **Settings Load:** Falls back to DEFAULT_SETTINGS if JSON parse fails or file missing
+- **Settings Load:** Falls back to `DEFAULT_SETTINGS` if JSON parse fails or file missing
+- **Installation:** Errors logged to console, process exits with status 1
 
 ## Cross-Cutting Concerns
 
 **Logging:**
-- Console output prefixed with `[Uprooted]` or `[Uprooted:plugin-name]`
-- Native logging available via `nativeLog()` helper which routes through bridge to .NET logs
-- Errors always logged even if silent mode preferred
+- TypeScript: Console output prefixed with `[Uprooted]` or `[Uprooted:plugin-name]`
+- TypeScript: Native logging via `nativeLog()` routes through bridge to .NET logs
+- C#: Thread-safe file logging to `uprooted-hook.log` with `[Category]` prefix and timestamps
+
+**Threading (C#):**
+- Background thread for initialization (4-phase wait)
+- Timer callback dispatches to UI thread via `Dispatcher.UIThread`
+- `_injecting` interlocked flag prevents concurrent CheckAndInject calls
+- `_ourItemClicked` flag coordinates pointer events between custom items and ListBox
+
+**Threading (TypeScript):**
+- Single-threaded (browser main thread)
+- MutationObserver callbacks debounced (80ms)
+- Plugin `start()` is async-safe but called sequentially (`await` in loop)
 
 **Validation:**
 - Settings validation deferred to each layer (installer validates, preload trusts)
-- Bridge type interfaces prevent accidental type mismatches (UserGuid ≠ string)
+- Bridge type interfaces prevent accidental type mismatches (UserGuid != string)
 - Plugin schema validation in installer (enforces valid setting types)
 
 **Authentication:**
 - No authentication layer (runs in user's own browser context)
 - All calls to native layer pre-authorized by Root's startup process
+- Plugins have unrestricted access to Root's bridge and DOM (no sandboxing)
 
 **Performance:**
 - Bridge proxy uses ES6 Proxy for zero-copy interception
 - MutationObserver for DOM waiting (efficient vs. polling)
 - Event handler registration uses Map for O(1) lookup
 - CSS injection uses ID-keyed `<style>` elements for efficient updates
+- C# sidebar injector uses 200ms timer polling (not event-driven — Avalonia RoutedEvent subscription via reflection unreliable)
+
+---
+
+*Architecture analysis: 2026-02-16*

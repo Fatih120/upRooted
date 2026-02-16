@@ -22,10 +22,32 @@
 - No API integration (static links in settings panel)
 
 **Root Communications Platform:**
-- Type: Host application integration
+- Type: Host application integration (dual-layer)
 - Purpose: Uprooted is a client mod framework for Root Communications
-- Integration method: Code injection via profiler-based IL patching
-- No external API calls - operates as embedded plugin system
+- C# integration: CLR profiler IL injection into Root's .NET 10/Avalonia process
+- TypeScript integration: HTML `<script>` tag injection into DotNetBrowser Chromium context
+- No external API calls — operates as embedded plugin system
+
+**Root WebRTC Bridge (Proxied):**
+- Type: JavaScript bridge objects on `window`
+- `window.__nativeToWebRtc` — INativeToWebRtc (42 methods): C# host controls WebRTC session
+- `window.__webRtcToNative` — IWebRtcToNative (29 methods): WebRTC JS notifies C# host
+- Status: Proxied by Uprooted via ES6 Proxy wrappers — plugins can intercept all method calls
+- Only available when a voice session is active
+
+**Root Sub-App Bridge (NOT Proxied):**
+- Type: JavaScript bridge object on `window` in sub-app iframe contexts
+- `window.__rootSdkBridgeWebToNative` — Sub-app bridge for protobuf communication
+- `window.__rootSdkBridgeNativeToWeb` — Sub-app inbound bridge
+- Status: NOT proxied by Uprooted — Uprooted plugins cannot intercept sub-app bridge calls
+- Used by: 7 embedded React/Vite sub-apps running in separate iframe contexts:
+  - Hexatris (multiplayer game)
+  - Polls (community polls)
+  - Suggestions (suggestion board)
+  - Minecraft Easy Setup (server management)
+  - Task Tracker (task management)
+  - Stickerwall (Alpine.js + PixiJS sticker board)
+  - Raid Planner (raid scheduling, 80k+ lines)
 
 ## Data Storage
 
