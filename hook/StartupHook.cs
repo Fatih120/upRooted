@@ -30,7 +30,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.1.95 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.1.96 Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
@@ -139,6 +139,56 @@ internal class StartupHook
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", "=== Uprooted Hook Ready ===");
             Logger.Log("Startup", "========================================");
+
+            // Phase 5: NSFW content filter (non-blocking, background thread)
+            var nsfwSettings = UprootedSettings.Load();
+            if (nsfwSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(nsfwSettings.NsfwApiKey))
+            {
+                var capturedWindow = mainWindow!;
+                var capturedResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
+
+                        // Wait for DotNetBrowser assemblies to load
+                        if (!WaitFor(() => DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded(),
+                            TimeSpan.FromSeconds(30)))
+                        {
+                            Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 30s, skipping");
+                            return;
+                        }
+                        Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies loaded");
+
+                        // Resolve DotNetBrowser types
+                        var browserReflection = new DotNetBrowserReflection();
+                        if (!browserReflection.Resolve())
+                        {
+                            Logger.Log("Startup", "Phase 5: DotNetBrowser type resolution failed, skipping");
+                            return;
+                        }
+
+                        // Initialize NSFW filter
+                        var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
+                            nsfwSettings, capturedWindow);
+                        ContentPages.NsfwFilterInstance = nsfwFilter;
+
+                        if (nsfwFilter.Initialize())
+                            Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
+                        else
+                            Logger.Log("Startup", "Phase 5: NSFW filter init returned false (BrowserView may not be ready yet, will retry via timer)");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 5 error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
+            }
         }
         catch (Exception ex)
         {

@@ -411,7 +411,7 @@ These are only populated when a voice session is active. They may be `undefined`
 | Global | Always Present | Description |
 |--------|----------------|-------------|
 | `__UPROOTED_SETTINGS__` | Yes | Settings object with `enabled`, `plugins`, `customCss` |
-| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"0.1.95"`) |
+| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"0.1.96"`) |
 | `__UPROOTED_LOADER__` | Yes | PluginLoader instance |
 
 ### Other Root Globals
@@ -585,7 +585,7 @@ This table tracks which Uprooted versions have been tested against which Root Co
 |-------------------|-----------------|--------|-------|
 | 0.1.x | 0.9.86+ | Supported | Current development line |
 | 0.1.92+ | 0.9.86 - 0.9.90 | Tested | Verified working |
-| 0.1.95 | 0.9.86 - latest | In development | Active development target |
+| 0.1.96 | 0.9.86 - latest | In development | Active development target |
 
 ### Compatibility Notes
 

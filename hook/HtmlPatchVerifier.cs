@@ -209,8 +209,12 @@ internal class HtmlPatchVerifier : IDisposable
         // Read uprooted-settings.json raw if it exists, otherwise build minimal JSON from INI settings.
         var settingsJson = BuildSettingsJson();
 
+        // Build NSFW config JSON for early injection (before Phase 5 completes)
+        var nsfwConfigJson = BuildNsfwConfigJson();
+
         return $"    {MarkerStart}\n" +
                $"    <script>window.__UPROOTED_SETTINGS__={settingsJson};</script>\n" +
+               $"    <script>window.__UPROOTED_NSFW_CONFIG__={nsfwConfigJson};</script>\n" +
                $"    <script src=\"file:///{preloadPath}\"></script>\n" +
                $"    <link rel=\"stylesheet\" href=\"file:///{cssPath}\">\n" +
                $"    {MarkerEnd}";
@@ -239,6 +243,15 @@ internal class HtmlPatchVerifier : IDisposable
                $"\"customCss\":{EscapeJsonString(settings.CustomCss)}," +
                "\"plugins\":{}" +
                "}";
+    }
+
+    private string BuildNsfwConfigJson()
+    {
+        var settings = UprootedSettings.Load();
+        var enabled = settings.NsfwFilterEnabled ? "true" : "false";
+        var apiKey = EscapeJsonString(settings.NsfwApiKey);
+        var threshold = settings.NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return $"{{\"enabled\":{enabled},\"apiKey\":{apiKey},\"threshold\":{threshold}}}";
     }
 
     /// <summary>
@@ -299,6 +312,8 @@ internal class HtmlPatchVerifier : IDisposable
                 continue;
             if (line.Contains("__UPROOTED_SETTINGS__") && line.Contains("<script"))
                 continue;
+            if (line.Contains("__UPROOTED_NSFW_CONFIG__") && line.Contains("<script"))
+                continue;
 
             result.Add(line);
         }
@@ -330,6 +345,15 @@ internal class HtmlPatchVerifier : IDisposable
                 if (File.Exists(indexPath))
                     targets.Add(indexPath);
             }
+        }
+
+        // Also check DotNetBrowser Host/Bundle context where chat renders
+        var hostBundleDir = Path.Combine(_profileDir, "HostBundle");
+        if (Directory.Exists(hostBundleDir))
+        {
+            var hostIndex = Path.Combine(hostBundleDir, "index.html");
+            if (File.Exists(hostIndex))
+                targets.Add(hostIndex);
         }
 
         return targets;

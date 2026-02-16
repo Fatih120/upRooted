@@ -314,7 +314,7 @@ Open the log file after launching Root. A successful startup looks like this:
 
 ```
 [HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.1.95 Loaded ===
+[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.1.96 Loaded ===
 [HH:MM:SS.fff] [Startup] ========================================
 [HH:MM:SS.fff] [Startup] Process: C:\Users\...\Root.exe
 [HH:MM:SS.fff] [Startup] PID: 12345

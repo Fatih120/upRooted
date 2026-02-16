@@ -109,6 +109,9 @@ internal static class ContentPages
         }
     }
 
+    // NSFW filter reference for live config updates from settings UI
+    internal static NsfwFilter? NsfwFilterInstance { get; set; }
+
     public static object? BuildPage(string pageName, AvaloniaReflection r,
         UprootedSettings settings, object? nativeFontFamily = null,
         ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
@@ -118,6 +121,7 @@ internal static class ContentPages
             "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
             "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
             "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
+            "content-filter" => BuildContentFilterPage(r, settings, nativeFontFamily, themeEngine),
             _ => null
         };
 
@@ -282,10 +286,10 @@ internal static class ContentPages
     // Known plugins metadata: (id, displayName, version, description, defaultEnabled)
     private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled)[] KnownPlugins =
     {
-        ("sentry-blocker", "Sentry Blocker", "0.1.95",
+        ("sentry-blocker", "Sentry Blocker", "0.1.96",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
             true),
-        ("themes", "Themes", "0.1.95",
+        ("themes", "Themes", "0.1.96",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
             true),
     };
@@ -1659,6 +1663,317 @@ internal static class ContentPages
 
         r.SetBorderChild(frame, inner);
         return frame;
+    }
+
+    // ===== Content Filter Page =====
+
+    private static object? BuildContentFilterPage(AvaloniaReflection r, UprootedSettings settings,
+        object? font, ThemeEngine? themeEngine = null)
+    {
+        ApplyThemedColors(themeEngine);
+        var page = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (page == null) return null;
+        r.SetMargin(page, 24, 24, 24, 0);
+        r.SetTag(page, "uprooted-content");
+
+        // Page title
+        var pageTitle = r.CreateTextBlock("Content Filter", 20, TextWhite);
+        r.SetFontWeightNumeric(pageTitle, 600);
+        ApplyFont(r, pageTitle, font);
+        r.AddChild(page, pageTitle);
+
+        // Card 1: Enable/Disable
+        var enableCard = CreateCard(r);
+        if (enableCard != null)
+        {
+            r.SetMargin(enableCard, 0, 20, 0, 0);
+            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            r.SetMargin(cardContent, 24, 24, 24, 24);
+
+            var enableTitle = CreateSectionHeader(r, "CONTENT FILTER", font);
+            r.AddChild(cardContent, enableTitle);
+
+            // Toggle row: description (left) + toggle (right)
+            var toggleRow = r.CreatePanel();
+            if (toggleRow != null)
+            {
+                r.SetMargin(toggleRow, 0, 16, 0, 0);
+
+                var descText = r.CreateTextBlock(
+                    "Automatically blur images classified as NSFW using Google Cloud Vision",
+                    13, TextMuted);
+                if (descText != null)
+                {
+                    ApplyFont(r, descText, font);
+                    r.SetTextWrapping(descText, "Wrap");
+                    r.SetHorizontalAlignment(descText, "Left");
+                    r.SetVerticalAlignment(descText, "Center");
+                    r.SetMargin(descText, 0, 0, 60, 0);
+                }
+                r.AddChild(toggleRow, descText);
+
+                var toggle = BuildToggleSwitch(r, settings.NsfwFilterEnabled, font, (enabled) =>
+                {
+                    settings.NsfwFilterEnabled = enabled;
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
+                    NsfwFilterInstance?.UpdateConfig();
+                    Logger.Log("ContentFilter", $"NSFW filter toggled to {enabled}");
+                });
+                if (toggle != null)
+                {
+                    r.SetHorizontalAlignment(toggle, "Right");
+                    r.SetVerticalAlignment(toggle, "Center");
+                }
+                r.AddChild(toggleRow, toggle);
+
+                r.AddChild(cardContent, toggleRow);
+            }
+
+            r.SetBorderChild(enableCard, cardContent);
+            r.AddChild(page, enableCard);
+        }
+
+        // Card 2: API Key
+        var apiKeyCard = CreateCard(r);
+        if (apiKeyCard != null)
+        {
+            r.SetMargin(apiKeyCard, 0, 12, 0, 0);
+            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            r.SetMargin(cardContent, 24, 24, 24, 24);
+
+            var apiTitle = CreateSectionHeader(r, "GOOGLE CLOUD VISION API KEY", font);
+            r.AddChild(cardContent, apiTitle);
+
+            // API key TextBox
+            var apiTextBox = r.CreateTextBox("Enter your API key", settings.NsfwApiKey, 100);
+            if (apiTextBox != null)
+            {
+                apiTextBox.GetType().GetProperty("FontSize")?.SetValue(apiTextBox, 13.0);
+                r.SetHeight(apiTextBox, 36);
+                r.SetBackground(apiTextBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetForeground(apiTextBox, TextWhite);
+                ApplyFont(r, apiTextBox, font);
+                r.SetMargin(apiTextBox, 0, 16, 0, 0);
+                if (r.CornerRadiusType != null)
+                {
+                    var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
+                    apiTextBox.GetType().GetProperty("CornerRadius")?.SetValue(apiTextBox, cr);
+                }
+                r.AddChild(cardContent, apiTextBox);
+            }
+
+            // Helper text
+            var helperText = r.CreateTextBlock(
+                "Get a key from console.cloud.google.com \u2014 SafeSearch costs ~$1.50/1,000 images",
+                12, TextDim);
+            if (helperText != null)
+            {
+                ApplyFont(r, helperText, font);
+                r.SetTextWrapping(helperText, "Wrap");
+                r.SetMargin(helperText, 0, 10, 0, 0);
+            }
+            r.AddChild(cardContent, helperText);
+
+            // Save button
+            var saveBtnRow = r.CreateStackPanel(vertical: false, spacing: 0);
+            if (saveBtnRow != null)
+            {
+                r.SetMargin(saveBtnRow, 0, 14, 0, 0);
+
+                var saveBtn = r.CreateBorder(AccentGreen, 8);
+                if (saveBtn != null)
+                {
+                    r.SetCursorHand(saveBtn);
+                    var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
+                    r.SetFontWeightNumeric(saveBtnText, 500);
+                    ApplyFont(r, saveBtnText, font);
+                    r.SetPadding(saveBtn, 16, 6, 16, 6);
+                    r.SetBorderChild(saveBtn, saveBtnText);
+
+                    var apiTextBoxRef = apiTextBox;
+                    r.SubscribeEvent(saveBtn, "PointerPressed", () =>
+                    {
+                        var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
+                        settings.NsfwApiKey = key;
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
+                        NsfwFilterInstance?.UpdateConfig();
+                        Logger.Log("ContentFilter", $"API key saved (length={key.Length})");
+                    });
+
+                    var btnAccent = AccentGreen;
+                    r.SubscribeEvent(saveBtn, "PointerEntered", () =>
+                        r.SetBackground(saveBtn, ColorUtils.Lighten(btnAccent, 15)));
+                    r.SubscribeEvent(saveBtn, "PointerExited", () =>
+                        r.SetBackground(saveBtn, btnAccent));
+
+                    r.AddChild(saveBtnRow, saveBtn);
+                }
+
+                r.AddChild(cardContent, saveBtnRow);
+            }
+
+            r.SetBorderChild(apiKeyCard, cardContent);
+            r.AddChild(page, apiKeyCard);
+        }
+
+        // Card 3: Sensitivity
+        var sensitivityCard = CreateCard(r);
+        if (sensitivityCard != null)
+        {
+            r.SetMargin(sensitivityCard, 0, 12, 0, 0);
+            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            r.SetMargin(cardContent, 24, 24, 24, 24);
+
+            var sensTitle = CreateSectionHeader(r, "SENSITIVITY", font);
+            r.AddChild(cardContent, sensTitle);
+
+            var options = new[]
+            {
+                ("Strict", 0.4, "Blurs on POSSIBLE and above"),
+                ("Normal", 0.6, "Blurs on LIKELY and above"),
+                ("Relaxed", 0.8, "Blurs only VERY_LIKELY"),
+            };
+
+            // Track radio indicators for selection update
+            var radioIndicators = new List<(object outer, object? inner, double threshold)>();
+
+            foreach (var (label, threshold, desc) in options)
+            {
+                bool isActive = Math.Abs(settings.NsfwThreshold - threshold) < 0.01;
+                var optionRow = r.CreateStackPanel(vertical: false, spacing: 12);
+                if (optionRow == null) continue;
+                r.SetMargin(optionRow, 0, 14, 0, 0);
+                r.SetCursorHand(optionRow);
+                r.SetBackground(optionRow, "Transparent");
+
+                // Radio indicator
+                var radioOuter = r.CreateBorder(null, 4);
+                object? radioInner = null;
+                if (radioOuter != null)
+                {
+                    r.SetWidth(radioOuter, 18);
+                    r.SetHeight(radioOuter, 18);
+                    SetBorderStroke(r, radioOuter,
+                        isActive ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                    r.SetVerticalAlignment(radioOuter, "Center");
+
+                    if (isActive)
+                    {
+                        radioInner = r.CreateBorder(AccentGreen, 2);
+                        if (radioInner != null)
+                        {
+                            r.SetWidth(radioInner, 8);
+                            r.SetHeight(radioInner, 8);
+                            r.SetMargin(radioInner, 3, 3, 3, 3);
+                        }
+                        r.SetBorderChild(radioOuter, radioInner);
+                    }
+
+                    r.AddChild(optionRow, radioOuter);
+                    radioIndicators.Add((radioOuter, radioInner, threshold));
+                }
+
+                // Text stack: label + description
+                var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
+                if (textStack != null)
+                {
+                    r.SetVerticalAlignment(textStack, "Center");
+                    var nameText = r.CreateTextBlock(label, 13, TextWhite);
+                    r.SetFontWeightNumeric(nameText, 450);
+                    ApplyFont(r, nameText, font);
+                    r.AddChild(textStack, nameText);
+
+                    var descText = r.CreateTextBlock(desc, 12, TextMuted);
+                    ApplyFont(r, descText, font);
+                    r.AddChild(textStack, descText);
+
+                    r.AddChild(optionRow, textStack);
+                }
+
+                // Click handler
+                var capturedThreshold = threshold;
+                var capturedRadioOuter = radioOuter;
+                r.SubscribeEvent(optionRow, "PointerPressed", () =>
+                {
+                    settings.NsfwThreshold = capturedThreshold;
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
+                    NsfwFilterInstance?.UpdateConfig();
+                    Logger.Log("ContentFilter", $"Sensitivity set to {capturedThreshold}");
+
+                    // Update radio visuals
+                    foreach (var (outer, inner, th) in radioIndicators)
+                    {
+                        bool selected = Math.Abs(th - capturedThreshold) < 0.01;
+                        SetBorderStroke(r, outer,
+                            selected ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                        if (selected)
+                        {
+                            var dot = r.CreateBorder(AccentGreen, 2);
+                            if (dot != null)
+                            {
+                                r.SetWidth(dot, 8);
+                                r.SetHeight(dot, 8);
+                                r.SetMargin(dot, 3, 3, 3, 3);
+                            }
+                            r.SetBorderChild(outer, dot);
+                        }
+                        else
+                        {
+                            r.SetBorderChild(outer, null);
+                        }
+                    }
+                });
+
+                r.AddChild(cardContent, optionRow);
+            }
+
+            r.SetBorderChild(sensitivityCard, cardContent);
+            r.AddChild(page, sensitivityCard);
+        }
+
+        // Card 4: How It Works
+        var howCard = CreateCard(r);
+        if (howCard != null)
+        {
+            r.SetMargin(howCard, 0, 12, 0, 0);
+            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            r.SetMargin(cardContent, 24, 24, 24, 24);
+
+            var howTitle = CreateSectionHeader(r, "HOW IT WORKS", font);
+            r.AddChild(cardContent, howTitle);
+
+            var howText = r.CreateTextBlock(
+                "Images in chat are checked against Google Cloud Vision's SafeSearch API. " +
+                "While classifying, images receive a light blur. If flagged as NSFW, a full " +
+                "blur is applied with a \"Click to reveal\" overlay. Results are cached by URL " +
+                "to avoid redundant API calls. The filter fails open \u2014 if the API is unreachable " +
+                "or returns an error, images are shown normally. No images are stored or sent anywhere " +
+                "except to Google's Vision API for classification.",
+                13, TextMuted);
+            if (howText != null)
+            {
+                ApplyFont(r, howText, font);
+                r.SetTextWrapping(howText, "Wrap");
+                r.SetMargin(howText, 0, 16, 0, 0);
+            }
+            r.AddChild(cardContent, howText);
+
+            r.SetBorderChild(howCard, cardContent);
+            r.AddChild(page, howCard);
+        }
+
+        // Bottom padding
+        var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (spacer != null)
+        {
+            spacer.GetType().GetProperty("Height")?.SetValue(spacer, 24.0);
+            r.AddChild(page, spacer);
+        }
+
+        return r.CreateScrollViewer(page);
     }
 
     // ===== Card and field builders matching Root's native style =====

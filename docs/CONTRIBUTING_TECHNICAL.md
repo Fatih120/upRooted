@@ -379,7 +379,7 @@ This generates a structured report with:
 
 **Healthy startup:**
 ```
-[Startup] === Uprooted Hook v0.1.95 Loaded ===
+[Startup] === Uprooted Hook v0.1.96 Loaded ===
 [Startup] Phase 0 OK: 0 file(s) repaired
 [Startup] Phase 1 OK: Avalonia assemblies loaded
 [Startup] Phase 2 OK: Application.Current is set
@@ -704,7 +704,7 @@ The settings file is `uprooted-settings.ini`, located in the profile directory
 ```ini
 ActiveTheme=default-dark
 Enabled=true
-Version=0.1.95
+Version=0.1.96
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
