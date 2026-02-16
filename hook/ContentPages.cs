@@ -420,29 +420,35 @@ internal static class ContentPages
                 cards.Add((plugin.Id, plugin.DisplayName, plugin.Description, card));
         }
 
+        // Track row grids and no-results message separately to avoid calling
+        // GetChildren on a TextBlock (which has no Children property and crashes)
+        var activeRowGrids = new List<object>();
+        object?[] noResultsMsg = { null };
+
         // Rebuild grid closure: detaches cards, filters, and lays out 2-column rows
         rebuildGrid = () =>
         {
-            // Detach all cards from their row grids, then clear container
-            var containerChildren = r.GetChildren(cardContainer);
-            if (containerChildren != null)
+            // Detach cards from their row grids, then remove row grids from container
+            foreach (var rowGrid in activeRowGrids)
             {
-                var items = new List<object>();
-                foreach (var item in containerChildren)
-                    if (item != null) items.Add(item);
-                foreach (var rowItem in items)
+                var rowChildren = r.GetChildren(rowGrid);
+                if (rowChildren != null)
                 {
-                    var rowChildren = r.GetChildren(rowItem);
-                    if (rowChildren != null)
-                    {
-                        var rowCards = new List<object>();
-                        foreach (var rc in rowChildren)
-                            if (rc != null) rowCards.Add(rc);
-                        foreach (var rc in rowCards)
-                            r.RemoveChild(rowItem, rc);
-                    }
-                    r.RemoveChild(cardContainer, rowItem);
+                    var rowCards = new List<object>();
+                    foreach (var rc in rowChildren)
+                        if (rc != null) rowCards.Add(rc);
+                    foreach (var rc in rowCards)
+                        r.RemoveChild(rowGrid, rc);
                 }
+                r.RemoveChild(cardContainer, rowGrid);
+            }
+            activeRowGrids.Clear();
+
+            // Remove "no results" message if present
+            if (noResultsMsg[0] != null)
+            {
+                r.RemoveChild(cardContainer, noResultsMsg[0]);
+                noResultsMsg[0] = null;
             }
 
             // Filter cards by search text and filter mode
@@ -484,6 +490,7 @@ internal static class ContentPages
                 }
 
                 r.AddChild(cardContainer, rowGrid);
+                activeRowGrids.Add(rowGrid);
             }
 
             // Update count label
@@ -503,6 +510,7 @@ internal static class ContentPages
                 r.SetMargin(noResults, 0, 8, 0, 0);
                 r.SetHorizontalAlignment(noResults, "Center");
                 r.AddChild(cardContainer, noResults);
+                noResultsMsg[0] = noResults;
             }
         };
 
