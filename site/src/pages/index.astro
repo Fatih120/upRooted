@@ -12,9 +12,9 @@ import Layout from "../layouts/Layout.astro";
         <ul class="features">
           <li>custom themes <span class="tag">working</span></li>
           <li>sentry blocker <span class="tag">working</span></li>
-          <li>plugins</li>
-          <li>bridge api</li>
-          <li>settings injection</li>
+          <li>plugins <span class="tag">working</span></li>
+          <li>bridge api <span class="tag tag-planned">planned</span></li>
+          <li>settings injection <span class="tag">working</span></li>
         </ul>
 
         <a href="https://github.com/watchthelight/uprooted/releases/latest" class="download-btn">download</a>
@@ -96,6 +96,11 @@ import Layout from "../layouts/Layout.astro";
     padding: 1px 6px;
     margin-left: 6px;
     letter-spacing: 0.04em;
+  }
+
+  .tag-planned {
+    color: #c89040;
+    border-color: rgba(200, 144, 64, 0.3);
   }
 
   .sub {
