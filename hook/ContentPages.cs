@@ -121,7 +121,6 @@ internal static class ContentPages
             "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
             "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
             "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
-            "content-filter" => BuildContentFilterPage(r, settings, nativeFontFamily, themeEngine),
             _ => null
         };
 
@@ -283,15 +282,18 @@ internal static class ContentPages
         return r.CreateScrollViewer(page);
     }
 
-    // Known plugins metadata: (id, displayName, version, description, defaultEnabled)
-    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled)[] KnownPlugins =
+    // Known plugins metadata: (id, displayName, version, description, defaultEnabled, hasSettings)
+    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings)[] KnownPlugins =
     {
         ("sentry-blocker", "Sentry Blocker", "0.1.10",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-            true),
+            true, false),
         ("themes", "Themes", "0.1.10",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
-            true),
+            true, false),
+        ("content-filter", "Content Filter", "0.1.10",
+            "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
+            false, true),
     };
 
     // Filter dropdown state (singleton, like ColorPickerPopup)
@@ -303,6 +305,11 @@ internal static class ContentPages
     private static object? _infoOverlay;
     private static object? _infoBackdrop;
     private static object? _infoPanel;
+
+    // Plugin settings lightbox state
+    private static object? _settingsOverlay;
+    private static object? _settingsBackdrop;
+    private static object? _settingsPanel;
 
     private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
@@ -416,10 +423,14 @@ internal static class ContentPages
         var cards = new List<(string Id, string Name, string Desc, object Card)>();
         foreach (var plugin in KnownPlugins)
         {
-            bool isEnabled = settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled;
+            // Content filter uses NsfwFilterEnabled as its canonical toggle
+            bool isEnabled = plugin.Id == "content-filter"
+                ? settings.NsfwFilterEnabled
+                : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
-                filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()));
+                filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
+                plugin.HasSettings);
             if (card != null)
                 cards.Add((plugin.Id, plugin.DisplayName, plugin.Description, card));
         }
@@ -534,11 +545,12 @@ internal static class ContentPages
 
     /// <summary>
     /// Build a Vencord-style plugin card: name + toggle on top row, description below.
+    /// Gear icon opens settings lightbox; info icon opens description lightbox.
     /// </summary>
     private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
         string pluginId, string displayName, string description,
         bool isEnabled, object? font, ThemeEngine? themeEngine,
-        int[] filterMode, Action? onRebuildNeeded)
+        int[] filterMode, Action? onRebuildNeeded, bool hasSettings = false)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -552,7 +564,7 @@ internal static class ContentPages
         var topRow = r.CreatePanel();
         if (topRow != null)
         {
-            // Plugin name — left aligned
+            // Plugin name - left aligned
             var nameText = r.CreateTextBlock(displayName, 14, TextWhite);
             r.SetFontWeightNumeric(nameText, 600);
             ApplyFont(r, nameText, font);
@@ -561,15 +573,47 @@ internal static class ContentPages
             r.SetMargin(nameText, 0, 0, 80, 0);
             r.AddChild(topRow, nameText);
 
-            // Right side: info icon + toggle
+            // Right side: gear icon + info icon + toggle
             var rightIcons = r.CreateStackPanel(vertical: false, spacing: 10);
             if (rightIcons != null)
             {
                 r.SetHorizontalAlignment(rightIcons, "Right");
                 r.SetVerticalAlignment(rightIcons, "Center");
 
-                // Info icon — opens lightbox with plugin details
-                if (pluginId == "sentry-blocker")
+                // Gear icon - opens settings lightbox (only for plugins with settings)
+                if (hasSettings)
+                {
+                    var gearBtnBg = ColorUtils.Lighten(CardBg, 12);
+                    var gearBtn = r.CreateBorder(gearBtnBg, 11);
+                    if (gearBtn != null)
+                    {
+                        r.SetWidth(gearBtn, 22);
+                        r.SetHeight(gearBtn, 22);
+                        r.SetCursorHand(gearBtn);
+
+                        var gearText = r.CreateTextBlock("\u2699", 13, TextMuted);
+                        ApplyFont(r, gearText, font);
+                        r.SetHorizontalAlignment(gearText, "Center");
+                        r.SetVerticalAlignment(gearText, "Center");
+                        r.SetBorderChild(gearBtn, gearText);
+
+                        var gearBtnRef = gearBtn;
+                        var capturedId = pluginId;
+                        var capturedName = displayName;
+                        r.SubscribeEvent(gearBtn, "PointerPressed", () =>
+                        {
+                            ShowPluginSettingsLightbox(r, capturedId, capturedName, settings, font);
+                        });
+                        r.SubscribeEvent(gearBtn, "PointerEntered", () =>
+                            r.SetBackground(gearBtnRef, ColorUtils.Lighten(gearBtnBg, 8)));
+                        r.SubscribeEvent(gearBtn, "PointerExited", () =>
+                            r.SetBackground(gearBtnRef, gearBtnBg));
+
+                        r.AddChild(rightIcons, gearBtn);
+                    }
+                }
+
+                // Info icon - opens lightbox with plugin details
                 {
                     var infoBtnBg = ColorUtils.Lighten(CardBg, 12);
                     var infoBtn = r.CreateBorder(infoBtnBg, 11);
@@ -607,6 +651,13 @@ internal static class ContentPages
                 var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
                 {
                     settings.Plugins[pluginId] = enabled;
+
+                    // Content filter uses NsfwFilterEnabled as canonical toggle
+                    if (pluginId == "content-filter")
+                    {
+                        settings.NsfwFilterEnabled = enabled;
+                        NsfwFilterInstance?.UpdateConfig();
+                    }
 
                     if (pluginId == "themes" && themeEngine != null)
                     {
@@ -901,6 +952,15 @@ internal static class ContentPages
                 r.AddChild(content, privacyBox);
             }
         }
+        else if (pluginId == "content-filter")
+        {
+            var howBox = BuildContentFilterInfoBox(r, font);
+            if (howBox != null)
+            {
+                r.SetMargin(howBox, 0, 14, 0, 0);
+                r.AddChild(content, howBox);
+            }
+        }
 
         r.SetBorderChild(_infoPanel, content);
         r.AddToOverlay(overlay, _infoPanel);
@@ -1156,7 +1216,7 @@ internal static class ContentPages
         if (outerContent == null) return card;
         r.SetMargin(outerContent, 20, 16, 20, 16);
 
-        // Header row with radio indicator — clickable to activate custom theme
+        // Header row with radio indicator -- clickable to activate custom theme
         var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
         if (headerRow != null)
         {
@@ -1422,7 +1482,7 @@ internal static class ContentPages
             r.AddChild(row, textBox);
         }
 
-        // Color swatch (clickable — opens color picker popup)
+        // Color swatch (clickable -- opens color picker popup)
         if (swatch != null)
         {
             r.SetWidth(swatch, 24);
@@ -1576,7 +1636,7 @@ internal static class ContentPages
             }
         });
 
-        // Hover effect — capture current CardBg for the closure
+        // Hover effect -- capture current CardBg for the closure
         var cardBgCurrent = CardBg;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
@@ -1597,7 +1657,7 @@ internal static class ContentPages
     /// </summary>
     private static object? BuildThemePreview(AvaloniaReflection r, string bgColor, string accentColor)
     {
-        // Outer frame — tagged to prevent tree walker from recoloring
+        // Outer frame -- tagged to prevent tree walker from recoloring
         var frame = r.CreateBorder("#00000000", 6);
         if (frame == null) return null;
         r.SetTag(frame, "uprooted-no-recolor");
@@ -1665,315 +1725,350 @@ internal static class ContentPages
         return frame;
     }
 
-    // ===== Content Filter Page =====
+    // ===== Plugin Settings Lightbox =====
 
-    private static object? BuildContentFilterPage(AvaloniaReflection r, UprootedSettings settings,
-        object? font, ThemeEngine? themeEngine = null)
+    /// <summary>
+    /// Show a centered lightbox overlay with plugin-specific settings.
+    /// </summary>
+    private static void ShowPluginSettingsLightbox(AvaloniaReflection r, string pluginId,
+        string pluginName, UprootedSettings settings, object? font)
     {
-        ApplyThemedColors(themeEngine);
-        var page = r.CreateStackPanel(vertical: true, spacing: 0);
-        if (page == null) return null;
-        r.SetMargin(page, 24, 24, 24, 0);
-        r.SetTag(page, "uprooted-content");
+        DismissPluginSettingsLightbox(r);
 
-        // Page title
-        var pageTitle = r.CreateTextBlock("Content Filter", 20, TextWhite);
-        r.SetFontWeightNumeric(pageTitle, 600);
-        ApplyFont(r, pageTitle, font);
-        r.AddChild(page, pageTitle);
+        var mainWindow = r.GetMainWindow();
+        if (mainWindow == null) return;
 
-        // Card 1: Enable/Disable
-        var enableCard = CreateCard(r);
-        if (enableCard != null)
+        var overlay = r.GetOverlayLayer(mainWindow);
+        if (overlay == null) return;
+
+        _settingsOverlay = overlay;
+
+        var windowBounds = r.GetBounds(mainWindow);
+        double windowW = windowBounds?.W ?? 800;
+        double windowH = windowBounds?.H ?? 600;
+
+        // Semi-transparent backdrop
+        _settingsBackdrop = r.CreateBorder("#80000000", 0);
+        if (_settingsBackdrop != null)
         {
-            r.SetMargin(enableCard, 0, 20, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
+            r.SetWidth(_settingsBackdrop, windowW);
+            r.SetHeight(_settingsBackdrop, windowH);
+            r.SetCanvasPosition(_settingsBackdrop, 0, 0);
+            r.SetTag(_settingsBackdrop, "uprooted-no-recolor");
+            r.SubscribeEvent(_settingsBackdrop, "PointerPressed", () => DismissPluginSettingsLightbox(r));
+            r.AddToOverlay(overlay, _settingsBackdrop);
+        }
 
-            var enableTitle = CreateSectionHeader(r, "CONTENT FILTER", font);
-            r.AddChild(cardContent, enableTitle);
+        // Lightbox card
+        double cardW = 480;
+        _settingsPanel = r.CreateBorder(CardBg, 12);
+        if (_settingsPanel == null) return;
+        r.SetTag(_settingsPanel, "uprooted-no-recolor");
+        SetBorderStroke(r, _settingsPanel, CardBorder, 0.5);
+        r.SetWidth(_settingsPanel, cardW);
 
-            // Toggle row: description (left) + toggle (right)
-            var toggleRow = r.CreatePanel();
-            if (toggleRow != null)
+        // Center the card
+        double cardX = (windowW - cardW) / 2;
+        double cardY = windowH * 0.12;
+        r.SetCanvasPosition(_settingsPanel, cardX, cardY);
+
+        var content = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (content == null) return;
+        r.SetMargin(content, 24, 20, 24, 20);
+
+        // Header row: plugin name + close button
+        var headerRow = r.CreatePanel();
+        if (headerRow != null)
+        {
+            var titleText = r.CreateTextBlock(pluginName + " Settings", 18, TextWhite);
+            r.SetFontWeightNumeric(titleText, 600);
+            ApplyFont(r, titleText, font);
+            r.SetHorizontalAlignment(titleText, "Left");
+            r.SetVerticalAlignment(titleText, "Center");
+            r.AddChild(headerRow, titleText);
+
+            // Close button
+            var closeBtnBg = ColorUtils.Lighten(CardBg, 12);
+            var closeBtn = r.CreateBorder(closeBtnBg, 10);
+            if (closeBtn != null)
             {
-                r.SetMargin(toggleRow, 0, 16, 0, 0);
+                r.SetWidth(closeBtn, 28);
+                r.SetHeight(closeBtn, 28);
+                r.SetCursorHand(closeBtn);
+                r.SetHorizontalAlignment(closeBtn, "Right");
+                r.SetVerticalAlignment(closeBtn, "Center");
 
-                var descText = r.CreateTextBlock(
-                    "Automatically blur images classified as NSFW using Google Cloud Vision",
-                    13, TextMuted);
-                if (descText != null)
-                {
-                    ApplyFont(r, descText, font);
-                    r.SetTextWrapping(descText, "Wrap");
-                    r.SetHorizontalAlignment(descText, "Left");
-                    r.SetVerticalAlignment(descText, "Center");
-                    r.SetMargin(descText, 0, 0, 60, 0);
-                }
-                r.AddChild(toggleRow, descText);
+                var closeText = r.CreateTextBlock("\u2715", 14, TextMuted);
+                ApplyFont(r, closeText, font);
+                r.SetHorizontalAlignment(closeText, "Center");
+                r.SetVerticalAlignment(closeText, "Center");
+                r.SetBorderChild(closeBtn, closeText);
 
-                var toggle = BuildToggleSwitch(r, settings.NsfwFilterEnabled, font, (enabled) =>
+                var closeBtnRef = closeBtn;
+                r.SubscribeEvent(closeBtn, "PointerPressed", () => DismissPluginSettingsLightbox(r));
+                r.SubscribeEvent(closeBtn, "PointerEntered", () =>
+                    r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
+                r.SubscribeEvent(closeBtn, "PointerExited", () =>
+                    r.SetBackground(closeBtnRef, closeBtnBg));
+
+                r.AddChild(headerRow, closeBtn);
+            }
+
+            r.AddChild(content, headerRow);
+        }
+
+        // Plugin-specific settings content
+        if (pluginId == "content-filter")
+            BuildContentFilterSettings(r, content, settings, font);
+
+        r.SetBorderChild(_settingsPanel, content);
+        r.AddToOverlay(overlay, _settingsPanel);
+    }
+
+    private static void DismissPluginSettingsLightbox(AvaloniaReflection r)
+    {
+        if (_settingsOverlay == null) return;
+
+        if (_settingsBackdrop != null)
+        {
+            r.RemoveFromOverlay(_settingsOverlay, _settingsBackdrop);
+            _settingsBackdrop = null;
+        }
+        if (_settingsPanel != null)
+        {
+            r.RemoveFromOverlay(_settingsOverlay, _settingsPanel);
+            _settingsPanel = null;
+        }
+
+        _settingsOverlay = null;
+    }
+
+    /// <summary>
+    /// Build the content filter settings UI inside a lightbox container.
+    /// Includes API key input + save button and sensitivity radio buttons.
+    /// </summary>
+    private static void BuildContentFilterSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // API Key section
+        var apiTitle = CreateSectionHeader(r, "GOOGLE CLOUD VISION API KEY", font);
+        if (apiTitle != null)
+        {
+            r.SetMargin(apiTitle, 0, 18, 0, 0);
+            r.AddChild(content, apiTitle);
+        }
+
+        var apiTextBox = r.CreateTextBox("Enter your API key", settings.NsfwApiKey, 100);
+        if (apiTextBox != null)
+        {
+            apiTextBox.GetType().GetProperty("FontSize")?.SetValue(apiTextBox, 13.0);
+            r.SetHeight(apiTextBox, 36);
+            r.SetBackground(apiTextBox, ColorUtils.Lighten(CardBg, 5));
+            r.SetForeground(apiTextBox, TextWhite);
+            ApplyFont(r, apiTextBox, font);
+            r.SetMargin(apiTextBox, 0, 12, 0, 0);
+            if (r.CornerRadiusType != null)
+            {
+                var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
+                apiTextBox.GetType().GetProperty("CornerRadius")?.SetValue(apiTextBox, cr);
+            }
+            r.AddChild(content, apiTextBox);
+        }
+
+        var helperText = r.CreateTextBlock(
+            "Get a key from console.cloud.google.com -- SafeSearch costs ~$1.50/1,000 images",
+            12, TextDim);
+        if (helperText != null)
+        {
+            ApplyFont(r, helperText, font);
+            r.SetTextWrapping(helperText, "Wrap");
+            r.SetMargin(helperText, 0, 8, 0, 0);
+        }
+        r.AddChild(content, helperText);
+
+        // Save button
+        var saveBtnRow = r.CreateStackPanel(vertical: false, spacing: 0);
+        if (saveBtnRow != null)
+        {
+            r.SetMargin(saveBtnRow, 0, 12, 0, 0);
+
+            var saveBtn = r.CreateBorder(AccentGreen, 8);
+            if (saveBtn != null)
+            {
+                r.SetCursorHand(saveBtn);
+                var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
+                r.SetFontWeightNumeric(saveBtnText, 500);
+                ApplyFont(r, saveBtnText, font);
+                r.SetPadding(saveBtn, 16, 6, 16, 6);
+                r.SetBorderChild(saveBtn, saveBtnText);
+
+                var apiTextBoxRef = apiTextBox;
+                r.SubscribeEvent(saveBtn, "PointerPressed", () =>
                 {
-                    settings.NsfwFilterEnabled = enabled;
+                    var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
+                    settings.NsfwApiKey = key;
                     try { settings.Save(); }
                     catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
                     NsfwFilterInstance?.UpdateConfig();
-                    Logger.Log("ContentFilter", $"NSFW filter toggled to {enabled}");
-                });
-                if (toggle != null)
-                {
-                    r.SetHorizontalAlignment(toggle, "Right");
-                    r.SetVerticalAlignment(toggle, "Center");
-                }
-                r.AddChild(toggleRow, toggle);
-
-                r.AddChild(cardContent, toggleRow);
-            }
-
-            r.SetBorderChild(enableCard, cardContent);
-            r.AddChild(page, enableCard);
-        }
-
-        // Card 2: API Key
-        var apiKeyCard = CreateCard(r);
-        if (apiKeyCard != null)
-        {
-            r.SetMargin(apiKeyCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var apiTitle = CreateSectionHeader(r, "GOOGLE CLOUD VISION API KEY", font);
-            r.AddChild(cardContent, apiTitle);
-
-            // API key TextBox
-            var apiTextBox = r.CreateTextBox("Enter your API key", settings.NsfwApiKey, 100);
-            if (apiTextBox != null)
-            {
-                apiTextBox.GetType().GetProperty("FontSize")?.SetValue(apiTextBox, 13.0);
-                r.SetHeight(apiTextBox, 36);
-                r.SetBackground(apiTextBox, ColorUtils.Lighten(CardBg, 5));
-                r.SetForeground(apiTextBox, TextWhite);
-                ApplyFont(r, apiTextBox, font);
-                r.SetMargin(apiTextBox, 0, 16, 0, 0);
-                if (r.CornerRadiusType != null)
-                {
-                    var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
-                    apiTextBox.GetType().GetProperty("CornerRadius")?.SetValue(apiTextBox, cr);
-                }
-                r.AddChild(cardContent, apiTextBox);
-            }
-
-            // Helper text
-            var helperText = r.CreateTextBlock(
-                "Get a key from console.cloud.google.com \u2014 SafeSearch costs ~$1.50/1,000 images",
-                12, TextDim);
-            if (helperText != null)
-            {
-                ApplyFont(r, helperText, font);
-                r.SetTextWrapping(helperText, "Wrap");
-                r.SetMargin(helperText, 0, 10, 0, 0);
-            }
-            r.AddChild(cardContent, helperText);
-
-            // Save button
-            var saveBtnRow = r.CreateStackPanel(vertical: false, spacing: 0);
-            if (saveBtnRow != null)
-            {
-                r.SetMargin(saveBtnRow, 0, 14, 0, 0);
-
-                var saveBtn = r.CreateBorder(AccentGreen, 8);
-                if (saveBtn != null)
-                {
-                    r.SetCursorHand(saveBtn);
-                    var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
-                    r.SetFontWeightNumeric(saveBtnText, 500);
-                    ApplyFont(r, saveBtnText, font);
-                    r.SetPadding(saveBtn, 16, 6, 16, 6);
-                    r.SetBorderChild(saveBtn, saveBtnText);
-
-                    var apiTextBoxRef = apiTextBox;
-                    r.SubscribeEvent(saveBtn, "PointerPressed", () =>
-                    {
-                        var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
-                        settings.NsfwApiKey = key;
-                        try { settings.Save(); }
-                        catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
-                        NsfwFilterInstance?.UpdateConfig();
-                        Logger.Log("ContentFilter", $"API key saved (length={key.Length})");
-                    });
-
-                    var btnAccent = AccentGreen;
-                    r.SubscribeEvent(saveBtn, "PointerEntered", () =>
-                        r.SetBackground(saveBtn, ColorUtils.Lighten(btnAccent, 15)));
-                    r.SubscribeEvent(saveBtn, "PointerExited", () =>
-                        r.SetBackground(saveBtn, btnAccent));
-
-                    r.AddChild(saveBtnRow, saveBtn);
-                }
-
-                r.AddChild(cardContent, saveBtnRow);
-            }
-
-            r.SetBorderChild(apiKeyCard, cardContent);
-            r.AddChild(page, apiKeyCard);
-        }
-
-        // Card 3: Sensitivity
-        var sensitivityCard = CreateCard(r);
-        if (sensitivityCard != null)
-        {
-            r.SetMargin(sensitivityCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var sensTitle = CreateSectionHeader(r, "SENSITIVITY", font);
-            r.AddChild(cardContent, sensTitle);
-
-            var options = new[]
-            {
-                ("Strict", 0.4, "Blurs on POSSIBLE and above"),
-                ("Normal", 0.6, "Blurs on LIKELY and above"),
-                ("Relaxed", 0.8, "Blurs only VERY_LIKELY"),
-            };
-
-            // Track radio indicators for selection update
-            var radioIndicators = new List<(object outer, object? inner, double threshold)>();
-
-            foreach (var (label, threshold, desc) in options)
-            {
-                bool isActive = Math.Abs(settings.NsfwThreshold - threshold) < 0.01;
-                var optionRow = r.CreateStackPanel(vertical: false, spacing: 12);
-                if (optionRow == null) continue;
-                r.SetMargin(optionRow, 0, 14, 0, 0);
-                r.SetCursorHand(optionRow);
-                r.SetBackground(optionRow, "Transparent");
-
-                // Radio indicator
-                var radioOuter = r.CreateBorder(null, 4);
-                object? radioInner = null;
-                if (radioOuter != null)
-                {
-                    r.SetWidth(radioOuter, 18);
-                    r.SetHeight(radioOuter, 18);
-                    SetBorderStroke(r, radioOuter,
-                        isActive ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
-                    r.SetVerticalAlignment(radioOuter, "Center");
-
-                    if (isActive)
-                    {
-                        radioInner = r.CreateBorder(AccentGreen, 2);
-                        if (radioInner != null)
-                        {
-                            r.SetWidth(radioInner, 8);
-                            r.SetHeight(radioInner, 8);
-                            r.SetMargin(radioInner, 3, 3, 3, 3);
-                        }
-                        r.SetBorderChild(radioOuter, radioInner);
-                    }
-
-                    r.AddChild(optionRow, radioOuter);
-                    radioIndicators.Add((radioOuter, radioInner, threshold));
-                }
-
-                // Text stack: label + description
-                var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
-                if (textStack != null)
-                {
-                    r.SetVerticalAlignment(textStack, "Center");
-                    var nameText = r.CreateTextBlock(label, 13, TextWhite);
-                    r.SetFontWeightNumeric(nameText, 450);
-                    ApplyFont(r, nameText, font);
-                    r.AddChild(textStack, nameText);
-
-                    var descText = r.CreateTextBlock(desc, 12, TextMuted);
-                    ApplyFont(r, descText, font);
-                    r.AddChild(textStack, descText);
-
-                    r.AddChild(optionRow, textStack);
-                }
-
-                // Click handler
-                var capturedThreshold = threshold;
-                var capturedRadioOuter = radioOuter;
-                r.SubscribeEvent(optionRow, "PointerPressed", () =>
-                {
-                    settings.NsfwThreshold = capturedThreshold;
-                    try { settings.Save(); }
-                    catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
-                    NsfwFilterInstance?.UpdateConfig();
-                    Logger.Log("ContentFilter", $"Sensitivity set to {capturedThreshold}");
-
-                    // Update radio visuals
-                    foreach (var (outer, inner, th) in radioIndicators)
-                    {
-                        bool selected = Math.Abs(th - capturedThreshold) < 0.01;
-                        SetBorderStroke(r, outer,
-                            selected ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
-                        if (selected)
-                        {
-                            var dot = r.CreateBorder(AccentGreen, 2);
-                            if (dot != null)
-                            {
-                                r.SetWidth(dot, 8);
-                                r.SetHeight(dot, 8);
-                                r.SetMargin(dot, 3, 3, 3, 3);
-                            }
-                            r.SetBorderChild(outer, dot);
-                        }
-                        else
-                        {
-                            r.SetBorderChild(outer, null);
-                        }
-                    }
+                    Logger.Log("ContentFilter", $"API key saved (length={key.Length})");
                 });
 
-                r.AddChild(cardContent, optionRow);
+                var btnAccent = AccentGreen;
+                r.SubscribeEvent(saveBtn, "PointerEntered", () =>
+                    r.SetBackground(saveBtn, ColorUtils.Lighten(btnAccent, 15)));
+                r.SubscribeEvent(saveBtn, "PointerExited", () =>
+                    r.SetBackground(saveBtn, btnAccent));
+
+                r.AddChild(saveBtnRow, saveBtn);
             }
 
-            r.SetBorderChild(sensitivityCard, cardContent);
-            r.AddChild(page, sensitivityCard);
+            r.AddChild(content, saveBtnRow);
         }
 
-        // Card 4: How It Works
-        var howCard = CreateCard(r);
-        if (howCard != null)
+        // Sensitivity section
+        var sensTitle = CreateSectionHeader(r, "SENSITIVITY", font);
+        if (sensTitle != null)
         {
-            r.SetMargin(howCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
+            r.SetMargin(sensTitle, 0, 20, 0, 0);
+            r.AddChild(content, sensTitle);
+        }
 
-            var howTitle = CreateSectionHeader(r, "HOW IT WORKS", font);
-            r.AddChild(cardContent, howTitle);
+        var options = new[]
+        {
+            ("Strict", 0.4, "Blurs on POSSIBLE and above"),
+            ("Normal", 0.6, "Blurs on LIKELY and above"),
+            ("Relaxed", 0.8, "Blurs only VERY_LIKELY"),
+        };
 
-            var howText = r.CreateTextBlock(
-                "Images in chat are checked against Google Cloud Vision's SafeSearch API. " +
-                "While classifying, images receive a light blur. If flagged as NSFW, a full " +
-                "blur is applied with a \"Click to reveal\" overlay. Results are cached by URL " +
-                "to avoid redundant API calls. The filter fails open \u2014 if the API is unreachable " +
-                "or returns an error, images are shown normally. No images are stored or sent anywhere " +
-                "except to Google's Vision API for classification.",
-                13, TextMuted);
-            if (howText != null)
+        var radioIndicators = new List<(object outer, object? inner, double threshold)>();
+
+        foreach (var (label, threshold, desc) in options)
+        {
+            bool isActive = Math.Abs(settings.NsfwThreshold - threshold) < 0.01;
+            var optionRow = r.CreateStackPanel(vertical: false, spacing: 12);
+            if (optionRow == null) continue;
+            r.SetMargin(optionRow, 0, 12, 0, 0);
+            r.SetCursorHand(optionRow);
+            r.SetBackground(optionRow, "Transparent");
+
+            var radioOuter = r.CreateBorder(null, 4);
+            object? radioInner = null;
+            if (radioOuter != null)
             {
-                ApplyFont(r, howText, font);
-                r.SetTextWrapping(howText, "Wrap");
-                r.SetMargin(howText, 0, 16, 0, 0);
+                r.SetWidth(radioOuter, 18);
+                r.SetHeight(radioOuter, 18);
+                SetBorderStroke(r, radioOuter,
+                    isActive ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                r.SetVerticalAlignment(radioOuter, "Center");
+
+                if (isActive)
+                {
+                    radioInner = r.CreateBorder(AccentGreen, 2);
+                    if (radioInner != null)
+                    {
+                        r.SetWidth(radioInner, 8);
+                        r.SetHeight(radioInner, 8);
+                        r.SetMargin(radioInner, 3, 3, 3, 3);
+                    }
+                    r.SetBorderChild(radioOuter, radioInner);
+                }
+
+                r.AddChild(optionRow, radioOuter);
+                radioIndicators.Add((radioOuter, radioInner, threshold));
             }
-            r.AddChild(cardContent, howText);
 
-            r.SetBorderChild(howCard, cardContent);
-            r.AddChild(page, howCard);
+            var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
+            if (textStack != null)
+            {
+                r.SetVerticalAlignment(textStack, "Center");
+                var nameText = r.CreateTextBlock(label, 13, TextWhite);
+                r.SetFontWeightNumeric(nameText, 450);
+                ApplyFont(r, nameText, font);
+                r.AddChild(textStack, nameText);
+
+                var descText = r.CreateTextBlock(desc, 12, TextMuted);
+                ApplyFont(r, descText, font);
+                r.AddChild(textStack, descText);
+
+                r.AddChild(optionRow, textStack);
+            }
+
+            var capturedThreshold = threshold;
+            r.SubscribeEvent(optionRow, "PointerPressed", () =>
+            {
+                settings.NsfwThreshold = capturedThreshold;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
+                NsfwFilterInstance?.UpdateConfig();
+                Logger.Log("ContentFilter", $"Sensitivity set to {capturedThreshold}");
+
+                foreach (var (outer, inner, th) in radioIndicators)
+                {
+                    bool selected = Math.Abs(th - capturedThreshold) < 0.01;
+                    SetBorderStroke(r, outer,
+                        selected ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                    if (selected)
+                    {
+                        var dot = r.CreateBorder(AccentGreen, 2);
+                        if (dot != null)
+                        {
+                            r.SetWidth(dot, 8);
+                            r.SetHeight(dot, 8);
+                            r.SetMargin(dot, 3, 3, 3, 3);
+                        }
+                        r.SetBorderChild(outer, dot);
+                    }
+                    else
+                    {
+                        r.SetBorderChild(outer, null);
+                    }
+                }
+            });
+
+            r.AddChild(content, optionRow);
         }
+    }
 
-        // Bottom padding
-        var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
-        if (spacer != null)
+    /// <summary>
+    /// Build the "How It Works" info box for the content filter info lightbox.
+    /// </summary>
+    private static object? BuildContentFilterInfoBox(AvaloniaReflection r, object? font)
+    {
+        var infoBg = ColorUtils.Lighten(CardBg, 4);
+        var box = r.CreateBorder(infoBg, 8);
+        if (box == null) return null;
+        SetBorderStroke(r, box, "#15ffffff", 0.5);
+
+        var boxContent = r.CreateStackPanel(vertical: true, spacing: 6);
+        if (boxContent == null) return box;
+        r.SetMargin(boxContent, 16, 14, 16, 14);
+
+        var headerText = r.CreateTextBlock("HOW IT WORKS", 12, TextDim);
+        if (headerText != null)
         {
-            spacer.GetType().GetProperty("Height")?.SetValue(spacer, 24.0);
-            r.AddChild(page, spacer);
+            r.SetFontWeightNumeric(headerText, 500);
+            ApplyFont(r, headerText, font);
         }
+        r.AddChild(boxContent, headerText);
 
-        return r.CreateScrollViewer(page);
+        var howText = r.CreateTextBlock(
+            "Images in chat are checked against Google Cloud Vision's SafeSearch API. " +
+            "While classifying, images receive a light blur. If flagged as NSFW, a full " +
+            "blur is applied with a \"Click to reveal\" overlay. Results are cached by URL " +
+            "to avoid redundant API calls. The filter fails open -- if the API is unreachable " +
+            "or returns an error, images are shown normally. No images are stored or sent anywhere " +
+            "except to Google's Vision API for classification.",
+            12, TextMuted);
+        if (howText != null)
+        {
+            ApplyFont(r, howText, font);
+            r.SetTextWrapping(howText, "Wrap");
+            r.SetMargin(howText, 0, 6, 0, 0);
+        }
+        r.AddChild(boxContent, howText);
+
+        r.SetBorderChild(box, boxContent);
+        return box;
     }
 
     // ===== Card and field builders matching Root's native style =====
