@@ -11,6 +11,9 @@
 - C - Profiler DLL for Windows binary patching
 - JavaScript/ES2022 - Runtime execution in browser context
 
+**Native:**
+- C - CLR profiler DLL (`uprooted_profiler.dll`) implementing `ICorProfilerCallback` COM interface for IL injection
+
 **Secondary:**
 - PowerShell - Installation scripts, build scripts, testing automation
 - Python - Log analysis, binary patching utilities
@@ -62,6 +65,13 @@
 - `glob` - File pattern matching in Rust
 - `opener` - Cross-platform file/directory opener
 
+**Native (C/MSVC):**
+- `uprooted_profiler.dll` - CLR profiler implementing `ICorProfilerCallback` COM interface
+  - Injects IL bytecode into .NET methods before JIT compilation
+  - Process name guard (only activates for Root.exe)
+  - Enabled via user-scoped env vars: `CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, `CORECLR_PROFILER_PATH`
+  - Requires `DOTNET_ReadyToRun=0` to disable precompiled native images
+
 **Build & Bundling:**
 - `esbuild` - JavaScript/CSS bundling
 - `vite` - Frontend asset bundling
@@ -89,6 +99,19 @@
 - Astro: `astro.config.mjs` (site)
   - Static output
   - Site URL: https://uprooted.sh
+
+## Injection Methods
+
+**Method 1: CLR Profiler (default, recommended)**
+- Native C DLL loaded by .NET runtime at process startup
+- Injects IL into first suitable method to load `UprootedHook.dll`
+- Requires: `DOTNET_ReadyToRun=0` (disables precompiled images, forces JIT)
+- Survives Root updates (no binary modification)
+
+**Method 2: Startup Hooks (alternative)**
+- Requires patching Root.exe to change `"System.StartupHookProvider.IsSupported": false` to `true`
+- Then set `DOTNET_STARTUP_HOOKS` to UprootedHook.dll path
+- Cleaner than profiler but breaks on Root updates (requires re-patching binary)
 
 ## Platform Requirements
 

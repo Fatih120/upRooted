@@ -18,9 +18,17 @@ No testing framework is configured or used in this codebase. There are:
 - Settings persistence in `src/core/settings.ts`
 - Error handling in preload initialization
 
+## C# Hook Test Harness
+
+**Location:** `hook-test/`
+
+A .NET test harness exists for the C# hook layer. This is a separate project for testing the hook DLL outside Root's process, run via PowerShell scripts. It is not an automated test suite but a manual verification tool for the reflection-based Avalonia injection.
+
+**C# hook debugging:** The primary testing tool for the C# layer is the log file `uprooted-hook.log` in Root's profile directory. The hook logs extensively with timestamps and categories. The Logger class swallows its own exceptions to avoid crashing Root.
+
 ## Manual Testing Evidence
 
-While no automated tests exist, the codebase contains patterns suggesting manual testing approach:
+While no automated tests exist for the TypeScript layer, the codebase contains patterns suggesting manual testing approach:
 
 **Logging for verification:**
 - Extensive console logging statements to verify operation: `console.log("[Uprooted] Started plugin: ${name}")`
@@ -201,7 +209,7 @@ npm run test:ui          # Vitest UI dashboard (optional)
 
 ## Current Testing Gaps
 
-**No coverage for:**
+**TypeScript layer — no coverage for:**
 - Plugin lifecycle state management (which plugins are active, pending, etc.)
 - Event handler cleanup and plugin isolation (handlers from stopped plugins still firing)
 - Bridge proxy deferred setup (async window property assignment)
@@ -210,6 +218,16 @@ npm run test:ui          # Vitest UI dashboard (optional)
 - DOM observer cleanup on timeout
 - Theme variable name collision with custom CSS
 - Installer HTML injection edge cases (missing `</head>` tag, already-patched files)
+
+**C# hook layer — no automated coverage for:**
+- AvaloniaReflection type resolution (relies on actual Avalonia assemblies being loaded)
+- Visual tree walker layout discovery (requires Root's actual UI structure)
+- SidebarInjector state machine (timer-based, threading-dependent)
+- ContentPages rendering (reflection-based control creation)
+- Concurrent injection/cleanup races (interlocked flag coordination)
+- Back button cleanup timing (must fire before Root's handler)
+- Settings JSON loading workaround (System.Text.Json MissingMethodException)
+- Note: C# hook is fundamentally hard to unit test because it depends on Root's actual runtime environment and Avalonia visual tree structure
 
 ---
 

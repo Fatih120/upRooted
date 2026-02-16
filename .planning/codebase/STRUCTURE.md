@@ -112,8 +112,8 @@ uprooted-private/
 
 **scripts:**
 - Purpose: Build, installation, and utility scripts
-- Contains: esbuild bundler, HTML patcher, install/uninstall CLIs
-- Key files: `scripts/build.ts` (bundles preload + CSS), `scripts/install.ts` (CLI installer)
+- Contains: esbuild bundler, HTML patcher, install/uninstall CLIs, installer build pipeline
+- Key files: `scripts/build.ts` (bundles preload + CSS), `scripts/install.ts` (CLI installer), `scripts/build_installer.ps1` (full installer build pipeline)
 
 **installer/src:**
 - Purpose: Desktop application frontend for installation and configuration
@@ -224,9 +224,14 @@ uprooted-private/
 
 **dist/:**
 - Purpose: Build output
-- Generated: Yes (by `npm run build`)
+- Generated: Yes (by `pnpm build`)
 - Committed: No (in .gitignore)
 - Contents: `uprooted-preload.js` (IIFE bundle) and `uprooted.css` (combined plugin CSS)
+
+**installer/src-tauri/artifacts/:**
+- Purpose: Staged binary artifacts for Tauri bundling
+- Generated: Yes (by `scripts/build_installer.ps1`)
+- Contents: `uprooted_profiler.dll`, `UprootedHook.dll`, `UprootedHook.deps.json`, `uprooted-preload.js`, `uprooted.css`
 
 **node_modules/:**
 - Purpose: Installed dependencies
@@ -267,6 +272,18 @@ This is a pnpm workspace with three packages:
    - Scripts: `dev`, `build`
 
 Run pnpm commands from root; package filtering with `--filter` (e.g., `pnpm --filter installer build`)
+
+## Installer Build Pipeline
+
+`scripts/build_installer.ps1` orchestrates the full installer build in 5 steps:
+
+1. `pnpm build` — TypeScript layer -> `dist/uprooted-preload.js` + `dist/uprooted.css`
+2. `dotnet build hook/ -c Release` — C# hook -> `UprootedHook.dll`
+3. `cl.exe` via VS Build Tools — Profiler C source -> `uprooted_profiler.dll`
+4. Stage all 5 files to `installer/src-tauri/artifacts/`
+5. `pnpm tauri build` — Tauri app -> `Uprooted Installer.exe`
+
+The resulting portable executable embeds all 5 binary artifacts and deploys them to `%LOCALAPPDATA%\Root\uprooted\` on install.
 
 ## Configuration Files
 

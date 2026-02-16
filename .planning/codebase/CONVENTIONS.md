@@ -5,9 +5,9 @@
 ## Naming Patterns
 
 **Files:**
-- Kebab-case for module files: `plugin-loader.ts`, `sentry-blocker`, `settings-panel`
-- PascalCase for components that export classes: Not used in current codebase
-- Index files use `index.ts` for barrel exports
+- camelCase for module files: `pluginLoader.ts`, `preload.ts`, `patcher.ts`, `settings.ts`
+- Kebab-case for plugin/feature directories: `sentry-blocker/`, `settings-panel/`
+- Index files use `index.ts` for barrel exports and plugin entry points
 
 **Functions:**
 - camelCase for all function names: `loadSettings()`, `waitForElement()`, `injectCss()`, `getCurrentTheme()`
@@ -16,7 +16,7 @@
 
 **Variables:**
 - camelCase for all variables: `pluginLoader`, `activePlugins`, `eventHandlers`, `blockedCount`
-- Constants use camelCase: `BACKUP_SUFFIX`, `INJECTION_MARKER`, `ID_PREFIX`, `PROFILE_DIR`
+- Constants use UPPER_SNAKE_CASE: `BACKUP_SUFFIX`, `INJECTION_MARKER`, `ID_PREFIX`, `PROFILE_DIR`
 - Descriptive names favored over abbreviations: `pluginSettings` not `ps`, `eventHandlers` not `handlers`
 
 **Types:**
@@ -138,6 +138,41 @@
 - Clear separation: `src/api/` for public plugin APIs, `src/core/` for internal infrastructure, `src/types/` for shared types
 - Plugins in `src/plugins/` are self-contained: include their own types, styles, and components
 - No circular dependencies observed; imports flow downward through layer hierarchy
+
+## C# Conventions (hook/)
+
+**Access Modifiers:**
+- `internal` access for all non-entry classes
+- `Entry.cs` uses `public` (must be accessible for `CreateInstance`)
+- `StartupHook` class is global namespace (no `namespace` declaration)
+
+**Namespace:**
+- `Uprooted` namespace for most hook classes
+- Exception: `Entry.cs` uses `UprootedHook` namespace, `StartupHook` is global
+
+**One-Time Initialization:**
+- Use `Interlocked.CompareExchange` for CAS-based init guards (never `lock` or `bool` flag)
+- Pattern: `if (Interlocked.CompareExchange(ref _initialized, 1, 0) == 0)`
+
+**Reflection Rules:**
+- ALL Avalonia type access through `AvaloniaReflection` — never `typeof()` or `Type.GetType()`
+- Never use `Enum.Parse` for `DispatcherPriority` (it's a struct in Avalonia 11+)
+- Never use `EventInfo.AddEventHandler` for Avalonia RoutedEvents — use `Expression.Lambda`
+- Always use `ClearValue(AvaloniaProperty)` to restore bindings after `SetValue`
+
+**UI Thread Safety:**
+- Never block the UI thread — all heavy work on background threads
+- Timer callback dispatches to `Dispatcher.UIThread` via `RunOnUIThread()`
+- Interlocked flags for concurrent operation guards
+
+**Error Handling:**
+- Never throw from injected code — catch and log
+- Logger swallows its own exceptions
+- All reflection calls handle null gracefully
+
+**Logging:**
+- `[Category]` prefix in log messages
+- Thread-safe file logging to `uprooted-hook.log`
 
 ---
 
