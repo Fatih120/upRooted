@@ -31,10 +31,8 @@ hook-test/**/obj/
 tests/**/bin/
 tests/**/obj/
 
-# Claude Code
-.claude/
-
 # Env
+.claude/
 .env
 .env.*
 
