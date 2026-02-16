@@ -207,7 +207,11 @@ internal static class ContentPages
 
             AddStatusField(r, cardContent, "Hook", "Loaded", AccentGreen, true, font);
             AddStatusField(r, cardContent, "Settings Injection", "Active", AccentGreen, false, font);
-            AddStatusField(r, cardContent, "Plugins", "0 loaded", TextDim, false, font);
+            var enabledCount = settings.Plugins.Count(p => p.Value);
+            var totalCount = settings.Plugins.Count;
+            var pluginStatus = enabledCount > 0 ? $"{enabledCount} active" : "0 loaded";
+            var pluginColor = enabledCount > 0 ? AccentGreen : TextDim;
+            AddStatusField(r, cardContent, "Plugins", pluginStatus, pluginColor, false, font);
             var activeTheme = themeEngine?.ActiveThemeName;
             var hasTheme = activeTheme != null && activeTheme != "default-dark";
             var themeStatus = hasTheme ? "Active (" + activeTheme + ")" : "Not active";
