@@ -47,6 +47,10 @@ internal class UprootedSettings
                     case "CustomCss": settings.CustomCss = val; break;
                     case "CustomAccent": settings.CustomAccent = val; break;
                     case "CustomBackground": settings.CustomBackground = val; break;
+                    case var k when k.StartsWith("Plugin."):
+                        var pluginName = k["Plugin.".Length..];
+                        settings.Plugins[pluginName] = val == "true";
+                        break;
                 }
             }
             Logger.Log("Settings", $"Loaded settings from {path}: ActiveTheme={settings.ActiveTheme}");
@@ -63,14 +67,20 @@ internal class UprootedSettings
         try
         {
             var path = GetSettingsPath();
-            var content = string.Join("\n",
+            var lines = new List<string>
+            {
                 "ActiveTheme=" + ActiveTheme,
                 "Enabled=" + (Enabled ? "true" : "false"),
                 "Version=" + Version,
                 "CustomCss=" + CustomCss,
                 "CustomAccent=" + CustomAccent,
-                "CustomBackground=" + CustomBackground);
-            File.WriteAllText(path, content);
+                "CustomBackground=" + CustomBackground
+            };
+            foreach (var (name, enabled) in Plugins)
+            {
+                lines.Add($"Plugin.{name}={( enabled ? "true" : "false" )}");
+            }
+            File.WriteAllText(path, string.Join("\n", lines));
             Logger.Log("Settings", "Saved settings to " + path + ": ActiveTheme=" + ActiveTheme);
         }
         catch (Exception ex)

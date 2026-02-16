@@ -8,8 +8,8 @@
 
 <p align="center">
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
+  <a href="https://github.com/watchthelight/uprooted/releases/latest"><img src="https://img.shields.io/badge/download-latest-2D7D46?style=flat" alt="download" /></a>
   <img src="https://img.shields.io/badge/version-0.1.9-2D7D46?style=flat" alt="version" />
-  <img src="https://img.shields.io/badge/status-beta · awaiting approval-yellow?style=flat" alt="status" />
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>
@@ -20,23 +20,30 @@
 
 - custom themes with runtime switching and presets
 - plugin system with lifecycle hooks
+- sentry blocker (privacy protection)
 - bridge api wrapping internal interfaces
 - settings UI injected into the native client
 
+## terms of use
+
+**by using uprooted, you agree to the following:**
+
+1. **do not distribute uprooted or its artifacts** (installers, DLLs, modified binaries) outside of this repository.
+2. **do not discuss uprooted in Root's public channels** (official Root servers, Root support, Root social media).
+3. violations will result in your UUID being **permanently blacklisted** from uprooted.
+
+these rules exist to protect the project and its users. if you want to share uprooted with someone, send them a link to this repository.
+
 ## policy
 
-**uprooted is not affiliated with root communications.** this is an independent community project.
-
-all modifications are cosmetic-only and do not interact with root's backend services. we will not distribute injection code until we have explicit approval from root's developers.
-
-> uprooted is a working beta. distribution is on hold pending developer approval.
+**uprooted is not affiliated with root communications.** this is an independent community project. all modifications are cosmetic-only and do not interact with root's backend services.
 
 ## links
 
 - [uprooted.sh](https://uprooted.sh)
-- [root support server](https://rootapp.com/server/root)
+- [download latest release](https://github.com/watchthelight/uprooted/releases/latest)
+- [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw)
 - admin@watchthelight.org
-- @watchthelight on discord
 
 ## license
 
