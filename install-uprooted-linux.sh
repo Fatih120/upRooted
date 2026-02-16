@@ -361,7 +361,7 @@ set_env_vars() {
     mkdir -p "$env_dir"
 
     cat > "$env_dir/uprooted.conf" << ENVCONF
-# Uprooted CLR profiler — remove this file or run the uninstaller to disable
+# Uprooted CLR profiler -- remove this file or run the uninstaller to disable
 CORECLR_ENABLE_PROFILING=1
 CORECLR_PROFILER=$PROFILER_GUID
 CORECLR_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so

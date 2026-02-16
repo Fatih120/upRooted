@@ -1,5 +1,5 @@
 /**
- * Uprooted Public API — Barrel export for plugin authors.
+ * Uprooted Public API -- Barrel export for plugin authors.
  *
  * Usage in plugins:
  *   import { css, dom, native, bridge } from "@uprooted/api";

@@ -126,7 +126,7 @@
                     isSafe = maxScore < THRESHOLD;
                 }
             } catch(e) {
-                // Parse error — fail open (show image)
+                // Parse error -- fail open (show image)
             }
 
             // Cache result
@@ -141,7 +141,7 @@
             processQueue();
         })
         .catch(function() {
-            // Network/API error — fail open (show image)
+            // Network/API error -- fail open (show image)
             activeConcurrent--;
             applyResult(img, true);
             processQueue();
@@ -151,11 +151,11 @@
     function applyResult(img, isSafe) {
         img.classList.remove('uprooted-nsfw-pending');
         if (isSafe) {
-            // Safe — no blur needed
+            // Safe -- no blur needed
             return;
         }
 
-        // NSFW — apply full blur and add overlay
+        // NSFW -- apply full blur and add overlay
         img.classList.add('uprooted-nsfw-blur');
 
         // Wrap image if not already wrapped
@@ -220,7 +220,7 @@
         if (urlCache.has(normalizedUrl)) {
             var cached = urlCache.get(normalizedUrl);
             if (!cached) {
-                // Known NSFW — apply immediately
+                // Known NSFW -- apply immediately
                 applyResult(img, false);
             }
             return;

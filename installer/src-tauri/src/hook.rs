@@ -205,23 +205,23 @@ fn broadcast_env_change() {
 /// Set CLR profiler env vars system-wide on Linux.
 ///
 /// Three mechanisms for maximum compatibility:
-/// 1. `~/.config/environment.d/uprooted.conf` — systemd user session (applies after re-login)
-/// 2. Wrapper script `~/.local/share/uprooted/launch-root.sh` — immediate use from terminal
-/// 3. `.desktop` file — "Root (Uprooted)" app menu entry using the wrapper
+/// 1. `~/.config/environment.d/uprooted.conf` -- systemd user session (applies after re-login)
+/// 2. Wrapper script `~/.local/share/uprooted/launch-root.sh` -- immediate use from terminal
+/// 3. `.desktop` file -- "Root (Uprooted)" app menu entry using the wrapper
 #[cfg(target_os = "linux")]
 pub fn set_env_vars() -> Result<(), String> {
     let dir = get_uprooted_dir();
     let profiler_path = dir.join(PROFILER_FILENAME);
     let root_path = crate::detection::get_root_exe_path();
 
-    // 1. systemd environment.d — session-wide env vars (like Windows registry)
+    // 1. systemd environment.d -- session-wide env vars (like Windows registry)
     let home = std::env::var("HOME").unwrap_or_default();
     let env_dir = PathBuf::from(&home).join(".config/environment.d");
     fs::create_dir_all(&env_dir)
         .map_err(|e| format!("Failed to create environment.d: {}", e))?;
 
     let env_conf = format!(
-        "# Uprooted CLR profiler — remove this file or run the uninstaller to disable\n\
+        "# Uprooted CLR profiler -- remove this file or run the uninstaller to disable\n\
 CORECLR_ENABLE_PROFILING=1\n\
 CORECLR_PROFILER={}\n\
 CORECLR_PROFILER_PATH={}\n\
@@ -232,7 +232,7 @@ DOTNET_ReadyToRun=0\n",
     fs::write(env_dir.join("uprooted.conf"), &env_conf)
         .map_err(|e| format!("Failed to write environment.d/uprooted.conf: {}", e))?;
 
-    // 2. Wrapper script — works immediately from terminal
+    // 2. Wrapper script -- works immediately from terminal
     let wrapper = dir.join("launch-root.sh");
     let script = format!(
         "#!/bin/bash\n\
@@ -259,7 +259,7 @@ exec '{}' \"$@\"\n",
     // 3. .desktop file
     create_desktop_file(&wrapper)?;
 
-    // 4. ~/.profile fallback — for non-systemd sessions (X11 login shells, etc.)
+    // 4. ~/.profile fallback -- for non-systemd sessions (X11 login shells, etc.)
     let profile_path = PathBuf::from(&home).join(".profile");
     let profile_content = fs::read_to_string(&profile_path).unwrap_or_default();
     if !profile_content.contains("CORECLR_ENABLE_PROFILING") {

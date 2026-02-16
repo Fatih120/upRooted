@@ -163,14 +163,14 @@ internal class NsfwFilter : IDisposable
                     }
                     else
                     {
-                        // Lost frame reference — try full re-discovery
+                        // Lost frame reference -- try full re-discovery
                         TryInject();
                     }
                 }
                 catch (Exception ex)
                 {
                     Logger.Log("NsfwFilter", $"Re-injection error: {ex.Message}");
-                    // Frame may be stale — try full re-discovery next time
+                    // Frame may be stale -- try full re-discovery next time
                     _lastFrame = null;
                 }
             });
@@ -220,7 +220,7 @@ internal class NsfwFilter : IDisposable
 
     private string BuildConfigJson()
     {
-        // Manual JSON building — no System.Text.Json allowed in profiler context
+        // Manual JSON building -- no System.Text.Json allowed in profiler context
         var enabled = _settings.NsfwFilterEnabled ? "true" : "false";
         var apiKey = EscapeJsonString(_settings.NsfwApiKey);
         var threshold = _settings.NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture);

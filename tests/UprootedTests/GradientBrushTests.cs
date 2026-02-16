@@ -67,7 +67,7 @@ public class GradientBrushTests
         var relPointType = typeof(Avalonia.RelativePoint);
         var relUnitType = typeof(Avalonia.RelativeUnit);
 
-        // Use Enum.Parse by NAME (not by int value — Relative=0, Absolute=1 in Avalonia!)
+        // Use Enum.Parse by NAME (not by int value -- Relative=0, Absolute=1 in Avalonia!)
         var relativeUnit = Enum.Parse(relUnitType, "Relative");
         Assert.Equal(Avalonia.RelativeUnit.Relative, relativeUnit);
 
@@ -123,7 +123,7 @@ public class GradientBrushTests
         var relUnitType = typeof(Avalonia.RelativeUnit);
         var relPointType = typeof(Avalonia.RelativePoint);
 
-        // Use Enum.Parse by NAME — Relative=0 in Avalonia (not 1!)
+        // Use Enum.Parse by NAME -- Relative=0 in Avalonia (not 1!)
         var relativeUnit = Enum.Parse(relUnitType, "Relative");
         var startPoint = Activator.CreateInstance(relPointType, 0.0, 0.0, relativeUnit);
         var endPoint = Activator.CreateInstance(relPointType, 1.0, 0.0, relativeUnit);

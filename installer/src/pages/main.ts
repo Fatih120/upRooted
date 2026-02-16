@@ -108,7 +108,7 @@ async function runDetection(): Promise<void> {
   // Environment variables
   if (hs.env_ok) {
     if (isLinux && !hs.env_vars_active) {
-      log("env vars: configured (not active — restart session or use wrapper)", "warn");
+      log("env vars: configured (not active -- restart session or use wrapper)", "warn");
     } else {
       log("env vars: configured", "success");
     }
@@ -172,19 +172,19 @@ function analyzeScenario(): void {
   const hasAnyEnv = hs.env_enable_profiling || hs.env_profiler_guid || hs.env_profiler_path;
 
   if (hasAnyFiles && !hs.files_ok) {
-    log("warning: hook files are partially deployed — try repair", "warn");
+    log("warning: hook files are partially deployed -- try repair", "warn");
   }
 
   if (hasAnyEnv && !hs.env_ok) {
-    log("warning: environment variables are partially configured — try repair", "warn");
+    log("warning: environment variables are partially configured -- try repair", "warn");
   }
 
   if (hs.files_ok && hs.env_ok && !detection.is_installed) {
-    log("hook is deployed but html is not patched — try repair", "warn");
+    log("hook is deployed but html is not patched -- try repair", "warn");
   }
 
   if (detection.is_installed && (!hs.files_ok || !hs.env_ok)) {
-    log("html is patched but hook deployment is incomplete — try repair", "warn");
+    log("html is patched but hook deployment is incomplete -- try repair", "warn");
   }
 
   if (!hasAnyFiles && !hasAnyEnv && !detection.is_installed) {
@@ -330,7 +330,7 @@ async function ensureRootClosed(): Promise<boolean> {
       try {
         const still = await checkRootRunning();
         if (still) {
-          log("root.exe is still running — close it manually", "error");
+          log("root.exe is still running -- close it manually", "error");
           cleanup();
           resolve(false);
           return;

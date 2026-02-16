@@ -1,5 +1,5 @@
 /**
- * CSS Injection — Runtime injection and removal of CSS stylesheets.
+ * CSS Injection -- Runtime injection and removal of CSS stylesheets.
  *
  * Each injection is identified by an ID so it can be individually removed.
  * Uses <style> elements appended to <head>.

@@ -1,5 +1,5 @@
 /**
- * Native Helpers — Utilities for interacting with Root's native layer.
+ * Native Helpers -- Utilities for interacting with Root's native layer.
  *
  * Root's Chromium runs with --disable-web-security, so we have broad access
  * to the page context. These helpers wrap common native interactions.

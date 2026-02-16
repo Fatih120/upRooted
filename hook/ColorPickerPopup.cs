@@ -217,7 +217,7 @@ internal static class ColorPickerPopup
             r.AddChild(grid, _svBaseLayer);
         }
 
-        // Layer 1: white→transparent (left→right) — saturation gradient
+        // Layer 1: white→transparent (left→right) -- saturation gradient
         var whiteGradient = r.CreateLinearGradientBrush(0, 0, 1, 0, new[]
         {
             ("#FFFFFFFF", 0.0),
@@ -236,7 +236,7 @@ internal static class ColorPickerPopup
             }
         }
 
-        // Layer 2: transparent→black (top→bottom) — value gradient
+        // Layer 2: transparent→black (top→bottom) -- value gradient
         var blackGradient = r.CreateLinearGradientBrush(0, 0, 0, 1, new[]
         {
             ("#00000000", 0.0),

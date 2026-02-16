@@ -1,5 +1,5 @@
 /**
- * Plugin Loader — Discovers, validates, and manages the lifecycle of plugins.
+ * Plugin Loader -- Discovers, validates, and manages the lifecycle of plugins.
  */
 
 import type { UprootedPlugin, Patch } from "../types/plugin.js";

@@ -1,5 +1,5 @@
 /**
- * DOM Helpers — Utilities for interacting with Root's DOM.
+ * DOM Helpers -- Utilities for interacting with Root's DOM.
  */
 
 /**

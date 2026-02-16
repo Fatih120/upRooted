@@ -255,7 +255,7 @@ internal class HtmlPatchVerifier : IDisposable
     }
 
     /// <summary>
-    /// Manual JSON string escaping — avoids System.Text.Json dependency.
+    /// Manual JSON string escaping -- avoids System.Text.Json dependency.
     /// </summary>
     private static string EscapeJsonString(string s)
     {

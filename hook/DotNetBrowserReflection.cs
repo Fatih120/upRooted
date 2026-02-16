@@ -64,18 +64,18 @@ internal class DotNetBrowserReflection
 
         Type? Find(string fullName) => typeMap.TryGetValue(fullName, out var t) ? t : null;
 
-        // BrowserView — the Avalonia control
+        // BrowserView -- the Avalonia control
         BrowserViewType = Find("DotNetBrowser.AvaloniaUi.BrowserView");
         // Fallback: search by name suffix
         BrowserViewType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "BrowserView" && !t.IsAbstract && !t.IsInterface);
 
-        // IBrowser — browser instance
+        // IBrowser -- browser instance
         IBrowserType = Find("DotNetBrowser.Browser.IBrowser");
         IBrowserType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "IBrowser" && t.IsInterface);
 
-        // IFrame — frame for JS execution
+        // IFrame -- frame for JS execution
         IFrameType = Find("DotNetBrowser.Frame.IFrame");
         IFrameType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "IFrame" && t.IsInterface);

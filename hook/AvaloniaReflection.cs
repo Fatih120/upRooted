@@ -765,7 +765,7 @@ internal class AvaloniaReflection
     /// <summary>
     /// Set a value via the Avalonia property system, bypassing trimmed CLR setters.
     /// avaloniaPropertyField is a FieldInfo for the static AvaloniaProperty (e.g. TextBox.TextProperty).
-    /// Uses SetValue(AvaloniaProperty, object?, BindingPriority) — the 3-param non-generic overload.
+    /// Uses SetValue(AvaloniaProperty, object?, BindingPriority) -- the 3-param non-generic overload.
     /// </summary>
     private void SetAvaloniaProperty(object control, FieldInfo? avaloniaPropertyField, object value)
     {
@@ -1109,7 +1109,7 @@ internal class AvaloniaReflection
         if (grid == null || ColumnDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
         try
         {
-            // GridUnitType: Auto=0, Pixel=1, Star=2 — use Parse to avoid wrong-value bugs
+            // GridUnitType: Auto=0, Pixel=1, Star=2 -- use Parse to avoid wrong-value bugs
             var starUnit = Enum.Parse(GridUnitTypeEnum, "Star");
             // new GridLength(starWidth, GridUnitType.Star)
             var gridLength = Activator.CreateInstance(GridLengthType, starWidth, starUnit);
@@ -1750,7 +1750,7 @@ internal class AvaloniaReflection
             {
                 object? startPoint = null, endPoint = null;
 
-                // Primary method: RelativePoint.Parse("X%,Y%") — always produces Relative unit
+                // Primary method: RelativePoint.Parse("X%,Y%") -- always produces Relative unit
                 var parseMethod = RelativePointType.GetMethod("Parse",
                     BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
                 if (parseMethod != null)

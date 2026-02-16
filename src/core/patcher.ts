@@ -1,4 +1,4 @@
-// Patcher — Injects/removes Uprooted's preload script and CSS
+// Patcher -- Injects/removes Uprooted's preload script and CSS
 // from Root's profile HTML files (WebRtcBundle + RootApps).
 
 import fs from "node:fs";

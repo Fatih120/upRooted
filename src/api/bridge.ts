@@ -1,5 +1,5 @@
 /**
- * Bridge Proxy — Wraps Root's bridge globals with ES6 Proxies so plugins
+ * Bridge Proxy -- Wraps Root's bridge globals with ES6 Proxies so plugins
  * can intercept, modify, or cancel bridge method calls.
  *
  * Root exposes two bridge objects on `window`:

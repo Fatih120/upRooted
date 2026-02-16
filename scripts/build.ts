@@ -1,5 +1,5 @@
 /**
- * Build script — Uses esbuild to bundle Uprooted into two output files:
+ * Build script -- Uses esbuild to bundle Uprooted into two output files:
  *   - dist/uprooted-preload.js  (IIFE bundle injected into Root)
  *   - dist/uprooted.css         (combined CSS from all built-in plugins)
  */

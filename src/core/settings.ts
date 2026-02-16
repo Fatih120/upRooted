@@ -1,5 +1,5 @@
 /**
- * Settings — File-based persistence for Uprooted configuration.
+ * Settings -- File-based persistence for Uprooted configuration.
  *
  * Because Root runs Chromium with --incognito, localStorage is wiped on each launch.
  * Settings are stored as JSON in the profile directory and inlined into the HTML

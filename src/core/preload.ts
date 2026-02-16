@@ -1,5 +1,5 @@
 /**
- * Preload — Entry point injected into Root's Chromium context.
+ * Preload -- Entry point injected into Root's Chromium context.
  *
  * This script runs before Root's own bundles load. It:
  *   1. Reads settings from window.__UPROOTED_SETTINGS__

@@ -36,7 +36,7 @@ internal class StartupHook
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
             Logger.Log("Startup", $".NET: {Environment.Version}");
 
-            // Phase 0: Verify HTML patches (filesystem only — no Avalonia needed)
+            // Phase 0: Verify HTML patches (filesystem only -- no Avalonia needed)
             Logger.Log("Startup", "Phase 0: Verifying HTML patches...");
             try
             {

@@ -1,5 +1,5 @@
 /**
- * Sentry Blocker — Blocks Sentry error tracking to protect user privacy.
+ * Sentry Blocker -- Blocks Sentry error tracking to protect user privacy.
  *
  * Root sends telemetry to Sentry (o4509469920133120.ingest.us.sentry.io) with:
  *   - sendDefaultPii: true (IP addresses on every event)
