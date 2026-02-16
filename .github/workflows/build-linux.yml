@@ -95,6 +95,13 @@ jobs:
             echo "  $f ($(stat -c%s "$path") bytes)"
           done
 
+      - name: Package artifacts tarball for bash installer --prebuilt
+        run: |
+          tar -czf uprooted-linux-artifacts.tar.gz \
+            -C installer/src-tauri/artifacts \
+            libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json \
+            uprooted-preload.js uprooted.css
+
       # ── Build Tauri ──
 
       - name: Build Tauri for Linux
@@ -138,6 +145,12 @@ jobs:
           name: Uprooted-Linux-AppImage
           path: installer/src-tauri/target/release/bundle/appimage/Uprooted-*.AppImage
 
+      - name: Upload artifacts tarball
+        uses: actions/upload-artifact@v4
+        with:
+          name: Uprooted-Linux-artifacts
+          path: uprooted-linux-artifacts.tar.gz
+
       - name: Publish to public repo release
         if: success()
         env:
@@ -151,7 +164,8 @@ jobs:
           echo "Uploading Linux artifacts to watchthelight/uprooted v$VERSION"
           gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" --draft 2>/dev/null || true
           for f in installer/src-tauri/target/release/bundle/deb/*.deb \
-                   installer/src-tauri/target/release/bundle/appimage/*.AppImage; do
+                   installer/src-tauri/target/release/bundle/appimage/*.AppImage \
+                   uprooted-linux-artifacts.tar.gz; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done
 

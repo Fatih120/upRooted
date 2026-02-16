@@ -40,11 +40,16 @@ pub fn install() -> PatchResult {
     let settings = load_settings();
     let settings_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
 
+    // On Linux, paths start with `/` so `file://` + `/home/...` = `file:///home/...` (correct).
+    // On Windows, paths start with `C:\` so we need `file:///` to get `file:///C:/...`.
+    let file_prefix = if cfg!(target_os = "windows") { "file:///" } else { "file://" };
+
     let injection = format!(
-        "{start}\n    <script>window.__UPROOTED_SETTINGS__={settings};</script>\n    <script src=\"file:///{preload}\"></script>\n    <link rel=\"stylesheet\" href=\"file:///{css}\">\n    {end}",
+        "{start}\n    <script>window.__UPROOTED_SETTINGS__={settings};</script>\n    <script src=\"{prefix}{preload}\"></script>\n    <link rel=\"stylesheet\" href=\"{prefix}{css}\">\n    {end}",
         start = MARKER_START,
         end = MARKER_END,
         settings = settings_json,
+        prefix = file_prefix,
         preload = preload_path,
         css = css_path,
     );

@@ -1,8 +1,11 @@
 #!/bin/bash
-# Uprooted Linux Installer v0.2.1
+# Uprooted Linux Installer v0.2.2
 # Standalone bash installer for systems without the GUI installer.
 #
 # Usage: ./install-uprooted-linux.sh [--root-path /path/to/Root.AppImage]
+#        ./install-uprooted-linux.sh --prebuilt [--root-path /path/to/Root.AppImage]
+#        ./install-uprooted-linux.sh --uninstall
+#        ./install-uprooted-linux.sh --repair [--prebuilt]
 #        ./install-uprooted-linux.sh --diagnose
 #
 # This script:
@@ -19,7 +22,8 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.2.1"
+VERSION="0.2.2"
+ARTIFACTS_URL="https://github.com/watchthelight/uprooted/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
 
 # Colors
 RED='\033[0;31m'
@@ -225,10 +229,128 @@ run_diagnose() {
     echo ""
 }
 
+# ── Uninstall function ──
+
+run_uninstall() {
+    echo ""
+    echo "  Uprooted Uninstaller v$VERSION"
+    echo "  ──────────────────────────────"
+    echo ""
+
+    # 1. Strip HTML patches
+    log "Removing HTML patches..."
+    if [[ -d "$PROFILE_DIR" ]]; then
+        local html_files=()
+        if [[ -f "$PROFILE_DIR/WebRtcBundle/index.html" ]]; then
+            html_files+=("$PROFILE_DIR/WebRtcBundle/index.html")
+        fi
+        for app_dir in "$PROFILE_DIR/RootApps"/*/; do
+            if [[ -f "${app_dir}index.html" ]]; then
+                html_files+=("${app_dir}index.html")
+            fi
+        done
+
+        local stripped=0
+        for html in "${html_files[@]}"; do
+            if grep -qE "(uprooted:start|uprooted-preload|<!-- uprooted -->|__UPROOTED_SETTINGS__)" "$html" 2>/dev/null; then
+                # Strip injection lines (markers, legacy markers, bare tags)
+                local tmp="${html}.tmp"
+                local inside_block=false
+                while IFS= read -r line; do
+                    if [[ "$line" == *"<!-- uprooted:start -->"* ]]; then
+                        inside_block=true
+                        continue
+                    fi
+                    if [[ "$line" == *"<!-- uprooted:end -->"* ]]; then
+                        inside_block=false
+                        continue
+                    fi
+                    if [[ "$inside_block" == true ]]; then
+                        continue
+                    fi
+                    # Legacy marker
+                    if [[ "$line" == *"<!-- uprooted -->"* ]]; then
+                        continue
+                    fi
+                    # Bare uprooted tags (bash installer without markers)
+                    if [[ "$line" == *"uprooted-preload"* ]] && [[ "$line" == *"<script"* || "$line" == *"</script"* ]]; then
+                        continue
+                    fi
+                    if [[ "$line" == *"uprooted.css"* ]] && [[ "$line" == *"<link"* ]]; then
+                        continue
+                    fi
+                    if [[ "$line" == *"__UPROOTED_SETTINGS__"* ]] && [[ "$line" == *"<script"* ]]; then
+                        continue
+                    fi
+                    echo "$line"
+                done < "$html" > "$tmp"
+                mv "$tmp" "$html"
+
+                # Remove backup if it exists
+                rm -f "${html}.uprooted.bak"
+                stripped=$((stripped + 1))
+                log "  Stripped: $(basename "$(dirname "$html")")/index.html"
+            fi
+        done
+        log "$stripped HTML file(s) cleaned"
+    else
+        warn "Profile directory not found, skipping HTML cleanup"
+    fi
+
+    # 2. Remove environment.d config
+    local env_conf="$HOME/.config/environment.d/uprooted.conf"
+    if [[ -f "$env_conf" ]]; then
+        rm -f "$env_conf"
+        log "Removed $env_conf"
+    fi
+
+    # 3. Clean env vars from ~/.profile
+    if grep -q "CORECLR_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
+        # Remove the Uprooted block from .profile
+        local tmp="$HOME/.profile.tmp"
+        local skip_block=false
+        while IFS= read -r line; do
+            if [[ "$line" == "# Uprooted CLR profiler"* ]]; then
+                skip_block=true
+                continue
+            fi
+            if [[ "$skip_block" == true ]]; then
+                # Skip export lines that are part of the block
+                if [[ "$line" == export\ CORECLR_* || "$line" == export\ DOTNET_ReadyToRun* || -z "$line" ]]; then
+                    continue
+                fi
+                skip_block=false
+            fi
+            echo "$line"
+        done < "$HOME/.profile" > "$tmp"
+        mv "$tmp" "$HOME/.profile"
+        log "Cleaned Uprooted env vars from ~/.profile"
+    fi
+
+    # 4. Remove .desktop file
+    local desktop="$HOME/.local/share/applications/root-uprooted.desktop"
+    if [[ -f "$desktop" ]]; then
+        rm -f "$desktop"
+        log "Removed .desktop file"
+    fi
+
+    # 5. Remove installed files
+    if [[ -d "$INSTALL_DIR" ]]; then
+        rm -rf "$INSTALL_DIR"
+        log "Removed $INSTALL_DIR"
+    fi
+
+    echo ""
+    log "Uninstall complete."
+    log "Log out and back in to clear env vars from your session."
+    echo ""
+}
+
 # ── Parse arguments ──
 
 ROOT_PATH=""
 MODE="install"
+USE_PREBUILT=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --root-path) ROOT_PATH="$2"; shift 2 ;;
@@ -236,14 +358,31 @@ while [[ $# -gt 0 ]]; do
             MODE="diagnose"
             shift
             ;;
+        --uninstall)
+            MODE="uninstall"
+            shift
+            ;;
+        --repair)
+            MODE="repair"
+            shift
+            ;;
+        --prebuilt)
+            USE_PREBUILT=true
+            shift
+            ;;
         --help|-h)
-            echo "Usage: $0 [--root-path /path/to/Root.AppImage]"
+            echo "Usage: $0 [--root-path /path/to/Root.AppImage] [--prebuilt]"
+            echo "       $0 --uninstall"
+            echo "       $0 --repair [--prebuilt]"
             echo "       $0 --diagnose"
             echo ""
             echo "Installs Uprooted client mod framework for Root Communications."
             echo ""
             echo "Options:"
             echo "  --root-path    Path to Root.AppImage (auto-detected if not given)"
+            echo "  --prebuilt     Download pre-built artifacts instead of building from source"
+            echo "  --uninstall    Remove Uprooted completely (patches, env vars, files)"
+            echo "  --repair       Re-deploy artifacts and re-patch HTML files"
             echo "  --diagnose     Check installation health and runtime state"
             echo "  --help         Show this help"
             exit 0
@@ -290,7 +429,7 @@ find_root() {
     die "Could not find Root.AppImage. Use --root-path to specify its location."
 }
 
-# ── Check prerequisites ──
+# ── Check prerequisites (build from source) ──
 
 check_prereqs() {
     local missing=()
@@ -310,7 +449,7 @@ check_prereqs() {
 
     if [[ ${#missing[@]} -gt 0 ]]; then
         error "Missing build dependencies: ${missing[*]}"
-        echo "Install them and try again."
+        echo "Install them and try again, or use --prebuilt to skip building."
         echo ""
         echo "Ubuntu/Debian:"
         echo "  sudo apt install gcc nodejs"
@@ -320,7 +459,48 @@ check_prereqs() {
     fi
 }
 
-# ── Build artifacts ──
+# ── Download pre-built artifacts ──
+
+download_prebuilt() {
+    log "Downloading pre-built artifacts..."
+
+    if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
+        die "Neither curl nor wget found. Install one and try again."
+    fi
+
+    local tmpdir
+    tmpdir=$(mktemp -d)
+    local tarball="$tmpdir/uprooted-linux-artifacts.tar.gz"
+
+    if command -v curl &>/dev/null; then
+        if ! curl -fSL -o "$tarball" "$ARTIFACTS_URL" 2>/dev/null; then
+            rm -rf "$tmpdir"
+            die "Failed to download pre-built artifacts from $ARTIFACTS_URL"
+        fi
+    else
+        if ! wget -q -O "$tarball" "$ARTIFACTS_URL" 2>/dev/null; then
+            rm -rf "$tmpdir"
+            die "Failed to download pre-built artifacts from $ARTIFACTS_URL"
+        fi
+    fi
+
+    mkdir -p "$INSTALL_DIR"
+    tar -xzf "$tarball" -C "$INSTALL_DIR"
+    chmod +x "$INSTALL_DIR/libuprooted_profiler.so"
+    rm -rf "$tmpdir"
+
+    # Verify all expected files exist
+    local files=("libuprooted_profiler.so" "UprootedHook.dll" "UprootedHook.deps.json" "uprooted-preload.js" "uprooted.css")
+    for f in "${files[@]}"; do
+        if [[ ! -f "$INSTALL_DIR/$f" ]]; then
+            die "Pre-built artifact missing after extraction: $f"
+        fi
+    done
+
+    log "Pre-built artifacts deployed to $INSTALL_DIR"
+}
+
+# ── Build artifacts from source ──
 
 build_artifacts() {
     local script_dir
@@ -352,6 +532,17 @@ build_artifacts() {
     chmod +x "$INSTALL_DIR/libuprooted_profiler.so"
 
     log "Artifacts deployed to $INSTALL_DIR"
+}
+
+# ── Deploy artifacts (prebuilt or from source) ──
+
+deploy_artifacts() {
+    if [[ "$USE_PREBUILT" == true ]]; then
+        download_prebuilt
+    else
+        check_prereqs
+        build_artifacts
+    fi
 }
 
 # ── Set session-wide env vars (systemd environment.d) ──
@@ -480,10 +671,105 @@ patch_html() {
     log "$patched HTML file(s) patched"
 }
 
+# ── Strip HTML patches (used by repair) ──
+
+strip_html_patches() {
+    if [[ ! -d "$PROFILE_DIR" ]]; then
+        return
+    fi
+
+    local html_files=()
+    if [[ -f "$PROFILE_DIR/WebRtcBundle/index.html" ]]; then
+        html_files+=("$PROFILE_DIR/WebRtcBundle/index.html")
+    fi
+    for app_dir in "$PROFILE_DIR/RootApps"/*/; do
+        if [[ -f "${app_dir}index.html" ]]; then
+            html_files+=("${app_dir}index.html")
+        fi
+    done
+
+    for html in "${html_files[@]}"; do
+        if grep -qE "(uprooted:start|uprooted-preload|<!-- uprooted -->|__UPROOTED_SETTINGS__)" "$html" 2>/dev/null; then
+            local tmp="${html}.tmp"
+            local inside_block=false
+            while IFS= read -r line; do
+                if [[ "$line" == *"<!-- uprooted:start -->"* ]]; then
+                    inside_block=true
+                    continue
+                fi
+                if [[ "$line" == *"<!-- uprooted:end -->"* ]]; then
+                    inside_block=false
+                    continue
+                fi
+                if [[ "$inside_block" == true ]]; then
+                    continue
+                fi
+                if [[ "$line" == *"<!-- uprooted -->"* ]]; then
+                    continue
+                fi
+                if [[ "$line" == *"uprooted-preload"* ]] && [[ "$line" == *"<script"* || "$line" == *"</script"* ]]; then
+                    continue
+                fi
+                if [[ "$line" == *"uprooted.css"* ]] && [[ "$line" == *"<link"* ]]; then
+                    continue
+                fi
+                if [[ "$line" == *"__UPROOTED_SETTINGS__"* ]] && [[ "$line" == *"<script"* ]]; then
+                    continue
+                fi
+                echo "$line"
+            done < "$html" > "$tmp"
+            mv "$tmp" "$html"
+            log "  Stripped: $(basename "$(dirname "$html")")/index.html"
+        fi
+    done
+}
+
+# ── Repair function ──
+
+run_repair() {
+    echo ""
+    echo "  Uprooted Repair v$VERSION"
+    echo "  ────────────────────────"
+    echo ""
+
+    find_root
+
+    # Re-deploy artifacts
+    log "Re-deploying artifacts..."
+    deploy_artifacts
+
+    # Re-set env vars
+    set_env_vars
+    create_wrapper
+    create_desktop_file
+
+    # Strip existing patches and re-apply
+    log "Stripping existing HTML patches..."
+    strip_html_patches
+
+    log "Re-applying HTML patches..."
+    patch_html
+
+    echo ""
+    log "Repair complete!"
+    log "Restart Root to activate Uprooted."
+    echo ""
+}
+
 # ── Main ──
 
 if [[ "$MODE" == "diagnose" ]]; then
     run_diagnose
+    exit 0
+fi
+
+if [[ "$MODE" == "uninstall" ]]; then
+    run_uninstall
+    exit 0
+fi
+
+if [[ "$MODE" == "repair" ]]; then
+    run_repair
     exit 0
 fi
 
@@ -493,8 +779,7 @@ echo "  ────────────────────────
 echo ""
 
 find_root
-check_prereqs
-build_artifacts
+deploy_artifacts
 set_env_vars
 create_wrapper
 create_desktop_file

@@ -171,6 +171,34 @@ fn main() {
             get_uprooted_version,
             open_profile_dir,
         ])
+        .setup(|app| {
+            // Wayland + WebKitGTK renders a blank window when transparent=true + decorations=false.
+            // Detect Wayland and disable transparency to work around this.
+            let use_transparency = !is_wayland_session();
+
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("uprooted")
+            .inner_size(680.0, 520.0)
+            .resizable(false)
+            .decorations(false)
+            .transparent(use_transparency)
+            .center()
+            .build()?;
+
+            Ok(())
+        })
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+/// Detect if running under a Wayland session.
+fn is_wayland_session() -> bool {
+    std::env::var("XDG_SESSION_TYPE")
+        .map(|v| v.eq_ignore_ascii_case("wayland"))
+        .unwrap_or(false)
+        || std::env::var("WAYLAND_DISPLAY").is_ok()
 }
