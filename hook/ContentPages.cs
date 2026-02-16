@@ -282,18 +282,27 @@ internal static class ContentPages
         return r.CreateScrollViewer(page);
     }
 
-    // Known plugins metadata: (id, displayName, version, description, defaultEnabled, hasSettings)
-    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings)[] KnownPlugins =
+    // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Closed (green)
+    private static readonly (string Label, string Color)[] TestingLevels =
+    {
+        ("Untested", "#E04040"),
+        ("Alpha",    "#E08030"),
+        ("Beta",     "#C0A820"),
+        ("Closed",   "#40A050"),
+    };
+
+    // Known plugins metadata
+    private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings, int TestingStatus)[] KnownPlugins =
     {
         ("sentry-blocker", "Sentry Blocker", "0.1.10",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-            true, false),
+            true, false, 1),   // Alpha
         ("themes", "Themes", "0.1.10",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
-            true, false),
+            true, false, 2),   // Beta
         ("content-filter", "Content Filter", "0.1.10",
             "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
-            false, true),
+            false, true, 0),   // Untested
     };
 
     // Filter dropdown state (singleton, like ColorPickerPopup)
@@ -430,7 +439,7 @@ internal static class ContentPages
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
-                plugin.HasSettings);
+                plugin.HasSettings, plugin.TestingStatus);
             if (card != null)
                 cards.Add((plugin.Id, plugin.DisplayName, plugin.Description, card));
         }
@@ -550,7 +559,8 @@ internal static class ContentPages
     private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
         string pluginId, string displayName, string description,
         bool isEnabled, object? font, ThemeEngine? themeEngine,
-        int[] filterMode, Action? onRebuildNeeded, bool hasSettings = false)
+        int[] filterMode, Action? onRebuildNeeded, bool hasSettings = false,
+        int testingStatus = -1)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -701,6 +711,27 @@ internal static class ContentPages
             r.SetMargin(descText, 0, 8, 0, 0);
         }
         r.AddChild(cardContent, descText);
+
+        // Testing status badge
+        if (testingStatus >= 0 && testingStatus < TestingLevels.Length)
+        {
+            var (statusLabel, statusColor) = TestingLevels[testingStatus];
+            var badge = r.CreateBorder(statusColor + "20", 6);
+            if (badge != null)
+            {
+                r.SetMargin(badge, 0, 10, 0, 0);
+                r.SetHorizontalAlignment(badge, "Left");
+                r.SetPadding(badge, 8, 3, 8, 3);
+                SetBorderStroke(r, badge, statusColor + "60", 0.5);
+
+                var badgeText = r.CreateTextBlock(statusLabel, 11, statusColor);
+                r.SetFontWeightNumeric(badgeText, 500);
+                ApplyFont(r, badgeText, font);
+                r.SetBorderChild(badge, badgeText);
+
+                r.AddChild(cardContent, badge);
+            }
+        }
 
         r.SetBorderChild(card, cardContent);
 
