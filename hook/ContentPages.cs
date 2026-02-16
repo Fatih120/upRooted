@@ -282,13 +282,23 @@ internal static class ContentPages
     // Known plugins metadata: (id, displayName, version, description, defaultEnabled)
     private static readonly (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled)[] KnownPlugins =
     {
-        ("sentry-blocker", "Sentry Blocker", "0.9.2",
+        ("sentry-blocker", "Sentry Blocker", "0.9.15",
             "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
             true),
-        ("themes", "Themes", "0.9.2",
+        ("themes", "Themes", "0.9.15",
             "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
             true),
     };
+
+    // Filter dropdown state (singleton, like ColorPickerPopup)
+    private static object? _filterOverlay;
+    private static object? _filterBackdrop;
+    private static object? _filterPanel;
+
+    // Plugin info lightbox state
+    private static object? _infoOverlay;
+    private static object? _infoBackdrop;
+    private static object? _infoPanel;
 
     private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
@@ -304,31 +314,202 @@ internal static class ContentPages
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
-        // Build a card for each known plugin
+        // State for search and filter
+        string[] searchText = { "" };
+        int[] filterMode = { 0 };
+        Action? rebuildGrid = null;
+
+        // "FILTERS" section header
+        var filtersHeader = CreateSectionHeader(r, "FILTERS", font);
+        if (filtersHeader != null)
+        {
+            r.SetMargin(filtersHeader, 0, 20, 0, 0);
+            r.AddChild(page, filtersHeader);
+        }
+
+        // Search + Filter row using Panel (overlay layout: search stretches, filter right-aligned)
+        var searchFilterRow = r.CreatePanel();
+        object? filterTextBlock = null;
+        if (searchFilterRow != null)
+        {
+            r.SetMargin(searchFilterRow, 0, 10, 0, 0);
+
+            // Search box
+            var searchBox = r.CreateTextBox("Search for a plugin...", "", 100);
+            if (searchBox != null)
+            {
+                searchBox.GetType().GetProperty("FontSize")?.SetValue(searchBox, 13.0);
+                r.SetHeight(searchBox, 36);
+                r.SetBackground(searchBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetForeground(searchBox, TextWhite);
+                ApplyFont(r, searchBox, font);
+                r.SetHorizontalAlignment(searchBox, "Stretch");
+                r.SetMargin(searchBox, 0, 0, 120, 0);
+                if (r.CornerRadiusType != null)
+                {
+                    var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
+                    searchBox.GetType().GetProperty("CornerRadius")?.SetValue(searchBox, cr);
+                }
+
+                var searchBoxRef = searchBox;
+                r.SubscribeEvent(searchBox, "TextChanged", () =>
+                {
+                    searchText[0] = r.GetTextBoxText(searchBoxRef)?.Trim() ?? "";
+                    rebuildGrid?.Invoke();
+                });
+
+                r.AddChild(searchFilterRow, searchBox);
+            }
+
+            // Filter button
+            filterTextBlock = r.CreateTextBlock("Show All \u25BE", 13, TextMuted);
+            ApplyFont(r, filterTextBlock, font);
+            var filterBtnBg = ColorUtils.Lighten(CardBg, 5);
+            var filterBtn = r.CreateBorder(filterBtnBg, 8);
+            if (filterBtn != null)
+            {
+                r.SetPadding(filterBtn, 14, 8, 14, 8);
+                r.SetBorderChild(filterBtn, filterTextBlock);
+                r.SetHorizontalAlignment(filterBtn, "Right");
+                r.SetVerticalAlignment(filterBtn, "Center");
+                r.SetCursorHand(filterBtn);
+                SetBorderStroke(r, filterBtn, CardBorder, 0.5);
+
+                var btnRef = filterBtn;
+                var txtRef = filterTextBlock;
+                r.SubscribeEvent(filterBtn, "PointerPressed", () =>
+                {
+                    ShowFilterDropdown(r, btnRef, txtRef, filterMode,
+                        () => rebuildGrid?.Invoke(), font);
+                });
+                r.SubscribeEvent(filterBtn, "PointerEntered", () =>
+                    r.SetBackground(btnRef, ColorUtils.Lighten(filterBtnBg, 6)));
+                r.SubscribeEvent(filterBtn, "PointerExited", () =>
+                    r.SetBackground(btnRef, filterBtnBg));
+
+                r.AddChild(searchFilterRow, filterBtn);
+            }
+
+            r.AddChild(page, searchFilterRow);
+        }
+
+        // Plugin count label
+        var countLabel = r.CreateTextBlock($"{KnownPlugins.Length} plugins", 13, TextDim);
+        if (countLabel != null)
+        {
+            ApplyFont(r, countLabel, font);
+            r.SetMargin(countLabel, 0, 16, 0, 0);
+        }
+        r.AddChild(page, countLabel);
+
+        // Card container (vertical stack, rows contain 2-column grids)
+        var cardContainer = r.CreateStackPanel(vertical: true, spacing: 12);
+        if (cardContainer != null)
+            r.SetMargin(cardContainer, 0, 12, 0, 0);
+        r.AddChild(page, cardContainer);
+
+        // Pre-build all plugin cards
+        var cards = new List<(string Id, string Name, string Desc, object Card)>();
         foreach (var plugin in KnownPlugins)
         {
             bool isEnabled = settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled;
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
-                plugin.Version, plugin.Description, isEnabled, font, themeEngine);
+                plugin.Description, isEnabled, font, themeEngine,
+                filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()));
             if (card != null)
-            {
-                r.SetMargin(card, 0, 16, 0, 0);
-                r.AddChild(page, card);
-            }
+                cards.Add((plugin.Id, plugin.DisplayName, plugin.Description, card));
         }
 
-        // Note about persistence
-        var noteText = r.CreateTextBlock(
-            "Plugin toggles are saved and persist across restarts.",
-            13, TextDim);
-        if (noteText != null)
+        // Rebuild grid closure: detaches cards, filters, and lays out 2-column rows
+        rebuildGrid = () =>
         {
-            ApplyFont(r, noteText, font);
-            r.SetTextWrapping(noteText, "Wrap");
-            r.SetMargin(noteText, 0, 16, 0, 0);
-        }
-        r.AddChild(page, noteText);
+            // Detach all cards from their row grids, then clear container
+            var containerChildren = r.GetChildren(cardContainer);
+            if (containerChildren != null)
+            {
+                var items = new List<object>();
+                foreach (var item in containerChildren)
+                    if (item != null) items.Add(item);
+                foreach (var rowItem in items)
+                {
+                    var rowChildren = r.GetChildren(rowItem);
+                    if (rowChildren != null)
+                    {
+                        var rowCards = new List<object>();
+                        foreach (var rc in rowChildren)
+                            if (rc != null) rowCards.Add(rc);
+                        foreach (var rc in rowCards)
+                            r.RemoveChild(rowItem, rc);
+                    }
+                    r.RemoveChild(cardContainer, rowItem);
+                }
+            }
 
+            // Filter cards by search text and filter mode
+            var visible = new List<object>();
+            foreach (var (id, name, desc, card) in cards)
+            {
+                if (!string.IsNullOrEmpty(searchText[0]))
+                {
+                    var q = searchText[0].ToLowerInvariant();
+                    if (!name.ToLowerInvariant().Contains(q) && !desc.ToLowerInvariant().Contains(q))
+                        continue;
+                }
+                if (filterMode[0] != 0)
+                {
+                    bool enabled = settings.Plugins.TryGetValue(id, out var en2) ? en2 : true;
+                    if (filterMode[0] == 1 && !enabled) continue;
+                    if (filterMode[0] == 2 && enabled) continue;
+                }
+                visible.Add(card);
+            }
+
+            // Build 2-column rows
+            for (int i = 0; i < visible.Count; i += 2)
+            {
+                var rowGrid = r.CreateGrid();
+                if (rowGrid == null) continue;
+                r.AddGridColumn(rowGrid, 1.0);
+                r.AddGridColumn(rowGrid, 1.0);
+
+                r.SetGridColumn(visible[i], 0);
+                r.SetMargin(visible[i], 0, 0, 6, 0);
+                r.AddChild(rowGrid, visible[i]);
+
+                if (i + 1 < visible.Count)
+                {
+                    r.SetGridColumn(visible[i + 1], 1);
+                    r.SetMargin(visible[i + 1], 6, 0, 0, 0);
+                    r.AddChild(rowGrid, visible[i + 1]);
+                }
+
+                r.AddChild(cardContainer, rowGrid);
+            }
+
+            // Update count label
+            if (countLabel != null)
+            {
+                var text = visible.Count == cards.Count
+                    ? $"{cards.Count} plugins"
+                    : $"{visible.Count} of {cards.Count} plugins";
+                r.TextBlockType?.GetProperty("Text")?.SetValue(countLabel, text);
+            }
+
+            // No results message
+            if (visible.Count == 0)
+            {
+                var noResults = r.CreateTextBlock("No plugins match your filters.", 13, TextDim);
+                ApplyFont(r, noResults, font);
+                r.SetMargin(noResults, 0, 8, 0, 0);
+                r.SetHorizontalAlignment(noResults, "Center");
+                r.AddChild(cardContainer, noResults);
+            }
+        };
+
+        // Initial grid build
+        rebuildGrid();
+
+        // Bottom padding
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
         {
@@ -340,11 +521,12 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Build an interactive plugin card with toggle switch, description, and optional privacy info.
+    /// Build a Vencord-style plugin card: name + toggle on top row, description below.
     /// </summary>
     private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
-        string pluginId, string displayName, string version, string description,
-        bool isEnabled, object? font, ThemeEngine? themeEngine = null)
+        string pluginId, string displayName, string description,
+        bool isEnabled, object? font, ThemeEngine? themeEngine,
+        int[] filterMode, Action? onRebuildNeeded)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -352,71 +534,97 @@ internal static class ContentPages
 
         var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (cardContent == null) return card;
-        r.SetMargin(cardContent, 24, 20, 24, 20);
+        r.SetMargin(cardContent, 16, 14, 16, 14);
 
-        // Status text reference for dynamic updates
-        object? statusTextRef = null;
-
-        // Top row: toggle + name + version badge
-        var topRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        // Top row: name (left) + icons/toggle (right) using Panel overlay
+        var topRow = r.CreatePanel();
         if (topRow != null)
         {
-            r.SetVerticalAlignment(topRow, "Center");
-
-            // Toggle switch
-            var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
-            {
-                settings.Plugins[pluginId] = enabled;
-
-                // Handle theme toggle: revert theme when disabled, reapply when enabled
-                if (pluginId == "themes" && themeEngine != null)
-                {
-                    if (!enabled)
-                    {
-                        themeEngine.RevertTheme();
-                        settings.ActiveTheme = "default-dark";
-                    }
-                    else if (settings.ActiveTheme != "default-dark")
-                    {
-                        if (settings.ActiveTheme == "custom")
-                            themeEngine.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
-                        else
-                            themeEngine.ApplyTheme(settings.ActiveTheme);
-                    }
-                }
-
-                try { settings.Save(); }
-                catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
-                Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
-
-                // Update status text dynamically
-                if (statusTextRef != null)
-                {
-                    var newLabel = enabled
-                        ? (pluginId == "sentry-blocker" ? "Active, blocking requests to sentry.io" : "Active")
-                        : "Inactive";
-                    var newColor = enabled ? AccentGreen : TextDim;
-                    r.TextBlockType?.GetProperty("Text")?.SetValue(statusTextRef, newLabel);
-                    r.SetForeground(statusTextRef, newColor);
-                }
-            });
-            if (togglePill != null)
-                r.AddChild(topRow, togglePill);
-
-            // Name
+            // Plugin name — left aligned
             var nameText = r.CreateTextBlock(displayName, 14, TextWhite);
-            r.SetFontWeightNumeric(nameText, 500);
+            r.SetFontWeightNumeric(nameText, 600);
             ApplyFont(r, nameText, font);
+            r.SetHorizontalAlignment(nameText, "Left");
             r.SetVerticalAlignment(nameText, "Center");
+            r.SetMargin(nameText, 0, 0, 80, 0);
             r.AddChild(topRow, nameText);
 
-            // Version badge
-            var versionText = r.CreateTextBlock($"v{version}", 11, TextWhite);
-            ApplyFont(r, versionText, font);
-            var versionBadge = r.CreateBorder(AccentGreen, 8, versionText);
-            r.SetPadding(versionBadge, 6, 2, 6, 2);
-            r.SetVerticalAlignment(versionBadge, "Center");
-            r.AddChild(topRow, versionBadge);
+            // Right side: info icon + toggle
+            var rightIcons = r.CreateStackPanel(vertical: false, spacing: 10);
+            if (rightIcons != null)
+            {
+                r.SetHorizontalAlignment(rightIcons, "Right");
+                r.SetVerticalAlignment(rightIcons, "Center");
+
+                // Info icon — opens lightbox with plugin details
+                if (pluginId == "sentry-blocker")
+                {
+                    var infoBtnBg = ColorUtils.Lighten(CardBg, 12);
+                    var infoBtn = r.CreateBorder(infoBtnBg, 11);
+                    if (infoBtn != null)
+                    {
+                        r.SetWidth(infoBtn, 22);
+                        r.SetHeight(infoBtn, 22);
+                        r.SetCursorHand(infoBtn);
+
+                        var infoText = r.CreateTextBlock("i", 12, TextMuted);
+                        r.SetFontWeightNumeric(infoText, 600);
+                        ApplyFont(r, infoText, font);
+                        r.SetHorizontalAlignment(infoText, "Center");
+                        r.SetVerticalAlignment(infoText, "Center");
+                        r.SetBorderChild(infoBtn, infoText);
+
+                        var infoBtnRef = infoBtn;
+                        var capturedName = displayName;
+                        var capturedDesc = description;
+                        var capturedId = pluginId;
+                        r.SubscribeEvent(infoBtn, "PointerPressed", () =>
+                        {
+                            ShowPluginInfoLightbox(r, capturedName, capturedDesc, capturedId, font);
+                        });
+                        r.SubscribeEvent(infoBtn, "PointerEntered", () =>
+                            r.SetBackground(infoBtnRef, ColorUtils.Lighten(infoBtnBg, 8)));
+                        r.SubscribeEvent(infoBtn, "PointerExited", () =>
+                            r.SetBackground(infoBtnRef, infoBtnBg));
+
+                        r.AddChild(rightIcons, infoBtn);
+                    }
+                }
+
+                // Toggle switch
+                var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
+                {
+                    settings.Plugins[pluginId] = enabled;
+
+                    if (pluginId == "themes" && themeEngine != null)
+                    {
+                        if (!enabled)
+                        {
+                            themeEngine.RevertTheme();
+                            settings.ActiveTheme = "default-dark";
+                        }
+                        else if (settings.ActiveTheme != "default-dark")
+                        {
+                            if (settings.ActiveTheme == "custom")
+                                themeEngine.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
+                            else
+                                themeEngine.ApplyTheme(settings.ActiveTheme);
+                        }
+                    }
+
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
+                    Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+
+                    // Rebuild grid if filter is active so toggled plugins appear/disappear
+                    if (filterMode[0] != 0)
+                        onRebuildNeeded?.Invoke();
+                });
+                if (togglePill != null)
+                    r.AddChild(rightIcons, togglePill);
+
+                r.AddChild(topRow, rightIcons);
+            }
 
             r.AddChild(cardContent, topRow);
         }
@@ -427,38 +635,284 @@ internal static class ContentPages
         {
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
-            r.SetMargin(descText, 0, 12, 0, 0);
+            r.SetMargin(descText, 0, 8, 0, 0);
         }
         r.AddChild(cardContent, descText);
 
-        // Privacy info box for sentry-blocker
+        r.SetBorderChild(card, cardContent);
+
+        // Card hover effect
+        var cardBgCurrent = CardBg;
+        r.SubscribeEvent(card, "PointerEntered", () =>
+            r.SetBackground(card, ColorUtils.Lighten(cardBgCurrent, 4)));
+        r.SubscribeEvent(card, "PointerExited", () =>
+            r.SetBackground(card, cardBgCurrent));
+
+        return card;
+    }
+
+    /// <summary>
+    /// Show filter dropdown overlay below the filter button.
+    /// </summary>
+    private static void ShowFilterDropdown(AvaloniaReflection r, object filterBtn,
+        object? filterTextBlock, int[] filterMode, Action rebuildGrid, object? font)
+    {
+        DismissFilterDropdown(r);
+
+        var mainWindow = r.GetMainWindow();
+        if (mainWindow == null) return;
+
+        var overlay = r.GetOverlayLayer(mainWindow);
+        if (overlay == null) return;
+
+        _filterOverlay = overlay;
+
+        // Position below filter button
+        var btnBounds = r.GetBounds(filterBtn);
+        var translated = r.TranslatePoint(filterBtn, 0, 0, overlay);
+        if (btnBounds == null || translated == null) return;
+
+        double btnX = translated.Value.X;
+        double btnY = translated.Value.Y;
+        double btnH = btnBounds.Value.H;
+        double btnW = btnBounds.Value.W;
+
+        var windowBounds = r.GetBounds(mainWindow);
+        double windowW = windowBounds?.W ?? 800;
+        double windowH = windowBounds?.H ?? 600;
+
+        // Backdrop (click to dismiss)
+        _filterBackdrop = r.CreateBorder("#01000000", 0);
+        if (_filterBackdrop != null)
+        {
+            r.SetWidth(_filterBackdrop, windowW);
+            r.SetHeight(_filterBackdrop, windowH);
+            r.SetCanvasPosition(_filterBackdrop, 0, 0);
+            r.SetTag(_filterBackdrop, "uprooted-no-recolor");
+            r.SubscribeEvent(_filterBackdrop, "PointerPressed", () => DismissFilterDropdown(r));
+            r.AddToOverlay(overlay, _filterBackdrop);
+        }
+
+        // Dropdown panel
+        _filterPanel = r.CreateBorder(CardBg, 8);
+        if (_filterPanel == null) return;
+        r.SetTag(_filterPanel, "uprooted-no-recolor");
+        SetBorderStroke(r, _filterPanel, CardBorder, 0.5);
+
+        // Position: right-aligned with button, below it
+        double dropW = 160;
+        double dropX = btnX + btnW - dropW;
+        if (dropX < 8) dropX = 8;
+        double dropY = btnY + btnH + 4;
+
+        r.SetCanvasPosition(_filterPanel, dropX, dropY);
+
+        var options = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (options == null) return;
+        r.SetMargin(options, 4, 4, 4, 4);
+
+        var filterOptions = new[] { ("Show All", 0), ("Show Enabled", 1), ("Show Disabled", 2) };
+        foreach (var (label, mode) in filterOptions)
+        {
+            var isActive = filterMode[0] == mode;
+            var optBg = isActive ? ColorUtils.Lighten(CardBg, 8) : CardBg;
+            var optBorder = r.CreateBorder(optBg, 6);
+            if (optBorder == null) continue;
+            r.SetCursorHand(optBorder);
+            r.SetPadding(optBorder, 12, 8, 12, 8);
+            r.SetWidth(optBorder, 152);
+
+            var optColor = isActive ? TextWhite : TextMuted;
+            var optWeight = isActive ? 600 : 400;
+            var optText = r.CreateTextBlock(label, 13, optColor);
+            r.SetFontWeightNumeric(optText, optWeight);
+            ApplyFont(r, optText, font);
+            r.SetBorderChild(optBorder, optText);
+
+            var capturedMode = mode;
+            var capturedLabel = label;
+            var optBorderRef = optBorder;
+            var optBgRef = optBg;
+
+            r.SubscribeEvent(optBorder, "PointerPressed", () =>
+            {
+                filterMode[0] = capturedMode;
+                if (filterTextBlock != null)
+                {
+                    var btnText = capturedLabel + " \u25BE";
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(filterTextBlock, btnText);
+                }
+                rebuildGrid();
+                DismissFilterDropdown(r);
+            });
+
+            r.SubscribeEvent(optBorder, "PointerEntered", () =>
+                r.SetBackground(optBorderRef, ColorUtils.Lighten(CardBg, 10)));
+            r.SubscribeEvent(optBorder, "PointerExited", () =>
+                r.SetBackground(optBorderRef, optBgRef));
+
+            r.AddChild(options, optBorder);
+        }
+
+        r.SetBorderChild(_filterPanel, options);
+        r.AddToOverlay(overlay, _filterPanel);
+    }
+
+    /// <summary>
+    /// Dismiss the filter dropdown overlay.
+    /// </summary>
+    private static void DismissFilterDropdown(AvaloniaReflection r)
+    {
+        if (_filterOverlay == null) return;
+
+        if (_filterBackdrop != null)
+        {
+            r.RemoveFromOverlay(_filterOverlay, _filterBackdrop);
+            _filterBackdrop = null;
+        }
+        if (_filterPanel != null)
+        {
+            r.RemoveFromOverlay(_filterOverlay, _filterPanel);
+            _filterPanel = null;
+        }
+
+        _filterOverlay = null;
+    }
+
+    /// <summary>
+    /// Show a centered lightbox overlay with plugin info (name, description, extra content).
+    /// </summary>
+    private static void ShowPluginInfoLightbox(AvaloniaReflection r, string pluginName,
+        string description, string pluginId, object? font)
+    {
+        DismissPluginInfoLightbox(r);
+
+        var mainWindow = r.GetMainWindow();
+        if (mainWindow == null) return;
+
+        var overlay = r.GetOverlayLayer(mainWindow);
+        if (overlay == null) return;
+
+        _infoOverlay = overlay;
+
+        var windowBounds = r.GetBounds(mainWindow);
+        double windowW = windowBounds?.W ?? 800;
+        double windowH = windowBounds?.H ?? 600;
+
+        // Semi-transparent backdrop
+        _infoBackdrop = r.CreateBorder("#80000000", 0);
+        if (_infoBackdrop != null)
+        {
+            r.SetWidth(_infoBackdrop, windowW);
+            r.SetHeight(_infoBackdrop, windowH);
+            r.SetCanvasPosition(_infoBackdrop, 0, 0);
+            r.SetTag(_infoBackdrop, "uprooted-no-recolor");
+            r.SubscribeEvent(_infoBackdrop, "PointerPressed", () => DismissPluginInfoLightbox(r));
+            r.AddToOverlay(overlay, _infoBackdrop);
+        }
+
+        // Lightbox card
+        double cardW = 480;
+        _infoPanel = r.CreateBorder(CardBg, 12);
+        if (_infoPanel == null) return;
+        r.SetTag(_infoPanel, "uprooted-no-recolor");
+        SetBorderStroke(r, _infoPanel, CardBorder, 0.5);
+        r.SetWidth(_infoPanel, cardW);
+
+        // Center the card
+        double cardX = (windowW - cardW) / 2;
+        double cardY = windowH * 0.2; // 20% from top
+        r.SetCanvasPosition(_infoPanel, cardX, cardY);
+
+        var content = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (content == null) return;
+        r.SetMargin(content, 24, 20, 24, 20);
+
+        // Header row: plugin name (left) + close button (right)
+        var headerRow = r.CreatePanel();
+        if (headerRow != null)
+        {
+            var titleText = r.CreateTextBlock(pluginName, 18, TextWhite);
+            r.SetFontWeightNumeric(titleText, 600);
+            ApplyFont(r, titleText, font);
+            r.SetHorizontalAlignment(titleText, "Left");
+            r.SetVerticalAlignment(titleText, "Center");
+            r.AddChild(headerRow, titleText);
+
+            // Close button
+            var closeBtnBg = ColorUtils.Lighten(CardBg, 12);
+            var closeBtn = r.CreateBorder(closeBtnBg, 10);
+            if (closeBtn != null)
+            {
+                r.SetWidth(closeBtn, 28);
+                r.SetHeight(closeBtn, 28);
+                r.SetCursorHand(closeBtn);
+                r.SetHorizontalAlignment(closeBtn, "Right");
+                r.SetVerticalAlignment(closeBtn, "Center");
+
+                var closeText = r.CreateTextBlock("\u2715", 14, TextMuted);
+                ApplyFont(r, closeText, font);
+                r.SetHorizontalAlignment(closeText, "Center");
+                r.SetVerticalAlignment(closeText, "Center");
+                r.SetBorderChild(closeBtn, closeText);
+
+                var closeBtnRef = closeBtn;
+                r.SubscribeEvent(closeBtn, "PointerPressed", () => DismissPluginInfoLightbox(r));
+                r.SubscribeEvent(closeBtn, "PointerEntered", () =>
+                    r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
+                r.SubscribeEvent(closeBtn, "PointerExited", () =>
+                    r.SetBackground(closeBtnRef, closeBtnBg));
+
+                r.AddChild(headerRow, closeBtn);
+            }
+
+            r.AddChild(content, headerRow);
+        }
+
+        // Description
+        var descText = r.CreateTextBlock(description, 13, TextMuted);
+        if (descText != null)
+        {
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.SetMargin(descText, 0, 14, 0, 0);
+        }
+        r.AddChild(content, descText);
+
+        // Plugin-specific extra content
         if (pluginId == "sentry-blocker")
         {
             var privacyBox = BuildPrivacyInfoBox(r, font);
             if (privacyBox != null)
             {
-                r.SetMargin(privacyBox, 0, 12, 0, 0);
-                r.AddChild(cardContent, privacyBox);
+                r.SetMargin(privacyBox, 0, 14, 0, 0);
+                r.AddChild(content, privacyBox);
             }
         }
 
-        // Status line
-        var statusColor = isEnabled ? AccentGreen : TextDim;
-        var statusLabel = isEnabled
-            ? (pluginId == "sentry-blocker" ? "Active, blocking requests to sentry.io" : "Active")
-            : "Inactive";
-        var statusText = r.CreateTextBlock(statusLabel, 12, statusColor);
-        if (statusText != null)
-        {
-            r.SetFontWeightNumeric(statusText, 450);
-            ApplyFont(r, statusText, font);
-            r.SetMargin(statusText, 0, 10, 0, 0);
-        }
-        statusTextRef = statusText;
-        r.AddChild(cardContent, statusText);
+        r.SetBorderChild(_infoPanel, content);
+        r.AddToOverlay(overlay, _infoPanel);
+    }
 
-        r.SetBorderChild(card, cardContent);
-        return card;
+    /// <summary>
+    /// Dismiss the plugin info lightbox overlay.
+    /// </summary>
+    private static void DismissPluginInfoLightbox(AvaloniaReflection r)
+    {
+        if (_infoOverlay == null) return;
+
+        if (_infoBackdrop != null)
+        {
+            r.RemoveFromOverlay(_infoOverlay, _infoBackdrop);
+            _infoBackdrop = null;
+        }
+        if (_infoPanel != null)
+        {
+            r.RemoveFromOverlay(_infoOverlay, _infoPanel);
+            _infoPanel = null;
+        }
+
+        _infoOverlay = null;
     }
 
     /// <summary>

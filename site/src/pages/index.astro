@@ -6,7 +6,7 @@ import Layout from "../layouts/Layout.astro";
   <div class="page">
     <div class="columns">
       <div class="left">
-        <h1>uprooted <span class="version">0.9.2</span></h1>
+        <h1>uprooted <span class="version">0.1.92</span></h1>
         <p class="sub">a client mod framework for root communications.</p>
 
         <ul class="features">
@@ -24,7 +24,7 @@ import Layout from "../layouts/Layout.astro";
           <span class="dot">&middot;</span>
           <a href="https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw">server</a>
           <span class="dot">&middot;</span>
-          <span class="dim">gpl-3.0</span>
+          <a href="https://github.com/watchthelight/uprooted/blob/main/LICENSE" class="dim">license</a>
         </nav>
       </div>
 
@@ -32,14 +32,18 @@ import Layout from "../layouts/Layout.astro";
         <div class="policy">
           <p>uprooted is a <strong>working beta</strong>. custom themes and the sentry blocker plugin ship with the framework. everything is configurable from Root's native settings panel.</p>
           <p>root's <a href="https://root.gg/terms">terms</a> prohibit reverse engineering and modification of the service. we believe cosmetic client mods can coexist with that policy.</p>
-          <p class="tos-header">terms of use:</p>
-          <ul class="tos">
-            <li>do not distribute uprooted outside of the official repository.</li>
-            <li>do not discuss uprooted in Root's public channels.</li>
-            <li>violations will be UUID blacklisted.</li>
-          </ul>
         </div>
       </div>
+    </div>
+
+    <div class="tos-box">
+      <div class="tos-label">terms of use</div>
+      <ol class="tos">
+        <li><strong>do not distribute</strong> uprooted or its artifacts outside of the official repository.</li>
+        <li><strong>do not discuss</strong> uprooted in Root's public channels, servers, or support.</li>
+        <li>violations will result in your UUID being <strong>permanently blacklisted</strong>.</li>
+      </ol>
+      <p class="tos-note">if you want to share uprooted, send them a link to the <a href="https://github.com/watchthelight/uprooted">repository</a>.</p>
     </div>
 
     <p class="footer dim">not affiliated with root communications.</p>
@@ -171,23 +175,50 @@ import Layout from "../layouts/Layout.astro";
     margin-top: 12px;
   }
 
-  .tos-header {
-    color: var(--text);
+  .tos-box {
+    margin-top: 32px;
+    border: 1px solid rgba(200, 80, 80, 0.25);
+    background: rgba(200, 80, 80, 0.04);
+    padding: 16px 20px;
+  }
+
+  .tos-label {
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #c85050;
+    margin-bottom: 10px;
   }
 
   .tos {
     list-style: none;
+    counter-reset: tos;
     font-size: 12px;
-    margin-top: 8px;
+    color: var(--text);
+    line-height: 1.7;
   }
 
   .tos li {
+    counter-increment: tos;
     padding: 2px 0;
   }
 
   .tos li::before {
-    content: "- ";
+    content: counter(tos) ". ";
+    color: #c85050;
+    font-weight: 700;
+    display: none;
+  }
+
+  .tos li strong {
+    color: #c85050;
+  }
+
+  .tos-note {
+    font-size: 11px;
     color: var(--dim);
+    margin-top: 10px;
   }
 
   .footer {
