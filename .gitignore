@@ -38,6 +38,10 @@ tests/**/obj/
 # Old build outputs
 Uprooted/
 
+# Publish / release artifacts
+_publish/
+*.exe
+
 # Compiled tool binaries (built locally)
 tools/*.exe
 tools/*.obj
