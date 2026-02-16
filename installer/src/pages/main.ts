@@ -444,7 +444,7 @@ function copyLogs(): void {
 // ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.1.81";
+  let version = "1.9.0";
   try {
     version = await getUprootedVersion();
   } catch {

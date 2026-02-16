@@ -219,10 +219,10 @@ pub fn set_env_vars() -> Result<(), String> {
 
     let env_conf = format!(
         "# Uprooted CLR profiler — remove this file or run the uninstaller to disable\n\
-        CORECLR_ENABLE_PROFILING=1\n\
-        CORECLR_PROFILER={}\n\
-        CORECLR_PROFILER_PATH={}\n\
-        DOTNET_ReadyToRun=0\n",
+CORECLR_ENABLE_PROFILING=1\n\
+CORECLR_PROFILER={}\n\
+CORECLR_PROFILER_PATH={}\n\
+DOTNET_ReadyToRun=0\n",
         PROFILER_GUID,
         profiler_path.display()
     );
@@ -233,12 +233,12 @@ pub fn set_env_vars() -> Result<(), String> {
     let wrapper = dir.join("launch-root.sh");
     let script = format!(
         "#!/bin/bash\n\
-        # Uprooted launcher - sets CLR profiler env vars for Root only\n\
-        export CORECLR_ENABLE_PROFILING=1\n\
-        export CORECLR_PROFILER='{}'\n\
-        export CORECLR_PROFILER_PATH='{}'\n\
-        export DOTNET_ReadyToRun=0\n\
-        exec '{}' \"$@\"\n",
+# Uprooted launcher - sets CLR profiler env vars for Root only\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{}'\n\
+export CORECLR_PROFILER_PATH='{}'\n\
+export DOTNET_ReadyToRun=0\n\
+exec '{}' \"$@\"\n",
         PROFILER_GUID,
         profiler_path.display(),
         root_path.display()
@@ -291,12 +291,12 @@ fn create_desktop_file(wrapper: &PathBuf) -> Result<(), String> {
 
     let desktop_content = format!(
         "[Desktop Entry]\n\
-        Name=Root (Uprooted)\n\
-        Comment=Root Communications with Uprooted mods\n\
-        Exec={}\n\
-        Type=Application\n\
-        Categories=Network;Chat;\n\
-        Terminal=false\n",
+Name=Root (Uprooted)\n\
+Comment=Root Communications with Uprooted mods\n\
+Exec={}\n\
+Type=Application\n\
+Categories=Network;Chat;\n\
+Terminal=false\n",
         wrapper.display()
     );
 

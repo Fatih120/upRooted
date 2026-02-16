@@ -39,6 +39,11 @@ internal class AvaloniaReflection
 
     // Value types
     public Type? SolidColorBrushType { get; private set; }
+    public Type? LinearGradientBrushType { get; private set; }
+    public Type? GradientStopType { get; private set; }
+    public Type? GradientStopsType { get; private set; }
+    public Type? RelativePointType { get; private set; }
+    public Type? RelativeUnitType { get; private set; }
     public Type? ColorType { get; private set; }
     public Type? ThicknessType { get; private set; }
     public Type? CornerRadiusType { get; private set; }
@@ -185,6 +190,11 @@ internal class AvaloniaReflection
             t.Name == "Ellipse" && t.Namespace?.StartsWith("Avalonia") == true && !t.IsAbstract);
 
         SolidColorBrushType = Find("Avalonia.Media.SolidColorBrush");
+        LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
+        GradientStopType = Find("Avalonia.Media.GradientStop");
+        GradientStopsType = Find("Avalonia.Media.GradientStops");
+        RelativePointType = Find("Avalonia.RelativePoint");
+        RelativeUnitType = Find("Avalonia.RelativeUnit");
         ColorType = Find("Avalonia.Media.Color");
         ThicknessType = Find("Avalonia.Thickness");
         CornerRadiusType = Find("Avalonia.CornerRadius");
@@ -1717,6 +1727,186 @@ internal class AvaloniaReflection
             return _colorParse.Invoke(null, new object[] { hex });
         }
         catch { return null; }
+    }
+
+    // ===== Linear Gradient Brush =====
+
+    /// <summary>
+    /// Creates a LinearGradientBrush with the specified start/end points and gradient stops.
+    /// startX/startY/endX/endY are 0-1 relative coordinates.
+    /// stops is an array of (hexColor, offset) tuples where offset is 0-1.
+    /// </summary>
+    public object? CreateLinearGradientBrush(double startX, double startY, double endX, double endY,
+        (string hex, double offset)[] stops)
+    {
+        if (LinearGradientBrushType == null || GradientStopType == null || _colorParse == null) return null;
+        try
+        {
+            var brush = Activator.CreateInstance(LinearGradientBrushType);
+            if (brush == null) return null;
+
+            // Set StartPoint and EndPoint as RelativePoint (using relative 0-1 coordinates)
+            if (RelativePointType != null)
+            {
+                object? startPoint = null, endPoint = null;
+
+                // Primary method: RelativePoint.Parse("X%,Y%") — always produces Relative unit
+                var parseMethod = RelativePointType.GetMethod("Parse",
+                    BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+                if (parseMethod != null)
+                {
+                    try
+                    {
+                        string startStr = $"{startX * 100:F0}%,{startY * 100:F0}%";
+                        string endStr = $"{endX * 100:F0}%,{endY * 100:F0}%";
+                        startPoint = parseMethod.Invoke(null, new object[] { startStr });
+                        endPoint = parseMethod.Invoke(null, new object[] { endStr });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Reflection", $"RelativePoint.Parse failed: {ex.Message}");
+                    }
+                }
+
+                // Fallback: constructor with Enum.Parse by name (not by int value)
+                if (startPoint == null)
+                {
+                    var relUnitType = RelativeUnitType ?? RelativePointType.GetConstructors()
+                        .SelectMany(c => c.GetParameters())
+                        .FirstOrDefault(p => p.ParameterType.Name == "RelativeUnit")?.ParameterType;
+
+                    if (relUnitType != null)
+                    {
+                        try
+                        {
+                            var relativeUnit = Enum.Parse(relUnitType, "Relative");
+                            startPoint = Activator.CreateInstance(RelativePointType, startX, startY, relativeUnit);
+                            endPoint = Activator.CreateInstance(RelativePointType, endX, endY, relativeUnit);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Reflection", $"RelativePoint ctor fallback failed: {ex.Message}");
+                        }
+                    }
+                }
+
+                if (startPoint != null)
+                    brush.GetType().GetProperty("StartPoint")?.SetValue(brush, startPoint);
+                if (endPoint != null)
+                    brush.GetType().GetProperty("EndPoint")?.SetValue(brush, endPoint);
+
+                Logger.Log("Reflection", $"LinearGradientBrush: start={startPoint != null} end={endPoint != null} method={(parseMethod != null ? "Parse" : "ctor")}");
+            }
+
+            // Add gradient stops
+            var gradientStops = brush.GetType().GetProperty("GradientStops")?.GetValue(brush);
+            if (gradientStops == null && GradientStopsType != null)
+            {
+                gradientStops = Activator.CreateInstance(GradientStopsType);
+                brush.GetType().GetProperty("GradientStops")?.SetValue(brush, gradientStops);
+            }
+
+            if (gradientStops is IList stopList)
+            {
+                foreach (var (hex, offset) in stops)
+                {
+                    var color = _colorParse.Invoke(null, new object[] { hex });
+                    if (color == null) continue;
+                    var stop = Activator.CreateInstance(GradientStopType);
+                    if (stop == null) continue;
+                    stop.GetType().GetProperty("Color")?.SetValue(stop, color);
+                    stop.GetType().GetProperty("Offset")?.SetValue(stop, offset);
+                    stopList.Add(stop);
+                }
+            }
+
+            return brush;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"CreateLinearGradientBrush error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Set Background on a control using a pre-created brush object (not a hex string).
+    /// </summary>
+    public void SetBackgroundBrush(object? control, object? brush)
+    {
+        if (control == null) return;
+        var bgProp = control.GetType().GetProperty("Background");
+        bgProp?.SetValue(control, brush);
+    }
+
+    /// <summary>
+    /// Subscribe to a pointer event and extract the position relative to the control.
+    /// Callback receives (x, y) coordinates in the control's coordinate space.
+    /// </summary>
+    public void SubscribePointerEvent(object control, string eventName, Action<double, double> callback)
+    {
+        try
+        {
+            var type = control.GetType();
+            var eventInfo = type.GetEvent(eventName);
+            if (eventInfo == null)
+            {
+                Logger.Log("Reflection", $"PointerEvent '{eventName}' not found on {type.Name}");
+                return;
+            }
+
+            var handlerType = eventInfo.EventHandlerType!;
+            var invokeMethod = handlerType.GetMethod("Invoke")!;
+            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+
+            // Build: (sender, e) => { var pos = e.GetPosition(sender); callback(pos.X, pos.Y); }
+            var p0 = Expression.Parameter(paramTypes[0], "sender");
+            var p1 = Expression.Parameter(paramTypes[1], "e");
+
+            // Find GetPosition method on the event args type
+            var getPositionMethod = paramTypes[1].GetMethod("GetPosition",
+                new[] { VisualType ?? typeof(object) });
+            // Fallback: try with IVisual or any single-param overload
+            getPositionMethod ??= paramTypes[1].GetMethods()
+                .FirstOrDefault(m => m.Name == "GetPosition" && m.GetParameters().Length == 1);
+
+            if (getPositionMethod == null)
+            {
+                Logger.Log("Reflection", $"GetPosition not found on {paramTypes[1].Name}");
+                return;
+            }
+
+            // Cast sender to the parameter type expected by GetPosition
+            var castSender = Expression.Convert(p0, getPositionMethod.GetParameters()[0].ParameterType);
+            var posExpr = Expression.Call(p1, getPositionMethod, castSender);
+
+            var posXProp = getPositionMethod.ReturnType.GetProperty("X");
+            var posYProp = getPositionMethod.ReturnType.GetProperty("Y");
+            if (posXProp == null || posYProp == null) return;
+
+            var xExpr = Expression.Property(posExpr, posXProp);
+            var yExpr = Expression.Property(posExpr, posYProp);
+
+            var callbackExpr = Expression.Constant(callback);
+            var invokeExpr = Expression.Invoke(callbackExpr, xExpr, yExpr);
+            var lambda = Expression.Lambda(handlerType, invokeExpr, p0, p1);
+            var handler = lambda.Compile();
+
+            eventInfo.AddEventHandler(control, handler);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SubscribePointerEvent({eventName}) failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Sets ClipToBounds on a control to prevent child content from rendering outside bounds.
+    /// </summary>
+    public void SetClipToBounds(object? control, bool clip)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("ClipToBounds")?.SetValue(control, clip);
     }
 
     /// <summary>

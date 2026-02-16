@@ -249,6 +249,33 @@
   text-decoration: underline;
 }
 
+/* --- Color input (native picker) --- */
+.uprooted-color-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 40px;
+  height: 28px;
+  border: 1px solid var(--rootsdk-border, #242C36);
+  border-radius: 4px;
+  padding: 0;
+  background: none;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.uprooted-color-input::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+.uprooted-color-input::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.uprooted-color-input:hover {
+  border-color: var(--rootsdk-brand-primary, #3B6AF8);
+}
+
 /* --- Theme cards --- */
 .uprooted-theme-card {
   background: var(--rootsdk-background-secondary, #1A1E24);
@@ -256,6 +283,18 @@
   border-radius: 6px;
   padding: 12px 14px;
   margin-bottom: 6px;
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.uprooted-theme-card:hover {
+  border-color: var(--rootsdk-muted, #72767D);
+}
+
+.uprooted-theme-card--active {
+  border-color: var(--rootsdk-brand-primary, #3B6AF8) !important;
+  box-shadow: 0 0 0 1px var(--rootsdk-brand-primary, #3B6AF8),
+              0 0 8px rgba(59, 106, 248, 0.25);
 }
 
 .uprooted-theme-card-name {

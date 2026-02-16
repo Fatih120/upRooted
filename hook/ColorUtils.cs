@@ -200,4 +200,63 @@ internal static class ColorUtils
         var (h, _, _) = RgbToHsl(accentHex);
         return HslToHex(h, saturation, lightness);
     }
+
+    /// <summary>
+    /// Convert RGB hex to HSV. H: 0-360, S: 0-1, V: 0-1.
+    /// </summary>
+    public static (double H, double S, double V) RgbToHsv(string hex)
+    {
+        var (r, g, b) = ParseHex(hex);
+        double rd = r / 255.0, gd = g / 255.0, bd = b / 255.0;
+        double max = Math.Max(rd, Math.Max(gd, bd));
+        double min = Math.Min(rd, Math.Min(gd, bd));
+        double d = max - min;
+
+        double h = 0;
+        if (d > 0)
+        {
+            if (max == rd)
+                h = ((gd - bd) / d + (gd < bd ? 6 : 0)) * 60;
+            else if (max == gd)
+                h = ((bd - rd) / d + 2) * 60;
+            else
+                h = ((rd - gd) / d + 4) * 60;
+        }
+
+        double s = max > 0 ? d / max : 0;
+        return (h, s, max);
+    }
+
+    /// <summary>
+    /// Convert HSV to RGB hex string. H: 0-360, S: 0-1, V: 0-1.
+    /// </summary>
+    public static string HsvToHex(double h, double s, double v)
+    {
+        h = ((h % 360) + 360) % 360;
+        s = Math.Clamp(s, 0, 1);
+        v = Math.Clamp(v, 0, 1);
+
+        double c = v * s;
+        double x = c * (1 - Math.Abs((h / 60.0) % 2 - 1));
+        double m = v - c;
+
+        double r1, g1, b1;
+        if (h < 60)       { r1 = c; g1 = x; b1 = 0; }
+        else if (h < 120) { r1 = x; g1 = c; b1 = 0; }
+        else if (h < 180) { r1 = 0; g1 = c; b1 = x; }
+        else if (h < 240) { r1 = 0; g1 = x; b1 = c; }
+        else if (h < 300) { r1 = x; g1 = 0; b1 = c; }
+        else               { r1 = c; g1 = 0; b1 = x; }
+
+        return ToHex(
+            (byte)Math.Round((r1 + m) * 255),
+            (byte)Math.Round((g1 + m) * 255),
+            (byte)Math.Round((b1 + m) * 255));
+    }
+
+    /// <summary>
+    /// Returns the fully saturated hex color for a given hue (S=1, V=1).
+    /// </summary>
+    public static string PureHueHex(double hue)
+        => HsvToHex(hue, 1.0, 1.0);
 }
