@@ -854,6 +854,26 @@ internal class LinkEmbedEngine
 
     // ===== Component 4: Embed Card Builder =====
 
+    /// <summary>
+    /// Ensure a text color has sufficient contrast against the card background.
+    /// Falls back to the theme's primary text color if WCAG contrast ratio is below 3:1.
+    /// </summary>
+    private static string EnsureReadable(string textHex)
+    {
+        try
+        {
+            var bgHex = ContentPages.CardBg;
+            double bgLum = ColorUtils.Luminance(bgHex);
+            double fgLum = ColorUtils.Luminance(textHex);
+            double lighter = Math.Max(bgLum, fgLum);
+            double darker = Math.Min(bgLum, fgLum);
+            double ratio = (lighter + 0.05) / (darker + 0.05);
+            if (ratio >= 3.0) return textHex;
+        }
+        catch { }
+        return ContentPages.TextWhite;
+    }
+
     private object? BuildEmbedCard(EmbedData data, object? bitmap = null)
     {
         try
@@ -862,14 +882,16 @@ internal class LinkEmbedEngine
             // Border (CardBg, CornerRadius=8, left accent border 3px)
             //   └── StackPanel (vertical, spacing=6, padding=12)
             //       ├── TextBlock (provider, FontSize=11, TextDim)           [if provider]
-            //       ├── TextBlock (author, FontSize=12, Bold, White)         [if author]
+            //       ├── TextBlock (author, FontSize=12, Bold, TextWhite)     [if author]
             //       ├── TextBlock (title, FontSize=13, SemiBold, accent)     [required]
             //       ├── TextBlock (description, FontSize=12, TextMuted)      [if desc]
             //       └── Border/Grid (image + optional play overlay)          [if image]
 
             var accentHex = data.Color ?? DefaultAccentColor;
-            // For generic embeds, use theme-color for title if available; YouTube always uses default blue
-            var titleColorHex = (data.VideoId == null && data.Color != null) ? data.Color : DefaultAccentColor;
+            // For generic embeds, use theme-color for title if available; YouTube always uses default blue.
+            // EnsureReadable checks WCAG contrast against CardBg and falls back to TextWhite.
+            var titleColorHex = EnsureReadable(
+                (data.VideoId == null && data.Color != null) ? data.Color : DefaultAccentColor);
 
             // Build inner content
             var content = _r.CreateStackPanel(vertical: true, spacing: 6);
@@ -886,7 +908,7 @@ internal class LinkEmbedEngine
             // Author (YouTube channel name, etc.)
             if (!string.IsNullOrEmpty(data.Author))
             {
-                var authorText = _r.CreateTextBlock(data.Author!, 12, "#FFFFFF", "Bold");
+                var authorText = _r.CreateTextBlock(data.Author!, 12, ContentPages.TextWhite, "Bold");
                 if (authorText != null)
                     _r.AddChild(content, authorText);
             }

@@ -579,15 +579,20 @@ pub fn kill_root_processes() -> u32 {
     #[cfg(target_os = "windows")]
     {
         use windows_sys::Win32::Foundation::CloseHandle;
-        use windows_sys::Win32::System::Threading::{OpenProcess, TerminateProcess, PROCESS_TERMINATE};
+        use windows_sys::Win32::System::Threading::{
+            OpenProcess, TerminateProcess, WaitForSingleObject,
+            PROCESS_SYNCHRONIZE, PROCESS_TERMINATE,
+        };
 
         let pids = find_root_pids();
         let mut killed = 0u32;
         for pid in &pids {
             unsafe {
-                let handle = OpenProcess(PROCESS_TERMINATE, 0, *pid);
+                let handle = OpenProcess(PROCESS_TERMINATE | PROCESS_SYNCHRONIZE, 0, *pid);
                 if !handle.is_null() {
                     if TerminateProcess(handle, 1) != 0 {
+                        // Wait up to 5s for the process to fully exit and release file handles
+                        WaitForSingleObject(handle, 5000);
                         killed += 1;
                     }
                     CloseHandle(handle);
