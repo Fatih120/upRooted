@@ -8,13 +8,17 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 .claude/
 ├── UPROOT_CLAUDE_DEV.md        # This file
 ├── settings.json               # Claude Code settings
-├── hooks.json                  # PreToolUse guard for critical rules
-├── commands/                   # Slash commands (/uproot:*)
-│   ├── hi.md                   # /uproot:hi — onboard into the codebase
-│   ├── ok.md                   # /uproot:ok — git pull + status + recent commits
-│   ├── build-hook.md           # /uproot:build-hook — dotnet build hook/ -c Release
-│   ├── build-installer.md      # /uproot:build-installer — full pipeline build
-│   └── watch-log.md            # /uproot:watch-log — tail the hook log file
+├── hooks.json                  # PreToolUse guard + Stop auto-review
+├── commands/                   # Slash commands
+│   ├── hi.md                   # /hi — onboard into the codebase
+│   ├── ok.md                   # /ok — preflight: sync + build + test + review
+│   ├── build-hook.md           # /build-hook — dotnet build hook/ -c Release
+│   ├── build-installer.md      # /build-installer — full pipeline build
+│   ├── deploy.md               # /deploy — build hook + deploy to local Root
+│   ├── watch-log.md            # /watch-log — tail the hook log file
+│   ├── diagnose.md             # /diagnose — check installation health
+│   ├── session-state.md        # /session-state — update SESSION_STATE.md + NEW-SESSION.md
+│   └── nose.md                 # /nose <ver> — bump all version references
 ├── agents/                     # Specialized subagents
 │   └── uprooted-reviewer.md   # Code reviewer (critical rules, conventions)
 └── skills/                     # Knowledge skills (auto-loaded on relevant queries)
@@ -35,11 +39,15 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 
 ## Components
 
-### Hook: Critical Rule Guard
+### Hooks
 
 **File:** `hooks.json`
 
-A `PreToolUse` prompt hook on `Write|Edit` that blocks code changes violating Uprooted's critical rules before they land. Catches:
+Two hooks are configured:
+
+**1. PreToolUse — Critical Rule Guard**
+
+A prompt hook on `Write|Edit` that blocks code changes violating Uprooted's critical rules before they land. Catches:
 
 | # | Pattern | Why it's blocked |
 |---|---------|-----------------|
@@ -53,21 +61,35 @@ A `PreToolUse` prompt hook on `Write|Edit` that blocks code changes violating Up
 
 Responds `APPROVE` or `BLOCK: [rule] [explanation]`. 15s timeout.
 
+**2. Stop — Auto-Review Reminder**
+
+A prompt hook on `*` that fires when Claude is about to stop. If source files in `hook/` or `src/` were edited during the session and no code review was run (via `uprooted-reviewer` or `/ok`), it blocks and reminds to review before finishing. Skips if the user explicitly opted out. 20s timeout.
+
 ### Commands
 
 | Command | Purpose | When to use |
 |---------|---------|-------------|
-| `/uproot:hi` | Read `NEW-SESSION.md` and `docs/INDEX.md`, orient in the codebase | Start of a new session (first time) |
-| `/uproot:ok` | `git pull`, `git status`, `git log --oneline -10` | Start of every session (sync with collaborator) |
-| `/uproot:build-hook` | `dotnet build hook/ -c Release` | After modifying C# files |
-| `/uproot:build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |
-| `/uproot:watch-log` | Tail `uprooted-hook.log` | Debugging hook behavior at runtime |
+| `/hi` | Read `NEW-SESSION.md`, `docs/INDEX.md`, and this file; orient in the codebase | Start of a new session (first time) |
+| `/ok` | **Preflight:** git sync + build hook + build TS + run tests + invoke reviewer | Before committing, or start of session |
+| `/build-hook` | `dotnet build hook/ -c Release` | Quick build check after C# changes |
+| `/build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |
+| `/deploy` | Build C# hook + deploy to local Root installation | Core dev loop: edit → build → deploy → test |
+| `/watch-log` | Tail `uprooted-hook.log` | Debugging hook behavior at runtime |
+| `/diagnose` | Check installation health: files, env vars, HTML patches, settings, log | When something isn't working after deployment |
+| `/session-state` | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history | After a work cycle, before ending session |
+| `/nose <ver>` | Bump all version refs (with content freshness audit) | Release prep |
 
-**Typical session start:** `/uproot:ok` then `/uproot:hi` (if new context needed).
+**Typical workflows:**
+
+- **Session start:** `/ok` (sync + verify), then `/hi` if new context needed
+- **Dev loop:** edit code → `/deploy` → launch Root → `/watch-log`
+- **Debug:** `/diagnose` → fix → `/deploy` → retest
+- **Pre-commit:** `/ok` (runs full preflight with review)
+- **End of session:** `/session-state` to capture what changed
 
 ### Agent: uprooted-reviewer
 
-**Model:** Sonnet | **Color:** Red | **Trigger:** explicit request ("review my changes", "check for violations")
+**Model:** Sonnet | **Color:** Red | **Trigger:** explicit request ("review my changes", "check for violations"), or auto-triggered by `/ok` preflight, or reminded by Stop hook
 
 Runs a structured code review against staged/modified files:
 
@@ -100,8 +122,8 @@ Provides:
 
 These aren't a "plugin" — Claude Code discovers them directly from the `.claude/` directory:
 
-- **`hooks.json`** — registered automatically, runs on every `Write`/`Edit` tool use
-- **`commands/*.md`** — available as `/uproot:<name>` slash commands
+- **`hooks.json`** — registered automatically, runs on every `Write`/`Edit` tool use and on session stop
+- **`commands/*.md`** — available as `/<name>` slash commands
 - **`agents/*.md`** — available as subagents when the trigger conditions match
 - **`skills/*/SKILL.md`** — loaded automatically when the user's query matches the skill description
 
@@ -115,4 +137,4 @@ No marketplace, no installation, no `settings.json` plugin references needed. Fi
 
 **New agent:** Create `.claude/agents/<name>.md` with frontmatter (`name`, `description`, `model`, `tools`, `color`, `whenToUse`) and a system prompt body.
 
-**New hook:** Add entries to `.claude/hooks.json` under the appropriate event (`PreToolUse`, `PostToolUse`, etc.).
+**New hook:** Add entries to `.claude/hooks.json` under the appropriate event (`PreToolUse`, `PostToolUse`, `Stop`, etc.). Prompt hooks are preferred for context-aware decisions. Hooks reload on session restart.

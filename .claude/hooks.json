@@ -10,5 +10,17 @@
         }
       ]
     }
+  ],
+  "Stop": [
+    {
+      "matcher": "*",
+      "hooks": [
+        {
+          "type": "prompt",
+          "prompt": "Review the conversation transcript to determine if the agent made edits to source code files in hook/ (C# .cs files) or src/ (TypeScript .ts files) during this session.\n\nIf NO source code files in hook/ or src/ were edited, respond: approve\n\nIf source code WAS edited, check whether the uprooted-reviewer agent was invoked at any point during the session, OR whether /ok was run after the edits, OR whether the user explicitly said to skip review.\n\nIf source code was edited AND no review occurred AND the user didn't skip it, respond:\nblock — Source files in hook/ or src/ were modified but no code review was run. Invoke the uprooted-reviewer agent on the changes, or run /ok before finishing.\n\nIf a review already happened or the user skipped it, respond: approve",
+          "timeout": 20
+        }
+      ]
+    }
   ]
 }
