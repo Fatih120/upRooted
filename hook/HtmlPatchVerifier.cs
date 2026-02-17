@@ -212,11 +212,13 @@ internal class HtmlPatchVerifier : IDisposable
         // Build NSFW config JSON for early injection (before Phase 5 completes)
         var nsfwConfigJson = BuildNsfwConfigJson();
 
+        var filePrefix = OperatingSystem.IsWindows() ? "file:///" : "file://";
+
         return $"    {MarkerStart}\n" +
                $"    <script>window.__UPROOTED_SETTINGS__={settingsJson};</script>\n" +
                $"    <script>window.__UPROOTED_NSFW_CONFIG__={nsfwConfigJson};</script>\n" +
-               $"    <script src=\"file:///{preloadPath}\"></script>\n" +
-               $"    <link rel=\"stylesheet\" href=\"file:///{cssPath}\">\n" +
+               $"    <script src=\"{filePrefix}{preloadPath}\"></script>\n" +
+               $"    <link rel=\"stylesheet\" href=\"{filePrefix}{cssPath}\">\n" +
                $"    {MarkerEnd}";
     }
 
