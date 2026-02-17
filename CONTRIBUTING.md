@@ -8,7 +8,7 @@ Guidelines for contributing to the Uprooted framework. Read this before opening 
 
 ## Status
 
-Uprooted is currently **awaiting approval** from Root's developers. We are accepting contributions to the framework scaffold, type definitions, documentation, and the landing page. We are **not** accepting contributions that distribute working injection code until approval is granted.
+Uprooted is in **active development** and accepting contributions across the entire project -- framework code, plugins, documentation, tooling, and bug fixes. See [Branch Rules](#branch-rules) for how to submit your work.
 
 ---
 
