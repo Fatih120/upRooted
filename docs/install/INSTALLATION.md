@@ -2,7 +2,7 @@
 
 Step-by-step instructions for installing, verifying, repairing, and uninstalling Uprooted on Windows and Linux.
 
-> **Related docs:** [Index](INDEX.md) | [Build Guide](BUILD.md) | [Installer Reference](INSTALLER.md) | [Architecture](ARCHITECTURE.md)
+> **Related docs:** [Index](../INDEX.md) | [Build Guide](BUILD.md) | [Installer Reference](../framework/INSTALLER.md) | [Architecture](../framework/ARCHITECTURE.md)
 
 ---
 
@@ -715,6 +715,6 @@ All paths Uprooted uses on each platform.
 
 ---
 
-See [Installer Reference](INSTALLER.md) for technical details on how the console
+See [Installer Reference](../framework/INSTALLER.md) for technical details on how the console
 installer works internally. See [Build Guide](BUILD.md) for building all layers
 from source.

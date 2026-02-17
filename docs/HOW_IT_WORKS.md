@@ -3,7 +3,7 @@
 A complete walkthrough of how we reverse-engineered Root Communications desktop app and built a client mod framework that injects custom UI into it at runtime. Every step, from opening the binary for the first time to seeing "UPROOTED" in the settings sidebar.
 
 > **Related docs:**
-> [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [CLR Profiler](CLR_PROFILER.md)
+> [Index](INDEX.md) | [Architecture](framework/ARCHITECTURE.md) | [Hook Reference](framework/HOOK_REFERENCE.md) | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md) | [CLR Profiler](framework/CLR_PROFILER.md)
 
 ---
 
@@ -418,7 +418,7 @@ We wrote `uprooted_profiler.dll` in C, implementing the `ICorProfilerCallback` C
 
 When the runtime JIT-compiles the targeted method, our injection runs first, loading `UprootedHook.dll` and creating an instance of `UprootedHook.Entry`. Root's original method body runs immediately after, completely unaware.
 
-For the full implementation -- environment variable setup, process guard logic, module selection criteria, metadata token creation, IL byte sequences, and the `SetILFunctionBody` call -- see [CLR Profiler Reference](CLR_PROFILER.md).
+For the full implementation -- environment variable setup, process guard logic, module selection criteria, metadata token creation, IL byte sequences, and the `SetILFunctionBody` call -- see [CLR Profiler Reference](framework/CLR_PROFILER.md).
 
 ### The result
 
@@ -460,7 +460,7 @@ public class Entry
 
 The entry point performs a process name guard (bail out if we're not in Root.exe), then spawns a background thread named `"Uprooted-Injector"`. We must never block Root's startup -- that would cause a visible freeze or crash. The background thread runs through the phased startup sequence described in the next section.
 
-For the complete process guard implementation and thread management details, see [Hook Reference](HOOK_REFERENCE.md).
+For the complete process guard implementation and thread management details, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -514,7 +514,7 @@ The main window is created after `Application.Current`. We navigate through `App
 
 Once we have the `MainWindow`, we start the sidebar monitoring timer and proceed to Phase 3.5 (theme engine initialization).
 
-For the full phase implementation with code, timeouts, and error handling, see [Hook Reference](HOOK_REFERENCE.md).
+For the full phase implementation with code, timeouts, and error handling, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -526,7 +526,7 @@ Root's settings page has no stable selectors -- no element IDs, no CSS classes, 
 
 The result is a `SettingsLayout` object with references to the nav container, content panel, ListBox, back button, and layout grid -- everything we need to inject our own section.
 
-For the complete traversal algorithm, column detection logic, and the `SettingsLayout` data structure, see [Hook Reference](HOOK_REFERENCE.md).
+For the complete traversal algorithm, column detection logic, and the `SettingsLayout` data structure, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -540,7 +540,7 @@ The most important pattern is the **overlay approach**: we never replace `Conten
 
 Cleanup is equally critical. The back button gets a `PointerPressed` handler that calls `CleanupInjection()` before Root's handler fires. Everything we inject is tagged with `Control.Tag = "uprooted-injected"` so we can find and remove our own controls without touching Root's.
 
-For the injection sequence, event handler wiring, cleanup logic, and the overlay pattern implementation, see [Hook Reference](HOOK_REFERENCE.md).
+For the injection sequence, event handler wiring, cleanup logic, and the overlay pattern implementation, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -570,7 +570,7 @@ It's verbose, but it works and it's the only option when you can't reference Ava
 
 All pages are wrapped in a `ScrollViewer` and use the same spacing and typography as Root's native settings pages. The goal is that a user can't tell where Root's UI ends and ours begins.
 
-For the page builder code and Root style matching details, see [Hook Reference](HOOK_REFERENCE.md).
+For the page builder code and Root style matching details, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -594,7 +594,7 @@ The discovery from Section 8 -- that Root's AXAML themes contain no color brush 
 
 The engine maintains a persistent map from any theme replacement color back to Root's original, so switching themes or reverting doesn't lose track of what the original colors were -- even after multiple theme changes.
 
-For the full `ThemeEngine` implementation, resource key lists, color mapping logic, and revert behavior, see [Hook Reference](HOOK_REFERENCE.md).
+For the full `ThemeEngine` implementation, resource key lists, color mapping logic, and revert behavior, see [Hook Reference](framework/HOOK_REFERENCE.md).
 
 ---
 
@@ -654,7 +654,7 @@ Built-in plugins include **themes** (CSS variable overrides) and **settings-pane
 
 Root runs Chromium with `--incognito`, wiping `localStorage` on every launch. We persist settings to a JSON file at `%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-settings.json` and inline them into the HTML at patch time.
 
-For the full TypeScript architecture, plugin API, preload sequence, and settings system, see [TypeScript Reference](TYPESCRIPT_REFERENCE.md).
+For the full TypeScript architecture, plugin API, preload sequence, and settings system, see [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md).
 
 ---
 
@@ -705,7 +705,7 @@ patches: [{
 }]
 ```
 
-For the full proxy implementation and plugin patch API, see [TypeScript Reference](TYPESCRIPT_REFERENCE.md).
+For the full proxy implementation and plugin patch API, see [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md).
 
 ---
 
@@ -715,7 +715,7 @@ For the full proxy implementation and plugin patch API, see [TypeScript Referenc
 
 The install process has three layers: build the TypeScript bundle (`pnpm build`), build the C# hook (`dotnet build hook/ -c Release`), deploy files and set environment variables, then patch HTML files. Environment variables are user-scoped and persist across reboots. `DOTNET_ReadyToRun=0` is critical -- it forces JIT compilation so our profiler gets a chance to modify IL.
 
-For installer implementation details (detection, file deployment, environment variable management), see [Installer Reference](INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](INSTALLATION.md).
+For installer implementation details (detection, file deployment, environment variable management), see [Installer Reference](framework/INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](install/INSTALLATION.md).
 
 ### The boot sequence
 

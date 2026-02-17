@@ -2,7 +2,7 @@
 
 Guidelines for contributing to the Uprooted framework. Read this before opening a pull request.
 
-> **Related docs:** [Documentation Index](docs/INDEX.md) | [Build Guide](docs/BUILD.md) | [Architecture](docs/ARCHITECTURE.md)
+> **Related docs:** [Documentation Index](docs/INDEX.md) | [Build Guide](docs/install/BUILD.md) | [Architecture](docs/framework/ARCHITECTURE.md)
 
 ---
 
@@ -66,7 +66,7 @@ pnpm install
 
 ### Building
 
-Each layer builds independently. See [BUILD.md](docs/BUILD.md) for full details.
+Each layer builds independently. See [BUILD.md](docs/install/BUILD.md) for full details.
 
 ```bash
 # TypeScript bundle (from public repo, output goes to dist/)
@@ -189,7 +189,7 @@ Keep PRs focused. One logical change per PR is easier to review than a grab-bag 
 
 ## Critical Rules
 
-These constraints exist because violating them causes real, hard-to-diagnose bugs. See [Architecture](docs/ARCHITECTURE.md) for detailed explanations.
+These constraints exist because violating them causes real, hard-to-diagnose bugs. See [Architecture](docs/framework/ARCHITECTURE.md) for detailed explanations.
 
 - **Never use `Type.GetType()` for Avalonia types** -- use `AvaloniaReflection`
 - **Never modify `ContentControl.Content` directly** -- causes UI freeze; use Grid overlay

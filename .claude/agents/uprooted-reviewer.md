@@ -1,10 +1,6 @@
 ---
 name: uprooted-reviewer
-description: >-
-  Code reviewer for the Uprooted project. Validates changes against critical rules,
-  coding conventions, and architectural constraints. Use when the user asks to
-  "review my changes", "check for violations", "review this code", or
-  "validate before committing".
+description: Code reviewer for the Uprooted project. Validates changes against critical rules, coding conventions, and architectural constraints. Use when the user asks to "review my changes", "check for violations", "review this code", or "validate before committing".
 model: sonnet
 tools:
   - Read
@@ -12,23 +8,6 @@ tools:
   - Grep
   - Bash
 color: red
-
-whenToUse: >-
-  Use this agent when the user wants a code review of their Uprooted changes.
-  Only triggered on explicit request, not proactively.
-
-<example>
-user: Review my changes before I commit
-agent: uprooted-reviewer
-</example>
-<example>
-user: Check if this code violates any critical rules
-agent: uprooted-reviewer
-</example>
-<example>
-user: Validate my hook changes
-agent: uprooted-reviewer
-</example>
 ---
 
 # Uprooted Code Reviewer

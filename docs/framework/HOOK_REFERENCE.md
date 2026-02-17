@@ -6,8 +6,8 @@
 > [Avalonia Patterns](AVALONIA_PATTERNS.md) |
 > [TypeScript Reference](TYPESCRIPT_REFERENCE.md) |
 > [CLR Profiler](CLR_PROFILER.md) |
-> [Build](BUILD.md) |
-> [How It Works](HOW_IT_WORKS.md)
+> [Build](../install/BUILD.md) |
+> [How It Works](../HOW_IT_WORKS.md)
 
 ---
 

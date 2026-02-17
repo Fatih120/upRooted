@@ -31,7 +31,7 @@ Build new components for the Uprooted framework. This skill provides templates, 
 
 | Component | Where to Create | Register In |
 |-----------|----------------|-------------|
-| New feature class | `hook/<FeatureName>.cs` | Instantiate in `StartupHook.cs` Phase 4 |
+| New feature class | `hook/<FeatureName>.cs` | Instantiate in `StartupHook.cs` at appropriate phase |
 | New settings page | Method in `hook/ContentPages.cs` | Add case in `BuildPage()` switch + nav item in `SidebarInjector.cs` |
 | New utility | `hook/<UtilName>.cs` | Import in consuming class |
 
@@ -60,8 +60,8 @@ pnpm build                           # esbuild IIFE bundle -> dist/
 # C# hook
 dotnet build hook/ -c Release        # -> hook/bin/Release/net10.0/UprootedHook.dll
 
-# Full installer (embeds both)
-powershell -File scripts/build_installer.ps1
+# Console TUI installer
+cd installer/src-tauri && cargo build --release
 
 # Run C# tests
 dotnet test tests/UprootedTests/

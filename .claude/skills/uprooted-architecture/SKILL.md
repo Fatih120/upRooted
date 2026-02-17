@@ -13,21 +13,27 @@ Uprooted is a dual-layer client modification framework for the Root Communicatio
 
 Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar.
 
-**Lifecycle (5 phases):**
+**Lifecycle (6 phases):**
 1. **Phase 0** — Verify HTML patches on disk (filesystem only, no Avalonia). Self-heal via FileSystemWatcher.
 2. **Phase 1** — Wait for Avalonia assemblies to load (30s timeout, poll 250ms).
 3. **Phase 2** — Resolve all Avalonia types via reflection into `AvaloniaReflection` cache.
 4. **Phase 3** — Wait for `Application.Current` then `MainWindow` (30s/60s timeouts).
-5. **Phase 4** — Start `SidebarInjector` 200ms timer-based settings page monitor.
+5. **Phase 3.5** — Initialize ThemeEngine + apply saved theme.
+6. **Phase 4** — Start `SidebarInjector` 200ms timer-based settings page monitor.
+7. **Phase 5** — Background thread: DotNetBrowser discovery + JS injection (NsfwFilter, LinkEmbeds).
 
 **Key files:**
-- `StartupHook.cs` — Entry point, orchestrates the 5-phase sequence
-- `AvaloniaReflection.cs` — 815-line reflection cache for ~80 Avalonia types (most critical file)
-- `SidebarInjector.cs` — 610-line timer-based UI injection state machine
-- `VisualTreeWalker.cs` — 331-line structural discovery (fragile, text-anchor based)
-- `ContentPages.cs` — Native Avalonia page builders
-- `ThemeEngine.cs` — Native theme application via resource dictionaries
+- `StartupHook.cs` — Entry point, orchestrates the multi-phase sequence
+- `AvaloniaReflection.cs` — 2029-line reflection cache for ~80 Avalonia types (most critical file)
+- `SidebarInjector.cs` — 1090-line timer-based UI injection state machine
+- `ContentPages.cs` — 2270-line native Avalonia page builders
+- `ThemeEngine.cs` — 2218-line native theme application via resource dictionaries
+- `DotNetBrowserReflection.cs` — 1914-line reflection cache for DotNetBrowser types, IBrowser discovery
+- `VisualTreeWalker.cs` — 554-line structural discovery (fragile, text-anchor based)
 - `HtmlPatchVerifier.cs` — Phase 0 self-healing patches
+- `BrowserDiscovery.cs` — Phase 4.5 diagnostic scanner
+- `LinkEmbedEngine.cs` — Link embed rendering (needs Avalonia-native redesign)
+- `NsfwFilter.cs` — Content filter JS injection (needs Avalonia-native redesign)
 
 ### Layer 2: TypeScript Browser Injection (`src/`)
 
@@ -111,8 +117,8 @@ pnpm build
 # Full installer pipeline (PowerShell)
 powershell -File scripts/build_installer.ps1
 
-# Tauri installer
-cd installer && cargo tauri build
+# Console TUI installer
+cd installer/src-tauri && cargo build --release
 ```
 
 ## Additional Resources

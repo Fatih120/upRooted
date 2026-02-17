@@ -1,7 +1,7 @@
 # Build Pipeline Guide
 
 > **Related docs:**
-> [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Installation Guide](INSTALLATION.md) | [Contributing](../CONTRIBUTING.md)
+> [Index](../INDEX.md) | [Architecture](../framework/ARCHITECTURE.md) | [Installation Guide](INSTALLATION.md) | [Contributing](../../CONTRIBUTING.md)
 
 This document covers every stage of the Uprooted build pipeline -- from
 compiling individual components to producing a self-contained installer
@@ -614,7 +614,7 @@ installer/src-tauri/artifacts/
 They are compiled into the final binary via Rust's `include_bytes!()` in
 `installer/src-tauri/src/embedded.rs`.
 
-See [Architecture](ARCHITECTURE.md) for how these components fit together
+See [Architecture](../framework/ARCHITECTURE.md) for how these components fit together
 at runtime.
 
 ---

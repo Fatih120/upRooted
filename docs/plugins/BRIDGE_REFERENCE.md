@@ -5,8 +5,8 @@ Complete reference for all 71 bridge methods across Root's two WebRTC bridge int
 > **Related Docs:**
 > [API Reference](API_REFERENCE.md) |
 > [Root Environment](ROOT_ENVIRONMENT.md) |
-> [TypeScript Reference](../TYPESCRIPT_REFERENCE.md) |
-> [Architecture](../ARCHITECTURE.md)
+> [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md) |
+> [Architecture](../framework/ARCHITECTURE.md)
 
 ## Table of Contents
 

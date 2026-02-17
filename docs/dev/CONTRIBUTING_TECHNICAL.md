@@ -1,10 +1,10 @@
 # Technical Onboarding Guide
 
-> **Related docs:** [Contributing](../CONTRIBUTING.md) | [Build Guide](BUILD.md) | [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md)
+> **Related docs:** [Contributing](../../CONTRIBUTING.md) | [Build Guide](../install/BUILD.md) | [Architecture](../framework/ARCHITECTURE.md) | [Hook Reference](../framework/HOOK_REFERENCE.md)
 
 This document covers the technical setup, build process, debugging workflows,
 and common failure modes for new contributors to Uprooted. For branch rules,
-commit format, PR process, and code style, see [CONTRIBUTING.md](../CONTRIBUTING.md).
+commit format, PR process, and code style, see [CONTRIBUTING.md](../../CONTRIBUTING.md).
 
 ---
 

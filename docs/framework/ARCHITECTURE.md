@@ -1,10 +1,10 @@
 # Architecture Reference
 
-Authoritative architecture reference for the Uprooted client modification framework. This document describes the system design, layer boundaries, component roles, data flow, conventions, and constraints. For the narrative walkthrough of how it was built, see [How It Works](HOW_IT_WORKS.md).
+Authoritative architecture reference for the Uprooted client modification framework. This document describes the system design, layer boundaries, component roles, data flow, conventions, and constraints. For the narrative walkthrough of how it was built, see [How It Works](../HOW_IT_WORKS.md).
 
 > **Related docs:**
-> [Index](INDEX.md) |
-> [How It Works](HOW_IT_WORKS.md) |
+> [Index](../INDEX.md) |
+> [How It Works](../HOW_IT_WORKS.md) |
 > [Hook Reference](HOOK_REFERENCE.md) |
 > [TypeScript Reference](TYPESCRIPT_REFERENCE.md) |
 > [CLR Profiler](CLR_PROFILER.md) |
@@ -367,7 +367,7 @@ interface Patch {
 }
 ```
 
-See [Plugin API Reference](plugins/API_REFERENCE.md) for the full plugin development API and [Bridge Reference](plugins/BRIDGE_REFERENCE.md) for the bridge method catalog.
+See [Plugin API Reference](../plugins/API_REFERENCE.md) for the full plugin development API and [Bridge Reference](../plugins/BRIDGE_REFERENCE.md) for the bridge method catalog.
 
 ---
 
@@ -770,7 +770,7 @@ The patcher uses comment markers (`<!-- uprooted:start -->` / `<!-- uprooted:end
 
 ## 12. AI Contributor Guide
 
-Guidance for AI-assisted development sessions working on the Uprooted codebase. See also the project-level [CLAUDE.md](../CLAUDE.md) for repository-specific rules.
+Guidance for AI-assisted development sessions working on the Uprooted codebase. See also the project-level [CLAUDE.md](../../CLAUDE.md) for repository-specific rules.
 
 ### What to Read First
 

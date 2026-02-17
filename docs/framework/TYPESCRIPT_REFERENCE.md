@@ -1,8 +1,8 @@
 # TypeScript Browser Injection Layer Reference
 
-> **Related docs:** [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [Root Internals](ROOT_INTERNALS.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [Root Environment](plugins/ROOT_ENVIRONMENT.md)
-> - [Bridge Reference](plugins/BRIDGE_REFERENCE.md) -- Bridge proxy interception and method catalog
-> - [Build Guide](BUILD.md) -- Build instructions for all components
+> **Related docs:** [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [Root Internals](../research/ROOT_INTERNALS.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [Root Environment](../plugins/ROOT_ENVIRONMENT.md)
+> - [Bridge Reference](../plugins/BRIDGE_REFERENCE.md) -- Bridge proxy interception and method catalog
+> - [Build Guide](../install/BUILD.md) -- Build instructions for all components
 
 ---
 
@@ -381,7 +381,7 @@ export * as native from "./native.js";
 export * as bridge from "./bridge.js";
 ```
 
-See [Plugin Getting Started](plugins/GETTING_STARTED.md) for writing plugins that use
+See [Plugin Getting Started](../plugins/GETTING_STARTED.md) for writing plugins that use
 this API.
 
 ---
@@ -716,7 +716,7 @@ Methods called by the C# host to control WebRTC. Key methods:
 | `receivePacket/receiveRawPacket(data)` | Data channel packets |
 | `nativeLoopbackAudioStarted/receiveNativeLoopbackAudioData/...` | Loopback audio |
 
-See [Bridge Reference](plugins/BRIDGE_REFERENCE.md) for the full method catalog with
+See [Bridge Reference](../plugins/BRIDGE_REFERENCE.md) for the full method catalog with
 parameter types and interception examples.
 
 ---

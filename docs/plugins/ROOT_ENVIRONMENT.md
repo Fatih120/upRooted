@@ -2,7 +2,7 @@
 
 Runtime context for plugin developers. Understanding Root's Chromium environment is essential for writing plugins that work reliably.
 
-> **Related docs:** [Root Internals](../ROOT_INTERNALS.md) | [gRPC Protocol](../GRPC_PROTOCOL.md) | [Bridge Reference](BRIDGE_REFERENCE.md) | [Plugin API Reference](API_REFERENCE.md) | [TypeScript Reference](../TYPESCRIPT_REFERENCE.md)
+> **Related docs:** [Root Internals](../research/ROOT_INTERNALS.md) | [gRPC Protocol](../research/GRPC_PROTOCOL.md) | [Bridge Reference](BRIDGE_REFERENCE.md) | [Plugin API Reference](API_REFERENCE.md) | [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md)
 
 ## Table of Contents
 
@@ -57,7 +57,7 @@ The primary injection target. Contains:
 - Media management (WebRTC peer connections)
 - Full DOM access to the call interface
 
-This context is loaded from Root's bundled HTML files. Uprooted's C# hook patches these HTML files to inject the `<script>` tag that loads `uprooted-preload.js`. See [Hook Reference](../HOOK_REFERENCE.md) for details on how the HTML patching works.
+This context is loaded from Root's bundled HTML files. Uprooted's C# hook patches these HTML files to inject the `<script>` tag that loads `uprooted-preload.js`. See [Hook Reference](../framework/HOOK_REFERENCE.md) for details on how the HTML patching works.
 
 ### Sub-App Contexts (separate iframes)
 
@@ -93,7 +93,7 @@ The different web contexts in Root have different capabilities. This table summa
 
 ---
 
-> **Note:** For the native application perspective on Root's architecture, see [Root Internals](../ROOT_INTERNALS.md). This document focuses on the browser-side view relevant to plugin development.
+> **Note:** For the native application perspective on Root's architecture, see [Root Internals](../research/ROOT_INTERNALS.md). This document focuses on the browser-side view relevant to plugin development.
 
 ## gRPC Backend Overview
 
@@ -127,7 +127,7 @@ Root's backend exposes 27 gRPC services with 163 total methods. These group into
 
 Not all 163 methods are implemented on the backend. Active testing found 32 actually-implemented endpoints. The remaining methods return gRPC status 12 (UNIMPLEMENTED), meaning the client stubs exist but the server-side logic has not been deployed yet.
 
-For the full protocol specification -- including wire format, protobuf encoding, UUID format, and per-method documentation -- see [gRPC Protocol](../GRPC_PROTOCOL.md).
+For the full protocol specification -- including wire format, protobuf encoding, UUID format, and per-method documentation -- see [gRPC Protocol](../research/GRPC_PROTOCOL.md).
 
 ---
 
@@ -589,7 +589,7 @@ This table tracks which Uprooted versions have been tested against which Root Co
 
 ### Compatibility Notes
 
-- **Root updates may break HTML patches.** Root's auto-updater can overwrite the HTML files that Uprooted patches. The C# hook's `HtmlPatchVerifier` (see [Hook Reference](../HOOK_REFERENCE.md)) automatically detects and re-applies patches using a `FileSystemWatcher`.
+- **Root updates may break HTML patches.** Root's auto-updater can overwrite the HTML files that Uprooted patches. The C# hook's `HtmlPatchVerifier` (see [Hook Reference](../framework/HOOK_REFERENCE.md)) automatically detects and re-applies patches using a `FileSystemWatcher`.
 - **Bridge method signatures are stable.** Root's bridge interfaces (`INativeToWebRtc`, `IWebRtcToNative`) have remained stable across all tested versions. New methods may be added, but existing method signatures have not changed.
 - **CSS variable names are stable.** The 25 `--color-*` / `--rootsdk-*` variable pairs have been consistent across all tested Root versions. New variables may be added in future versions.
 - **Sub-app iframe structure may change.** The number and type of embedded sub-apps can change between Root versions. Do not rely on specific iframes being present.

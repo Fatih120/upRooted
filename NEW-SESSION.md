@@ -1,6 +1,6 @@
 # New Session Quick-Start
 
-> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md)
+> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md)
 
 ---
 
@@ -88,9 +88,9 @@ Two independent injection layers into one app:
 | Order | Document | Why |
 |------:|----------|-----|
 | 1 | `NEW-SESSION.md` (this file) | Orientation, rules, file map |
-| 2 | `docs/ARCHITECTURE.md` | Layer boundaries, data flow, all constraints |
+| 2 | `docs/framework/ARCHITECTURE.md` | Layer boundaries, data flow, all constraints |
 | 3 | `hook/SESSION_STATE.md` | What changed last, pending issues, build commands |
-| 4 | `docs/HOOK_REFERENCE.md` | C# hook deep dive (all 18 .cs files) |
+| 4 | `docs/framework/HOOK_REFERENCE.md` | C# hook deep dive (all 18 .cs files) |
 | 5 | `docs/HOW_IT_WORKS.md` | Narrative walkthrough from reverse engineering to running mod |
 
 ## 6. Current State
@@ -195,14 +195,14 @@ powershell -File scripts/build_installer.ps1
 |----------|------|-------------|
 | New Session Guide | `NEW-SESSION.md` | This file -- AI agent quick-start reference card |
 | AI Contributor Guide | `CLAUDE.md` | Repository rules, structure, build commands for AI sessions |
-| Architecture | `docs/ARCHITECTURE.md` | System design, layer boundaries, data flow, critical rules |
+| Architecture | `docs/framework/ARCHITECTURE.md` | System design, layer boundaries, data flow, critical rules |
 | How It Works | `docs/HOW_IT_WORKS.md` | Narrative technical walkthrough from RE to running mod |
-| Hook Reference | `docs/HOOK_REFERENCE.md` | C# hook deep dive -- all 18 .cs files |
-| TypeScript Reference | `docs/TYPESCRIPT_REFERENCE.md` | Browser injection layer -- plugin runtime, bridge, themes |
-| CLR Profiler | `docs/CLR_PROFILER.md` | Native C profiler DLL -- IL injection, env vars, attach |
-| Installer Reference | `docs/INSTALLER.md` | Console TUI installer -- detection, patching, deployment |
-| Build Guide | `docs/BUILD.md` | Build pipeline for all layers |
-| Installation Guide | `docs/INSTALLATION.md` | End-user install/uninstall instructions |
+| Hook Reference | `docs/framework/HOOK_REFERENCE.md` | C# hook deep dive -- all 18 .cs files |
+| TypeScript Reference | `docs/framework/TYPESCRIPT_REFERENCE.md` | Browser injection layer -- plugin runtime, bridge, themes |
+| CLR Profiler | `docs/framework/CLR_PROFILER.md` | Native C profiler DLL -- IL injection, env vars, attach |
+| Installer Reference | `docs/framework/INSTALLER.md` | Console TUI installer -- detection, patching, deployment |
+| Build Guide | `docs/install/BUILD.md` | Build pipeline for all layers |
+| Installation Guide | `docs/install/INSTALLATION.md` | End-user install/uninstall instructions |
 | Roadmap | `docs/ROADMAP.md` | Known issues, planned features, future direction |
 | Documentation Index | `docs/INDEX.md` | Navigation hub for all documentation |
 | Contributing | `CONTRIBUTING.md` | Branch rules, PR process, code style |
@@ -223,17 +223,17 @@ powershell -File scripts/build_installer.ps1
 
 | Document | Path | Description |
 |----------|------|-------------|
-| Theme Engine Deep Dive | `docs/THEME_ENGINE_DEEP_DIVE.md` | Theme system internals -- ResourceDict injection, CSS vars, live preview |
-| Avalonia Patterns | `docs/AVALONIA_PATTERNS.md` | Avalonia reflection patterns, control creation, event handling |
-| .NET Runtime | `docs/DOTNET_RUNTIME.md` | .NET 10 runtime constraints, profiler context limitations |
-| Root Internals | `docs/ROOT_INTERNALS.md` | Root app architecture -- Avalonia, DotNetBrowser, gRPC |
-| gRPC Protocol | `docs/GRPC_PROTOCOL.md` | Root's gRPC backend protocol analysis |
-| gRPC Lib Reference | `docs/GRPC_LIB_REFERENCE.md` | gRPC library usage and integration reference |
-| Reverse Engineering | `docs/REVERSE_ENGINEERING.md` | RE methodology -- decompilation, IL analysis, runtime inspection |
-| Security Research | `docs/SECURITY_RESEARCH.md` | Security analysis -- trust model, attack surface, mitigations |
-| Research Index | `docs/RESEARCH_INDEX.md` | Navigation hub for all research documents |
-| Planning Reference | `docs/PLANNING_REFERENCE.md` | Project planning, milestones, decision log |
-| Contributing (Technical) | `docs/CONTRIBUTING_TECHNICAL.md` | Technical contribution guide -- code patterns, testing, review |
+| Theme Engine Deep Dive | `docs/framework/THEME_ENGINE_DEEP_DIVE.md` | Theme system internals -- ResourceDict injection, CSS vars, live preview |
+| Avalonia Patterns | `docs/framework/AVALONIA_PATTERNS.md` | Avalonia reflection patterns, control creation, event handling |
+| .NET Runtime | `docs/framework/DOTNET_RUNTIME.md` | .NET 10 runtime constraints, profiler context limitations |
+| Root Internals | `docs/research/ROOT_INTERNALS.md` | Root app architecture -- Avalonia, DotNetBrowser, gRPC |
+| gRPC Protocol | `docs/research/GRPC_PROTOCOL.md` | Root's gRPC backend protocol analysis |
+| gRPC Lib Reference | `docs/research/GRPC_LIB_REFERENCE.md` | gRPC library usage and integration reference |
+| Reverse Engineering | `docs/research/REVERSE_ENGINEERING.md` | RE methodology -- decompilation, IL analysis, runtime inspection |
+| Security Research | `docs/research/SECURITY_RESEARCH.md` | Security analysis -- trust model, attack surface, mitigations |
+| Research Index | `docs/research/RESEARCH_INDEX.md` | Navigation hub for all research documents |
+| Planning Reference | `docs/dev/PLANNING_REFERENCE.md` | Project planning, milestones, decision log |
+| Contributing (Technical) | `docs/dev/CONTRIBUTING_TECHNICAL.md` | Technical contribution guide -- code patterns, testing, review |
 
 ---
 

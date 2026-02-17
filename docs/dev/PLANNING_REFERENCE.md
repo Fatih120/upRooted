@@ -2,7 +2,7 @@
 
 Reference index for the `.planning/codebase/` automated analysis files.
 
-> **Related docs:** [Roadmap](ROADMAP.md) | [Architecture](ARCHITECTURE.md) | [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | [Index](INDEX.md)
+> **Related docs:** [Roadmap](../ROADMAP.md) | [Architecture](../framework/ARCHITECTURE.md) | [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | [Index](../INDEX.md)
 
 ---
 

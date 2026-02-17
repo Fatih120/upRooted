@@ -2,8 +2,8 @@
 
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
-> [Installation Guide](INSTALLATION.md) |
-> [Build Guide](BUILD.md) |
+> [Installation Guide](../install/INSTALLATION.md) |
+> [Build Guide](../install/BUILD.md) |
 > [Hook Reference](HOOK_REFERENCE.md)
 
 ---
@@ -597,7 +597,7 @@ The `installer/src-tauri/artifacts/` directory is populated by `scripts/build_in
 before `cargo build --release`: build the C# hook (`dotnet build hook/ -c Release`),
 build the TS bundle (`pnpm build`), copy outputs to `artifacts/`, then run the
 release build. Missing artifacts cause a compile error since `include_bytes!()` is
-evaluated at compile time. See [Build Guide](BUILD.md) for the full pipeline.
+evaluated at compile time. See [Build Guide](../install/BUILD.md) for the full pipeline.
 
 ---
 
@@ -637,7 +637,7 @@ a minimal binary.
 
 - See [Hook Reference](HOOK_REFERENCE.md) for what the deployed hook does at runtime
   (multi-phase startup, sidebar injection, Avalonia reflection, DotNetBrowser features).
-- See [Installation Guide](INSTALLATION.md) for end-user install instructions.
+- See [Installation Guide](../install/INSTALLATION.md) for end-user install instructions.
 - See [Architecture](ARCHITECTURE.md) for how the installer fits into the dual-layer
   injection model.
 - The `uprooted-preload.js` deployed by the installer is compiled from the public

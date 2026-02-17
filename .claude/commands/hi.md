@@ -17,7 +17,7 @@ Orient yourself in the Uprooted codebase by reading the key context documents in
 2. Read `docs/INDEX.md`. This is the documentation navigation hub. Scan the full index to understand what documentation exists and where to find it.
 
 3. Based on the user's likely next task (if known) or general orientation, identify 2-3 documents from the index that would be most relevant and read them. Good defaults if no specific task is apparent:
-   - `docs/ARCHITECTURE.md` — system design and layer boundaries
+   - `docs/framework/ARCHITECTURE.md` — system design and layer boundaries
    - `hook/SESSION_STATE.md` — what changed last, pending issues
 
 4. Provide a brief summary to the user confirming you are oriented:

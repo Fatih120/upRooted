@@ -7,8 +7,8 @@ A step-by-step guide to building your first plugin for Root Communications using
 > [Bridge Reference](BRIDGE_REFERENCE.md) |
 > [Root Environment](ROOT_ENVIRONMENT.md) |
 > [Examples](EXAMPLES.md) |
-> [TypeScript Reference](../TYPESCRIPT_REFERENCE.md) |
-> [Build Guide](../BUILD.md)
+> [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md) |
+> [Build Guide](../install/BUILD.md)
 
 ## Table of Contents
 
@@ -33,13 +33,13 @@ Before you start, you need:
 - **Root Communications** v0.9.86 installed
 - **Uprooted** installed -- run `powershell -File Install-Uprooted.ps1`
 
-For full dev environment setup instructions (including .NET SDK for the hook and Tauri for the installer), see [BUILD.md](../BUILD.md).
+For full dev environment setup instructions (including .NET SDK for the hook and Tauri for the installer), see [BUILD.md](../install/BUILD.md).
 
 Verify your Uprooted installation is working by launching Root and checking for the "UPROOTED" section in Root's settings sidebar.
 
 ### What You Should Know
 
-This guide assumes you are comfortable with TypeScript and basic DOM manipulation. You do not need to know anything about Root's internals -- that is what Uprooted abstracts for you. If you want to understand the internals anyway, read [Root Environment](ROOT_ENVIRONMENT.md) and the [Architecture Reference](../ARCHITECTURE.md).
+This guide assumes you are comfortable with TypeScript and basic DOM manipulation. You do not need to know anything about Root's internals -- that is what Uprooted abstracts for you. If you want to understand the internals anyway, read [Root Environment](ROOT_ENVIRONMENT.md) and the [Architecture Reference](../framework/ARCHITECTURE.md).
 
 ---
 
@@ -88,7 +88,7 @@ src/
     └── settings-panel/# Built-in settings panel
 ```
 
-For a detailed breakdown of these files and their TypeScript types, see [TypeScript Reference](../TYPESCRIPT_REFERENCE.md).
+For a detailed breakdown of these files and their TypeScript types, see [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md).
 
 ---
 
@@ -554,7 +554,7 @@ export default {
 pnpm build
 ```
 
-This runs esbuild to bundle everything into `dist/uprooted-preload.js`. See [BUILD.md](../BUILD.md) for the full build system documentation.
+This runs esbuild to bundle everything into `dist/uprooted-preload.js`. See [BUILD.md](../install/BUILD.md) for the full build system documentation.
 
 ### Install
 
@@ -608,5 +608,5 @@ See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more det
 - [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) -- All 71 bridge methods with type signatures
 - [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md) -- Runtime constraints, CSS variables, and available APIs
 - [EXAMPLES.md](EXAMPLES.md) -- Copy-paste example plugins covering common patterns
-- [Architecture Reference](../ARCHITECTURE.md) -- Authoritative reference for the full Uprooted system
+- [Architecture Reference](../framework/ARCHITECTURE.md) -- Authoritative reference for the full Uprooted system
 - Study the built-in plugins at `src/plugins/themes/` and `src/plugins/sentry-blocker/` for real-world patterns

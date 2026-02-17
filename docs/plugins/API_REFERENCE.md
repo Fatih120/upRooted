@@ -6,7 +6,7 @@ Complete reference for the Uprooted plugin API. All types are defined in `src/ty
 > [Getting Started](GETTING_STARTED.md) |
 > [Bridge Reference](BRIDGE_REFERENCE.md) |
 > [Root Environment](ROOT_ENVIRONMENT.md) |
-> [TypeScript Reference](../TYPESCRIPT_REFERENCE.md)
+> [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md)
 
 ## Table of Contents
 

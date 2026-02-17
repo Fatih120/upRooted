@@ -2,7 +2,7 @@
 
 Project direction, known issues, and planned features for Uprooted.
 
-> **Related docs:** [Index](INDEX.md) | [Architecture](ARCHITECTURE.md) | [Planning Reference](PLANNING_REFERENCE.md) | [Security Research](SECURITY_RESEARCH.md) | [Contributing Technical](CONTRIBUTING_TECHNICAL.md)
+> **Related docs:** [Index](INDEX.md) | [Architecture](framework/ARCHITECTURE.md) | [Planning Reference](dev/PLANNING_REFERENCE.md) | [Security Research](research/SECURITY_RESEARCH.md) | [Contributing Technical](dev/CONTRIBUTING_TECHNICAL.md)
 
 ---
 
@@ -140,7 +140,7 @@ Expand coverage to handle additional transport mechanisms (WebSocket, image beac
 
 Items derived from security research on Root Communications v0.9.86. Uprooted ships inside the same process and browser context as Root, so these findings directly affect how Uprooted handles tokens, validates input, delivers updates, and protects user privacy.
 
-See [Security Research](SECURITY_RESEARCH.md) for the full findings.
+See [Security Research](research/SECURITY_RESEARCH.md) for the full findings.
 
 ### Token handling improvements
 
@@ -182,7 +182,7 @@ Root leaks PII to Sentry (H4 `sendDefaultPii: true`, H5 TURN/ICE credentials, M1
 
 Items from the automated codebase analysis that are not yet tracked elsewhere in this roadmap. These range from type safety gaps to architectural concerns that will cause maintenance burden as the project grows.
 
-See [Planning Reference](PLANNING_REFERENCE.md) for the full analysis.
+See [Planning Reference](dev/PLANNING_REFERENCE.md) for the full analysis.
 
 ### Settings persistence (System.Text.Json limitation)
 
@@ -217,7 +217,7 @@ No linter or formatter is configured for the TypeScript layer. Code style curren
 
 The TypeScript layer has zero test coverage. No test framework, no test files, no test scripts. The C# layer has a manual test harness and two unit test files. This section tracks the plan to close these gaps.
 
-See [Planning Reference](PLANNING_REFERENCE.md) for the full testing analysis.
+See [Planning Reference](dev/PLANNING_REFERENCE.md) for the full testing analysis.
 
 ### Test framework setup
 

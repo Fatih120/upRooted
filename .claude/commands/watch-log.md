@@ -37,7 +37,7 @@ The hook log uses this format:
 ```
 
 Categories include:
-- `Startup` — Initialization phases (0-4)
+- `Startup` — Initialization phases (0-5)
 - `Injector` — Sidebar injection state changes
 - `Theme` — Theme engine operations
 - `Walker` — Visual tree discovery

@@ -2,9 +2,9 @@
 
 Root Communications desktop application architecture from a reverse engineering perspective. This document describes Root's internal structure, process model, embedded browser integration, sub-application lifecycle, authentication flow, theme infrastructure, update mechanism, file layout, backend protocol, and known behavioral quirks -- everything a framework contributor needs to understand about the host application that Uprooted modifies at runtime.
 
-For the browser-side perspective relevant to plugin development, see [Root Environment](plugins/ROOT_ENVIRONMENT.md).
+For the browser-side perspective relevant to plugin development, see [Root Environment](../plugins/ROOT_ENVIRONMENT.md).
 
-> **Related docs:** [Architecture](ARCHITECTURE.md) | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | [gRPC Protocol](GRPC_PROTOCOL.md) | [Reverse Engineering](REVERSE_ENGINEERING.md) | [Security Research](SECURITY_RESEARCH.md)
+> **Related docs:** [Architecture](../framework/ARCHITECTURE.md) | [Root Environment](../plugins/ROOT_ENVIRONMENT.md) | [gRPC Protocol](GRPC_PROTOCOL.md) | [Reverse Engineering](REVERSE_ENGINEERING.md) | [Security Research](SECURITY_RESEARCH.md)
 
 ---
 
@@ -46,7 +46,7 @@ Uprooted is a client modification framework that injects custom UI, plugin infra
 
 This document covers Root's architecture as observed through reverse engineering of version 0.9.86 and surrounding versions. All findings come from static analysis of the binary, source map extraction, runtime observation, and network traffic analysis. Nothing here is based on Root's internal documentation or source code access.
 
-This is the **native/.NET/system-level view** aimed at Uprooted framework contributors who need to understand the host application deeply. Plugin authors who only need to work within the Chromium context should start with [Root Environment](plugins/ROOT_ENVIRONMENT.md) instead.
+This is the **native/.NET/system-level view** aimed at Uprooted framework contributors who need to understand the host application deeply. Plugin authors who only need to work within the Chromium context should start with [Root Environment](../plugins/ROOT_ENVIRONMENT.md) instead.
 
 ---
 
@@ -387,7 +387,7 @@ The C# `ThemeEngine` (2,218 lines) uses reflection to:
 
 The TypeScript theme plugin overrides CSS variables using the `--rootsdk-*` mechanism, which was designed for this exact purpose. Setting inline styles on `:root` takes precedence over stylesheet defaults via CSS specificity rules.
 
-For the complete CSS variable table (all 25 variables across all three themes), see [Root Environment -- CSS Variable System](plugins/ROOT_ENVIRONMENT.md#css-variable-system).
+For the complete CSS variable table (all 25 variables across all three themes), see [Root Environment -- CSS Variable System](../plugins/ROOT_ENVIRONMENT.md#css-variable-system).
 
 ---
 

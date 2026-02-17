@@ -59,12 +59,14 @@ var settings = JsonSerializer.Deserialize<Settings>(json);
 
 **Correct:**
 ```csharp
-// Use manual string parsing or INI-style settings
-// UprootedSettings.cs currently returns hardcoded defaults
-// Future: implement a simple hand-rolled JSON parser
+// Use UprootedSettings which reads/writes INI-format files
+var settings = new UprootedSettings();
+string theme = settings.Get("theme", "default");
+settings.Set("theme", "crimson");
+settings.Save();
 ```
 
-**Status:** The C# hook currently returns hardcoded defaults only. Loading user settings from JSON is a known missing feature that requires a custom parser.
+`UprootedSettings` uses a simple INI key=value format that avoids `System.Text.Json` entirely.
 
 ---
 
@@ -143,7 +145,7 @@ See `AvaloniaReflection.Resolve()` for the actual implementation of this fallbac
 ## Additional Constraints
 
 ### Environment Variables Are User-Scoped
-CLR profiler env vars (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, `CORECLR_PROFILER_PATH`) are set at user scope. They affect ALL .NET processes. The profiler has a process name guard (checks for "Root") and returns `E_FAIL` for other processes, but there is slight startup overhead for every .NET app.
+CLR profiler env vars use dual prefixes: `DOTNET_` (primary, .NET 10+) and `CORECLR_` (legacy fallback). Both `DOTNET_ENABLE_PROFILING`/`CORECLR_ENABLE_PROFILING`, `*_PROFILER`, and `*_PROFILER_PATH` are set at user scope. They affect ALL .NET processes. The profiler has a process name guard (checks for "Root") and returns `E_FAIL` for other processes, but there is slight startup overhead for every .NET app.
 
 ### Settings Page Detection Is Text-Based
 The `VisualTreeWalker` searches for a TextBlock with exact text `"APP SETTINGS"` as an anchor point. If Root renames this text in an update, injection silently fails with no error visible to the user.

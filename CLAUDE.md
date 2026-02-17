@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-> **Related docs:** [NEW-SESSION.md](NEW-SESSION.md) | [Architecture](docs/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Contributing](CONTRIBUTING.md)
+> **Related docs:** [NEW-SESSION.md](NEW-SESSION.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Contributing](CONTRIBUTING.md)
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 For comprehensive documentation, start with [docs/INDEX.md](docs/INDEX.md).
 
-Read `docs/INDEX.md` for navigation, `docs/ARCHITECTURE.md` for architecture reference.
+Read `docs/INDEX.md` for navigation, `docs/framework/ARCHITECTURE.md` for architecture reference.
 
 ### Quick Context for AI Sessions
 
@@ -83,21 +83,36 @@ uprooted-private/
 │   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush)
 ├── docs/                              # Documentation
 │   ├── INDEX.md                       # Documentation navigation hub (start here)
-│   ├── ARCHITECTURE.md                # System architecture and design decisions
-│   ├── HOOK_REFERENCE.md              # C# hook layer deep dive
-│   ├── TYPESCRIPT_REFERENCE.md        # TypeScript browser injection reference
-│   ├── CLR_PROFILER.md                # Native C profiler internals
-│   ├── INSTALLER.md                   # Console TUI installer reference
-│   ├── INSTALLATION.md                # End-user install guide
-│   ├── BUILD.md                       # Build pipeline for all layers
-│   ├── ROADMAP.md                     # Known issues, planned features, future direction
 │   ├── HOW_IT_WORKS.md                # Complete technical walkthrough
-│   └── plugins/                       # Plugin author documentation
-│       ├── GETTING_STARTED.md         # Plugin quickstart tutorial
-│       ├── API_REFERENCE.md           # Plugin API surface
-│       ├── BRIDGE_REFERENCE.md        # Root bridge IPC reference
-│       ├── ROOT_ENVIRONMENT.md        # Root app internals (DOM, CSS, Chromium)
-│       └── EXAMPLES.md               # Annotated example plugins
+│   ├── ROADMAP.md                     # Known issues, planned features, future direction
+│   ├── install/                       # Installation and build
+│   │   ├── INSTALLATION.md            # End-user install guide
+│   │   └── BUILD.md                   # Build pipeline for all layers
+│   ├── framework/                     # Framework internals
+│   │   ├── ARCHITECTURE.md            # System architecture and design decisions
+│   │   ├── HOOK_REFERENCE.md          # C# hook layer deep dive
+│   │   ├── TYPESCRIPT_REFERENCE.md    # TypeScript browser injection reference
+│   │   ├── CLR_PROFILER.md            # Native C profiler internals
+│   │   ├── INSTALLER.md              # Console TUI installer reference
+│   │   ├── THEME_ENGINE_DEEP_DIVE.md  # Theme engine algorithm deep dive
+│   │   ├── AVALONIA_PATTERNS.md       # Avalonia UI patterns via reflection
+│   │   └── DOTNET_RUNTIME.md          # .NET runtime constraints
+│   ├── plugins/                       # Plugin author documentation
+│   │   ├── GETTING_STARTED.md         # Plugin quickstart tutorial
+│   │   ├── API_REFERENCE.md           # Plugin API surface
+│   │   ├── BRIDGE_REFERENCE.md        # Root bridge IPC reference
+│   │   ├── ROOT_ENVIRONMENT.md        # Root app internals (DOM, CSS, Chromium)
+│   │   └── EXAMPLES.md               # Annotated example plugins
+│   ├── research/                      # Security research and reverse engineering
+│   │   ├── SECURITY_RESEARCH.md       # Security findings
+│   │   ├── REVERSE_ENGINEERING.md     # RE methodology
+│   │   ├── GRPC_PROTOCOL.md           # gRPC-web protocol reference
+│   │   ├── GRPC_LIB_REFERENCE.md      # gRPC library reference
+│   │   ├── RESEARCH_INDEX.md          # Research file navigation
+│   │   └── ROOT_INTERNALS.md          # Root's native architecture
+│   └── dev/                           # Developer environment
+│       ├── CONTRIBUTING_TECHNICAL.md   # Technical onboarding
+│       └── PLANNING_REFERENCE.md      # Planning analysis index
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
 ├── CONTRIBUTING.md                    # Contribution guidelines
@@ -107,9 +122,9 @@ uprooted-private/
 
 ## Research and Planning
 
-- **Research directory**: `research/` contains 100+ files from reverse engineering Root -- see [docs/RESEARCH_INDEX.md](docs/RESEARCH_INDEX.md) for a navigable inventory
-- **Planning analysis**: `.planning/codebase/` has 7 automated analysis files -- see [docs/PLANNING_REFERENCE.md](docs/PLANNING_REFERENCE.md) for structured summaries
-- **Security findings**: 105 security findings from penetration testing -- see [docs/SECURITY_RESEARCH.md](docs/SECURITY_RESEARCH.md)
+- **Research directory**: `research/` contains 100+ files from reverse engineering Root -- see [docs/research/RESEARCH_INDEX.md](docs/research/RESEARCH_INDEX.md) for a navigable inventory
+- **Planning analysis**: `.planning/codebase/` has 7 automated analysis files -- see [docs/dev/PLANNING_REFERENCE.md](docs/dev/PLANNING_REFERENCE.md) for structured summaries
+- **Security findings**: 105 security findings from penetration testing -- see [docs/research/SECURITY_RESEARCH.md](docs/research/SECURITY_RESEARCH.md)
 
 ## Extended Documentation
 
@@ -117,12 +132,12 @@ Beyond the core docs listed above, the project includes deep-dive references:
 
 | Document | Purpose |
 |----------|---------|
-| [Theme Engine Deep Dive](docs/THEME_ENGINE_DEEP_DIVE.md) | Full ThemeEngine algorithm documentation |
-| [Avalonia Patterns](docs/AVALONIA_PATTERNS.md) | Avalonia concepts via reflection |
-| [.NET Runtime](docs/DOTNET_RUNTIME.md) | CLR profiler, IL injection, assembly scanning |
-| [Root Internals](docs/ROOT_INTERNALS.md) | Root's native architecture |
-| [gRPC Protocol](docs/GRPC_PROTOCOL.md) | Complete gRPC-web protocol reference |
-| [Contributing Technical](docs/CONTRIBUTING_TECHNICAL.md) | Dev environment, debugging, failure modes |
+| [Theme Engine Deep Dive](docs/framework/THEME_ENGINE_DEEP_DIVE.md) | Full ThemeEngine algorithm documentation |
+| [Avalonia Patterns](docs/framework/AVALONIA_PATTERNS.md) | Avalonia concepts via reflection |
+| [.NET Runtime](docs/framework/DOTNET_RUNTIME.md) | CLR profiler, IL injection, assembly scanning |
+| [Root Internals](docs/research/ROOT_INTERNALS.md) | Root's native architecture |
+| [gRPC Protocol](docs/research/GRPC_PROTOCOL.md) | Complete gRPC-web protocol reference |
+| [Contributing Technical](docs/dev/CONTRIBUTING_TECHNICAL.md) | Dev environment, debugging, failure modes |
 | [Advanced Plugin Dev](docs/plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin development patterns |
 
 See [docs/INDEX.md](docs/INDEX.md) for the complete documentation map with reading paths.

@@ -3,8 +3,8 @@
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
 > [Hook Reference](HOOK_REFERENCE.md) |
-> [Installation Guide](INSTALLATION.md) |
-> [Build Guide](BUILD.md)
+> [Installation Guide](../install/INSTALLATION.md) |
+> [Build Guide](../install/BUILD.md)
 
 ---
 
@@ -89,7 +89,7 @@ static const MYGUID CLSID_UprootedProfiler =
 > canonical going forward. The `CORECLR_` prefix is retained for compatibility with .NET 8/9
 > runtimes.
 
-See [Installation Guide](INSTALLATION.md) for deployment details on each platform.
+See [Installation Guide](../install/INSTALLATION.md) for deployment details on each platform.
 
 ---
 

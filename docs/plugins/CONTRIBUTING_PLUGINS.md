@@ -2,7 +2,7 @@
 
 A step-by-step guide for contributing your plugin to the Uprooted project. Whether you've built something small and useful or an ambitious new feature, this guide walks you through the entire process -- from forking the repo to opening your pull request.
 
-> **Related docs:** [Getting Started](GETTING_STARTED.md) | [API Reference](API_REFERENCE.md) | [Examples](EXAMPLES.md) | [Advanced Development](ADVANCED_DEVELOPMENT.md) | [Root Environment](ROOT_ENVIRONMENT.md) | [Build Guide](../BUILD.md) | [Contributing](../../CONTRIBUTING.md) | [Contributing Technical](../CONTRIBUTING_TECHNICAL.md)
+> **Related docs:** [Getting Started](GETTING_STARTED.md) | [API Reference](API_REFERENCE.md) | [Examples](EXAMPLES.md) | [Advanced Development](ADVANCED_DEVELOPMENT.md) | [Root Environment](ROOT_ENVIRONMENT.md) | [Build Guide](../install/BUILD.md) | [Contributing](../../CONTRIBUTING.md) | [Contributing Technical](../dev/CONTRIBUTING_TECHNICAL.md)
 
 ## Table of Contents
 
@@ -560,9 +560,9 @@ These documents cover specific aspects of plugin development in more depth:
 | [Root Environment](ROOT_ENVIRONMENT.md) | Runtime context: Chromium constraints, CSS variables, debugging |
 | [Examples](EXAMPLES.md) | 11 annotated example plugins (beginner to advanced) |
 | [Advanced Development](ADVANCED_DEVELOPMENT.md) | Bridge chains, multi-plugin interaction, performance, error recovery |
-| [Build Guide](../BUILD.md) | Build pipeline for all layers |
+| [Build Guide](../install/BUILD.md) | Build pipeline for all layers |
 | [Contributing](../../CONTRIBUTING.md) | Branch rules, commit format, PR process, code style |
-| [Contributing Technical](../CONTRIBUTING_TECHNICAL.md) | Dev environment setup, debugging workflows, failure modes |
+| [Contributing Technical](../dev/CONTRIBUTING_TECHNICAL.md) | Dev environment setup, debugging workflows, failure modes |
 
 ---
 
