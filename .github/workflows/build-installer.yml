@@ -80,10 +80,19 @@ jobs:
       - name: Build UprootedHook.dll
         run: dotnet build hook -c Release -o hook/_out
 
-      - name: Stage Hook DLL + deps
+      - name: Stage Hook DLL + deps + JS scripts
         run: |
           Copy-Item hook\_out\UprootedHook.dll installer\src-tauri\artifacts\
           Copy-Item hook\_out\UprootedHook.deps.json installer\src-tauri\artifacts\
+          foreach ($js in @("nsfw-filter.js", "link-embeds.js")) {
+            $src = "hook\_out\$js"
+            if (Test-Path $src) {
+              Copy-Item $src installer\src-tauri\artifacts\
+              Write-Host "  Staged $js"
+            } else {
+              throw "Missing JS script from hook build: $js"
+            }
+          }
 
       - name: Compile profiler DLL
         run: cl.exe /LD /O2 /Fe:installer\src-tauri\artifacts\uprooted_profiler.dll tools\uprooted_profiler.c /link ole32.lib kernel32.lib shell32.lib /DEF:tools\uprooted_profiler.def
@@ -95,7 +104,9 @@ jobs:
             "UprootedHook.dll",
             "UprootedHook.deps.json",
             "uprooted-preload.js",
-            "uprooted.css"
+            "uprooted.css",
+            "nsfw-filter.js",
+            "link-embeds.js"
           )
           foreach ($f in $files) {
             $p = "installer\src-tauri\artifacts\$f"
