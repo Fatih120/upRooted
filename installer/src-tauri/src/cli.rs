@@ -40,6 +40,14 @@ pub fn run_install_plain() {
     );
     println!("{DIM}  {}{RESET}", "═".repeat(40));
 
+    // Check for running Root process
+    if hook::check_root_running() {
+        let killed = hook::kill_root_processes();
+        ok(&format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" }));
+    } else {
+        ok("Root is not running");
+    }
+
     // Detect
     let detection = detection::detect();
     if detection.root_found {
@@ -93,6 +101,14 @@ pub fn run_uninstall_plain() {
     );
     println!("{DIM}  {}{RESET}", "═".repeat(40));
 
+    // Check for running Root process
+    if hook::check_root_running() {
+        let killed = hook::kill_root_processes();
+        ok(&format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" }));
+    } else {
+        ok("Root is not running");
+    }
+
     match hook::remove_env_vars() {
         Ok(()) => ok("Environment variables removed"),
         Err(e) => fail(&format!("Failed to remove env vars: {e}")),
@@ -126,6 +142,14 @@ pub fn run_repair_plain() {
         env!("CARGO_PKG_VERSION")
     );
     println!("{DIM}  {}{RESET}", "═".repeat(40));
+
+    // Check for running Root process
+    if hook::check_root_running() {
+        let killed = hook::kill_root_processes();
+        ok(&format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" }));
+    } else {
+        ok("Root is not running");
+    }
 
     match hook::deploy_files() {
         Ok(()) => ok("Files re-deployed"),

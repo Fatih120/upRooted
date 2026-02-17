@@ -31,13 +31,14 @@ internal class LinkEmbedEngine
     private Timer? _scanTimer;
     private int _scanning; // Interlocked reentrancy guard
 
-    // Chat area discovery
-    private object? _chatContainer;
-    private bool _loggedFallback; // suppress repeated fallback log messages
+    // Chat area discovery — no caching, always scan from mainWindow on each tick
+    // to handle room navigation instantly
 
     // URL tracking — metadata cache avoids re-fetching, injectedCards tracks live cards
     // Per-node dedup is via "uprooted-embed-scanned" tag on each CTextBlock
+    // Image byte cache survives VirtualizingStackPanel recycling for instant re-injection
     private readonly Dictionary<string, EmbedData?> _metadataCache = new();
+    private readonly Dictionary<string, byte[]> _imageBytesCache = new();
     private readonly List<object> _injectedCards = new();
 
     // HTTP via reflection — Root's single-file trimming removes HttpClient methods at JIT time.
@@ -165,124 +166,12 @@ internal class LinkEmbedEngine
 
     // ===== Component 1: Chat Area Discovery =====
 
-    private object? DiscoverChatArea()
-    {
-        // If cached container is still valid (attached to visual tree), return it
-        if (_chatContainer != null && _r.GetParent(_chatContainer) != null)
-            return _chatContainer;
-
-        // Clear stale reference
-        _chatContainer = null;
-
-        // Root's chat text is rendered via CTextBlock / RootMarkdownTextBlock (extend Control, NOT TextBlock).
-        // Scan by type name — same types ScanForUrls uses.
-        var candidates = new List<(object textBlock, object parent)>();
-        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
-        {
-            var typeName = node.GetType().Name;
-            if (!s_messageTextTypes.Contains(typeName)) continue;
-
-            // Read Text property via reflection (CTextBlock.Text)
-            string? text = null;
-            try
-            {
-                text = node.GetType().GetProperty("Text",
-                    BindingFlags.Public | BindingFlags.Instance)?.GetValue(node) as string;
-            }
-            catch { }
-            if (text == null || text.Length < 20) continue;
-
-            var wordCount = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
-            if (wordCount < 4) continue;
-
-            var parent = _r.GetParent(node);
-            if (parent != null)
-                candidates.Add((node, parent));
-
-            if (candidates.Count >= 5) break; // enough to fingerprint
-        }
-
-        if (candidates.Count < 2)
-        {
-            // Fallback: use mainWindow as scan root when not enough message text visible
-            if (!_loggedFallback)
-            {
-                Logger.Log("LinkEmbed", $"Chat container fallback: using mainWindow ({candidates.Count} candidates)");
-                _loggedFallback = true;
-            }
-            _chatContainer = _mainWindow;
-            return _chatContainer;
-        }
-
-        // Find common ancestor of all candidates (the chat message container)
-        _chatContainer = FindCommonAncestor(candidates);
-        if (_chatContainer != null)
-        {
-            _loggedFallback = false; // reset so we log if we fall back again later
-            Logger.Log("LinkEmbed", $"Chat container discovered: {_chatContainer.GetType().Name} " +
-                $"({candidates.Count} message candidates)");
-        }
-        else
-        {
-            // Fallback to mainWindow if common ancestor search fails
-            _chatContainer = _mainWindow;
-            if (!_loggedFallback)
-            {
-                Logger.Log("LinkEmbed", "Chat container fallback: common ancestor not found, using mainWindow");
-                _loggedFallback = true;
-            }
-        }
-
-        return _chatContainer;
-    }
-
     /// <summary>
-    /// Walk up from each candidate to find the nearest common ancestor.
-    /// Collects ancestor chains and finds the first shared node.
+    /// Always scan from mainWindow — no caching.
+    /// Room navigation in Root replaces the visual tree, so a cached container goes stale instantly.
+    /// Full tree walk is &lt;10ms for ~2000 nodes, so 2Hz polling is fine.
     /// </summary>
-    private object? FindCommonAncestor(List<(object textBlock, object parent)> candidates)
-    {
-        if (candidates.Count == 0) return null;
-
-        // Build ancestor chain for first candidate
-        var firstAncestors = new List<object>();
-        var current = candidates[0].parent;
-        for (int i = 0; i < 20 && current != null; i++)
-        {
-            firstAncestors.Add(current);
-            current = _r.GetParent(current);
-        }
-
-        // Find the deepest ancestor shared by all candidates
-        foreach (var ancestor in firstAncestors)
-        {
-            bool sharedByAll = true;
-            for (int c = 1; c < candidates.Count; c++)
-            {
-                if (!IsAncestorOf(ancestor, candidates[c].textBlock))
-                {
-                    sharedByAll = false;
-                    break;
-                }
-            }
-
-            if (sharedByAll)
-                return ancestor;
-        }
-
-        return null;
-    }
-
-    private bool IsAncestorOf(object ancestor, object descendant)
-    {
-        var current = _r.GetParent(descendant);
-        for (int i = 0; i < 25 && current != null; i++)
-        {
-            if (ReferenceEquals(current, ancestor)) return true;
-            current = _r.GetParent(current);
-        }
-        return false;
-    }
+    private object DiscoverChatArea() => _mainWindow;
 
     // ===== Component 2: URL Scanner =====
 
@@ -355,12 +244,19 @@ internal class LinkEmbedEngine
     {
         try
         {
-            // Phase A: Fetch metadata (title/description/provider) — ~200-500ms
             var data = FetchMetadata(url);
             if (data == null) return;
             if (string.IsNullOrEmpty(data.Title)) return;
 
-            // Inject text-only card immediately (no waiting for image download)
+            // Fast path: if we already have cached image bytes (re-injection after
+            // VirtualizingStackPanel recycle), build the full card with image in one shot
+            if (_imageBytesCache.TryGetValue(url, out var cachedBytes))
+            {
+                InjectEmbedWithCachedImage(textBlock, data, cachedBytes);
+                return;
+            }
+
+            // First time: Phase A — inject text-only card immediately
             InjectEmbed(textBlock, data, imageBytes: null);
 
             // Phase B: Fetch image asynchronously, then update existing card
@@ -381,6 +277,8 @@ internal class LinkEmbedEngine
                                 Logger.Log("LinkEmbed", $"Image skipped (size={imgBytes.Length}): {imageUrl}");
                                 return;
                             }
+                            // Cache image bytes for future re-injections
+                            _imageBytesCache[capturedData.Url] = imgBytes;
                             AddImageToExistingCard(capturedData, imgBytes);
                         }
                         catch (Exception ex)
@@ -395,6 +293,59 @@ internal class LinkEmbedEngine
         {
             Logger.Log("LinkEmbed", $"FetchAndInject error for {url}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Fast re-injection path: build full card with cached image bytes in one UI thread dispatch.
+    /// Used when VirtualizingStackPanel recycles and we need to re-create the embed.
+    /// </summary>
+    private void InjectEmbedWithCachedImage(object textControl, EmbedData data, byte[] imageBytes)
+    {
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                var (grid, col, colSpan) = FindInjectionGrid(textControl);
+                if (grid == null) return;
+
+                var embedTag = "uprooted-link-embed:" + data.Url;
+                var children = _r.GetChildren(grid);
+                if (children != null)
+                {
+                    foreach (var child in children)
+                    {
+                        if (child != null && _r.GetTag(child) == embedTag) return;
+                    }
+                }
+
+                object? bitmap = null;
+                try
+                {
+                    using var ms = new System.IO.MemoryStream(imageBytes);
+                    bitmap = _r.CreateBitmapFromStream(ms);
+                }
+                catch { }
+
+                var card = BuildEmbedCard(data, bitmap);
+                if (card == null) return;
+
+                _r.SetTag(card, embedTag);
+                _r.SetMargin(card, 0, 4, 0, 4);
+
+                int newRow = AddAutoRowToGrid(grid);
+                _r.SetGridRow(card, newRow);
+                _r.SetGridColumn(card, col);
+                SetGridColumnSpan(card, colSpan);
+
+                _r.AddChild(grid, card);
+                _injectedCards.Add(card);
+                Logger.Log("LinkEmbed", $"Embed re-injected (cached) for: {data.Url}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("LinkEmbed", $"Cached inject error: {ex.Message}");
+            }
+        });
     }
 
     /// <summary>
@@ -437,7 +388,7 @@ internal class LinkEmbedEngine
                 object? imageElement;
                 if (data.VideoId != null)
                 {
-                    imageElement = BuildThumbnailWithPlayButton(bitmap);
+                    imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
                 }
                 else
                 {
@@ -564,10 +515,13 @@ internal class LinkEmbedEngine
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(string) }, null);
 
-            // Find GetAsync(string) — fallback for byte fetching via response stream
+            // Find GetAsync — try (string) first, then (Uri) since trimmed builds may only have Uri overload
             s_getAsync = httpClientType.GetMethod("GetAsync",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(string) }, null);
+            s_getAsync ??= httpClientType.GetMethod("GetAsync",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(Uri) }, null);
 
             // Resolve SendAsync + HttpRequestMessage + HttpMethod.Get for deep fallback.
             // SendAsync is the core method that GetStringAsync delegates to — always survives trimming.
@@ -681,10 +635,12 @@ internal class LinkEmbedEngine
         {
             object? response = null;
 
-            // Try GetAsync(string) first
+            // Try GetAsync first (may take string or Uri depending on what survived trimming)
             if (s_getAsync != null)
             {
-                var task = s_getAsync.Invoke(s_httpClient, new object[] { url });
+                var paramType = s_getAsync.GetParameters()[0].ParameterType;
+                object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
+                var task = s_getAsync.Invoke(s_httpClient, new[] { arg });
                 response = task?.GetType().GetProperty("Result")?.GetValue(task);
             }
 
@@ -960,7 +916,7 @@ internal class LinkEmbedEngine
                 object? imageElement;
                 if (data.VideoId != null)
                 {
-                    imageElement = BuildThumbnailWithPlayButton(bitmap);
+                    imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
                 }
                 else
                 {
@@ -1017,9 +973,10 @@ internal class LinkEmbedEngine
 
     /// <summary>
     /// Build a thumbnail image with a centered play button overlay for YouTube embeds.
+    /// Clicking the thumbnail opens the YouTube URL in the default browser.
     /// Structure: Border (CornerRadius=6, ClipToBounds) → Grid → [Image, Play Button]
     /// </summary>
-    private object? BuildThumbnailWithPlayButton(object bitmap)
+    private object? BuildThumbnailWithPlayButton(object bitmap, string? url = null)
     {
         var img = _r.CreateImage("UniformToFill");
         if (img == null) return null;
@@ -1060,6 +1017,29 @@ internal class LinkEmbedEngine
             _r.SetMaxHeight(container, MaxImageHeight);
             _r.SetMaxWidth(container, MaxImageWidth);
             _r.SetHorizontalAlignment(container, "Left");
+            _r.SetCursorHand(container);
+
+            // Click to open YouTube URL in default browser
+            if (url != null)
+            {
+                var capturedUrl = url;
+                _r.SubscribeEvent(container, "PointerPressed", () =>
+                {
+                    try
+                    {
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = capturedUrl,
+                            UseShellExecute = true
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("LinkEmbed", $"Open URL error: {ex.Message}");
+                    }
+                });
+            }
+
             return container;
         }
 
@@ -1106,76 +1086,45 @@ internal class LinkEmbedEngine
         {
             try
             {
-                // Walk up from CTextBlock to the message Grid
-                // Structure: CTextBlock → ... → RootMarkdownTextBlock → Grid (message container)
-                var messageGrid = FindMessageGrid(textControl);
-                if (messageGrid == null)
+                var (grid, col, colSpan) = FindInjectionGrid(textControl);
+                if (grid == null)
                 {
-                    Logger.Log("LinkEmbed", $"No message grid found for: {data.Url}");
+                    Logger.Log("LinkEmbed", $"No injection grid for: {data.Url}");
                     return;
                 }
 
-                // Inject into the parent container as a sibling AFTER the message grid
-                // This ensures embeds appear below the message text, not on top of it
-                var parent = _r.GetParent(messageGrid);
-                if (parent == null || _r.GetChildren(parent) == null)
-                {
-                    Logger.Log("LinkEmbed", $"No injectable parent for: {data.Url}");
-                    return;
-                }
-
-                // URL-specific dedup tag to support multi-URL messages
+                // URL-specific dedup tag
                 var embedTag = "uprooted-link-embed:" + data.Url;
 
-                // Check if this URL's embed already exists in the parent
-                var parentChildren = _r.GetChildren(parent);
-                if (parentChildren != null)
+                // Check if already injected
+                var children = _r.GetChildren(grid);
+                if (children != null)
                 {
-                    foreach (var child in parentChildren)
+                    foreach (var child in children)
                     {
                         if (child != null && _r.GetTag(child) == embedTag) return;
                     }
                 }
 
-                // Build text-only card (Phase A — image added later in Phase B)
                 var card = BuildEmbedCard(data);
                 if (card == null) return;
 
                 _r.SetTag(card, embedTag);
                 _r.SetMargin(card, 0, 4, 0, 4);
 
-                // Find messageGrid's index in parent and insert card right after it
-                int insertIndex = -1;
-                if (parentChildren != null)
-                {
-                    for (int i = 0; i < parentChildren.Count; i++)
-                    {
-                        if (ReferenceEquals(parentChildren[i], messageGrid))
-                        {
-                            insertIndex = i + 1;
-                            break;
-                        }
-                    }
-                }
+                // Add an Auto RowDefinition to the Grid so the embed gets its own row
+                int newRow = AddAutoRowToGrid(grid);
 
-                if (insertIndex >= 0 && insertIndex <= (parentChildren?.Count ?? 0))
-                    _r.InsertChild(parent, insertIndex, card);
-                else
-                    _r.AddChild(parent, card);
+                // Place embed in the new row, same column as message text
+                _r.SetGridRow(card, newRow);
+                _r.SetGridColumn(card, col);
+                SetGridColumnSpan(card, colSpan);
 
-                // If parent is a Grid, match the message's column position and span all columns
-                // Without this, the card defaults to column 0 (avatar column, ~40px) → vertical text
-                if (_r.IsGrid(parent))
-                {
-                    var msgCol = _r.GetGridColumn(messageGrid);
-                    _r.SetGridColumn(card, msgCol);
-                    SetGridColumnSpan(card, 99);
-                    Logger.Log("LinkEmbed", $"Grid layout: column={msgCol}, columnSpan=99");
-                }
-
+                _r.AddChild(grid, card);
                 _injectedCards.Add(card);
-                Logger.Log("LinkEmbed", $"Embed card injected for: {data.Url} " +
-                    $"into {parent.GetType().Name} at index {insertIndex}");
+
+                Logger.Log("LinkEmbed", $"Embed injected for: {data.Url} " +
+                    $"into Grid row={newRow} col={col}");
             }
             catch (Exception ex)
             {
@@ -1185,37 +1134,105 @@ internal class LinkEmbedEngine
     }
 
     /// <summary>
-    /// Walk up from a CTextBlock to find the message Grid container.
-    /// The message Grid contains RootMarkdownTextBlock, timestamps, avatar, etc. as siblings.
-    /// We identify it by finding a Grid ancestor that has a RootMarkdownTextBlock child.
+    /// Add a new Auto-height RowDefinition to a Grid and return its row index.
     /// </summary>
-    private object? FindMessageGrid(object control)
+    private int AddAutoRowToGrid(object grid)
     {
-        var current = _r.GetParent(control);
-        for (int i = 0; i < 10 && current != null; i++)
+        try
         {
-            var typeName = current.GetType().Name;
+            var rowDefsProp = grid.GetType().GetProperty("RowDefinitions");
+            var rowDefs = rowDefsProp?.GetValue(grid);
+            if (rowDefs == null) return 99; // fallback: high row number
 
-            // Look for a Grid or Panel that contains a RootMarkdownTextBlock child
-            if (typeName == "Grid" || typeName.Contains("Panel"))
+            // Get current count
+            int count = 0;
+            var countProp = rowDefs.GetType().GetProperty("Count");
+            if (countProp != null)
+                count = (int)countProp.GetValue(rowDefs)!;
+
+            // Create RowDefinition with Auto height
+            // GridUnitType.Auto = 0 in Avalonia
+            if (_r.GridLengthType != null && _r.GridUnitTypeEnum != null)
             {
-                bool hasMarkdownChild = false;
-                foreach (var child in _r.GetVisualChildren(current))
+                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                var autoLength = Activator.CreateInstance(_r.GridLengthType, 1.0, autoUnit);
+
+                // Find RowDefinition type from same assembly as Grid
+                var rowDefType = _r.GridType?.Assembly.GetType("Avalonia.Controls.RowDefinition");
+                if (rowDefType != null)
                 {
-                    var childType = child.GetType().Name;
-                    if (childType == "RootMarkdownTextBlock" || childType == "MessageView")
-                    {
-                        hasMarkdownChild = true;
-                        break;
-                    }
+                    var rowDef = Activator.CreateInstance(rowDefType);
+                    rowDefType.GetProperty("Height")?.SetValue(rowDef, autoLength);
+
+                    // Add to RowDefinitions collection
+                    var addMethod = rowDefs.GetType().GetMethod("Add");
+                    addMethod?.Invoke(rowDefs, new[] { rowDef });
+
+                    return count; // the new row is at index = old count
                 }
-
-                if (hasMarkdownChild && _r.GetChildren(current) != null)
-                    return current;
             }
-
-            current = _r.GetParent(current);
         }
-        return null;
+        catch (Exception ex)
+        {
+            Logger.Log("LinkEmbed", $"AddAutoRowToGrid error: {ex.Message}");
+        }
+
+        return 99; // fallback
+    }
+
+    /// <summary>
+    /// Find the message content Grid that contains the CTextBlock's ancestor RootMarkdownTextBlock.
+    /// Tree structure (confirmed via diagnostics):
+    ///   CTextBlock → StackPanel(6) → RootMarkdownTextBlock → Grid(12) → Grid(7) → Panel → Border → Grid → MessageView → ...
+    ///
+    /// We inject into Grid(12) at depth 2 — the message layout grid.
+    /// Returns a tuple: (grid, column to use, columnSpan).
+    /// </summary>
+    private (object? grid, int column, int columnSpan) FindInjectionGrid(object control)
+    {
+        // Walk up: CTextBlock → StackPanel → RootMarkdownTextBlock → Grid (target)
+        var current = control;
+        object? markdownTextBlock = null;
+
+        for (int i = 0; i < 6; i++)
+        {
+            current = _r.GetParent(current);
+            if (current == null) break;
+
+            var typeName = current.GetType().Name;
+            if (typeName == "RootMarkdownTextBlock")
+            {
+                markdownTextBlock = current;
+                break;
+            }
+        }
+
+        if (markdownTextBlock == null)
+        {
+            Logger.Log("LinkEmbed", "RootMarkdownTextBlock not found in parent chain");
+            return (null, 0, 1);
+        }
+
+        // The Grid is the direct parent of RootMarkdownTextBlock
+        var grid = _r.GetParent(markdownTextBlock);
+        if (grid == null || !_r.IsGrid(grid))
+        {
+            // Fallback: try one more level up
+            var above = _r.GetParent(grid!);
+            if (above != null && _r.IsGrid(above))
+                grid = above;
+            else
+            {
+                Logger.Log("LinkEmbed", $"Grid not found above RootMarkdownTextBlock (found {grid?.GetType().Name})");
+                return (null, 0, 1);
+            }
+        }
+
+        // Get the column the markdown text is in (usually column 1, column 0 is avatar)
+        int col = _r.GetGridColumn(markdownTextBlock);
+        // Span all remaining columns
+        int colSpan = 99;
+
+        return (grid, col, colSpan);
     }
 }

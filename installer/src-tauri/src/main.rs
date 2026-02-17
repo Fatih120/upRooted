@@ -92,14 +92,14 @@ mod tui {
     }
 
     struct Step {
-        label: &'static str,
+        label: String,
         status: StepStatus,
     }
 
     impl Step {
-        fn new(label: &'static str) -> Self {
+        fn new(label: &str) -> Self {
             Self {
-                label,
+                label: label.to_string(),
                 status: StepStatus::Pending,
             }
         }
@@ -174,7 +174,7 @@ mod tui {
             lines.push(Line::from(vec![
                 Span::styled(icon, style),
                 Span::raw(" "),
-                Span::styled(step.label, style),
+                Span::styled(step.label.clone(), style),
             ]));
 
             // Show error detail on failure
@@ -276,6 +276,7 @@ mod tui {
     pub fn run_install() {
         let state = AppState {
             steps: vec![
+                Step::new("Check for running Root process"),
                 Step::new("Detect Root installation"),
                 Step::new("Deploy hook files"),
                 Step::new("Set environment variables"),
@@ -290,34 +291,32 @@ mod tui {
         };
 
         run_tui(state, |state| {
-            // Step 0: Detect
+            // Step 0: Check for running Root process
             state.steps[0].status = StepStatus::Running;
+            if hook::check_root_running() {
+                let killed = hook::kill_root_processes();
+                state.steps[0].label = format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" });
+            } else {
+                state.steps[0].label = "Root is not running".to_string();
+            }
+            state.steps[0].status = StepStatus::Done;
+
+            // Step 1: Detect
+            state.steps[1].status = StepStatus::Running;
             let detection = detection::detect();
             if detection.root_found {
-                state.steps[0].status = StepStatus::Done;
+                state.steps[1].status = StepStatus::Done;
             } else {
-                state.steps[0].status =
+                state.steps[1].status =
                     StepStatus::Failed(format!("Root not found at {}", detection.root_path));
                 state.finished = true;
                 state.message = "Installation failed.".to_string();
                 return;
             }
 
-            // Step 1: Deploy files
-            state.steps[1].status = StepStatus::Running;
-            match hook::deploy_files() {
-                Ok(()) => state.steps[1].status = StepStatus::Done,
-                Err(e) => {
-                    state.steps[1].status = StepStatus::Failed(e);
-                    state.finished = true;
-                    state.message = "Installation failed.".to_string();
-                    return;
-                }
-            }
-
-            // Step 2: Set env vars
+            // Step 2: Deploy files
             state.steps[2].status = StepStatus::Running;
-            match hook::set_env_vars() {
+            match hook::deploy_files() {
                 Ok(()) => state.steps[2].status = StepStatus::Done,
                 Err(e) => {
                     state.steps[2].status = StepStatus::Failed(e);
@@ -327,25 +326,37 @@ mod tui {
                 }
             }
 
-            // Step 3: Patch HTML
+            // Step 3: Set env vars
             state.steps[3].status = StepStatus::Running;
+            match hook::set_env_vars() {
+                Ok(()) => state.steps[3].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[3].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Installation failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 4: Patch HTML
+            state.steps[4].status = StepStatus::Running;
             let result = patcher::install();
             if result.success {
-                state.steps[3].status = StepStatus::Done;
+                state.steps[4].status = StepStatus::Done;
             } else {
-                state.steps[3].status = StepStatus::Failed(result.message);
+                state.steps[4].status = StepStatus::Failed(result.message);
                 state.finished = true;
                 state.message = "Installation failed.".to_string();
                 return;
             }
 
-            // Step 4: Verify
-            state.steps[4].status = StepStatus::Running;
+            // Step 5: Verify
+            state.steps[5].status = StepStatus::Running;
             let final_check = detection::detect();
             if final_check.hook_status.files_ok && final_check.is_installed {
-                state.steps[4].status = StepStatus::Done;
+                state.steps[5].status = StepStatus::Done;
             } else {
-                state.steps[4].status = StepStatus::Failed("Verification found issues".to_string());
+                state.steps[5].status = StepStatus::Failed("Verification found issues".to_string());
                 state.finished = true;
                 state.message = "Installed with warnings.".to_string();
                 state.success = true;
@@ -361,6 +372,7 @@ mod tui {
     pub fn run_uninstall() {
         let state = AppState {
             steps: vec![
+                Step::new("Check for running Root process"),
                 Step::new("Remove environment variables"),
                 Step::new("Restore HTML files"),
                 Step::new("Remove deployed files"),
@@ -373,33 +385,43 @@ mod tui {
         };
 
         run_tui(state, |state| {
-            // Step 0: Remove env vars
+            // Step 0: Check for running Root process
             state.steps[0].status = StepStatus::Running;
+            if hook::check_root_running() {
+                let killed = hook::kill_root_processes();
+                state.steps[0].label = format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" });
+            } else {
+                state.steps[0].label = "Root is not running".to_string();
+            }
+            state.steps[0].status = StepStatus::Done;
+
+            // Step 1: Remove env vars
+            state.steps[1].status = StepStatus::Running;
             match hook::remove_env_vars() {
-                Ok(()) => state.steps[0].status = StepStatus::Done,
+                Ok(()) => state.steps[1].status = StepStatus::Done,
                 Err(e) => {
-                    state.steps[0].status = StepStatus::Failed(e);
+                    state.steps[1].status = StepStatus::Failed(e);
                     state.finished = true;
                     state.message = "Uninstall failed.".to_string();
                     return;
                 }
             }
 
-            // Step 1: Restore HTML
-            state.steps[1].status = StepStatus::Running;
+            // Step 2: Restore HTML
+            state.steps[2].status = StepStatus::Running;
             let result = patcher::uninstall();
             if result.success {
-                state.steps[1].status = StepStatus::Done;
+                state.steps[2].status = StepStatus::Done;
             } else {
-                state.steps[1].status = StepStatus::Failed(result.message);
+                state.steps[2].status = StepStatus::Failed(result.message);
             }
 
-            // Step 2: Remove files
-            state.steps[2].status = StepStatus::Running;
+            // Step 3: Remove files
+            state.steps[3].status = StepStatus::Running;
             match hook::remove_files() {
-                Ok(()) => state.steps[2].status = StepStatus::Done,
+                Ok(()) => state.steps[3].status = StepStatus::Done,
                 Err(e) => {
-                    state.steps[2].status = StepStatus::Failed(e);
+                    state.steps[3].status = StepStatus::Failed(e);
                     state.finished = true;
                     state.message = "Uninstall had errors.".to_string();
                     return;
@@ -415,6 +437,7 @@ mod tui {
     pub fn run_repair() {
         let state = AppState {
             steps: vec![
+                Step::new("Check for running Root process"),
                 Step::new("Re-deploy hook files"),
                 Step::new("Set environment variables"),
                 Step::new("Re-patch HTML files"),
@@ -428,21 +451,19 @@ mod tui {
         };
 
         run_tui(state, |state| {
-            // Step 0: Deploy files
+            // Step 0: Check for running Root process
             state.steps[0].status = StepStatus::Running;
-            match hook::deploy_files() {
-                Ok(()) => state.steps[0].status = StepStatus::Done,
-                Err(e) => {
-                    state.steps[0].status = StepStatus::Failed(e);
-                    state.finished = true;
-                    state.message = "Repair failed.".to_string();
-                    return;
-                }
+            if hook::check_root_running() {
+                let killed = hook::kill_root_processes();
+                state.steps[0].label = format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" });
+            } else {
+                state.steps[0].label = "Root is not running".to_string();
             }
+            state.steps[0].status = StepStatus::Done;
 
-            // Step 1: Set env vars
+            // Step 1: Deploy files
             state.steps[1].status = StepStatus::Running;
-            match hook::set_env_vars() {
+            match hook::deploy_files() {
                 Ok(()) => state.steps[1].status = StepStatus::Done,
                 Err(e) => {
                     state.steps[1].status = StepStatus::Failed(e);
@@ -452,25 +473,37 @@ mod tui {
                 }
             }
 
-            // Step 2: Repair HTML
+            // Step 2: Set env vars
             state.steps[2].status = StepStatus::Running;
+            match hook::set_env_vars() {
+                Ok(()) => state.steps[2].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[2].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Repair failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 3: Repair HTML
+            state.steps[3].status = StepStatus::Running;
             let result = patcher::repair();
             if result.success {
-                state.steps[2].status = StepStatus::Done;
+                state.steps[3].status = StepStatus::Done;
             } else {
-                state.steps[2].status = StepStatus::Failed(result.message);
+                state.steps[3].status = StepStatus::Failed(result.message);
                 state.finished = true;
                 state.message = "Repair failed.".to_string();
                 return;
             }
 
-            // Step 3: Verify
-            state.steps[3].status = StepStatus::Running;
+            // Step 4: Verify
+            state.steps[4].status = StepStatus::Running;
             let final_check = detection::detect();
             if final_check.hook_status.files_ok && final_check.is_installed {
-                state.steps[3].status = StepStatus::Done;
+                state.steps[4].status = StepStatus::Done;
             } else {
-                state.steps[3].status = StepStatus::Failed("Verification found issues".to_string());
+                state.steps[4].status = StepStatus::Failed("Verification found issues".to_string());
             }
 
             state.finished = true;

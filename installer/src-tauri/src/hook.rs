@@ -575,7 +575,6 @@ pub fn check_root_running() -> bool {
 }
 
 /// Terminate all Root processes. Returns the number of processes killed.
-#[allow(dead_code)]
 pub fn kill_root_processes() -> u32 {
     #[cfg(target_os = "windows")]
     {
