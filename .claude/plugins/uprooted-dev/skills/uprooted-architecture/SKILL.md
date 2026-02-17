@@ -1,14 +1,6 @@
 ---
-name: Uprooted Architecture
-description: >-
-  This skill should be used when the user asks about "Uprooted architecture",
-  "how injection works", "hook lifecycle", "bridge proxy", "Avalonia reflection",
-  "plugin system", "sidebar injection", "visual tree", "content overlay pattern",
-  "critical rules", "what not to do in the hook", "C# patterns", "TypeScript patterns",
-  or when working on any file in hook/, src/, or installer/src-tauri/src/.
-  Provides deep architectural knowledge and coding standards for the Uprooted
-  client mod framework.
-version: 0.1.0
+name: uprooted-architecture
+description: This skill should be used when the user asks about "Uprooted architecture", "how injection works", "hook lifecycle", "bridge proxy", "Avalonia reflection", "plugin system", "sidebar injection", "visual tree", "content overlay pattern", "critical rules", "what not to do in the hook", "C# patterns", "TypeScript patterns", or when working on any file in hook/, src/, or installer/src-tauri/src/. Provides deep architectural knowledge and coding standards for the Uprooted client mod framework.
 ---
 
 # Uprooted Architecture Knowledge

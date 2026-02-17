@@ -1,14 +1,6 @@
 ---
-name: Uprooted Builder
-description: >-
-  This skill should be used when the user asks to "build a plugin", "create a plugin",
-  "new plugin", "scaffold plugin", "add a feature", "hook feature", "new settings page",
-  "build a theme", "create a theme", "intercept bridge", "patch bridge method",
-  "add a nav item", "scaffold a hook feature", "new content page",
-  or when the user wants to generate new code for any Uprooted component.
-  Provides templates, API references, and registration steps for building
-  TypeScript plugins, C# hook features, bridge patches, and themes.
-version: 0.1.0
+name: uprooted-builder
+description: This skill should be used when the user asks to "build a plugin", "create a plugin", "new plugin", "scaffold plugin", "add a feature", "hook feature", "new settings page", "build a theme", "create a theme", "intercept bridge", "patch bridge method", "add a nav item", "scaffold a hook feature", "new content page", or when the user wants to generate new code for any Uprooted component. Provides templates, API references, and registration steps for building TypeScript plugins, C# hook features, bridge patches, and themes.
 ---
 
 # Uprooted Builder
