@@ -237,6 +237,8 @@ pub fn run_debug() {
     }
 
     println!();
+    println!("  {DIM}Press Enter to exit...{RESET}");
+    let _ = std::io::stdin().read_line(&mut String::new());
 }
 
 fn status_line(label: &str, ok_val: bool) {
