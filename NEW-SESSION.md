@@ -7,7 +7,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.2.1 (package.json) / 0.1.1 (hook display). Target: Root v0.9.86+.
+Version: 0.2.2 (package.json) / 0.1.1 (hook display). Target: Root v0.9.86+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -91,7 +91,7 @@ Two independent injection layers into one app:
 
 **Source:** `hook/SESSION_STATE.md` (2026-02-14)
 
-**Versions:** package.json 0.2.1 | hook display "0.1.1" | Target Root 0.9.87
+**Versions:** package.json 0.2.2 | hook display "0.1.1" | Target Root 0.9.87
 
 **Recent work (all working):**
 - Fixed infinite inject/detach loop -- replaced broken `VisualRoot` property check with `FindFirstTextBlock("APP SETTINGS")`
@@ -224,4 +224,4 @@ powershell -File scripts/build_installer.ps1
 
 ---
 
-*Quick-start reference for Uprooted v0.2.1. Last updated 2026-02-16.*
+*Quick-start reference for Uprooted v0.2.2. Last updated 2026-02-16.*

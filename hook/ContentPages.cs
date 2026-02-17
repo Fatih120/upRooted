@@ -324,51 +324,48 @@ internal static class ContentPages
         return r.CreateScrollViewer(page);
     }
 
+    // Plain class to avoid ValueTuple TypeLoadException in profiler injection context
+    private sealed class PluginInfo
+    {
+        public string Id = "";
+        public string DisplayName = "";
+        public string Version = "";
+        public string Description = "";
+        public bool DefaultEnabled;
+        public bool HasSettings;
+        public int TestingStatus;
+    }
+
     // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Closed (green)
-    private static (string Label, string Color)[] TestingLevels = Array.Empty<(string, string)>();
+    private static readonly string[] TestingLabels = { "Untested", "Alpha", "Beta", "Closed" };
+    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050" };
 
     // Known plugins metadata
-    private static (string Id, string DisplayName, string Version, string Description, bool DefaultEnabled, bool HasSettings, int TestingStatus)[] KnownPlugins =
-        Array.Empty<(string, string, string, string, bool, bool, int)>();
+    private static PluginInfo[]? KnownPlugins;
 
-    private static bool _staticInitDone;
-
-    /// <summary>
-    /// Initialize static arrays in a method (not field initializer) so any failure
-    /// doesn't permanently break the class via TypeInitializationException.
-    /// </summary>
     private static void EnsureStaticInit()
     {
-        if (_staticInitDone) return;
-        _staticInitDone = true;
+        if (KnownPlugins != null) return;
         try
         {
-            TestingLevels = new (string, string)[]
+            KnownPlugins = new PluginInfo[]
             {
-                ("Untested", "#E04040"),
-                ("Alpha",    "#E08030"),
-                ("Beta",     "#C0A820"),
-                ("Closed",   "#40A050"),
+                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.2.2",
+                    Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
+                    DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
+                new() { Id = "themes", DisplayName = "Themes", Version = "0.2.2",
+                    Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
+                    DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
+                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.2.2",
+                    Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
-
-            KnownPlugins = new (string, string, string, string, bool, bool, int)[]
-            {
-                ("sentry-blocker", "Sentry Blocker", "0.2.1",
-                    "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-                    true, false, 1),
-                ("themes", "Themes", "0.2.1",
-                    "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
-                    true, false, 2),
-                ("content-filter", "Content Filter", "0.2.1",
-                    "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
-                    false, true, 0),
-            };
-
-            Logger.Log("ContentPages", $"Static init OK: {TestingLevels.Length} levels, {KnownPlugins.Length} plugins");
+            Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
         catch (Exception ex)
         {
             Logger.LogException("ContentPages", "Static init FAILED", ex);
+            KnownPlugins = Array.Empty<PluginInfo>();
         }
     }
 
@@ -495,8 +492,11 @@ internal static class ContentPages
             r.SetMargin(cardContainer, 0, 12, 0, 0);
         r.AddChild(page, cardContainer);
 
-        // Pre-build all plugin cards
-        var cards = new List<(string Id, string Name, string Desc, object Card)>();
+        // Pre-build all plugin cards (parallel lists to avoid ValueTuple TypeLoadException in profiler context)
+        var cardIds = new List<string>();
+        var cardNames = new List<string>();
+        var cardDescs = new List<string>();
+        var cardObjects = new List<object>();
         foreach (var plugin in KnownPlugins)
         {
             // Content filter uses NsfwFilterEnabled as its canonical toggle
@@ -508,7 +508,12 @@ internal static class ContentPages
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
                 plugin.HasSettings, plugin.TestingStatus);
             if (card != null)
-                cards.Add((plugin.Id, plugin.DisplayName, plugin.Description, card));
+            {
+                cardIds.Add(plugin.Id);
+                cardNames.Add(plugin.DisplayName);
+                cardDescs.Add(plugin.Description);
+                cardObjects.Add(card);
+            }
         }
 
         // Track row grids and no-results message separately to avoid calling
@@ -544,21 +549,21 @@ internal static class ContentPages
 
             // Filter cards by search text and filter mode
             var visible = new List<object>();
-            foreach (var (id, name, desc, card) in cards)
+            for (int ci = 0; ci < cardObjects.Count; ci++)
             {
                 if (!string.IsNullOrEmpty(searchText[0]))
                 {
                     var q = searchText[0].ToLowerInvariant();
-                    if (!name.ToLowerInvariant().Contains(q) && !desc.ToLowerInvariant().Contains(q))
+                    if (!cardNames[ci].ToLowerInvariant().Contains(q) && !cardDescs[ci].ToLowerInvariant().Contains(q))
                         continue;
                 }
                 if (filterMode[0] != 0)
                 {
-                    bool enabled = settings.Plugins.TryGetValue(id, out var en2) ? en2 : true;
+                    bool enabled = settings.Plugins.TryGetValue(cardIds[ci], out var en2) ? en2 : true;
                     if (filterMode[0] == 1 && !enabled) continue;
                     if (filterMode[0] == 2 && enabled) continue;
                 }
-                visible.Add(card);
+                visible.Add(cardObjects[ci]);
             }
 
             // Build 2-column rows
@@ -587,9 +592,9 @@ internal static class ContentPages
             // Update count label
             if (countLabel != null)
             {
-                var text = visible.Count == cards.Count
-                    ? $"{cards.Count} plugins"
-                    : $"{visible.Count} of {cards.Count} plugins";
+                var text = visible.Count == cardObjects.Count
+                    ? $"{cardObjects.Count} plugins"
+                    : $"{visible.Count} of {cardObjects.Count} plugins";
                 r.TextBlockType?.GetProperty("Text")?.SetValue(countLabel, text);
             }
 
@@ -780,9 +785,10 @@ internal static class ContentPages
         r.AddChild(cardContent, descText);
 
         // Testing status badge
-        if (testingStatus >= 0 && testingStatus < TestingLevels.Length)
+        if (testingStatus >= 0 && testingStatus < TestingLabels.Length)
         {
-            var (statusLabel, statusColor) = TestingLevels[testingStatus];
+            var statusLabel = TestingLabels[testingStatus];
+            var statusColor = TestingColors[testingStatus];
             var badge = r.CreateBorder(statusColor + "20", 6);
             if (badge != null)
             {
