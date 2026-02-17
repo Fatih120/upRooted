@@ -453,7 +453,7 @@ function copyLogs(): void {
 // ── Init ──
 
 export async function init(container: HTMLElement): Promise<void> {
-  let version = "0.2.4";
+  let version = "0.2.5";
   try {
     version = await getUprootedVersion();
   } catch {
