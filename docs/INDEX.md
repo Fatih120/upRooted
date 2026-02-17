@@ -39,6 +39,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Contributing Technical | [`docs/CONTRIBUTING_TECHNICAL.md`](CONTRIBUTING_TECHNICAL.md) | Technical onboarding: dev environment, debugging, failure modes | Contributors |
 | gRPC Library Reference | [`docs/GRPC_LIB_REFERENCE.md`](GRPC_LIB_REFERENCE.md) | API reference for grpc_lib.py encoding/decoding library | Security researchers |
 | Advanced Plugin Dev | [`docs/plugins/ADVANCED_DEVELOPMENT.md`](plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin patterns: bridge chains, performance, error recovery | Plugin authors |
+| Plugin Contribution Guide | [`docs/plugins/CONTRIBUTING_PLUGINS.md`](plugins/CONTRIBUTING_PLUGINS.md) | Fork-to-PR workflow for contributing plugins | Plugin authors |
 | AI Session Onboarding | [`NEW-SESSION.md`](../NEW-SESSION.md) | Context-efficient AI agent onboarding reference card | AI contributors |
 
 ---
@@ -61,6 +62,7 @@ For developers who want to build plugins for Uprooted.
 3. [Bridge Reference](plugins/BRIDGE_REFERENCE.md) -- intercept and extend Root's IPC bridge
 4. [Root Environment](plugins/ROOT_ENVIRONMENT.md) -- DOM structure, CSS variables, Chromium context
 5. [Plugin Examples](plugins/EXAMPLES.md) -- annotated real-world patterns
+6. [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) -- fork-to-PR workflow for submitting your plugin
 
 ### Contribute to the Framework
 
@@ -151,6 +153,7 @@ For setting up a development environment.
 | Logging | [Hook Reference](HOOK_REFERENCE.md) | Logging |
 | Platform paths | [Hook Reference](HOOK_REFERENCE.md) | Platform paths |
 | Plugin advanced patterns | [Advanced Plugin Dev](plugins/ADVANCED_DEVELOPMENT.md) | -- |
+| Plugin contribution workflow | [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) | -- |
 | Plugin examples | [Plugin Examples](plugins/EXAMPLES.md) | -- |
 | Plugin settings | [Plugin API Reference](plugins/API_REFERENCE.md) | Settings |
 | Plugin storage | [Plugin API Reference](plugins/API_REFERENCE.md) | Storage |
