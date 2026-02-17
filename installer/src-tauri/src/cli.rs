@@ -210,7 +210,7 @@ pub fn run_debug() {
 
     // ── [7/7] Hook log tail ──
     header("7/7", "Hook log (last 50 lines)");
-    let log_path = hook::get_uprooted_dir().join("uprooted-hook.log");
+    let log_path = detection::get_profile_dir().join("uprooted-hook.log");
     if log_path.exists() {
         match fs::read_to_string(&log_path) {
             Ok(content) => {
