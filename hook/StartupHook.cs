@@ -30,7 +30,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.2.5 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.2.51 Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
@@ -141,9 +141,41 @@ internal class StartupHook
             Logger.Log("Startup", "=== Uprooted Hook Ready ===");
             Logger.Log("Startup", "========================================");
 
-            // Phase 5: NSFW content filter (non-blocking, background thread)
-            var nsfwSettings = UprootedSettings.Load();
-            if (nsfwSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(nsfwSettings.NsfwApiKey))
+            // Phase 4.5: Browser discovery (runs after delay to let Root finish loading)
+            {
+                var discoveryWindow = mainWindow!;
+                var discoveryResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(10_000); // Wait 10s for Root to fully initialize
+                        Logger.Log("Startup", "Phase 4.5: Running browser discovery scan...");
+                        discoveryResolver.RunOnUIThread(() =>
+                        {
+                            try
+                            {
+                                new BrowserDiscovery(discoveryResolver, discoveryWindow).DumpAllFindings();
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log("Startup", $"Phase 4.5 error (UI): {ex.Message}");
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5 error: {ex.Message}");
+                    }
+                });
+            }
+
+            // Phase 5: DotNetBrowser features (NSFW filter + link embeds)
+            var phase5Settings = UprootedSettings.Load();
+            var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
+            var wantLinkEmbeds = !phase5Settings.Plugins.TryGetValue("link-embeds", out var leEnabled) || leEnabled;
+
+            if (wantNsfw || wantLinkEmbeds)
             {
                 var capturedWindow = mainWindow!;
                 var capturedResolver = resolver;
@@ -151,9 +183,9 @@ internal class StartupHook
                 {
                     try
                     {
-                        Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
+                        Logger.Log("Startup", "Phase 5: Waiting for DotNetBrowser assemblies...");
 
-                        // Wait for DotNetBrowser assemblies to load
+                        // Shared: wait for DotNetBrowser assemblies
                         if (!WaitFor(() => DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded(),
                             TimeSpan.FromSeconds(30)))
                         {
@@ -162,7 +194,7 @@ internal class StartupHook
                         }
                         Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies loaded");
 
-                        // Resolve DotNetBrowser types
+                        // Shared: resolve DotNetBrowser types
                         var browserReflection = new DotNetBrowserReflection();
                         if (!browserReflection.Resolve())
                         {
@@ -170,15 +202,40 @@ internal class StartupHook
                             return;
                         }
 
-                        // Initialize NSFW filter
-                        var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
-                            nsfwSettings, capturedWindow);
-                        ContentPages.NsfwFilterInstance = nsfwFilter;
+                        // NSFW filter
+                        if (wantNsfw)
+                        {
+                            Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
+                            var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
+                                phase5Settings, capturedWindow);
+                            ContentPages.NsfwFilterInstance = nsfwFilter;
 
-                        if (nsfwFilter.Initialize())
-                            Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
+                            if (nsfwFilter.Initialize())
+                                Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
+                            else
+                                Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
+                        }
                         else
-                            Logger.Log("Startup", "Phase 5: NSFW filter init returned false (BrowserView may not be ready yet, will retry via timer)");
+                        {
+                            Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
+                        }
+
+                        // Link embeds
+                        if (wantLinkEmbeds)
+                        {
+                            Logger.Log("Startup", "Phase 5: Starting link embeds injector...");
+                            var linkEmbeds = new LinkEmbedInjector(capturedResolver, browserReflection,
+                                phase5Settings, capturedWindow);
+
+                            if (linkEmbeds.Initialize())
+                                Logger.Log("Startup", "Phase 5 OK: Link embeds active");
+                            else
+                                Logger.Log("Startup", "Phase 5: Link embeds init returned false (will retry via timer)");
+                        }
+                        else
+                        {
+                            Logger.Log("Startup", "Phase 5: Link embeds plugin disabled, skipping");
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -188,7 +245,7 @@ internal class StartupHook
             }
             else
             {
-                Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
+                Logger.Log("Startup", "Phase 5: No DotNetBrowser features needed, skipping");
             }
         }
         catch (Exception ex)

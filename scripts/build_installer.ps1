@@ -81,7 +81,17 @@ Copy-Item $hookDll $ArtifactsDir -Force
 if (Test-Path $hookDeps) {
     Copy-Item $hookDeps $ArtifactsDir -Force
 }
-Write-OK "Staged UprootedHook.dll + deps.json"
+
+# Stage DotNetBrowser JS scripts (injected into Chromium by the hook)
+$hookBinDir = Join-Path $HookProjectDir "bin\Release\net10.0"
+foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
+    $srcJs = Join-Path $hookBinDir $jsFile
+    if (Test-Path $srcJs) {
+        Copy-Item $srcJs $ArtifactsDir -Force
+        Write-OK "  Staged $jsFile"
+    }
+}
+Write-OK "Staged UprootedHook.dll + deps.json + JS scripts"
 
 # Step 3: Compile profiler DLL
 Write-Step "Compiling uprooted_profiler.dll (cl.exe)..."
@@ -135,7 +145,9 @@ $required = @(
     "UprootedHook.dll",
     "UprootedHook.deps.json",
     "uprooted-preload.js",
-    "uprooted.css"
+    "uprooted.css",
+    "nsfw-filter.js",
+    "link-embeds.js"
 )
 foreach ($f in $required) {
     $p = Join-Path $ArtifactsDir $f

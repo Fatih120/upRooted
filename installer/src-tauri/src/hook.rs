@@ -75,6 +75,8 @@ pub fn deploy_files() -> Result<(), String> {
         ("UprootedHook.deps.json", embedded::HOOK_DEPS_JSON),
         ("uprooted-preload.js", embedded::PRELOAD_JS),
         ("uprooted.css", embedded::THEME_CSS),
+        ("nsfw-filter.js", embedded::NSFW_FILTER_JS),
+        ("link-embeds.js", embedded::LINK_EMBEDS_JS),
     ];
 
     for (name, data) in files {

@@ -1,6 +1,7 @@
 // Prevents additional console window on Windows in release
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
 mod detection;
 mod embedded;
 mod hook;
@@ -153,7 +154,30 @@ fn open_profile_dir() -> Result<(), String> {
     }
 }
 
+use clap::Parser;
+
+#[derive(Parser)]
+#[command(name = "uprooted", about = "Uprooted installer for Root Communications")]
+struct Cli {
+    /// Run full diagnostic install with live verbose output
+    #[arg(long)]
+    debug: bool,
+}
+
 fn main() {
+    let args = Cli::parse();
+
+    if args.debug {
+        // GUI .exe has no console — allocate one on Windows so println! output is visible
+        #[cfg(target_os = "windows")]
+        unsafe {
+            windows_sys::Win32::System::Console::AllocConsole();
+        }
+
+        cli::run_debug();
+        std::process::exit(0);
+    }
+
     // WebKitGTK GPU compositing causes blank/white windows on many Wayland compositors
     // (KDE Plasma, GNOME, Fedora, etc). Disable before WebKit initializes.
     if is_wayland_session() {

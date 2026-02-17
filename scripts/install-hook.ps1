@@ -106,6 +106,16 @@ if (Test-Path $srcDeps) {
     Copy-Item $srcDeps (Join-Path $UprootedDir "UprootedHook.deps.json") -Force
 }
 
+# Copy JS scripts that are injected into DotNetBrowser
+$jsFiles = @("nsfw-filter.js", "link-embeds.js")
+foreach ($jsFile in $jsFiles) {
+    $srcJs = Join-Path $HookBinDir $jsFile
+    if (Test-Path $srcJs) {
+        Copy-Item $srcJs (Join-Path $UprootedDir $jsFile) -Force
+        Write-OK "  $jsFile ($([math]::Round((Get-Item (Join-Path $UprootedDir $jsFile)).Length / 1KB, 1)) KB)"
+    }
+}
+
 Write-OK "Artifacts copied:"
 Write-OK "  uprooted_profiler.dll ($([math]::Round((Get-Item $DstProfilerDll).Length / 1KB, 1)) KB)"
 Write-OK "  UprootedHook.dll ($([math]::Round((Get-Item $DstHookDll).Length / 1KB, 1)) KB)"

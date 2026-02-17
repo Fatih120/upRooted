@@ -21,6 +21,7 @@ internal class HtmlPatchVerifier : IDisposable
     private static readonly TimeSpan PatchCooldown = TimeSpan.FromSeconds(2);
     private Timer? _debounceTimer;
     private readonly object _debounceLock = new();
+    private Timer? _pollTimer;
 
     internal HtmlPatchVerifier()
     {
@@ -73,33 +74,59 @@ internal class HtmlPatchVerifier : IDisposable
 
     /// <summary>
     /// Start FileSystemWatchers on WebRtcBundle/ and RootApps/ to detect overwrites.
+    /// Falls back to periodic polling if FileSystemWatcher is unavailable
+    /// (e.g. .NET trimming removes it in single-file deployments).
     /// </summary>
     internal void StartWatching()
     {
-        try
+        var dirsToWatch = new List<string>();
+
+        var webRtcDir = Path.Combine(_profileDir, "WebRtcBundle");
+        if (Directory.Exists(webRtcDir))
+            dirsToWatch.Add(webRtcDir);
+
+        var rootAppsDir = Path.Combine(_profileDir, "RootApps");
+        if (Directory.Exists(rootAppsDir))
         {
-            var webRtcDir = Path.Combine(_profileDir, "WebRtcBundle");
-            if (Directory.Exists(webRtcDir))
-                AddWatcher(webRtcDir);
-
-            var rootAppsDir = Path.Combine(_profileDir, "RootApps");
-            if (Directory.Exists(rootAppsDir))
-            {
-                foreach (var appDir in Directory.GetDirectories(rootAppsDir))
-                    AddWatcher(appDir);
-            }
-
-            Logger.Log("HtmlPatch", $"FileSystemWatcher active on {_watchers.Count} director(ies)");
+            foreach (var appDir in Directory.GetDirectories(rootAppsDir))
+                dirsToWatch.Add(appDir);
         }
-        catch (Exception ex)
+
+        var hostBundleDir = Path.Combine(_profileDir, "HostBundle");
+        if (Directory.Exists(hostBundleDir))
+            dirsToWatch.Add(hostBundleDir);
+
+        // Try FileSystemWatcher for each directory individually
+        var fswFailed = false;
+        foreach (var dir in dirsToWatch)
         {
-            Logger.Log("HtmlPatch", $"Failed to start watchers: {ex.Message}");
+            try
+            {
+                AddWatcher(dir);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("HtmlPatch", $"FileSystemWatcher failed for {Path.GetFileName(dir)}: {ex.Message}");
+                fswFailed = true;
+            }
+        }
+
+        if (_watchers.Count > 0)
+            Logger.Log("HtmlPatch", $"FileSystemWatcher active on {_watchers.Count} director(ies)");
+
+        // Fall back to periodic polling if FSW failed for any directory
+        if (fswFailed || _watchers.Count == 0)
+        {
+            _pollTimer = new Timer(PollPatchCheck, null, 10_000, 30_000);
+            Logger.Log("HtmlPatch", "Using poll fallback (30s interval) for directories without FSW");
         }
     }
 
     public void Dispose()
     {
         _debounceTimer?.Dispose();
+        _pollTimer?.Dispose();
+        _pollTimer = null;
         foreach (var w in _watchers)
         {
             w.EnableRaisingEvents = false;
@@ -163,6 +190,50 @@ internal class HtmlPatchVerifier : IDisposable
         catch (Exception ex)
         {
             Logger.Log("HtmlPatch", $"Watcher error on {GetRelativeName(filePath)}: {ex.Message}");
+        }
+        finally
+        {
+            Interlocked.Exchange(ref _patchGuard, 0);
+        }
+    }
+
+    /// <summary>
+    /// Poll fallback: periodically check all target HTML files for missing patches.
+    /// Used when FileSystemWatcher is unavailable (e.g. .NET trimming).
+    /// </summary>
+    private void PollPatchCheck(object? state)
+    {
+        if (Interlocked.CompareExchange(ref _patchGuard, 1, 0) != 0)
+            return;
+
+        try
+        {
+            if (DateTime.UtcNow - _lastPatchTime < PatchCooldown)
+                return;
+
+            foreach (var file in FindTargetHtmlFiles())
+            {
+                try
+                {
+                    var content = File.ReadAllText(file);
+                    if (IsPatched(content)) continue;
+
+                    Logger.Log("HtmlPatch", $"Poll: patches lost in {GetRelativeName(file)}, repairing...");
+                    if (PatchFile(file, content))
+                    {
+                        _lastPatchTime = DateTime.UtcNow;
+                        Logger.Log("HtmlPatch", $"Poll: repaired {GetRelativeName(file)}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("HtmlPatch", $"Poll error on {GetRelativeName(file)}: {ex.Message}");
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("HtmlPatch", $"PollPatchCheck error: {ex.Message}");
         }
         finally
         {
