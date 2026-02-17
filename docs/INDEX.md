@@ -40,6 +40,11 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | gRPC Library Reference | [`docs/research/GRPC_LIB_REFERENCE.md`](research/GRPC_LIB_REFERENCE.md) | API reference for grpc_lib.py encoding/decoding library | Security researchers |
 | Advanced Plugin Dev | [`docs/plugins/ADVANCED_DEVELOPMENT.md`](plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin patterns: bridge chains, performance, error recovery | Plugin authors |
 | Plugin Contribution Guide | [`docs/plugins/CONTRIBUTING_PLUGINS.md`](plugins/CONTRIBUTING_PLUGINS.md) | Fork-to-PR workflow for contributing plugins | Plugin authors |
+| Built-in Plugins Index | [`docs/plugins/builtin/INDEX.md`](plugins/builtin/INDEX.md) | Overview of all four shipped plugins | Everyone |
+| Sentry Blocker | [`docs/plugins/builtin/sentry-blocker.md`](plugins/builtin/sentry-blocker.md) | Privacy plugin: blocks Sentry telemetry | Everyone |
+| Themes | [`docs/plugins/builtin/themes.md`](plugins/builtin/themes.md) | CSS variable theme engine with presets and custom colors | Everyone |
+| Settings Panel | [`docs/plugins/builtin/settings-panel.md`](plugins/builtin/settings-panel.md) | In-app settings UI injected into Root's sidebar | Everyone |
+| Link Embeds | [`docs/plugins/builtin/link-embeds.md`](plugins/builtin/link-embeds.md) | Discord-style rich link previews and YouTube embeds | Everyone |
 | AI Session Onboarding | [`NEW-SESSION.md`](../NEW-SESSION.md) | Context-efficient AI agent onboarding reference card | AI contributors |
 
 ---
@@ -62,7 +67,8 @@ For developers who want to build plugins for Uprooted.
 3. [Bridge Reference](plugins/BRIDGE_REFERENCE.md) -- intercept and extend Root's IPC bridge
 4. [Root Environment](plugins/ROOT_ENVIRONMENT.md) -- DOM structure, CSS variables, Chromium context
 5. [Plugin Examples](plugins/EXAMPLES.md) -- annotated real-world patterns
-6. [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) -- fork-to-PR workflow for submitting your plugin
+6. [Built-in Plugins](plugins/builtin/INDEX.md) -- study the four shipped plugins as reference implementations
+7. [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) -- fork-to-PR workflow for submitting your plugin
 
 ### Contribute to the Framework
 
@@ -165,5 +171,10 @@ For setting up a development environment.
 | Sidebar injection | [Hook Reference](framework/HOOK_REFERENCE.md) | Sidebar injection |
 | Startup phases | [Hook Reference](framework/HOOK_REFERENCE.md) | Startup phases |
 | Technical debt | [Planning Reference](dev/PLANNING_REFERENCE.md) | Concerns and Technical Debt |
+| Sentry blocker | [Sentry Blocker](plugins/builtin/sentry-blocker.md) | -- |
+| Theme engine (browser) | [Themes](plugins/builtin/themes.md) | -- |
 | Theme engine | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md) | Theme engine |
 | Theme system (Root) | [Root Environment](plugins/ROOT_ENVIRONMENT.md) | Theme system |
+| Link embeds | [Link Embeds](plugins/builtin/link-embeds.md) | -- |
+| Settings panel (browser) | [Settings Panel](plugins/builtin/settings-panel.md) | -- |
+| Built-in plugins | [Built-in Plugins Index](plugins/builtin/INDEX.md) | -- |
