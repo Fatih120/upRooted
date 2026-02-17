@@ -115,6 +115,8 @@ uprooted-private/
 │       └── PLANNING_REFERENCE.md      # Planning analysis index
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
+├── CHANGELOG.md                       # Internal changelog (Keep a Changelog format)
+├── CHANGELOG_PUBLIC.md                # Public changelog (mirrors GitHub release notes)
 ├── CONTRIBUTING.md                    # Contribution guidelines
 ├── CLAUDE.md                          # AI contributor guide (this file)
 └── README.md                          # Repository landing page
