@@ -47,6 +47,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Themes | [`docs/plugins/builtin/themes.md`](plugins/builtin/themes.md) | CSS variable theme engine with presets and custom colors | Everyone |
 | Settings Panel | [`docs/plugins/builtin/settings-panel.md`](plugins/builtin/settings-panel.md) | In-app settings UI injected into Root's sidebar | Everyone |
 | Link Embeds | [`docs/plugins/builtin/link-embeds.md`](plugins/builtin/link-embeds.md) | Discord-style rich link previews and YouTube embeds | Everyone |
+| Archives | [`docs/archives/`](archives/) | Miscellaneous notes, one-off fixes, and historical context | Contributors |
 | AI Session Onboarding | [`NEW-SESSION.md`](../NEW-SESSION.md) | Context-efficient AI agent onboarding reference card | AI contributors |
 
 ---

@@ -110,9 +110,10 @@ uprooted-private/
 │   │   ├── GRPC_LIB_REFERENCE.md      # gRPC library reference
 │   │   ├── RESEARCH_INDEX.md          # Research file navigation
 │   │   └── ROOT_INTERNALS.md          # Root's native architecture
-│   └── dev/                           # Developer environment
-│       ├── CONTRIBUTING_TECHNICAL.md   # Technical onboarding
-│       └── PLANNING_REFERENCE.md      # Planning analysis index
+│   ├── dev/                           # Developer environment
+│   │   ├── CONTRIBUTING_TECHNICAL.md   # Technical onboarding
+│   │   └── PLANNING_REFERENCE.md      # Planning analysis index
+│   └── archives/                      # Miscellaneous notes, one-off fixes, historical context
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
 ├── CHANGELOG.md                       # Internal changelog (Keep a Changelog format)
