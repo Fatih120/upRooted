@@ -63,6 +63,7 @@ Two independent injection layers into one app:
 | `plugins/sentry-blocker/` | Blocks Sentry telemetry (fetch/XHR/sendBeacon) |
 | `plugins/themes/` | CSS variable theme engine (`--rootsdk-*` overrides) |
 | `plugins/settings-panel/` | DOM-injected settings UI in browser sidebar |
+| `plugins/link-embeds/` | Discord-style link previews (OpenGraph + YouTube) |
 | `types/plugin.ts` | `UprootedPlugin`, `Patch`, `SettingField` interfaces |
 | `types/bridge.ts` | `INativeToWebRtc` (42 methods), `IWebRtcToNative` (29 methods) |
 
