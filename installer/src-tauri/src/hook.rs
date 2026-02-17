@@ -259,7 +259,29 @@ exec '{}' \"$@\"\n",
     // 3. .desktop file
     create_desktop_file(&wrapper)?;
 
-    // 4. ~/.profile fallback -- for non-systemd sessions (X11 login shells, etc.)
+    // 4. KDE Plasma env script -- sourced on Plasma session startup
+    let plasma_env_dir = PathBuf::from(&home).join(".config/plasma-workspace/env");
+    let _ = fs::create_dir_all(&plasma_env_dir);
+    let plasma_script = format!(
+        "#!/bin/sh\n\
+        # Uprooted CLR profiler -- remove this file or run the uninstaller to disable\n\
+        export CORECLR_ENABLE_PROFILING=1\n\
+        export CORECLR_PROFILER='{}'\n\
+        export CORECLR_PROFILER_PATH='{}'\n\
+        export DOTNET_ReadyToRun=0\n",
+        PROFILER_GUID,
+        profiler_path.display()
+    );
+    let plasma_env_file = plasma_env_dir.join("uprooted.sh");
+    let _ = fs::write(&plasma_env_file, &plasma_script);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let perms = std::fs::Permissions::from_mode(0o755);
+        let _ = std::fs::set_permissions(&plasma_env_file, perms);
+    }
+
+    // 5. ~/.profile fallback -- for non-systemd sessions (X11 login shells, etc.)
     let profile_path = PathBuf::from(&home).join(".profile");
     let profile_content = fs::read_to_string(&profile_path).unwrap_or_default();
     if !profile_content.contains("CORECLR_ENABLE_PROFILING") {
@@ -293,6 +315,10 @@ pub fn remove_env_vars() -> Result<(), String> {
     // Remove systemd environment.d config
     let env_conf = PathBuf::from(&home).join(".config/environment.d/uprooted.conf");
     let _ = fs::remove_file(&env_conf);
+
+    // Remove KDE Plasma env script
+    let plasma_env_file = PathBuf::from(&home).join(".config/plasma-workspace/env/uprooted.sh");
+    let _ = fs::remove_file(&plasma_env_file);
 
     // Remove wrapper script
     let dir = get_uprooted_dir();
