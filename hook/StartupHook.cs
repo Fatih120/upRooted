@@ -170,12 +170,40 @@ internal class StartupHook
                 });
             }
 
-            // Phase 5: DotNetBrowser features (NSFW filter + link embeds)
+            // Phase 4.5b: Native link embeds (Avalonia-only, no DotNetBrowser)
+            var embedSettings = UprootedSettings.Load();
+            var wantLinkEmbeds = !embedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) || leEnabled;
+
+            if (wantLinkEmbeds)
+            {
+                var embedWindow = mainWindow!;
+                var embedResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(15_000); // Wait 15s for chat to populate
+                        Logger.Log("Startup", "Phase 4.5b: Starting native link embed engine...");
+                        var engine = new LinkEmbedEngine(embedResolver, embedWindow);
+                        engine.Initialize();
+                        Logger.Log("Startup", "Phase 4.5b OK: Native link embeds active");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5b error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5b: Link embeds plugin disabled, skipping");
+            }
+
+            // Phase 5: DotNetBrowser features (NSFW filter)
             var phase5Settings = UprootedSettings.Load();
             var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
-            var wantLinkEmbeds = !phase5Settings.Plugins.TryGetValue("link-embeds", out var leEnabled) || leEnabled;
 
-            if (wantNsfw || wantLinkEmbeds)
+            if (wantNsfw)
             {
                 var capturedWindow = mainWindow!;
                 var capturedResolver = resolver;
@@ -185,16 +213,44 @@ internal class StartupHook
                     {
                         Logger.Log("Startup", "Phase 5: Waiting for DotNetBrowser assemblies...");
 
-                        // Shared: wait for DotNetBrowser assemblies
-                        if (!WaitFor(() => DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded(),
-                            TimeSpan.FromSeconds(30)))
+                        // Event-driven detection: react immediately when DotNetBrowser loads
+                        if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                         {
-                            Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 30s, skipping");
-                            return;
+                            using var assemblyEvent = new ManualResetEventSlim(false);
+                            AssemblyLoadEventHandler handler = (_, args) =>
+                            {
+                                var name = args.LoadedAssembly.GetName().Name ?? "";
+                                if (name.Equals("DotNetBrowser", StringComparison.OrdinalIgnoreCase) ||
+                                    name.Equals("DotNetBrowser.Core", StringComparison.OrdinalIgnoreCase) ||
+                                    name.Equals("DotNetBrowser.Chromium", StringComparison.OrdinalIgnoreCase))
+                                {
+                                    Logger.Log("Startup", $"Phase 5: DotNetBrowser assembly loaded via event: {name}");
+                                    assemblyEvent.Set();
+                                }
+                            };
+                            AppDomain.CurrentDomain.AssemblyLoad += handler;
+                            try
+                            {
+                                // Double-check after subscribing (assembly may have loaded between check and subscribe)
+                                if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
+                                {
+                                    if (!assemblyEvent.Wait(TimeSpan.FromSeconds(90)))
+                                    {
+                                        Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 90s, skipping");
+                                        return;
+                                    }
+                                }
+                            }
+                            finally
+                            {
+                                AppDomain.CurrentDomain.AssemblyLoad -= handler;
+                            }
+                            // Brief pause for any companion assemblies to finish loading
+                            Thread.Sleep(1000);
                         }
                         Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies loaded");
 
-                        // Shared: resolve DotNetBrowser types
+                        // Resolve DotNetBrowser types
                         var browserReflection = new DotNetBrowserReflection();
                         if (!browserReflection.Resolve())
                         {
@@ -203,39 +259,15 @@ internal class StartupHook
                         }
 
                         // NSFW filter
-                        if (wantNsfw)
-                        {
-                            Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
-                            var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
-                                phase5Settings, capturedWindow);
-                            ContentPages.NsfwFilterInstance = nsfwFilter;
+                        Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
+                        var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
+                            phase5Settings, capturedWindow);
+                        ContentPages.NsfwFilterInstance = nsfwFilter;
 
-                            if (nsfwFilter.Initialize())
-                                Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
-                            else
-                                Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
-                        }
+                        if (nsfwFilter.Initialize())
+                            Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
                         else
-                        {
-                            Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
-                        }
-
-                        // Link embeds
-                        if (wantLinkEmbeds)
-                        {
-                            Logger.Log("Startup", "Phase 5: Starting link embeds injector...");
-                            var linkEmbeds = new LinkEmbedInjector(capturedResolver, browserReflection,
-                                phase5Settings, capturedWindow);
-
-                            if (linkEmbeds.Initialize())
-                                Logger.Log("Startup", "Phase 5 OK: Link embeds active");
-                            else
-                                Logger.Log("Startup", "Phase 5: Link embeds init returned false (will retry via timer)");
-                        }
-                        else
-                        {
-                            Logger.Log("Startup", "Phase 5: Link embeds plugin disabled, skipping");
-                        }
+                            Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
                     }
                     catch (Exception ex)
                     {
@@ -245,7 +277,7 @@ internal class StartupHook
             }
             else
             {
-                Logger.Log("Startup", "Phase 5: No DotNetBrowser features needed, skipping");
+                Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
             }
         }
         catch (Exception ex)

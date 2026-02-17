@@ -7,7 +7,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.2.2 (package.json) / 0.1.1 (hook display). Target: Root v0.9.86+.
+Version: 0.3.0. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -15,7 +15,7 @@ Contributors: `watchthelight` (owner), `agomusio` (admin).
 
 Two independent injection layers into one app:
 1. **C# .NET hook** (`hook/`) -- CLR profiler IL-injects into Root.exe, adds native Avalonia sidebar/settings UI via reflection.
-2. **TypeScript browser injection** (`src/`) -- `<script>` tags in HTML inject into DotNetBrowser Chromium; plugin runtime, theme CSS, bridge proxies.
+2. **TypeScript browser injection** (`src/`) -- `<script>` tags in HTML inject into DotNetBrowser Chromium (WebRTC + sub-apps, NOT chat); plugin runtime, theme CSS, bridge proxies.
 
 ## 3. Critical Rules -- Never Do These
 
@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 179 | 5-phase Avalonia wait + initialization orchestrator |
+| `StartupHook.cs` | 315 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 344 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 1943 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
@@ -47,6 +47,10 @@ Two independent injection layers into one app:
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | 91 | INI-based settings (System.Text.Json workaround) |
+| `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `LinkEmbedInjector.cs` | 312 | Link embed JS injection (needs Avalonia-native redesign) |
+| `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 28 | Thread-safe file logging, swallows own exceptions |
 
@@ -63,7 +67,8 @@ Two independent injection layers into one app:
 | `plugins/sentry-blocker/` | Blocks Sentry telemetry (fetch/XHR/sendBeacon) |
 | `plugins/themes/` | CSS variable theme engine (`--rootsdk-*` overrides) |
 | `plugins/settings-panel/` | DOM-injected settings UI in browser sidebar |
-| `plugins/link-embeds/` | Discord-style link previews (OpenGraph + YouTube) |
+| `plugins/link-embeds/` | Discord-style link previews (OpenGraph + YouTube, browser-side) |
+| `plugins/nsfw-filter/` | NSFW content filtering (browser-side) |
 | `types/plugin.ts` | `UprootedPlugin`, `Patch`, `SettingField` interfaces |
 | `types/bridge.ts` | `INativeToWebRtc` (42 methods), `IWebRtcToNative` (29 methods) |
 
@@ -73,7 +78,7 @@ Two independent injection layers into one app:
 |------|---------|
 | `tools/uprooted_profiler.c` | CLR profiler DLL source (Windows) |
 | `installer/src-tauri/src/patcher.rs` | Rust: HTML patch install/uninstall/repair |
-| `installer/src-tauri/src/hook.rs` | Rust: file deployment + env var management |
+| `installer/src-tauri/src/hook.rs` | Rust: file deployment + env var management (DOTNET_ + CORECLR_) |
 | `scripts/build_installer.ps1` | Full installer build pipeline (5 steps) |
 | `scripts/build.ts` | esbuild bundler: `src/` -> `dist/` (IIFE + CSS) |
 | `Install-Uprooted.ps1` | PowerShell one-click installer |
@@ -85,25 +90,32 @@ Two independent injection layers into one app:
 | 1 | `NEW-SESSION.md` (this file) | Orientation, rules, file map |
 | 2 | `docs/ARCHITECTURE.md` | Layer boundaries, data flow, all constraints |
 | 3 | `hook/SESSION_STATE.md` | What changed last, pending issues, build commands |
-| 4 | `docs/HOOK_REFERENCE.md` | C# hook deep dive (1417 lines, all 14 .cs files) |
+| 4 | `docs/HOOK_REFERENCE.md` | C# hook deep dive (all 18 .cs files) |
 | 5 | `docs/HOW_IT_WORKS.md` | Narrative walkthrough from reverse engineering to running mod |
 
 ## 6. Current State
 
-**Source:** `hook/SESSION_STATE.md` (2026-02-14)
+**Source:** `hook/SESSION_STATE.md` (2026-02-17)
 
-**Versions:** package.json 0.2.2 | hook display "0.1.1" | Target Root 0.9.87
+**Versions:** 0.3.0 | Target Root 0.9.92
+
+**Critical finding (2026-02-17):**
+- **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
+- DotNetBrowser loads `rootapp://app/__index.html` -- shell page with `<iframe id="app-iframe">` permanently at `about:blank`
+- `DotNetBrowser.AvaloniaUi` NOT loaded -- Root accesses browser engine programmatically via ViewModel chain
 
 **Recent work (all working):**
-- Fixed infinite inject/detach loop -- replaced broken `VisualRoot` property check with `FindFirstTextBlock("APP SETTINGS")`
-- Fixed chatty TreeWalker logging -- silent text block search instead of full `FindSettingsLayout`
-- Replaced crashing `DumpDiagnostics` with focused `DumpVersionRecon`
-- Added "Uprooted 0.1.1" version text in grey version box (matches native style)
-- Cosmetic sidebar fixes -- margins, font weight, hover highlights now match native items
+- Console TUI installer replaces Tauri GUI (~600KB vs ~100MB)
+- Anti-RE hardening: stripped symbols, LTO, no PDBs
+- Dual-prefix env vars: DOTNET_ (primary) + CORECLR_ (legacy)
+- Phase 4.5 (BrowserDiscovery) and Phase 5 (DotNetBrowser features) implemented
+- DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
+- Event-driven DotNetBrowser assembly detection (ManualResetEventSlim, 90s timeout)
+- NsfwFilter and LinkEmbedInjector: JS injection works technically but targets wrong surface (chat is not in browser)
+- C# settings persistence fully working via INI format (UprootedSettings)
 
 **Known issues:**
-- Style verification pending -- user has not confirmed latest cosmetic fixes visually
-- C# settings persistence uses INI (System.Text.Json broken in profiler context)
+- Link embeds + NSFW filter need Avalonia-native redesign (chat is not in DotNetBrowser)
 - Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
 
@@ -119,8 +131,8 @@ dotnet build hook/ -c Release
 # C# tests
 dotnet test tests/
 
-# Tauri installer
-cd installer && cargo tauri build
+# Console TUI installer
+cd installer/src-tauri && cargo build --release
 
 # Full installer with all embedded artifacts
 powershell -File scripts/build_installer.ps1
@@ -132,7 +144,7 @@ powershell -File scripts/build_installer.ps1
 |----------|--------|
 | Where is the C# entry point? | `hook/Entry.cs` (profiler) or `hook/NativeEntry.cs` (hostfxr) |
 | Where is the TypeScript entry point? | `src/core/preload.ts` |
-| Where is the startup sequence? | `hook/StartupHook.cs` -- 5 phases |
+| Where is the startup sequence? | `hook/StartupHook.cs` -- Phase 0-5 |
 | Where is Avalonia reflection? | `hook/AvaloniaReflection.cs` (1943 lines) |
 | Where is the sidebar injection? | `hook/SidebarInjector.cs` |
 | Where are settings pages built? | `hook/ContentPages.cs` |
@@ -185,10 +197,10 @@ powershell -File scripts/build_installer.ps1
 | AI Contributor Guide | `CLAUDE.md` | Repository rules, structure, build commands for AI sessions |
 | Architecture | `docs/ARCHITECTURE.md` | System design, layer boundaries, data flow, critical rules |
 | How It Works | `docs/HOW_IT_WORKS.md` | Narrative technical walkthrough from RE to running mod |
-| Hook Reference | `docs/HOOK_REFERENCE.md` | C# hook deep dive -- all 14 .cs files (1417 lines) |
+| Hook Reference | `docs/HOOK_REFERENCE.md` | C# hook deep dive -- all 18 .cs files |
 | TypeScript Reference | `docs/TYPESCRIPT_REFERENCE.md` | Browser injection layer -- plugin runtime, bridge, themes |
 | CLR Profiler | `docs/CLR_PROFILER.md` | Native C profiler DLL -- IL injection, env vars, attach |
-| Installer Reference | `docs/INSTALLER.md` | Tauri/Rust installer -- detection, patching, deployment |
+| Installer Reference | `docs/INSTALLER.md` | Console TUI installer -- detection, patching, deployment |
 | Build Guide | `docs/BUILD.md` | Build pipeline for all layers |
 | Installation Guide | `docs/INSTALLATION.md` | End-user install/uninstall instructions |
 | Roadmap | `docs/ROADMAP.md` | Known issues, planned features, future direction |
@@ -225,4 +237,4 @@ powershell -File scripts/build_installer.ps1
 
 ---
 
-*Quick-start reference for Uprooted v0.2.2. Last updated 2026-02-16.*
+*Quick-start reference for Uprooted v0.3.0. Last updated 2026-02-17.*

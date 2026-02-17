@@ -40,13 +40,13 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 14 source files in the `hook/` directory:
+The hook layer consists of 18 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
 | `Entry.cs` | 33 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 179 | 5-phase startup orchestrator |
+| `StartupHook.cs` | 315 | Multi-phase startup orchestrator (Phase 0-5) |
 | `AvaloniaReflection.cs` | 1943 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1088 | Timer-based sidebar injection and content management |
@@ -55,6 +55,10 @@ The hook layer consists of 14 source files in the `hook/` directory:
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
 | `HtmlPatchVerifier.cs` | 344 | Self-healing HTML patch system with FileSystemWatcher |
+| `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `LinkEmbedInjector.cs` | 312 | Link embed JS injection (needs Avalonia-native redesign) |
+| `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `UprootedSettings.cs` | 91 | INI-based settings persistence |
 | `Logger.cs` | 28 | Thread-safe file logging |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
@@ -147,10 +151,11 @@ Native DLL proxy -> hostfxr -> NativeEntry.Initialize()
 
 ## Startup Sequence
 
-**File:** `hook/StartupHook.cs` (179 lines)
+**File:** `hook/StartupHook.cs` (315 lines)
 
 The `StartupHook` class is the internal, no-namespace class required by .NET's
-`DOTNET_STARTUP_HOOKS` mechanism. It contains the five-phase initialization sequence.
+`DOTNET_STARTUP_HOOKS` mechanism. It contains the multi-phase initialization sequence
+(Phase 0 through Phase 5).
 
 ### Process Guard
 
@@ -277,6 +282,42 @@ injector.StartMonitoring();
 Creates the `SidebarInjector` and starts its 200ms polling timer. From this point on,
 the sidebar injector continuously monitors for the settings page and injects when
 detected.
+
+### Phase 4.5: Browser Discovery (Diagnostic)
+
+**Time:** 10 seconds after Phase 4
+**Failure mode:** Non-fatal; purely informational
+
+**File:** `hook/BrowserDiscovery.cs` (498 lines)
+
+A diagnostic phase that performs a full DFS visual tree dump of the main window and
+scans all loaded assemblies. Results are logged for architecture discovery and debugging.
+This phase confirmed that the Avalonia visual tree contains 1647+ nodes and 0 browser
+controls — leading to the discovery that chat is Avalonia-native.
+
+### Phase 5: DotNetBrowser Feature Loading
+
+**Timeout:** 90 seconds (event-driven, not polling)
+**Failure mode:** Non-fatal; features degrade gracefully
+
+**File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`
+
+Uses `AppDomain.CurrentDomain.AssemblyLoad` event + `ManualResetEventSlim` to detect
+when DotNetBrowser assemblies load. Assembly gate requires `DotNetBrowser` or
+`DotNetBrowser.Core` (NOT `DotNetBrowser.AvaloniaUi`, which Root does not ship).
+
+On detection:
+1. `DotNetBrowserReflection` resolves all DotNetBrowser types (IBrowser, IFrame, IEngine,
+   etc.) via reflection.
+2. Discovers `IBrowser` via ViewModel chain walking: `MainWindow.DataContext` →
+   `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`
+   (ConcurrentDictionary).
+3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines).
+4. Initializes `LinkEmbedInjector.TryInject()` (`hook/LinkEmbedInjector.cs`, 312 lines).
+
+**Known limitation:** Chat is Avalonia-native, so JS injection into DotNetBrowser does
+not modify chat messages. Both `NsfwFilter` and `LinkEmbedInjector` need Avalonia-native
+redesign to target chat content.
 
 ---
 
@@ -958,7 +999,7 @@ control from `NavContainer` (they'll be re-added at the bottom after our items).
 **Step 4** (`SidebarInjector.cs:229`): Wrap NavContainer in a ScrollViewer for sidebar
 scrolling via `WrapInScrollViewer()` (`SidebarInjector.cs:632-676`).
 
-**Step 5** (`SidebarInjector.cs:232`): Inject "Uprooted 0.2.2" version text into
+**Step 5** (`SidebarInjector.cs:232`): Inject "Uprooted {version}" version text into
 Root's grey version info box via `InjectVersionText()` (`SidebarInjector.cs:711-788`).
 
 **Step 6** (`SidebarInjector.cs:235`): Record current ListBox selection index for
@@ -1509,7 +1550,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.2.2";
+public string Version { get; set; } = "0.3.0";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -1546,7 +1587,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.2.2
+Version=0.3.0
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
@@ -1630,31 +1671,35 @@ Returns:
                                  v
                         +-------------------+
                         |  StartupHook.cs   |
-                        +---+------+--------+
-                            |      |
-                +-----------+      +------------+
-                |                               |
-                v                               v
-    +---------------------+           +-------------------+
-    | HtmlPatchVerifier   |           | AvaloniaReflection|
-    +---------------------+           +--------+----------+
-    | PlatformPaths       |                    |
-    | UprootedSettings    |          +---------+---------+
-    +---------------------+          |                   |
-                                     v                   v
-                          +------------------+  +----------------+
-                          |VisualTreeWalker  |  | ThemeEngine    |
-                          +--------+---------+  +--+----+--------+
-                                   |               |    |
-                                   v               |    v
-                          +------------------+     | +----------+
-                          | SidebarInjector  |<----+ |ColorUtils|
-                          +--------+---------+       +----------+
-                                   |                      ^
-                                   v                      |
-                          +------------------+    +-------+--------+
-                          | ContentPages     |--->|ColorPickerPopup|
-                          +------------------+    +----------------+
+                        +--+---+------+-----+
+                           |   |      |
+              +------------+   |      +-------------+
+              |                |                     |
+              v                v                     v
+  +-----------------+  +-------------------+  +------------------------+
+  |HtmlPatchVerifier|  |AvaloniaReflection |  |DotNetBrowserReflection |
+  +-----------------+  +--------+----------+  +----------+-------------+
+  | PlatformPaths   |          |                         |
+  | UprootedSettings|  +-------+--------+       +--------+--------+
+  +-----------------+  |                |       |                 |
+                       v                v       v                 v
+            +------------------+ +-----------+ +---------------+ +---------------+
+            |VisualTreeWalker  | |ThemeEngine| |LinkEmbedInjctr| |  NsfwFilter   |
+            +--------+---------+ +--+--+-----+ +---------------+ +---------------+
+                     |              |  |
+                     v              |  v
+            +------------------+   | +----------+
+            | SidebarInjector  |<--+ |ColorUtils|
+            +--------+---------+     +----------+
+                     |                     ^
+                     v                     |
+            +------------------+   +-------+--------+
+            | ContentPages     |-->|ColorPickerPopup|
+            +------------------+   +----------------+
+
+    +------------------+
+    |BrowserDiscovery  |  (Phase 4.5 diagnostic, depends on AvaloniaReflection)
+    +------------------+
 
     Cross-cutting dependencies (used by most files):
     +----------+    +----------------+    +-------------------+
@@ -1668,7 +1713,7 @@ Returns:
 |--------|-----------|-------------|
 | `Entry.cs` | `StartupHook`, `Logger` | Calls `Initialize()` |
 | `NativeEntry.cs` | `StartupHook`, `Logger` | Calls `Initialize()` |
-| `StartupHook.cs` | `HtmlPatchVerifier`, `AvaloniaReflection`, `VisualTreeWalker`, `SidebarInjector`, `ThemeEngine`, `UprootedSettings`, `Logger` | Orchestrates all phases |
+| `StartupHook.cs` | `HtmlPatchVerifier`, `AvaloniaReflection`, `VisualTreeWalker`, `SidebarInjector`, `ThemeEngine`, `DotNetBrowserReflection`, `BrowserDiscovery`, `NsfwFilter`, `LinkEmbedInjector`, `UprootedSettings`, `Logger` | Orchestrates all phases (0-5) |
 | `AvaloniaReflection.cs` | `Logger` | Logs resolution results |
 | `VisualTreeWalker.cs` | `AvaloniaReflection`, `Logger` | Uses reflection for tree traversal |
 | `SidebarInjector.cs` | `AvaloniaReflection`, `VisualTreeWalker`, `ContentPages`, `ThemeEngine`, `UprootedSettings`, `Logger` | Orchestrates injection + content |
@@ -1677,6 +1722,10 @@ Returns:
 | `ColorPickerPopup.cs` | `AvaloniaReflection`, `ColorUtils` | HSV picker UI |
 | `ColorUtils.cs` | (none) | Pure utility functions |
 | `HtmlPatchVerifier.cs` | `PlatformPaths`, `UprootedSettings`, `Logger` | HTML patch + watch |
+| `DotNetBrowserReflection.cs` | `AvaloniaReflection`, `Logger` | DotNetBrowser type resolution + IBrowser discovery |
+| `BrowserDiscovery.cs` | `AvaloniaReflection`, `Logger` | Diagnostic visual tree + assembly dump |
+| `LinkEmbedInjector.cs` | `DotNetBrowserReflection`, `Logger` | JS injection into DotNetBrowser |
+| `NsfwFilter.cs` | `DotNetBrowserReflection`, `Logger` | JS injection into DotNetBrowser |
 | `UprootedSettings.cs` | `PlatformPaths`, `Logger` | INI persistence |
 | `Logger.cs` | `PlatformPaths` | File path for log |
 | `PlatformPaths.cs` | (none) | Pure path resolution |

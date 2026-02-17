@@ -28,10 +28,142 @@ fn header(step: &str, title: &str) {
     println!("{DIM}{}─{RESET}", "─".repeat(50));
 }
 
-pub fn run_debug() {
+// ═══════════════════════════════════════════════════════════════════
+// Plain-mode install (--plain)
+// ═══════════════════════════════════════════════════════════════════
+
+pub fn run_install_plain() {
     println!();
     println!(
-        "{BOLD}  Uprooted Installer v{} — Debug Mode{RESET}",
+        "{BOLD}  Uprooted v{} — Install{RESET}",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("{DIM}  {}{RESET}", "═".repeat(40));
+
+    // Detect
+    let detection = detection::detect();
+    if detection.root_found {
+        ok(&format!("Root found: {}", detection.root_path));
+    } else {
+        fail(&format!("Root NOT found: {}", detection.root_path));
+        return;
+    }
+
+    // Deploy files
+    match hook::deploy_files() {
+        Ok(()) => ok("Files deployed"),
+        Err(e) => {
+            fail(&format!("Deploy failed: {e}"));
+            return;
+        }
+    }
+
+    // Set env vars
+    match hook::set_env_vars() {
+        Ok(()) => ok("Environment variables set"),
+        Err(e) => {
+            fail(&format!("Env var setup failed: {e}"));
+            return;
+        }
+    }
+
+    // Patch HTML
+    let result = patcher::install();
+    if result.success {
+        ok(&result.message);
+    } else {
+        fail(&format!("HTML patching failed: {}", result.message));
+        return;
+    }
+
+    println!();
+    println!("  {GREEN}{BOLD}\u{2713} Patch active{RESET} — restart Root to load Uprooted.");
+    println!();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Plain-mode uninstall (--uninstall --plain)
+// ═══════════════════════════════════════════════════════════════════
+
+pub fn run_uninstall_plain() {
+    println!();
+    println!(
+        "{BOLD}  Uprooted v{} — Uninstall{RESET}",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("{DIM}  {}{RESET}", "═".repeat(40));
+
+    match hook::remove_env_vars() {
+        Ok(()) => ok("Environment variables removed"),
+        Err(e) => fail(&format!("Failed to remove env vars: {e}")),
+    }
+
+    let result = patcher::uninstall();
+    if result.success {
+        ok(&result.message);
+    } else {
+        fail(&format!("HTML restore failed: {}", result.message));
+    }
+
+    match hook::remove_files() {
+        Ok(()) => ok("Files removed"),
+        Err(e) => fail(&format!("Failed to remove files: {e}")),
+    }
+
+    println!();
+    println!("  {GREEN}{BOLD}\u{2713} Uprooted removed.{RESET}");
+    println!();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Plain-mode repair (--repair --plain)
+// ═══════════════════════════════════════════════════════════════════
+
+pub fn run_repair_plain() {
+    println!();
+    println!(
+        "{BOLD}  Uprooted v{} — Repair{RESET}",
+        env!("CARGO_PKG_VERSION")
+    );
+    println!("{DIM}  {}{RESET}", "═".repeat(40));
+
+    match hook::deploy_files() {
+        Ok(()) => ok("Files re-deployed"),
+        Err(e) => {
+            fail(&format!("Deploy failed: {e}"));
+            return;
+        }
+    }
+
+    match hook::set_env_vars() {
+        Ok(()) => ok("Environment variables set"),
+        Err(e) => {
+            fail(&format!("Env var setup failed: {e}"));
+            return;
+        }
+    }
+
+    let result = patcher::repair();
+    if result.success {
+        ok(&result.message);
+    } else {
+        fail(&format!("HTML repair failed: {}", result.message));
+        return;
+    }
+
+    println!();
+    println!("  {GREEN}{BOLD}\u{2713} Repair complete{RESET} — restart Root to load Uprooted.");
+    println!();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Diagnose (--diagnose) — verbose diagnostic output
+// ═══════════════════════════════════════════════════════════════════
+
+pub fn run_diagnose() {
+    println!();
+    println!(
+        "{BOLD}  Uprooted v{} — Diagnostics{RESET}",
         env!("CARGO_PKG_VERSION")
     );
     println!("{DIM}  {}{RESET}", "═".repeat(45));
@@ -93,9 +225,9 @@ pub fn run_debug() {
 
     println!();
     println!("  {BOLD}Env var status:{RESET}");
-    status_line("CORECLR_ENABLE_PROFILING", hs.env_enable_profiling);
-    status_line("CORECLR_PROFILER", hs.env_profiler_guid);
-    status_line("CORECLR_PROFILER_PATH", hs.env_profiler_path);
+    status_line("DOTNET_ENABLE_PROFILING", hs.env_enable_profiling);
+    status_line("DOTNET_PROFILER", hs.env_profiler_guid);
+    status_line("DOTNET_PROFILER_PATH", hs.env_profiler_path);
     status_line("DOTNET_ReadyToRun", hs.env_ready_to_run);
 
     if hs.env_vars_active {
@@ -155,9 +287,9 @@ pub fn run_debug() {
     // Re-check env vars after setting
     let hs2 = hook::check_hook_status();
     println!("  {BOLD}Post-set verification:{RESET}");
-    status_line("CORECLR_ENABLE_PROFILING", hs2.env_enable_profiling);
-    status_line("CORECLR_PROFILER", hs2.env_profiler_guid);
-    status_line("CORECLR_PROFILER_PATH", hs2.env_profiler_path);
+    status_line("DOTNET_ENABLE_PROFILING", hs2.env_enable_profiling);
+    status_line("DOTNET_PROFILER", hs2.env_profiler_guid);
+    status_line("DOTNET_PROFILER_PATH", hs2.env_profiler_path);
     status_line("DOTNET_ReadyToRun", hs2.env_ready_to_run);
 
     // ── [5/7] HTML patching ──
@@ -237,8 +369,6 @@ pub fn run_debug() {
     }
 
     println!();
-    println!("  {DIM}Press Enter to exit...{RESET}");
-    let _ = std::io::stdin().read_line(&mut String::new());
 }
 
 fn status_line(label: &str, ok_val: bool) {
@@ -260,20 +390,16 @@ fn format_size(bytes: u64) -> String {
 }
 
 /// Minimal timestamp without pulling in the chrono crate.
-/// Returns a human-readable string from UNIX epoch.
 fn chrono_lite() -> String {
     use std::time::SystemTime;
     match SystemTime::now().duration_since(SystemTime::UNIX_EPOCH) {
         Ok(d) => {
             let secs = d.as_secs();
-            // Basic UTC breakdown
             let days = secs / 86400;
             let time_secs = secs % 86400;
             let hours = time_secs / 3600;
             let minutes = (time_secs % 3600) / 60;
             let seconds = time_secs % 60;
-
-            // Days since epoch to Y-M-D (simplified leap year calculation)
             let (year, month, day) = days_to_date(days);
             format!(
                 "{year:04}-{month:02}-{day:02} {hours:02}:{minutes:02}:{seconds:02} UTC"
@@ -284,7 +410,6 @@ fn chrono_lite() -> String {
 }
 
 fn days_to_date(days: u64) -> (u64, u64, u64) {
-    // Civil calendar algorithm from Howard Hinnant
     let z = days + 719468;
     let era = z / 146097;
     let doe = z - era * 146097;

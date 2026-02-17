@@ -147,7 +147,18 @@ if (Test-Path $regPath) {
     Write-Host "  No rootapp:// handler found" -ForegroundColor DarkGray
 }
 
-# --- Step 3: Update settings ---
+# --- Step 3: Remove DOTNET_ profiler env vars ---
+
+Write-Step "Removing DOTNET_ profiler env vars..."
+foreach ($var in @("DOTNET_EnableDiagnostics", "DOTNET_ENABLE_PROFILING", "DOTNET_PROFILER", "DOTNET_PROFILER_PATH")) {
+    $val = [Environment]::GetEnvironmentVariable($var, "User")
+    if ($val) {
+        [Environment]::SetEnvironmentVariable($var, $null, "User")
+        Write-OK "  Removed $var"
+    }
+}
+
+# --- Step 4: Update settings ---
 
 Write-Step "Updating settings..."
 
@@ -169,7 +180,7 @@ if (Test-Path $SettingsFile) {
     Write-Host "  No settings file found" -ForegroundColor DarkGray
 }
 
-# --- Step 4: Ask about file removal ---
+# --- Step 5: Ask about file removal ---
 
 Write-Host ""
 $response = Read-Host "Remove Uprooted files from $UprootedDir? (y/n)"

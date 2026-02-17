@@ -41,7 +41,7 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 ```
 uprooted-private/
 ├── hook/                              # C# .NET hook (CLR profiler injection)
-│   ├── StartupHook.cs                 # 5-phase Avalonia wait + initialization
+│   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types
 │   ├── SidebarInjector.cs             # Timer-based sidebar injection (200ms poll)
@@ -53,16 +53,20 @@ uprooted-private/
 │   ├── NativeEntry.cs                 # Native method proxies
 │   ├── PlatformPaths.cs               # Platform-specific path resolution
 │   ├── UprootedSettings.cs            # INI-based settings (no System.Text.Json)
+│   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
+│   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
+│   ├── LinkEmbedInjector.cs           # Link embed JS injection (needs Avalonia-native redesign)
+│   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging
 │   └── SESSION_STATE.md               # Session state/context handoff
-├── installer/src-tauri/src/           # Tauri installer (Rust)
-│   ├── main.rs                        # Tauri app entry point
+├── installer/src-tauri/src/           # Console TUI installer (Rust)
+│   ├── main.rs                        # Console TUI entry point (ratatui)
+│   ├── cli.rs                         # Plain ANSI output mode (--plain, --diagnose)
 │   ├── patcher.rs                     # HTML patch install/uninstall/repair
-│   ├── hook.rs                        # File deployment + env var management
+│   ├── hook.rs                        # File deployment + env var management (DOTNET_ + CORECLR_)
 │   ├── detection.rs                   # Root installation detection
 │   ├── settings.rs                    # JSON settings management
-│   ├── themes.rs                      # Theme file discovery and embedding
 │   └── embedded.rs                    # Embedded resource management
 ├── tools/                             # Native profiler and build utilities
 │   ├── uprooted_profiler.c            # CLR profiler DLL (Windows)
@@ -83,7 +87,7 @@ uprooted-private/
 │   ├── HOOK_REFERENCE.md              # C# hook layer deep dive
 │   ├── TYPESCRIPT_REFERENCE.md        # TypeScript browser injection reference
 │   ├── CLR_PROFILER.md                # Native C profiler internals
-│   ├── INSTALLER.md                   # Tauri/Rust installer reference
+│   ├── INSTALLER.md                   # Console TUI installer reference
 │   ├── INSTALLATION.md                # End-user install guide
 │   ├── BUILD.md                       # Build pipeline for all layers
 │   ├── ROADMAP.md                     # Known issues, planned features, future direction
@@ -129,11 +133,8 @@ See [docs/INDEX.md](docs/INDEX.md) for the complete documentation map with readi
 # C# hook
 dotnet build hook/ -c Release
 
-# Installer (Tauri/Rust)
-cd installer && cargo tauri build
-
-# Full installer with embedded artifacts
-powershell -File scripts/build_installer.ps1
+# Console TUI installer (Rust)
+cd installer/src-tauri && cargo build --release
 ```
 
 ## Critical Rules

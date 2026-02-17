@@ -43,6 +43,7 @@ pub fn load_settings() -> UprootedSettings {
     UprootedSettings::default()
 }
 
+#[allow(dead_code)]
 pub fn save_settings(settings: &UprootedSettings) -> Result<(), String> {
     let path = settings_path();
     if let Some(parent) = path.parent() {

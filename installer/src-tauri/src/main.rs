@@ -1,233 +1,481 @@
-// Prevents additional console window on Windows in release
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
 mod cli;
 mod detection;
 mod embedded;
 mod hook;
 mod patcher;
 mod settings;
-mod themes;
-
-use detection::DetectionResult;
-use hook::HookStatus;
-use patcher::PatchResult;
-use settings::UprootedSettings;
-use themes::ThemeDefinition;
-
-#[tauri::command]
-fn detect_root() -> DetectionResult {
-    detection::detect()
-}
-
-#[tauri::command]
-fn check_hook_status() -> HookStatus {
-    hook::check_hook_status()
-}
-
-#[tauri::command]
-fn check_root_running() -> bool {
-    hook::check_root_running()
-}
-
-#[tauri::command]
-fn kill_root() -> u32 {
-    hook::kill_root_processes()
-}
-
-#[tauri::command]
-fn install_uprooted() -> PatchResult {
-    // Step 1: Deploy embedded files
-    if let Err(e) = hook::deploy_files() {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to deploy files: {}", e),
-            files_patched: vec![],
-        };
-    }
-
-    // Step 2: Set environment variables
-    if let Err(e) = hook::set_env_vars() {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to set env vars: {}", e),
-            files_patched: vec![],
-        };
-    }
-
-    // Step 3: Patch HTML files
-    patcher::install()
-}
-
-#[tauri::command]
-fn uninstall_uprooted() -> PatchResult {
-    // Step 1: Remove environment variables
-    if let Err(e) = hook::remove_env_vars() {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to remove env vars: {}", e),
-            files_patched: vec![],
-        };
-    }
-
-    // Step 2: Restore HTML files
-    let result = patcher::uninstall();
-
-    // Step 3: Remove deployed files
-    if let Err(e) = hook::remove_files() {
-        return PatchResult {
-            success: false,
-            message: format!("HTML restored but failed to remove files: {}", e),
-            files_patched: result.files_patched,
-        };
-    }
-
-    result
-}
-
-#[tauri::command]
-fn repair_uprooted() -> PatchResult {
-    // Re-deploy files (overwrite)
-    if let Err(e) = hook::deploy_files() {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to deploy files: {}", e),
-            files_patched: vec![],
-        };
-    }
-
-    // Re-set env vars
-    if let Err(e) = hook::set_env_vars() {
-        return PatchResult {
-            success: false,
-            message: format!("Failed to set env vars: {}", e),
-            files_patched: vec![],
-        };
-    }
-
-    // Re-patch HTML
-    patcher::repair()
-}
-
-#[tauri::command]
-fn load_settings() -> UprootedSettings {
-    settings::load_settings()
-}
-
-#[tauri::command]
-fn save_settings(settings: UprootedSettings) -> Result<(), String> {
-    settings::save_settings(&settings)
-}
-
-#[tauri::command]
-fn list_themes() -> Vec<ThemeDefinition> {
-    themes::get_builtin_themes()
-}
-
-#[tauri::command]
-fn apply_theme(name: String) -> Result<(), String> {
-    let mut s = settings::load_settings();
-    let theme_settings = s.plugins.entry("themes".to_string()).or_insert_with(|| {
-        settings::PluginSettings {
-            enabled: true,
-            config: std::collections::HashMap::new(),
-        }
-    });
-    theme_settings
-        .config
-        .insert("theme".to_string(), serde_json::Value::String(name));
-    settings::save_settings(&s)
-}
-
-#[tauri::command]
-fn get_uprooted_version() -> String {
-    env!("CARGO_PKG_VERSION").to_string()
-}
-
-#[tauri::command]
-fn open_profile_dir() -> Result<(), String> {
-    let profile = detection::get_profile_dir();
-    if profile.exists() {
-        opener::open(profile).map_err(|e| e.to_string())
-    } else {
-        Err("Profile directory does not exist.".to_string())
-    }
-}
 
 use clap::Parser;
 
 #[derive(Parser)]
 #[command(name = "uprooted", about = "Uprooted installer for Root Communications")]
 struct Cli {
-    /// Run full diagnostic install with live verbose output
+    /// Uninstall Uprooted (remove env vars, restore HTML, delete files)
     #[arg(long)]
-    debug: bool,
+    uninstall: bool,
+
+    /// Repair installation (re-deploy files, re-patch HTML)
+    #[arg(long)]
+    repair: bool,
+
+    /// Run diagnostics (check files, env vars, patches)
+    #[arg(long)]
+    diagnose: bool,
+
+    /// Plain ANSI output instead of TUI (for scripts / CI)
+    #[arg(long)]
+    plain: bool,
 }
 
 fn main() {
     let args = Cli::parse();
 
-    if args.debug {
-        // GUI .exe has no console — allocate one on Windows so println! output is visible
-        #[cfg(target_os = "windows")]
-        unsafe {
-            windows_sys::Win32::System::Console::AllocConsole();
+    if args.diagnose {
+        cli::run_diagnose();
+        return;
+    }
+
+    if args.uninstall {
+        if args.plain {
+            cli::run_uninstall_plain();
+        } else {
+            tui::run_uninstall();
         }
-
-        cli::run_debug();
-        std::process::exit(0);
+        return;
     }
 
-    // WebKitGTK GPU compositing causes blank/white windows on many Wayland compositors
-    // (KDE Plasma, GNOME, Fedora, etc). Disable before WebKit initializes.
-    if is_wayland_session() {
-        std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
-        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    if args.repair {
+        if args.plain {
+            cli::run_repair_plain();
+        } else {
+            tui::run_repair();
+        }
+        return;
     }
 
-    tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
-        .invoke_handler(tauri::generate_handler![
-            detect_root,
-            check_hook_status,
-            check_root_running,
-            kill_root,
-            install_uprooted,
-            uninstall_uprooted,
-            repair_uprooted,
-            load_settings,
-            save_settings,
-            list_themes,
-            apply_theme,
-            get_uprooted_version,
-            open_profile_dir,
-        ])
-        .setup(|app| {
-            let use_transparency = !is_wayland_session();
-
-            tauri::WebviewWindowBuilder::new(
-                app,
-                "main",
-                tauri::WebviewUrl::App("index.html".into()),
-            )
-            .title("uprooted")
-            .inner_size(680.0, 520.0)
-            .resizable(false)
-            .decorations(false)
-            .transparent(use_transparency)
-            .center()
-            .build()?;
-
-            Ok(())
-        })
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+    // Default: install
+    if args.plain {
+        cli::run_install_plain();
+    } else {
+        tui::run_install();
+    }
 }
 
-/// Detect if running under a Wayland session.
-fn is_wayland_session() -> bool {
-    std::env::var("XDG_SESSION_TYPE")
-        .map(|v| v.eq_ignore_ascii_case("wayland"))
-        .unwrap_or(false)
-        || std::env::var("WAYLAND_DISPLAY").is_ok()
+// ══════════════════════════════════════════════════════════════════════════════
+// TUI module — btop-inspired console UI with ratatui
+// ══════════════════════════════════════════════════════════════════════════════
+
+mod tui {
+    use crate::{detection, hook, patcher};
+    use crossterm::{
+        event::{self, Event, KeyEventKind},
+        execute,
+        terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    };
+    use ratatui::{
+        backend::CrosstermBackend,
+        layout::Rect,
+        style::{Color, Modifier, Style},
+        text::{Line, Span},
+        widgets::{Block, Borders, Paragraph},
+        Frame, Terminal,
+    };
+    use std::io;
+    use std::time::{Duration, Instant};
+
+    #[derive(Clone, PartialEq)]
+    enum StepStatus {
+        Pending,
+        Running,
+        Done,
+        Failed(String),
+    }
+
+    struct Step {
+        label: &'static str,
+        status: StepStatus,
+    }
+
+    impl Step {
+        fn new(label: &'static str) -> Self {
+            Self {
+                label,
+                status: StepStatus::Pending,
+            }
+        }
+    }
+
+    struct AppState {
+        steps: Vec<Step>,
+        title: &'static str,
+        finished: bool,
+        success: bool,
+        message: String,
+        spinner_tick: usize,
+    }
+
+    const SPINNER: &[&str] = &["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+
+    fn render(frame: &mut Frame, state: &AppState) {
+        let area = frame.area();
+
+        // Center a box in the terminal
+        let box_width = 60u16.min(area.width);
+        let box_height = (state.steps.len() as u16 + 8).min(area.height);
+        let x = (area.width.saturating_sub(box_width)) / 2;
+        let y = (area.height.saturating_sub(box_height)) / 2;
+        let centered = Rect::new(x, y, box_width, box_height);
+
+        let block = Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Cyan))
+            .title(Span::styled(
+                format!(" {} ", state.title),
+                Style::default()
+                    .fg(Color::Cyan)
+                    .add_modifier(Modifier::BOLD),
+            ));
+
+        let inner = block.inner(centered);
+        frame.render_widget(block, centered);
+
+        // Build content lines
+        let mut lines: Vec<Line> = Vec::new();
+
+        // Version line
+        lines.push(Line::from(Span::styled(
+            format!("  Uprooted v{}", env!("CARGO_PKG_VERSION")),
+            Style::default()
+                .fg(Color::White)
+                .add_modifier(Modifier::BOLD),
+        )));
+        lines.push(Line::from(""));
+
+        // Steps
+        for step in &state.steps {
+            let (icon, style) = match &step.status {
+                StepStatus::Pending => (
+                    "  ○".to_string(),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                StepStatus::Running => (
+                    format!("  {}", SPINNER[state.spinner_tick % SPINNER.len()]),
+                    Style::default().fg(Color::Yellow),
+                ),
+                StepStatus::Done => (
+                    "  ✓".to_string(),
+                    Style::default().fg(Color::Green),
+                ),
+                StepStatus::Failed(_) => (
+                    "  ✗".to_string(),
+                    Style::default().fg(Color::Red),
+                ),
+            };
+            lines.push(Line::from(vec![
+                Span::styled(icon, style),
+                Span::raw(" "),
+                Span::styled(step.label, style),
+            ]));
+
+            // Show error detail on failure
+            if let StepStatus::Failed(msg) = &step.status {
+                lines.push(Line::from(Span::styled(
+                    format!("      {}", msg),
+                    Style::default().fg(Color::Red),
+                )));
+            }
+        }
+
+        // Footer
+        lines.push(Line::from(""));
+        if state.finished {
+            if state.success {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", state.message),
+                    Style::default()
+                        .fg(Color::Green)
+                        .add_modifier(Modifier::BOLD),
+                )));
+            } else {
+                lines.push(Line::from(Span::styled(
+                    format!("  {}", state.message),
+                    Style::default()
+                        .fg(Color::Red)
+                        .add_modifier(Modifier::BOLD),
+                )));
+            }
+            lines.push(Line::from(Span::styled(
+                "  Press any key to exit...",
+                Style::default().fg(Color::DarkGray),
+            )));
+        }
+
+        let paragraph = Paragraph::new(lines);
+        frame.render_widget(paragraph, inner);
+    }
+
+    fn run_tui(mut state: AppState, execute_steps: impl FnOnce(&mut AppState)) {
+        // Setup terminal
+        let _ = enable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, EnterAlternateScreen);
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = match Terminal::new(backend) {
+            Ok(t) => t,
+            Err(_) => {
+                let _ = disable_raw_mode();
+                eprintln!("Failed to initialize terminal UI");
+                return;
+            }
+        };
+
+        // Initial render
+        let _ = terminal.draw(|f| render(f, &state));
+
+        // Execute steps (blocking)
+        execute_steps(&mut state);
+
+        // Final render
+        let _ = terminal.draw(|f| render(f, &state));
+
+        // Wait for keypress or auto-close on success after 3s
+        let deadline = if state.success {
+            Some(Instant::now() + Duration::from_secs(3))
+        } else {
+            None
+        };
+
+        loop {
+            let timeout = match deadline {
+                Some(d) => d.saturating_duration_since(Instant::now()),
+                None => Duration::from_secs(60),
+            };
+
+            if timeout.is_zero() {
+                break;
+            }
+
+            if event::poll(timeout.min(Duration::from_millis(100))).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = event::read() {
+                    if key.kind == KeyEventKind::Press {
+                        break;
+                    }
+                }
+            }
+
+            // Update spinner for any running steps
+            state.spinner_tick += 1;
+            let _ = terminal.draw(|f| render(f, &state));
+        }
+
+        // Restore terminal
+        let _ = disable_raw_mode();
+        let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+    }
+
+    pub fn run_install() {
+        let state = AppState {
+            steps: vec![
+                Step::new("Detect Root installation"),
+                Step::new("Deploy hook files"),
+                Step::new("Set environment variables"),
+                Step::new("Patch HTML files"),
+                Step::new("Verify installation"),
+            ],
+            title: "Install",
+            finished: false,
+            success: false,
+            message: String::new(),
+            spinner_tick: 0,
+        };
+
+        run_tui(state, |state| {
+            // Step 0: Detect
+            state.steps[0].status = StepStatus::Running;
+            let detection = detection::detect();
+            if detection.root_found {
+                state.steps[0].status = StepStatus::Done;
+            } else {
+                state.steps[0].status =
+                    StepStatus::Failed(format!("Root not found at {}", detection.root_path));
+                state.finished = true;
+                state.message = "Installation failed.".to_string();
+                return;
+            }
+
+            // Step 1: Deploy files
+            state.steps[1].status = StepStatus::Running;
+            match hook::deploy_files() {
+                Ok(()) => state.steps[1].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[1].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Installation failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 2: Set env vars
+            state.steps[2].status = StepStatus::Running;
+            match hook::set_env_vars() {
+                Ok(()) => state.steps[2].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[2].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Installation failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 3: Patch HTML
+            state.steps[3].status = StepStatus::Running;
+            let result = patcher::install();
+            if result.success {
+                state.steps[3].status = StepStatus::Done;
+            } else {
+                state.steps[3].status = StepStatus::Failed(result.message);
+                state.finished = true;
+                state.message = "Installation failed.".to_string();
+                return;
+            }
+
+            // Step 4: Verify
+            state.steps[4].status = StepStatus::Running;
+            let final_check = detection::detect();
+            if final_check.hook_status.files_ok && final_check.is_installed {
+                state.steps[4].status = StepStatus::Done;
+            } else {
+                state.steps[4].status = StepStatus::Failed("Verification found issues".to_string());
+                state.finished = true;
+                state.message = "Installed with warnings.".to_string();
+                state.success = true;
+                return;
+            }
+
+            state.finished = true;
+            state.success = true;
+            state.message = "Patch active — restart Root to load Uprooted.".to_string();
+        });
+    }
+
+    pub fn run_uninstall() {
+        let state = AppState {
+            steps: vec![
+                Step::new("Remove environment variables"),
+                Step::new("Restore HTML files"),
+                Step::new("Remove deployed files"),
+            ],
+            title: "Uninstall",
+            finished: false,
+            success: false,
+            message: String::new(),
+            spinner_tick: 0,
+        };
+
+        run_tui(state, |state| {
+            // Step 0: Remove env vars
+            state.steps[0].status = StepStatus::Running;
+            match hook::remove_env_vars() {
+                Ok(()) => state.steps[0].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[0].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Uninstall failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 1: Restore HTML
+            state.steps[1].status = StepStatus::Running;
+            let result = patcher::uninstall();
+            if result.success {
+                state.steps[1].status = StepStatus::Done;
+            } else {
+                state.steps[1].status = StepStatus::Failed(result.message);
+            }
+
+            // Step 2: Remove files
+            state.steps[2].status = StepStatus::Running;
+            match hook::remove_files() {
+                Ok(()) => state.steps[2].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[2].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Uninstall had errors.".to_string();
+                    return;
+                }
+            }
+
+            state.finished = true;
+            state.success = true;
+            state.message = "Uprooted removed.".to_string();
+        });
+    }
+
+    pub fn run_repair() {
+        let state = AppState {
+            steps: vec![
+                Step::new("Re-deploy hook files"),
+                Step::new("Set environment variables"),
+                Step::new("Re-patch HTML files"),
+                Step::new("Verify installation"),
+            ],
+            title: "Repair",
+            finished: false,
+            success: false,
+            message: String::new(),
+            spinner_tick: 0,
+        };
+
+        run_tui(state, |state| {
+            // Step 0: Deploy files
+            state.steps[0].status = StepStatus::Running;
+            match hook::deploy_files() {
+                Ok(()) => state.steps[0].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[0].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Repair failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 1: Set env vars
+            state.steps[1].status = StepStatus::Running;
+            match hook::set_env_vars() {
+                Ok(()) => state.steps[1].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[1].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Repair failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 2: Repair HTML
+            state.steps[2].status = StepStatus::Running;
+            let result = patcher::repair();
+            if result.success {
+                state.steps[2].status = StepStatus::Done;
+            } else {
+                state.steps[2].status = StepStatus::Failed(result.message);
+                state.finished = true;
+                state.message = "Repair failed.".to_string();
+                return;
+            }
+
+            // Step 3: Verify
+            state.steps[3].status = StepStatus::Running;
+            let final_check = detection::detect();
+            if final_check.hook_status.files_ok && final_check.is_installed {
+                state.steps[3].status = StepStatus::Done;
+            } else {
+                state.steps[3].status = StepStatus::Failed("Verification found issues".to_string());
+            }
+
+            state.finished = true;
+            state.success = true;
+            state.message = "Repair complete — restart Root to load Uprooted.".to_string();
+        });
+    }
 }

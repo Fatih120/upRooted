@@ -25,8 +25,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev \
-            librsvg2-dev patchelf gcc
+          sudo apt-get install -y gcc
 
       - name: Setup .NET 10 Preview
         uses: actions/setup-dotnet@v4
@@ -78,17 +77,26 @@ jobs:
       - name: Build UprootedHook.dll
         run: dotnet build hook -c Release -o hook/_out
 
-      - name: Stage Hook DLL + deps
+      - name: Stage Hook DLL + deps + JS scripts
         run: |
           cp hook/_out/UprootedHook.dll installer/src-tauri/artifacts/
           cp hook/_out/UprootedHook.deps.json installer/src-tauri/artifacts/
+          for js in nsfw-filter.js link-embeds.js; do
+            src="hook/_out/$js"
+            if [ -f "$src" ]; then
+              cp "$src" installer/src-tauri/artifacts/
+              echo "  Staged $js"
+            else
+              echo "Missing JS script from hook build: $js" && exit 1
+            fi
+          done
 
-      - name: Compile profiler .so
-        run: gcc -shared -fPIC -O2 -o installer/src-tauri/artifacts/libuprooted_profiler.so tools/uprooted_profiler_linux.c
+      - name: Compile profiler .so (stripped)
+        run: gcc -shared -fPIC -O2 -s -fvisibility=hidden -o installer/src-tauri/artifacts/libuprooted_profiler.so tools/uprooted_profiler_linux.c
 
       - name: Verify staged artifacts
         run: |
-          for f in libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json uprooted-preload.js uprooted.css; do
+          for f in libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js; do
             path="installer/src-tauri/artifacts/$f"
             [ -f "$path" ] || { echo "Missing: $f"; exit 1; }
             [ -s "$path" ] || { echo "Empty: $f"; exit 1; }
@@ -100,50 +108,25 @@ jobs:
           tar -czf uprooted-linux-artifacts.tar.gz \
             -C installer/src-tauri/artifacts \
             libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json \
-            uprooted-preload.js uprooted.css
+            uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js
 
-      # ── Build Tauri ──
+      # ── Build installer (console TUI) ──
 
-      - name: Build Tauri for Linux
-        working-directory: installer
-        run: pnpm tauri build --bundles deb appimage
+      - name: Build installer
+        working-directory: installer/src-tauri
+        run: cargo build --release
 
-      - name: Rename Linux bundles
+      - name: Rename Linux binary
         run: |
-          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          DEBDIR="installer/src-tauri/target/release/bundle/deb"
-          APPDIR="installer/src-tauri/target/release/bundle/appimage"
+          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.0-linux-amd64
+          chmod +x installer/src-tauri/target/release/Uprooted-0.3.0-linux-amd64
+          echo "Renamed to Uprooted-0.3.0-linux-amd64"
 
-          echo "=== deb ==="
-          ls -la "$DEBDIR/" 2>/dev/null || echo "No deb output"
-          echo "=== appimage ==="
-          ls -la "$APPDIR/" 2>/dev/null || echo "No appimage output"
-
-          # Rename deb
-          DEB=$(ls "$DEBDIR"/*.deb 2>/dev/null | head -1)
-          if [ -n "$DEB" ]; then
-            mv "$DEB" "$DEBDIR/Uprooted-${VERSION}-amd64.deb"
-            echo "Renamed deb to Uprooted-${VERSION}-amd64.deb"
-          fi
-
-          # Rename AppImage
-          AI=$(ls "$APPDIR"/*.AppImage 2>/dev/null | head -1)
-          if [ -n "$AI" ]; then
-            mv "$AI" "$APPDIR/Uprooted-${VERSION}-amd64.AppImage"
-            echo "Renamed AppImage to Uprooted-${VERSION}-amd64.AppImage"
-          fi
-
-      - name: Upload .deb
+      - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
-          name: Uprooted-Linux-deb
-          path: installer/src-tauri/target/release/bundle/deb/Uprooted-*.deb
-
-      - name: Upload AppImage
-        uses: actions/upload-artifact@v4
-        with:
-          name: Uprooted-Linux-AppImage
-          path: installer/src-tauri/target/release/bundle/appimage/Uprooted-*.AppImage
+          name: Uprooted-Linux
+          path: installer/src-tauri/target/release/Uprooted-0.3.0-linux-amd64
 
       - name: Upload artifacts tarball
         uses: actions/upload-artifact@v4
@@ -160,86 +143,10 @@ jobs:
             echo "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           fi
-          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
+          VERSION="0.3.0"
           echo "Uploading Linux artifacts to watchthelight/uprooted v$VERSION"
           gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" --draft 2>/dev/null || true
-          for f in installer/src-tauri/target/release/bundle/deb/*.deb \
-                   installer/src-tauri/target/release/bundle/appimage/*.AppImage \
+          for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
                    uprooted-linux-artifacts.tar.gz; do
-            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
-          done
-
-  # ── Arch Linux Package ──
-  # Repackages the .deb into a native .pkg.tar.zst for pacman
-
-  build-arch:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            packaging/arch
-            installer/src-tauri/tauri.conf.json
-
-      - name: Download .deb artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Uprooted-Linux-deb
-          path: ./deb-artifact/
-
-      - name: Prepare PKGBUILD
-        run: |
-          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          DEB_FILE=$(ls deb-artifact/*.deb | head -1)
-          DEB_NAME=$(basename "$DEB_FILE")
-          SHA256=$(sha256sum "$DEB_FILE" | awk '{print $1}')
-
-          echo "Version: $VERSION"
-          echo "Deb: $DEB_NAME"
-          echo "SHA256: $SHA256"
-
-          mkdir -p uprooted-bin
-          cp "$DEB_FILE" uprooted-bin/
-          sed -e "s|%%VERSION%%|${VERSION}|g" \
-              -e "s|%%DEB_NAME%%|${DEB_NAME}|g" \
-              -e "s|%%SHA256%%|${SHA256}|g" \
-              packaging/arch/PKGBUILD > uprooted-bin/PKGBUILD
-
-          echo "=== Generated PKGBUILD ==="
-          cat uprooted-bin/PKGBUILD
-
-      - name: Build Arch package
-        uses: 2m/arch-pkgbuild-builder@v1.17
-        with:
-          target: pkgbuild
-          pkgname: uprooted-bin
-
-      - name: Rename Arch package
-        run: |
-          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          PKG=$(ls uprooted-bin/*.pkg.tar.zst 2>/dev/null | head -1)
-          if [ -n "$PKG" ]; then
-            mv "$PKG" "uprooted-bin/Uprooted-${VERSION}-x86_64.pkg.tar.zst"
-            echo "Renamed to Uprooted-${VERSION}-x86_64.pkg.tar.zst"
-          fi
-
-      - name: Upload .pkg.tar.zst
-        uses: actions/upload-artifact@v4
-        with:
-          name: Uprooted-Arch
-          path: uprooted-bin/Uprooted-*.pkg.tar.zst
-
-      - name: Publish to public repo release
-        if: success()
-        env:
-          GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
-        run: |
-          if [ -z "$GH_TOKEN" ]; then
-            echo "PUBLIC_REPO_TOKEN not configured, skipping public release"
-            exit 0
-          fi
-          VERSION=$(jq -r '.version' installer/src-tauri/tauri.conf.json)
-          for f in uprooted-bin/Uprooted-*.pkg.tar.zst; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done

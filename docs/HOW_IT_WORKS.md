@@ -715,7 +715,7 @@ For the full proxy implementation and plugin patch API, see [TypeScript Referenc
 
 The install process has three layers: build the TypeScript bundle (`pnpm build`), build the C# hook (`dotnet build hook/ -c Release`), deploy files and set environment variables, then patch HTML files. Environment variables are user-scoped and persist across reboots. `DOTNET_ReadyToRun=0` is critical -- it forces JIT compilation so our profiler gets a chance to modify IL.
 
-For installer implementation details (Tauri/Rust detection, file deployment, environment variable management), see [Installer Reference](INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](INSTALLATION.md).
+For installer implementation details (detection, file deployment, environment variable management), see [Installer Reference](INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](INSTALLATION.md).
 
 ### The boot sequence
 
@@ -723,7 +723,7 @@ After installation, every time Root.exe launches:
 
 ```
 1.  Windows starts Root.exe
-2.  .NET runtime sees CORECLR_ENABLE_PROFILING=1
+2.  .NET runtime sees DOTNET_ENABLE_PROFILING=1 (or CORECLR_ENABLE_PROFILING=1 for legacy .NET)
 3.  Runtime loads uprooted_profiler.dll as CLR profiler
 4.  Profiler checks process name -> "Root"
 5.  Profiler waits for a suitable module to load
@@ -801,6 +801,6 @@ We went from a closed 617 MB binary to a fully injected mod framework by:
 7. **Writing a managed hook** -- C# reflection-based Avalonia UI injection
 8. **Building a theme engine** -- native Avalonia resource dictionary injection + DWM title bar
 9. **Creating browser-side plugins** -- TypeScript ES6 Proxy bridge interception + CSS theme engine
-10. **Packaging it all** -- Tauri/Rust installer, env vars, HTML patching, clean uninstall
+10. **Packaging it all** -- console TUI installer (~600KB single binary), env vars, HTML patching, clean uninstall
 
 Two independent injection layers. Zero binary modifications. Full cleanup on uninstall. The user sees "UPROOTED" in their settings sidebar, and Root doesn't know we're there.

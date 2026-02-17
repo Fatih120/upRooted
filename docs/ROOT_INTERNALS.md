@@ -74,11 +74,13 @@ Root uses **Avalonia 11.3.10** as its UI framework. Avalonia is a cross-platform
 | `ContentControl.Content` | Direct assignment causes UI freeze -- Uprooted uses Grid overlay instead |
 | `DispatcherPriority` | A struct (not enum) in Avalonia 11+ -- incorrect usage causes build failures |
 
-Root's native Avalonia UI handles the application shell: window chrome, sidebar navigation, settings pages, and the container that hosts DotNetBrowser. The web content (chat, communities, voice/video) is rendered entirely within the embedded Chromium instance.
+Root's native Avalonia UI handles the application shell, window chrome, sidebar navigation, settings pages, **and the entire chat/community UI**. Chat messages, channels, and community views are rendered as native Avalonia controls (1647+ visual tree nodes confirmed, 0 browser-like controls). DotNetBrowser handles auxiliary functions: WebRTC voice/video, OAuth flows, and sub-app iframes (polls, task tracker, etc.).
 
 ### Embedded DotNetBrowser (Chromium 144)
 
-Root embeds **DotNetBrowser**, a commercial Chromium-based browser control for .NET, to render its web UI. DotNetBrowser provides a `BrowserView` control that hosts a full Chromium engine within the Avalonia visual tree. This is not WebView2 (Microsoft's Chromium wrapper) or CEF (Chromium Embedded Framework) -- it is a distinct commercial product with its own binary IPC protocol.
+Root embeds **DotNetBrowser**, a commercial Chromium-based browser control for .NET, for auxiliary web functions (WebRTC, OAuth, sub-apps). This is not WebView2 (Microsoft's Chromium wrapper) or CEF (Chromium Embedded Framework) -- it is a distinct commercial product with its own binary IPC protocol.
+
+> **Critical:** Despite DotNetBrowser being present, Root does NOT use it to render chat or community views. Chat is rendered entirely in native Avalonia controls. See [Critical Finding: Chat is Avalonia-Native](#critical-finding-chat-is-avalonia-native) below.
 
 The Chromium instance runs with notable flags:
 
@@ -99,9 +101,11 @@ The three layers interact through well-defined boundaries:
 |                                                          |
 |  +------------------+     +---------------------------+  |
 |  | Avalonia UI       |     | DotNetBrowser (Chromium)  |  |
-|  | - Window chrome   |     | - Web UI rendering        |  |
-|  | - Settings pages  |     | - Sub-app iframes         |  |
-|  | - Sidebar nav     |     | - WebRTC voice/video      |  |
+|  | - Window chrome   |     | - WebRTC voice/video      |  |
+|  | - Settings pages  |     | - OAuth flows             |  |
+|  | - Sidebar nav     |     | - Sub-app iframes         |  |
+|  | - Chat UI (native)|     |   (polls, tasks, etc.)    |  |
+|  | - Community views |     |                           |  |
 |  +--------+---------+     +-------------+-------------+  |
 |           |                             |                |
 |           |    Binary IPC (localhost)    |                |
@@ -123,7 +127,7 @@ The .NET host creates JavaScript bridge objects that are injected into the Chrom
 
 ### How Root Embeds Chromium
 
-DotNetBrowser provides a `BrowserView` Avalonia control that Root places in its visual tree. From Avalonia's perspective, this control is an opaque rendering surface -- the Chromium engine handles all internal rendering, input, and layout independently.
+Root accesses DotNetBrowser programmatically through its ViewModel chain, NOT through a `BrowserView` Avalonia control. Root does not ship `DotNetBrowser.AvaloniaUi` (the package that provides `BrowserView`). No browser-like controls exist in the Avalonia visual tree (confirmed: 1647+ nodes scanned, 0 browser controls found). The browser engine is accessed via: `MainWindow.DataContext` (MainViewModel) → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values` (ConcurrentDictionary).
 
 The embedded Chromium engine runs as a set of child processes managed by the DotNetBrowser runtime:
 
@@ -150,14 +154,31 @@ Binary analysis of Root.exe reveals named pipe endpoints used for internal IPC:
 
 The `NativeToWebRtcBridge` pipe is particularly relevant -- it carries the bearer token during the WebRTC initialization sequence. Token interception via this pipe is one of the extraction methods documented in our research.
 
-### BrowserView Control and Navigation
+### Browser Engine Access and Shell Page
 
-Root uses DotNetBrowser's `BrowserView` as an Avalonia control embedded in the main window's visual tree. The browser navigates to local HTML files stored in the profile directory:
+Root accesses the DotNetBrowser engine programmatically (no `BrowserView` in the visual tree). The browser loads a shell page at `rootapp://app/__index.html`:
 
-- `WebRtcBundle/index.html` -- The primary WebRTC context
+```html
+<html lang="en">
+<head>
+  <title>Root App Container</title>
+  <style>html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+  iframe { display:block; width:100%; height:100%; border:none; }</style>
+</head>
+<body>
+  <iframe id="app-iframe"></iframe>  <!-- permanently about:blank, no src -->
+</body>
+</html>
+```
+
+The shell page contains a single `<iframe id="app-iframe">` that **permanently stays at `about:blank`** with no `src` attribute and no content. This iframe is not used for navigation or rendering.
+
+Additional HTML files in the profile directory serve specific functions:
+
+- `WebRtcBundle/index.html` -- The WebRTC voice/video context
 - `DotNetBrowser/RootApps/Bundle/Host/index.html` -- The sub-app host container
 
-Navigation is not URL-based in the traditional sense. Root loads local `file://` URLs pointing to its bundled HTML files. The host `index.html` is a bare iframe container with no Content Security Policy (CSP) and no sandbox attributes, which makes script injection straightforward.
+The host `index.html` is a bare iframe container with no Content Security Policy (CSP) and no sandbox attributes, which makes script injection straightforward.
 
 ### JavaScript Bridge Objects
 
@@ -173,6 +194,24 @@ Root creates four bridge objects on the `window` scope inside Chromium:
 Additionally, `__rootSdkBridgeDev` exists in the codebase for development/debugging but ports are closed in production builds.
 
 These bridges are the primary mechanism through which the .NET host controls web content and web content notifies the .NET host. Uprooted proxies the WebRTC bridges (`__nativeToWebRtc` and `__webRtcToNative`) using ES6 Proxy objects, allowing plugins to intercept, modify, or cancel any bridge call. The sub-app bridge (`__rootSdkBridgeWebToNative`) is not currently proxied.
+
+### Critical Finding: Chat is Avalonia-Native
+
+Extensive investigation on 2026-02-17 (Root v0.9.92) revealed that **Root's chat UI is rendered entirely in native Avalonia controls, NOT in DotNetBrowser**. This finding has significant implications for any Uprooted feature that targets chat messages.
+
+**Evidence:**
+
+1. **Visual tree scan:** 1647+ Avalonia nodes in the main window, 0 browser-like controls (no `BrowserView`, no `WebView`, no `ChromiumWebBrowser`)
+2. **DotNetBrowser shell page:** Loads `rootapp://app/__index.html`, title "Root App Container", size 1280x800. Contains a single `<iframe id="app-iframe">` that permanently stays at `about:blank`
+3. **Assembly analysis:** `DotNetBrowser.AvaloniaUi` is NOT loaded — Root doesn't ship the package that provides `BrowserView`
+4. **IBrowser access:** Found via ViewModel chain walking (MainWindow.DataContext → BrowserService → BrowserEngineManager → IEngine → Profiles[0].Browsers), confirming programmatic-only access
+
+**Implications for Uprooted:**
+
+- JavaScript injection into DotNetBrowser **cannot** modify chat messages, channel lists, or community views
+- Features like link embeds and NSFW filtering that target chat content must use **Avalonia-native approaches**: watching the visual tree for URL-containing TextBlocks, creating native embed controls, etc.
+- TypeScript plugins in the WebRTC context can still intercept bridge calls and modify sub-app behavior
+- The DotNetBrowser shell page's about:blank iframe is a dead end — injecting JS there has no visible effect on the chat UI
 
 ---
 
@@ -200,7 +239,7 @@ Each sub-app directory contains a Vite build output: `app/client/dist/assets/ind
 
 ### SPA-Like Navigation
 
-Root's overall navigation model is SPA-like from the user's perspective. The native Avalonia shell provides the persistent sidebar and window chrome, while the DotNetBrowser control swaps between sub-app iframes as the user navigates. The host container (`Host/index.html`) acts as the frame orchestrator.
+Root's overall navigation model is SPA-like from the user's perspective. The native Avalonia shell provides the persistent sidebar, window chrome, and all chat/community UI. DotNetBrowser's role is limited: sub-apps are loaded into their own HTML files within the host container (`Host/index.html`), which acts as the frame orchestrator for these auxiliary features.
 
 Within each sub-app, TanStack Router handles client-side routing. Sub-apps communicate with the native host exclusively through the `__rootSdkBridgeWebToNative` bridge -- they do not make direct network requests to Root's backend. Instead, they serialize protobuf messages and pass them to the bridge's `.send()` method, which forwards them through the .NET host to the backend.
 

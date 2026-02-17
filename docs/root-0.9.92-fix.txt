@@ -1,0 +1,96 @@
+Root v0.9.92 Broke Uprooted — What Happened and How We Fixed It
+================================================================
+
+Date: 2026-02-17
+
+
+WHAT ROOT CHANGED
+-----------------
+
+Root auto-updated from v0.9.90 to v0.9.92 via Velopack at ~05:50 AM.
+
+1. Root upgraded from .NET 8/9 to .NET 10.0.3.
+
+2. .NET 10 changed which environment variable prefix activates the CLR
+   profiler. The old prefix (CORECLR_ENABLE_PROFILING, CORECLR_PROFILER,
+   CORECLR_PROFILER_PATH) no longer triggers profiler activation. .NET 10
+   requires the DOTNET_ prefix instead (DOTNET_ENABLE_PROFILING, etc.).
+
+   Confusingly, the old CORECLR_PROFILER_PATH still causes the DLL to be
+   loaded into the process via LoadLibrary — but DllGetClassObject is never
+   called, so the profiler never actually initializes. This made it look
+   like the profiler was present but broken.
+
+3. Root's embedded runtimeconfig.json also disables several .NET features:
+   - System.StartupHookProvider.IsSupported: false
+   - System.Runtime.InteropServices.EnableConsumingManagedCodeFromNativeHosting: false
+   - System.Diagnostics.Debugger.IsSupported: false
+
+   This means DOTNET_STARTUP_HOOKS (an alternative injection method) is a
+   dead end — both the config flag and the managed code that processes
+   startup hooks were trimmed from the binary.
+
+4. Root.exe is now a 617MB single-file .NET bundle. There is no separate
+   coreclr.dll, hostfxr.dll, or Root.dll on disk — everything is embedded
+   in the single executable.
+
+
+WHAT WE CHANGED
+---------------
+
+The fix was straightforward once the root cause was identified: switch all
+profiler environment variables from the CORECLR_ prefix to the DOTNET_ prefix.
+We keep the old CORECLR_ prefix as a fallback for users still on older Root
+versions (.NET 8/9).
+
+Files modified:
+
+  tools/uprooted_launcher.c
+    The Windows launcher now sets both prefixes before launching Root:
+      DOTNET_EnableDiagnostics=1
+      DOTNET_ENABLE_PROFILING=1
+      DOTNET_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
+      DOTNET_PROFILER_PATH=<path to uprooted_profiler.dll>
+      DOTNET_ReadyToRun=0
+      CORECLR_ENABLE_PROFILING=1        (legacy)
+      CORECLR_PROFILER={...}            (legacy)
+      CORECLR_PROFILER_PATH=<path>      (legacy)
+
+  scripts/install-hook.ps1
+    Sets the DOTNET_ profiler env vars in the Windows user registry so
+    Root picks them up regardless of how it's launched.
+
+  scripts/uninstall-hook.ps1
+    Cleans up the DOTNET_ profiler env vars on uninstall.
+
+  install-uprooted-linux.sh
+    Updated all six locations where env vars are configured on Linux:
+    - systemd environment.d config
+    - KDE Plasma env script
+    - ~/.profile fallback
+    - launch-root.sh wrapper script
+    - Diagnostics (--diagnose) checks
+    - Uninstall cleanup
+
+  tools/uprooted_profiler.c
+    Removed a DllMain debug canary that was added during investigation.
+    No functional changes to the profiler itself — the IL injection logic
+    was already correct and continues to work.
+
+
+WHY DOTNET_STARTUP_HOOKS DIDN'T WORK
+-------------------------------------
+
+This was our first attempted fix before we understood the real problem.
+DOTNET_STARTUP_HOOKS is a .NET feature that loads a managed assembly and
+calls StartupHook.Initialize() before the app's Main(). However:
+
+  1. Root's runtimeconfig sets StartupHookProvider.IsSupported to false.
+  2. We tried binary-patching that flag to true in the 617MB executable,
+     but the .NET trimmer had already removed the managed code that
+     processes startup hooks. The flag flip had no effect.
+  3. External runtimeconfig.json files don't override the config embedded
+     in single-file bundles.
+
+The CLR profiler approach (which Uprooted has always used) continues to
+work — it just needed the correct env var prefix for .NET 10.

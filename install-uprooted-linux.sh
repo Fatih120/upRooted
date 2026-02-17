@@ -22,7 +22,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.2.51"
+VERSION="0.3.0"
 ARTIFACTS_URL="https://github.com/watchthelight/uprooted/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
 
 # Colors
@@ -47,33 +47,39 @@ run_diagnose() {
     # 1. Check env vars in current shell
     log "Checking environment variables in current session..."
     local env_ok=true
-    if [[ "${CORECLR_ENABLE_PROFILING:-}" == "1" ]]; then
-        log "  CORECLR_ENABLE_PROFILING=1"
+    if [[ "${DOTNET_ENABLE_PROFILING:-}" == "1" ]]; then
+        log "  DOTNET_ENABLE_PROFILING=1"
     else
-        error "  CORECLR_ENABLE_PROFILING is not set (or not '1')"
+        error "  DOTNET_ENABLE_PROFILING is not set (or not '1')"
         env_ok=false
     fi
-    if [[ -n "${CORECLR_PROFILER:-}" ]]; then
-        log "  CORECLR_PROFILER=$CORECLR_PROFILER"
+    if [[ -n "${DOTNET_PROFILER:-}" ]]; then
+        log "  DOTNET_PROFILER=$DOTNET_PROFILER"
     else
-        error "  CORECLR_PROFILER is not set"
+        error "  DOTNET_PROFILER is not set"
         env_ok=false
     fi
-    if [[ -n "${CORECLR_PROFILER_PATH:-}" ]]; then
-        if [[ -f "$CORECLR_PROFILER_PATH" ]]; then
-            log "  CORECLR_PROFILER_PATH=$CORECLR_PROFILER_PATH (exists)"
+    if [[ -n "${DOTNET_PROFILER_PATH:-}" ]]; then
+        if [[ -f "$DOTNET_PROFILER_PATH" ]]; then
+            log "  DOTNET_PROFILER_PATH=$DOTNET_PROFILER_PATH (exists)"
         else
-            warn "  CORECLR_PROFILER_PATH=$CORECLR_PROFILER_PATH (FILE NOT FOUND)"
+            warn "  DOTNET_PROFILER_PATH=$DOTNET_PROFILER_PATH (FILE NOT FOUND)"
             env_ok=false
         fi
     else
-        error "  CORECLR_PROFILER_PATH is not set"
+        error "  DOTNET_PROFILER_PATH is not set"
         env_ok=false
     fi
     if [[ "${DOTNET_ReadyToRun:-}" == "0" ]]; then
         log "  DOTNET_ReadyToRun=0"
     else
         warn "  DOTNET_ReadyToRun is not set to '0' (optional but recommended)"
+    fi
+    # Legacy check (CORECLR_ prefix for .NET 8/9)
+    if [[ "${CORECLR_ENABLE_PROFILING:-}" == "1" ]]; then
+        log "  CORECLR_ENABLE_PROFILING=1 (legacy)"
+    else
+        warn "  CORECLR_ENABLE_PROFILING not set (legacy, optional for .NET 10+)"
     fi
 
     if [[ "$env_ok" == "false" ]]; then
@@ -123,7 +129,7 @@ run_diagnose() {
         warn "  plasma-workspace/env/uprooted.sh: missing (KDE users need this)"
     fi
 
-    if grep -q "CORECLR_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
+    if grep -q "DOTNET_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
         log "  ~/.profile: contains Uprooted env vars"
     else
         warn "  ~/.profile: does not contain Uprooted env vars"
@@ -158,13 +164,19 @@ run_diagnose() {
             exe_path=$(readlink "/proc/$pid/exe" 2>/dev/null || echo "(unreadable)")
             log "    /proc/$pid/exe -> $exe_path"
 
-            # Check if CORECLR_ENABLE_PROFILING is set in the process
+            # Check if DOTNET_ENABLE_PROFILING is set in the process
             if [[ -r "/proc/$pid/environ" ]]; then
-                if tr '\0' '\n' < "/proc/$pid/environ" | grep -q "CORECLR_ENABLE_PROFILING=1"; then
-                    log "    Process has CORECLR_ENABLE_PROFILING=1"
+                local proc_env
+                proc_env=$(tr '\0' '\n' < "/proc/$pid/environ")
+                if echo "$proc_env" | grep -q "DOTNET_ENABLE_PROFILING=1"; then
+                    log "    Process has DOTNET_ENABLE_PROFILING=1"
                 else
-                    error "    Process does NOT have CORECLR_ENABLE_PROFILING set!"
-                    warn "    This means the profiler is NOT loading for this instance."
+                    warn "    Process does NOT have DOTNET_ENABLE_PROFILING set"
+                fi
+                if echo "$proc_env" | grep -q "CORECLR_ENABLE_PROFILING=1"; then
+                    log "    Process has CORECLR_ENABLE_PROFILING=1 (legacy)"
+                else
+                    warn "    Process does NOT have CORECLR_ENABLE_PROFILING set (legacy, optional)"
                 fi
             else
                 warn "    Cannot read /proc/$pid/environ (permission denied)"
@@ -319,18 +331,18 @@ run_uninstall() {
     fi
 
     # 4. Clean env vars from ~/.profile
-    if grep -q "CORECLR_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
+    if grep -qE "(DOTNET_ENABLE_PROFILING|CORECLR_ENABLE_PROFILING)" "$HOME/.profile" 2>/dev/null; then
         # Remove the Uprooted block from .profile
         local tmp="$HOME/.profile.tmp"
         local skip_block=false
         while IFS= read -r line; do
-            if [[ "$line" == "# Uprooted CLR profiler"* ]]; then
+            if [[ "$line" == "# Uprooted"* ]] && [[ "$line" != *"preload"* ]]; then
                 skip_block=true
                 continue
             fi
             if [[ "$skip_block" == true ]]; then
                 # Skip export lines that are part of the block
-                if [[ "$line" == export\ CORECLR_* || "$line" == export\ DOTNET_ReadyToRun* || -z "$line" ]]; then
+                if [[ "$line" == export\ DOTNET_* || "$line" == export\ CORECLR_* || -z "$line" ]]; then
                     continue
                 fi
                 skip_block=false
@@ -566,11 +578,17 @@ set_env_vars() {
     mkdir -p "$env_dir"
 
     cat > "$env_dir/uprooted.conf" << ENVCONF
-# Uprooted CLR profiler -- remove this file or run the uninstaller to disable
+# Uprooted -- remove this file or run the uninstaller to disable
+# .NET 10+ (DOTNET_ prefix)
+DOTNET_EnableDiagnostics=1
+DOTNET_ENABLE_PROFILING=1
+DOTNET_PROFILER=$PROFILER_GUID
+DOTNET_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
+DOTNET_ReadyToRun=0
+# Legacy (.NET 8/9)
 CORECLR_ENABLE_PROFILING=1
 CORECLR_PROFILER=$PROFILER_GUID
 CORECLR_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
-DOTNET_ReadyToRun=0
 ENVCONF
     log "Session env vars written to $env_dir/uprooted.conf"
 
@@ -579,24 +597,32 @@ ENVCONF
     mkdir -p "$plasma_env_dir"
     cat > "$plasma_env_dir/uprooted.sh" << PLASMAENV
 #!/bin/sh
-# Uprooted CLR profiler -- remove this file or run the uninstaller to disable
+# Uprooted -- remove this file or run the uninstaller to disable
+export DOTNET_EnableDiagnostics=1
+export DOTNET_ENABLE_PROFILING=1
+export DOTNET_PROFILER='$PROFILER_GUID'
+export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
+export DOTNET_ReadyToRun=0
 export CORECLR_ENABLE_PROFILING=1
 export CORECLR_PROFILER='$PROFILER_GUID'
 export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
 PLASMAENV
     chmod +x "$plasma_env_dir/uprooted.sh"
     log "KDE Plasma env script written to $plasma_env_dir/uprooted.sh"
 
     # Also add to ~/.profile as fallback for non-systemd sessions (X11, login shells)
-    if ! grep -q "CORECLR_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
+    if ! grep -q "DOTNET_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
         cat >> "$HOME/.profile" << PROFILE
 
-# Uprooted CLR profiler (remove these lines to disable)
+# Uprooted (remove these lines to disable)
+export DOTNET_EnableDiagnostics=1
+export DOTNET_ENABLE_PROFILING=1
+export DOTNET_PROFILER='$PROFILER_GUID'
+export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
+export DOTNET_ReadyToRun=0
 export CORECLR_ENABLE_PROFILING=1
 export CORECLR_PROFILER='$PROFILER_GUID'
 export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
 PROFILE
         log "Env vars appended to ~/.profile (login shell fallback)"
     else
@@ -613,11 +639,17 @@ create_wrapper() {
     local wrapper="$INSTALL_DIR/launch-root.sh"
     cat > "$wrapper" << WRAPPER
 #!/bin/bash
-# Uprooted launcher - sets CLR profiler env vars for Root only
+# Uprooted launcher - sets injection env vars for Root only
+# .NET 10+ (DOTNET_ prefix)
+export DOTNET_EnableDiagnostics=1
+export DOTNET_ENABLE_PROFILING=1
+export DOTNET_PROFILER='$PROFILER_GUID'
+export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
+export DOTNET_ReadyToRun=0
+# Legacy (.NET 8/9)
 export CORECLR_ENABLE_PROFILING=1
 export CORECLR_PROFILER='$PROFILER_GUID'
 export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
 exec '$ROOT_PATH' "\$@"
 WRAPPER
     chmod +x "$wrapper"

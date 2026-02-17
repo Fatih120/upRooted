@@ -18,7 +18,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 2. [Architecture Diagram](#2-architecture-diagram)
 3. [Repository Structure](#3-repository-structure)
 4. [Core Abstractions](#4-core-abstractions)
-5. [Data Flow -- 5-Phase Startup](#5-data-flow----5-phase-startup)
+5. [Data Flow -- Multi-Phase Startup](#5-data-flow----multi-phase-startup)
 6. [Threading Model](#6-threading-model)
 7. [Error Handling](#7-error-handling)
 8. [Conventions](#8-conventions)
@@ -38,7 +38,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 - Injects custom UI (sidebar sections, settings pages, color pickers) into Root's native Avalonia settings panel.
 - Proxies Root's internal JavaScript bridge interfaces so plugins can intercept, modify, or cancel bridge method calls.
 - Provides a theme engine that overrides Root's Avalonia resource dictionaries and CSS variable system.
-- Ships a self-contained Tauri installer that deploys all artifacts and configures CLR profiler injection.
+- Ships a lightweight console TUI installer (~600KB) that deploys all artifacts and configures CLR profiler injection.
 - Self-heals HTML patches when Root auto-updates overwrite them (via `FileSystemWatcher`).
 
 ### What it is not
@@ -52,7 +52,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 Uprooted has two independent injection layers that operate in parallel:
 
 1. **C# .NET hook** (`hook/`) -- Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar and applies themes via resource dictionary manipulation.
-2. **TypeScript browser injection** (`src/`) -- Injects into Root's embedded Chromium (DotNetBrowser) context via HTML `<script>` tags. Provides the plugin runtime, theme CSS engine, and bridge proxy system.
+2. **TypeScript browser injection** (`src/`) -- Injects into Root's DotNetBrowser Chromium context (WebRTC bundle and sub-apps — NOT the chat UI, which is Avalonia-native) via HTML `<script>` tags. Provides the plugin runtime, theme CSS engine, and bridge proxy system.
 
 The C# layer handles native UI integration and Avalonia theming. The TypeScript layer handles web content modification and bridge interception. They share no runtime state but target the same application. The only shared state is the settings file on disk and the visual result (both layers inject into the same app).
 
@@ -91,7 +91,7 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
   StartupHook.Initialize()                     +------+------+   Bridge event
        |                                       |      |      |   interception
   Background thread                         themes  sentry  settings
-  5-phase startup                           plugin  blocker  panel
+  Multi-phase startup (0-5)                 plugin  blocker  panel
        |                                       |      |      |
   Phase 0: HtmlPatchVerifier                   +------+------+
        |   (verify + FileSystemWatcher)               |
@@ -112,6 +112,17 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
        |   +-- Inject UPROOTED sidebar section
        |   +-- ContentPages (Uprooted, Plugins, Themes)
        |   +-- ColorPickerPopup (custom accent/bg)
+       |
+  Phase 4.5: BrowserDiscovery (10s delay)
+       |   Diagnostic visual tree + assembly scan
+       |
+  Phase 5: DotNetBrowser features
+       |   Event-driven assembly detection
+       |   (ManualResetEventSlim, 90s timeout)
+       |   +-- DotNetBrowserReflection (type cache)
+       |   +-- IBrowser discovery via ViewModel chain
+       |   +-- NsfwFilter JS injection
+       |   +-- LinkEmbedInjector JS injection
        |
   UI thread dispatch via RunOnUIThread()
 ```
@@ -141,7 +152,7 @@ uprooted-private/
 |-- hook/                             # C# .NET hook (CLR profiler injection layer)
 |   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
 |   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs         (179)  # 5-phase Avalonia wait + initialization orchestration.
+|   |-- StartupHook.cs         (315)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
 |   |-- HtmlPatchVerifier.cs   (344)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
 |   |-- AvaloniaReflection.cs (1943)  # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
@@ -152,6 +163,10 @@ uprooted-private/
 |   |-- ColorUtils.cs          (262)  # Color parsing, HSL conversion, contrast calculation.
 |   |-- UprootedSettings.cs     (91)  # INI-based settings (System.Text.Json workaround).
 |   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
+|   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
+|   |-- BrowserDiscovery.cs    (498)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
+|   |-- LinkEmbedInjector.cs   (312)  # Link embed JS injection into DotNetBrowser (needs redesign).
+|   |-- NsfwFilter.cs          (305)  # NSFW filter JS injection (needs redesign for Avalonia-native chat).
 |   |-- Logger.cs                (28) # Thread-safe file logging to uprooted-hook.log.
 |   |-- UprootedHook.csproj          # .NET 10.0 project file, nullable enabled.
 |   `-- SESSION_STATE.md              # Session state handoff between dev sessions.
@@ -184,23 +199,17 @@ uprooted-private/
 |       |-- plugin.ts                 # UprootedPlugin, Patch, SettingField interfaces.
 |       |-- settings.ts               # UprootedSettings, PluginSettings, DEFAULT_SETTINGS.
 |       `-- root.ts                   # Window augmentation, branded GUID types.
-|-- installer/                        # Tauri v2 desktop installer application
-|   |-- src/                          # TypeScript frontend
-|   |   |-- main.ts                   # Entry point, router, titlebar setup.
-|   |   |-- starfield.ts              # Starfield background animation.
-|   |   |-- lib/
-|   |   |   |-- tauri.ts              # Tauri command wrappers (detect, install, themes).
-|   |   |   `-- state.ts              # Local state management.
-|   |   |-- pages/
-|   |   |   |-- main.ts               # Installation/uninstallation UI.
-|   |   |   `-- themes.ts             # Theme preview and selection UI.
-|   |   `-- styles/
-|   |       |-- components.css        # Component styles.
-|   |       `-- global.css            # Global styles.
-|   `-- src-tauri/                    # Rust/Tauri backend
-|       |-- src/                      # Rust source (commands, patcher, detection, settings).
-|       |-- tauri.conf.json           # Tauri app configuration.
-|       `-- capabilities/             # Permission scopes.
+|-- installer/                        # Console TUI installer (Rust)
+|   `-- src-tauri/                    # Rust source
+|       |-- src/                      # Rust source files
+|       |   |-- main.rs              # Console TUI entry point (ratatui)
+|       |   |-- cli.rs              # Plain ANSI output mode (--plain, --diagnose)
+|       |   |-- detection.rs        # Root installation detection
+|       |   |-- patcher.rs          # HTML patch install/uninstall/repair
+|       |   |-- hook.rs             # File deployment + env var management
+|       |   |-- settings.rs        # JSON settings management
+|       |   `-- embedded.rs        # Embedded resource management
+|       `-- artifacts/              # Staging directory for build artifacts
 |-- scripts/                          # Build and utility scripts
 |   |-- build.ts                      # esbuild bundler: src/ -> dist/ (IIFE + CSS).
 |   |-- build_installer.ps1           # Full installer build pipeline (5 steps).
@@ -241,8 +250,8 @@ uprooted-private/
 |   |-- uprooted-preload.js           # IIFE bundle injected via <script> tag.
 |   |-- uprooted-preload.js.map       # Source map.
 |   `-- uprooted.css                  # Combined CSS from all plugins.
-|-- package.json                      # pnpm workspace root (v0.2.2).
-|-- pnpm-workspace.yaml               # Monorepo: root, installer/, site/.
+|-- package.json                      # pnpm workspace root (v0.3.0).
+|-- pnpm-workspace.yaml               # Monorepo: root, site/ (installer is standalone Rust).
 |-- tsconfig.json                     # ES2022, strict, @uprooted/* path alias.
 |-- tsconfig.build.json               # Build-specific TypeScript config.
 |-- Install-Uprooted.ps1             # PowerShell one-click installer (Profiler + StartupHooks).
@@ -258,13 +267,14 @@ uprooted-private/
 
 ### Monorepo workspaces
 
-This is a pnpm workspace with three packages:
+This is a pnpm workspace with two packages:
 
 | Package | Path | Description |
 |---------|------|-------------|
 | Root | `./` | TypeScript source, build scripts, C# hook, shared config |
-| Installer | `./installer/` | Tauri v2 desktop application (Vite + TypeScript + Rust) |
 | Site | `./site/` | Astro marketing site (uprooted.sh) |
+
+The installer (`./installer/src-tauri/`) is a standalone Rust console TUI and is not part of the pnpm workspace.
 
 ### Build output
 
@@ -274,7 +284,7 @@ This is a pnpm workspace with three packages:
 | `dist/uprooted.css` | `src/plugins/**/*.css` | `pnpm build` |
 | `hook/bin/Release/net10.0/UprootedHook.dll` | `hook/` | `dotnet build hook/ -c Release` |
 | `tools/uprooted_profiler.dll` | `tools/uprooted_profiler.c` | `cl.exe` via VS Build Tools |
-| `Uprooted Installer.exe` | All of the above | `scripts/build_installer.ps1` |
+| `uprooted.exe` / `uprooted` | All of the above | `cargo build --release` in `installer/src-tauri/` |
 
 ---
 
@@ -287,7 +297,7 @@ This section describes the key classes and modules that form the framework's bac
 | Class | File | Role |
 |-------|------|------|
 | `Entry` | `hook/Entry.cs` | Profiler injection entry point. `[ModuleInitializer]` and constructor both guarded by `Interlocked.CompareExchange` for one-time initialization. Calls `StartupHook.Initialize()`. |
-| `StartupHook` | `hook/StartupHook.cs` | Initialization orchestrator. Process name guard, background thread, 5-phase Avalonia wait sequence. Coordinates all other hook components. |
+| `StartupHook` | `hook/StartupHook.cs` | Initialization orchestrator. Process name guard, background thread, multi-phase startup (Phase 0-5). Coordinates Avalonia injection and DotNetBrowser feature loading. |
 | `HtmlPatchVerifier` | `hook/HtmlPatchVerifier.cs` | Self-healing HTML patches. Runs at Phase 0 (no Avalonia needed). Verifies injection markers exist in profile HTML files. Sets up `FileSystemWatcher` to re-patch when Root auto-updates overwrite files. |
 | `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The largest and most critical file in the codebase (1943 lines). |
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
@@ -298,6 +308,10 @@ This section describes the key classes and modules that form the framework's bac
 | `ColorUtils` | `hook/ColorUtils.cs` | Color parsing, HSL conversion, luminance calculation, and contrast ratio computation. Used by `ThemeEngine` and `ContentPages`. |
 | `UprootedSettings` | `hook/UprootedSettings.cs` | INI-based settings persistence. Loads and saves key=value pairs from `uprooted-settings.ini` in the profile directory. Uses INI format instead of JSON because `System.Text.Json` is broken in the profiler-injected context. |
 | `PlatformPaths` | `hook/PlatformPaths.cs` | Cross-platform path resolution. Returns profile directory and Uprooted install directory for Windows and Linux. |
+| `DotNetBrowserReflection` | `hook/DotNetBrowserReflection.cs` | Reflection cache for DotNetBrowser types (IBrowser, IFrame, IEngine). Discovers IBrowser via ViewModel chain walking. Provides `ExecuteJavaScript` wrapper. |
+| `BrowserDiscovery` | `hook/BrowserDiscovery.cs` | Phase 4.5 diagnostic scanner. Dumps full visual tree structure and loaded assemblies after 10s delay to aid in architecture discovery. |
+| `LinkEmbedInjector` | `hook/LinkEmbedInjector.cs` | Injects link embed JavaScript into DotNetBrowser. Currently non-functional for chat (chat is Avalonia-native, not browser-rendered). Needs Avalonia-native redesign. |
+| `NsfwFilter` | `hook/NsfwFilter.cs` | Injects NSFW filter JavaScript into DotNetBrowser. Currently non-functional for chat (same reason as LinkEmbedInjector). Needs Avalonia-native redesign. |
 | `Logger` | `hook/Logger.cs` | Thread-safe file logging. Writes to `uprooted-hook.log` in the profile directory with timestamps and `[Category]` prefixes. Swallows its own exceptions to avoid crashing Root. |
 
 ### TypeScript Browser Layer
@@ -357,9 +371,9 @@ See [Plugin API Reference](plugins/API_REFERENCE.md) for the full plugin develop
 
 ---
 
-## 5. Data Flow -- 5-Phase Startup
+## 5. Data Flow -- Multi-Phase Startup
 
-The C# hook uses a phased startup sequence to safely initialize within Root's .NET process without blocking application startup. Each phase has a timeout and will abort gracefully if the required condition is not met. Source: `hook/StartupHook.cs`.
+The C# hook uses a phased startup sequence (Phase 0 through Phase 5) to safely initialize within Root's .NET process without blocking application startup. Each phase has a timeout and will abort gracefully if the required condition is not met. Source: `hook/StartupHook.cs`.
 
 For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md).
 
@@ -417,6 +431,26 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 - **Action:** Creates `SidebarInjector` with references to `AvaloniaReflection`, the main window, and the `ThemeEngine`. Calls `StartMonitoring()` which starts a 200ms `Timer`. Each tick dispatches to the UI thread, performs a lightweight check for the "APP SETTINGS" TextBlock, and injects/removes the sidebar section as needed.
 - **Ongoing:** This phase runs for the lifetime of the process.
 
+### Phase 4.5: Browser Discovery (Diagnostic)
+
+**Purpose:** Dump visual tree structure and loaded assemblies for architecture discovery and debugging.
+
+- **File:** `hook/BrowserDiscovery.cs`
+- **Thread:** Background (10-second delay after Phase 4)
+- **Action:** Performs a full DFS visual tree dump of the main window and scans all loaded assemblies. Results are logged for diagnostic purposes.
+- **Failure mode:** Non-fatal. Purely informational.
+
+### Phase 5: DotNetBrowser Feature Loading
+
+**Purpose:** Detect DotNetBrowser assemblies and initialize browser-dependent features (NSFW filter, link embeds).
+
+- **File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`, `hook/LinkEmbedInjector.cs`
+- **Thread:** Background
+- **Detection:** Event-driven via `AppDomain.CurrentDomain.AssemblyLoad` event + `ManualResetEventSlim`. Waits for an assembly matching `DotNetBrowser` or `DotNetBrowser.Core` (NOT `DotNetBrowser.AvaloniaUi`, which Root does not ship).
+- **Timeout:** 90 seconds
+- **On success:** Resolves DotNetBrowser types via `DotNetBrowserReflection`, discovers `IBrowser` via ViewModel chain walking (`MainWindow.DataContext` → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`), then initializes `NsfwFilter` and `LinkEmbedInjector`.
+- **Known limitation:** Chat is Avalonia-native, so JS injection into DotNetBrowser does not affect chat messages. Link embeds and NSFW filter need Avalonia-native redesign.
+
 ### TypeScript Startup (Independent)
 
 The TypeScript layer has its own startup sequence, independent of the C# phases:
@@ -440,7 +474,7 @@ The C# hook must operate within Root's .NET process without blocking the applica
 
 **Background thread (`Uprooted-Injector`):**
 - Spawned in `StartupHook.Initialize()` with `IsBackground = true`.
-- Runs the 5-phase startup sequence (Phase 0 through Phase 3).
+- Runs the multi-phase startup sequence (Phase 0 through Phase 5).
 - All polling waits (`WaitForAvaloniaAssemblies`, `WaitFor`) happen here.
 - Never touches Avalonia controls directly.
 
@@ -675,7 +709,7 @@ The TypeScript layer uses a separate JSON-based settings file (`uprooted-setting
 
 ### Profiler Injection Scope
 
-The CLR profiler environment variables (`CORECLR_ENABLE_PROFILING`, etc.) are set as user-scoped environment variables. They affect ALL .NET applications the user launches, not just Root. The profiler DLL has a process name guard (checks for "Root" and returns `E_FAIL` for other processes), so other apps see minimal overhead (profiler loads, checks name, detaches). However, this is a known limitation.
+The CLR profiler environment variables are set as user-scoped environment variables using both `DOTNET_` (primary, for .NET 10+) and `CORECLR_` (legacy, for .NET 8/9) prefixes. They affect ALL .NET applications the user launches, not just Root. The profiler DLL has a process name guard (checks for "Root" and returns `E_FAIL` for other processes), so other apps see minimal overhead (profiler loads, checks name, detaches). However, this is a known limitation.
 
 ### Fragile Integration Points
 
@@ -688,6 +722,15 @@ The CLR profiler environment variables (`CORECLR_ENABLE_PROFILING`, etc.) are se
 | `__nativeToWebRtc` / `__webRtcToNative` globals | Root renames or freezes them | Bridge proxy cannot intercept IPC |
 | Profile HTML file paths | Root moves to different directory | HTML patching cannot find target files |
 | DotNetBrowser as embedded browser | Root switches browser engine | TypeScript layer entirely incompatible |
+
+### Chat is Avalonia-Native (Not Browser-Rendered)
+
+Root's chat UI, channel lists, and community views are rendered entirely in native Avalonia controls (1647+ visual tree nodes, 0 browser controls). DotNetBrowser is auxiliary -- used for WebRTC voice/video, OAuth flows, and sub-app iframes (polls, task tracker, etc.). The shell page at `rootapp://app/__index.html` contains an `<iframe id="app-iframe">` that permanently stays at `about:blank`.
+
+This means `LinkEmbedInjector` and `NsfwFilter` (which inject JavaScript into DotNetBrowser) cannot modify chat messages. These features need architectural redesign to use Avalonia-native visual tree approaches instead.
+
+- **Files:** `hook/LinkEmbedInjector.cs`, `hook/NsfwFilter.cs`
+- **Approach needed:** Watch for URL-containing TextBlocks in the chat visual tree, fetch OG metadata via C#, create native Avalonia embed controls
 
 ### `after` Patch Handler Not Implemented
 
@@ -809,4 +852,4 @@ These are the fragile integration points that must be checked when Root releases
 
 ---
 
-*Architecture reference for Uprooted v0.2.2. Last updated 2026-02-16.*
+*Architecture reference for Uprooted v0.3.0. Last updated 2026-02-17.*

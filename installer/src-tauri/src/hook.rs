@@ -12,10 +12,17 @@ const PROFILER_GUID: &str = "{D1A6F5A0-1234-4567-89AB-CDEF01234567}";
 
 #[cfg(target_os = "windows")]
 const ENV_VARS: &[&str] = &[
+    // DOTNET_ prefix (primary — .NET 10+)
+    "DOTNET_EnableDiagnostics",
+    "DOTNET_ENABLE_PROFILING",
+    "DOTNET_PROFILER",
+    "DOTNET_PROFILER_PATH",
+    "DOTNET_ReadyToRun",
+    // CORECLR_ prefix (legacy — .NET 8/9)
     "CORECLR_ENABLE_PROFILING",
     "CORECLR_PROFILER",
     "CORECLR_PROFILER_PATH",
-    "DOTNET_ReadyToRun",
+    // Legacy startup hooks
     "DOTNET_STARTUP_HOOKS",
 ];
 
@@ -112,6 +119,24 @@ pub fn set_env_vars() -> Result<(), String> {
         .to_string_lossy()
         .to_string();
 
+    // DOTNET_ prefix (primary — .NET 10+)
+    env_key
+        .set_value("DOTNET_EnableDiagnostics", &"1")
+        .map_err(|e| format!("Failed to set DOTNET_EnableDiagnostics: {}", e))?;
+    env_key
+        .set_value("DOTNET_ENABLE_PROFILING", &"1")
+        .map_err(|e| format!("Failed to set DOTNET_ENABLE_PROFILING: {}", e))?;
+    env_key
+        .set_value("DOTNET_PROFILER", &PROFILER_GUID)
+        .map_err(|e| format!("Failed to set DOTNET_PROFILER: {}", e))?;
+    env_key
+        .set_value("DOTNET_PROFILER_PATH", &profiler_path)
+        .map_err(|e| format!("Failed to set DOTNET_PROFILER_PATH: {}", e))?;
+    env_key
+        .set_value("DOTNET_ReadyToRun", &"0")
+        .map_err(|e| format!("Failed to set DOTNET_ReadyToRun: {}", e))?;
+
+    // CORECLR_ prefix (legacy — .NET 8/9)
     env_key
         .set_value("CORECLR_ENABLE_PROFILING", &"1")
         .map_err(|e| format!("Failed to set CORECLR_ENABLE_PROFILING: {}", e))?;
@@ -121,9 +146,6 @@ pub fn set_env_vars() -> Result<(), String> {
     env_key
         .set_value("CORECLR_PROFILER_PATH", &profiler_path)
         .map_err(|e| format!("Failed to set CORECLR_PROFILER_PATH: {}", e))?;
-    env_key
-        .set_value("DOTNET_ReadyToRun", &"0")
-        .map_err(|e| format!("Failed to set DOTNET_ReadyToRun: {}", e))?;
 
     // Remove legacy startup hooks var if present
     let _ = env_key.delete_value("DOTNET_STARTUP_HOOKS");
@@ -148,7 +170,7 @@ pub fn remove_env_vars() -> Result<(), String> {
     Ok(())
 }
 
-/// Check env var status from the registry.
+/// Check env var status from the registry (DOTNET_ primary, CORECLR_ fallback).
 #[cfg(target_os = "windows")]
 fn check_env_vars() -> (bool, bool, bool, bool) {
     let hkcu = RegKey::predef(HKEY_CURRENT_USER);
@@ -158,15 +180,18 @@ fn check_env_vars() -> (bool, bool, bool, bool) {
     };
 
     let enable: bool = env_key
-        .get_value::<String, _>("CORECLR_ENABLE_PROFILING")
+        .get_value::<String, _>("DOTNET_ENABLE_PROFILING")
+        .or_else(|_| env_key.get_value::<String, _>("CORECLR_ENABLE_PROFILING"))
         .map(|v| v == "1")
         .unwrap_or(false);
     let guid: bool = env_key
-        .get_value::<String, _>("CORECLR_PROFILER")
+        .get_value::<String, _>("DOTNET_PROFILER")
+        .or_else(|_| env_key.get_value::<String, _>("CORECLR_PROFILER"))
         .map(|v| v == PROFILER_GUID)
         .unwrap_or(false);
     let path: bool = env_key
-        .get_value::<String, _>("CORECLR_PROFILER_PATH")
+        .get_value::<String, _>("DOTNET_PROFILER_PATH")
+        .or_else(|_| env_key.get_value::<String, _>("CORECLR_PROFILER_PATH"))
         .map(|v| !v.is_empty())
         .unwrap_or(false);
     let r2r: bool = env_key
@@ -224,12 +249,18 @@ pub fn set_env_vars() -> Result<(), String> {
 
     let env_conf = format!(
         "# Uprooted CLR profiler -- remove this file or run the uninstaller to disable\n\
+# .NET 10+ (DOTNET_ prefix)\n\
+DOTNET_EnableDiagnostics=1\n\
+DOTNET_ENABLE_PROFILING=1\n\
+DOTNET_PROFILER={guid}\n\
+DOTNET_PROFILER_PATH={path}\n\
+DOTNET_ReadyToRun=0\n\
+# Legacy (.NET 8/9)\n\
 CORECLR_ENABLE_PROFILING=1\n\
-CORECLR_PROFILER={}\n\
-CORECLR_PROFILER_PATH={}\n\
-DOTNET_ReadyToRun=0\n",
-        PROFILER_GUID,
-        profiler_path.display()
+CORECLR_PROFILER={guid}\n\
+CORECLR_PROFILER_PATH={path}\n",
+        guid = PROFILER_GUID,
+        path = profiler_path.display()
     );
     fs::write(env_dir.join("uprooted.conf"), &env_conf)
         .map_err(|e| format!("Failed to write environment.d/uprooted.conf: {}", e))?;
@@ -239,14 +270,20 @@ DOTNET_ReadyToRun=0\n",
     let script = format!(
         "#!/bin/bash\n\
 # Uprooted launcher - sets CLR profiler env vars for Root only\n\
-export CORECLR_ENABLE_PROFILING=1\n\
-export CORECLR_PROFILER='{}'\n\
-export CORECLR_PROFILER_PATH='{}'\n\
+# .NET 10+ (DOTNET_ prefix)\n\
+export DOTNET_EnableDiagnostics=1\n\
+export DOTNET_ENABLE_PROFILING=1\n\
+export DOTNET_PROFILER='{guid}'\n\
+export DOTNET_PROFILER_PATH='{path}'\n\
 export DOTNET_ReadyToRun=0\n\
-exec '{}' \"$@\"\n",
-        PROFILER_GUID,
-        profiler_path.display(),
-        root_path.display()
+# Legacy (.NET 8/9)\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{guid}'\n\
+export CORECLR_PROFILER_PATH='{path}'\n\
+exec '{root}' \"$@\"\n",
+        guid = PROFILER_GUID,
+        path = profiler_path.display(),
+        root = root_path.display()
     );
     fs::write(&wrapper, &script)
         .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
@@ -266,13 +303,19 @@ exec '{}' \"$@\"\n",
     let _ = fs::create_dir_all(&plasma_env_dir);
     let plasma_script = format!(
         "#!/bin/sh\n\
-        # Uprooted CLR profiler -- remove this file or run the uninstaller to disable\n\
-        export CORECLR_ENABLE_PROFILING=1\n\
-        export CORECLR_PROFILER='{}'\n\
-        export CORECLR_PROFILER_PATH='{}'\n\
-        export DOTNET_ReadyToRun=0\n",
-        PROFILER_GUID,
-        profiler_path.display()
+# Uprooted CLR profiler -- remove this file or run the uninstaller to disable\n\
+# .NET 10+ (DOTNET_ prefix)\n\
+export DOTNET_EnableDiagnostics=1\n\
+export DOTNET_ENABLE_PROFILING=1\n\
+export DOTNET_PROFILER='{guid}'\n\
+export DOTNET_PROFILER_PATH='{path}'\n\
+export DOTNET_ReadyToRun=0\n\
+# Legacy (.NET 8/9)\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{guid}'\n\
+export CORECLR_PROFILER_PATH='{path}'\n",
+        guid = PROFILER_GUID,
+        path = profiler_path.display()
     );
     let plasma_env_file = plasma_env_dir.join("uprooted.sh");
     let _ = fs::write(&plasma_env_file, &plasma_script);
@@ -286,15 +329,21 @@ exec '{}' \"$@\"\n",
     // 5. ~/.profile fallback -- for non-systemd sessions (X11 login shells, etc.)
     let profile_path = PathBuf::from(&home).join(".profile");
     let profile_content = fs::read_to_string(&profile_path).unwrap_or_default();
-    if !profile_content.contains("CORECLR_ENABLE_PROFILING") {
+    if !profile_content.contains("DOTNET_ENABLE_PROFILING") {
         let block = format!(
             "\n# Uprooted CLR profiler (remove these lines to disable)\n\
+# .NET 10+ (DOTNET_ prefix)\n\
+export DOTNET_EnableDiagnostics=1\n\
+export DOTNET_ENABLE_PROFILING=1\n\
+export DOTNET_PROFILER='{guid}'\n\
+export DOTNET_PROFILER_PATH='{path}'\n\
+export DOTNET_ReadyToRun=0\n\
+# Legacy (.NET 8/9)\n\
 export CORECLR_ENABLE_PROFILING=1\n\
-export CORECLR_PROFILER='{}'\n\
-export CORECLR_PROFILER_PATH='{}'\n\
-export DOTNET_ReadyToRun=0\n",
-            PROFILER_GUID,
-            profiler_path.display()
+export CORECLR_PROFILER='{guid}'\n\
+export CORECLR_PROFILER_PATH='{path}'\n",
+            guid = PROFILER_GUID,
+            path = profiler_path.display()
         );
         let mut file = fs::OpenOptions::new()
             .append(true)
@@ -335,7 +384,7 @@ pub fn remove_env_vars() -> Result<(), String> {
     // Remove env vars from ~/.profile if present
     let profile_path = PathBuf::from(&home).join(".profile");
     if let Ok(content) = fs::read_to_string(&profile_path) {
-        if content.contains("CORECLR_ENABLE_PROFILING") {
+        if content.contains("DOTNET_ENABLE_PROFILING") || content.contains("CORECLR_ENABLE_PROFILING") {
             // Remove the Uprooted block (comment + 4 export lines + blank line before)
             let cleaned: Vec<&str> = content
                 .lines()
@@ -420,9 +469,11 @@ fn check_env_vars() -> (bool, bool, bool, bool) {
         })
         .unwrap_or_default();
 
-    let enable = content.contains("CORECLR_ENABLE_PROFILING=1");
+    let enable = content.contains("DOTNET_ENABLE_PROFILING=1")
+        || content.contains("CORECLR_ENABLE_PROFILING=1");
     let guid = content.contains(PROFILER_GUID);
-    let path = content.contains("CORECLR_PROFILER_PATH=");
+    let path = content.contains("DOTNET_PROFILER_PATH=")
+        || content.contains("CORECLR_PROFILER_PATH=");
     let r2r = content.contains("DOTNET_ReadyToRun=0");
 
     (enable, guid, path, r2r)
@@ -444,13 +495,16 @@ fn check_env_vars_active() -> bool {
 
 #[cfg(target_os = "linux")]
 fn check_env_vars_active() -> bool {
-    let enable = std::env::var("CORECLR_ENABLE_PROFILING")
+    let enable = std::env::var("DOTNET_ENABLE_PROFILING")
+        .or_else(|_| std::env::var("CORECLR_ENABLE_PROFILING"))
         .map(|v| v == "1")
         .unwrap_or(false);
-    let guid = std::env::var("CORECLR_PROFILER")
+    let guid = std::env::var("DOTNET_PROFILER")
+        .or_else(|_| std::env::var("CORECLR_PROFILER"))
         .map(|v| v == PROFILER_GUID)
         .unwrap_or(false);
-    let path = std::env::var("CORECLR_PROFILER_PATH")
+    let path = std::env::var("DOTNET_PROFILER_PATH")
+        .or_else(|_| std::env::var("CORECLR_PROFILER_PATH"))
         .map(|v| !v.is_empty())
         .unwrap_or(false);
     enable && guid && path
@@ -521,6 +575,7 @@ pub fn check_root_running() -> bool {
 }
 
 /// Terminate all Root processes. Returns the number of processes killed.
+#[allow(dead_code)]
 pub fn kill_root_processes() -> u32 {
     #[cfg(target_os = "windows")]
     {

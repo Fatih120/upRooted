@@ -519,10 +519,12 @@ bridge method (`__webRtcToNative.uprootedThemeChanged`) is planned to close this
 **Why two separate engines?**
 
 Root's desktop app renders in two completely different technologies. Native controls
-(sidebar, title bar, settings chrome, overlays) are Avalonia XAML -- they do not respond
-to CSS. Web content (chat, voice, communities) is Chromium HTML -- it does not respond to
-Avalonia resource dictionaries. There is no shared color bus, so each layer needs its own
-theme engine targeting its own rendering pipeline.
+(sidebar, title bar, settings chrome, overlays, **and the chat/community UI**) are Avalonia
+XAML -- they do not respond to CSS. Web content (WebRTC voice/video, sub-apps like polls
+and task tracker) is Chromium HTML via DotNetBrowser -- it does not respond to Avalonia
+resource dictionaries. Note: chat is Avalonia-native, NOT browser-rendered. There is no
+shared color bus, so each layer needs its own theme engine targeting its own rendering
+pipeline.
 
 ---
 

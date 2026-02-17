@@ -28,6 +28,11 @@ internal class AvaloniaReflection
     public Type? EllipseType { get; private set; }
     public Type? CanvasType { get; private set; }
 
+    // Image types
+    public Type? ImageType { get; private set; }     // Avalonia.Controls.Image
+    public Type? BitmapType { get; private set; }    // Avalonia.Media.Imaging.Bitmap
+    public Type? StretchType { get; private set; }   // Avalonia.Media.Stretch
+
     // Overlay / layout types
     public Type? OverlayLayerType { get; private set; }
     public Type? PointType { get; private set; }
@@ -118,6 +123,10 @@ internal class AvaloniaReflection
     private MethodInfo? _translatePoint;           // Visual.TranslatePoint(Point, Visual) extension
     private PropertyInfo? _controlOpacity;
     private PropertyInfo? _controlIsHitTestVisible;
+
+    // Image
+    private PropertyInfo? _imageSource;    // Image.Source
+    private PropertyInfo? _imageStretch;   // Image.Stretch
 
     // Resource system
     private PropertyInfo? _appResources;              // Application.Resources
@@ -215,6 +224,11 @@ internal class AvaloniaReflection
         VisualType = Find("Avalonia.Visual");
         TopLevelType = Find("Avalonia.Controls.TopLevel");
 
+        // Image types
+        ImageType = Find("Avalonia.Controls.Image");
+        BitmapType = Find("Avalonia.Media.Imaging.Bitmap");
+        StretchType = Find("Avalonia.Media.Stretch");
+
         // Overlay / Canvas / layout types
         OverlayLayerType = Find("Avalonia.Controls.Primitives.OverlayLayer");
         CanvasType = Find("Avalonia.Controls.Canvas");
@@ -241,6 +255,9 @@ internal class AvaloniaReflection
         Logger.Log("Reflection", $"  ToggleSwitch: {(ToggleSwitchType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Ellipse: {(EllipseType != null ? EllipseType.FullName : "MISSING")}");
         Logger.Log("Reflection", $"  Visual: {(VisualType != null ? VisualType.FullName : "MISSING")}");
+        Logger.Log("Reflection", $"  Image: {(ImageType != null ? "OK" : "MISSING")}");
+        Logger.Log("Reflection", $"  Bitmap: {(BitmapType != null ? "OK" : "MISSING")}");
+        Logger.Log("Reflection", $"  Stretch: {(StretchType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  OverlayLayer: {(OverlayLayerType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  Canvas: {(CanvasType != null ? "OK" : "MISSING")}");
     }
@@ -413,6 +430,10 @@ internal class AvaloniaReflection
         Logger.Log("Reflection", $"  ResourceDictionary: {(ResourceDictionaryType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  IResourceDictionary: {(IResourceDictionaryType != null ? "OK" : "MISSING")}");
         Logger.Log("Reflection", $"  App.Resources: {(_appResources != null ? "OK" : "MISSING")}");
+
+        // Image
+        _imageSource = ImageType?.GetProperty("Source", pub);
+        _imageStretch = ImageType?.GetProperty("Stretch", pub);
 
         // Opacity and IsHitTestVisible
         _controlOpacity = ControlType?.GetProperty("Opacity", pub)
@@ -1312,7 +1333,13 @@ internal class AvaloniaReflection
     /// </summary>
     public static string PropertyToFieldName(string propertyName) => propertyName + "Property";
 
-    // ===== MaxHeight helpers =====
+    // ===== MaxHeight / MaxWidth helpers =====
+
+    public void SetMaxWidth(object? control, double maxWidth)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("MaxWidth")?.SetValue(control, maxWidth);
+    }
 
     public void SetMaxHeight(object? control, double maxHeight)
     {
@@ -1907,6 +1934,65 @@ internal class AvaloniaReflection
     {
         if (control == null) return;
         control.GetType().GetProperty("ClipToBounds")?.SetValue(control, clip);
+    }
+
+    // ===== Image helpers =====
+
+    /// <summary>
+    /// Creates an Avalonia Image control with the specified Stretch mode.
+    /// </summary>
+    public object? CreateImage(string stretch = "Uniform")
+    {
+        if (ImageType == null) return null;
+        try
+        {
+            var img = Activator.CreateInstance(ImageType);
+            if (img != null && StretchType != null && _imageStretch != null)
+            {
+                var stretchVal = Enum.Parse(StretchType, stretch);
+                _imageStretch.SetValue(img, stretchVal);
+            }
+            return img;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"CreateImage error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Creates an Avalonia Bitmap from a MemoryStream via Bitmap(Stream) constructor.
+    /// Returns null if the Bitmap type wasn't resolved or construction fails.
+    /// </summary>
+    public object? CreateBitmapFromStream(System.IO.Stream stream)
+    {
+        if (BitmapType == null) return null;
+        try
+        {
+            // Bitmap(Stream) constructor
+            var ctor = BitmapType.GetConstructor(new[] { typeof(System.IO.Stream) });
+            if (ctor == null)
+            {
+                Logger.Log("Reflection", "Bitmap(Stream) constructor not found");
+                return null;
+            }
+            return ctor.Invoke(new object[] { stream });
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"CreateBitmapFromStream error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sets Image.Source = bitmap on an Image control.
+    /// </summary>
+    public void SetImageSource(object? image, object? bitmap)
+    {
+        if (image == null || bitmap == null) return;
+        _imageSource?.SetValue(image, bitmap);
     }
 
     /// <summary>

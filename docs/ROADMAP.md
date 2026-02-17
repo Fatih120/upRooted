@@ -13,12 +13,12 @@ Issues are organized by severity. Critical issues block core functionality; high
 ### Critical
 
 **System.Text.Json broken in profiler context**
-`System.Text.Json` causes `MissingMethodException` when used inside the CLR profiler-injected hook. This prevents JSON deserialization in the C# layer, so the hook cannot read `uprooted-settings.json`. Native Avalonia UI (themes page, plugins page) returns hardcoded defaults only and cannot reflect actual user configuration. Settings persistence from the C# side is currently disabled.
+`System.Text.Json` causes `MissingMethodException` when used inside the CLR profiler-injected hook. This prevents JSON deserialization in the C# layer.
 - Files: `hook/UprootedSettings.cs`
-- Workaround in progress: manual INI-style parsing (partially implemented)
+- Workaround: INI-based `UprootedSettings` (fully implemented). Uses key=value format instead of JSON. Supports theme persistence, plugin toggles, and custom accent/background colors.
 
 **Environment variables affect all .NET apps**
-CLR profiler environment variables (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, etc.) are user-scoped and persistent. They apply to every .NET process the user launches, not just Root. The profiler has a process name guard that returns `E_FAIL` for non-Root processes, but other .NET apps still incur a slight startup overhead from the profiler loading and unloading.
+CLR profiler environment variables (`DOTNET_ENABLE_PROFILING`, `DOTNET_PROFILER`, etc. plus legacy `CORECLR_` prefix for .NET 8/9 compatibility) are user-scoped and persistent. They apply to every .NET process the user launches, not just Root. The profiler has a process name guard that returns `E_FAIL` for non-Root processes, but other .NET apps still incur a slight startup overhead from the profiler loading and unloading.
 - Files: `installer/src-tauri/src/hook.rs`, install scripts
 - Mitigation: Process name guard in `tools/uprooted_profiler.c`
 
@@ -28,6 +28,11 @@ CLR profiler environment variables (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILE
 The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific Avalonia type names, property names, and method signatures. Any Avalonia version update that renames or removes types will break all UI injection. The entire C# layer becomes non-functional if the reflection cache cannot resolve its targets.
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
+
+**Chat is Avalonia-native -- link embeds and NSFW filter need redesign**
+Root's chat UI (messages, channels, community views) is rendered entirely in native Avalonia controls, NOT in DotNetBrowser. Investigation on 2026-02-17 confirmed: 1647+ Avalonia visual tree nodes, 0 browser controls, DotNetBrowser's shell page iframe permanently at `about:blank`. Link embeds and NSFW filter currently inject JavaScript into DotNetBrowser, which has no effect on chat content. These features require Avalonia-native visual tree approaches (watching for URL-containing TextBlocks, creating native embed controls) instead.
+- Files: `hook/LinkEmbedInjector.cs`, `hook/NsfwFilter.cs`, `hook/DotNetBrowserReflection.cs`
+- Approach: Watch visual tree for URL TextBlocks, fetch OG metadata via C#, create native Avalonia embed controls
 
 **Settings page text-based detection fragile**
 The sidebar injector locates the settings page by searching the visual tree for the exact text "APP SETTINGS". If Root renames this label, native UI injection silently fails with no error visible to the user.
@@ -66,8 +71,8 @@ Settings loading merges user settings with defaults using a shallow object sprea
 
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
-### Fix C# settings persistence
-Replace `System.Text.Json` usage with manual INI-style parsing in the hook layer. Partial implementation already exists in `hook/UprootedSettings.cs`. This unblocks the native Avalonia settings pages from reflecting actual user configuration.
+### ~~Fix C# settings persistence~~ (DONE)
+INI-based `UprootedSettings` is fully implemented. The hook layer reads and writes `uprooted-settings.ini` with key=value pairs for theme, plugins, custom colors, etc.
 
 ### Implement theme click handlers in native UI
 The native Avalonia Themes page shows themes with "ACTIVE" badges but has no click handlers. Add theme selection behavior so users can switch themes from the native settings UI.
@@ -266,7 +271,7 @@ Uprooted injects into a closed-source application that updates independently. Tr
 
 | Uprooted Version | Root Versions Tested | Status | Notes |
 |-------------------|---------------------|--------|-------|
-| 0.1.92 (current) | v0.9.86 | Active | Primary development target |
+| 0.3.0 (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
 
 Maintain this matrix as new Root versions are released. When a user reports a bug, the first diagnostic question should be which Root version they are running.
 
@@ -319,4 +324,4 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-17*

@@ -9,7 +9,7 @@ Step-by-step instructions for installing, verifying, repairing, and uninstalling
 ## Table of Contents
 
 1. [Prerequisites](#prerequisites)
-2. [Quick Install (Tauri Installer)](#quick-install-tauri-installer)
+2. [Quick Install (Console Installer)](#quick-install-console-installer)
 3. [PowerShell Install (Manual Windows)](#powershell-install-manual-windows)
 4. [Linux Install](#linux-install)
 5. [Arch Linux](#arch-linux)
@@ -38,23 +38,33 @@ On Linux, everything lives under `~/.local/` and `~/.config/`.
 
 ---
 
-## Quick Install (Tauri Installer)
+## Quick Install (Console Installer)
 
-This is the recommended method for most users. The Tauri-based GUI installer handles
-detection, file deployment, environment variable configuration, and HTML patching
-automatically.
+This is the recommended method for most users. The console TUI installer (ratatui-based,
+btop-inspired interface) handles detection, file deployment, environment variable
+configuration, and HTML patching automatically. It is a single portable binary (~600KB)
+with no external dependencies.
 
 ### Steps
 
 1. **Download the installer** from the
    [latest release](https://github.com/watchthelight/uprooted/releases/latest).
-   - Windows: `.msi` or `.exe` installer
-   - Linux: `.deb` or `.AppImage` installer
+   - Windows: `Uprooted-0.3.0-Setup.exe`
+   - Linux: `Uprooted-0.3.0-linux-amd64`
 
 2. **Close Root** if it is currently running. The installer will warn you if Root is
    still open.
 
-3. **Run the installer.** It will:
+3. **Run the installer** from a terminal:
+   ```bash
+   # Windows (PowerShell or Command Prompt)
+   .\Uprooted-0.3.0-Setup.exe
+
+   # Linux
+   chmod +x Uprooted-0.3.0-linux-amd64
+   ./Uprooted-0.3.0-linux-amd64
+   ```
+   The TUI will guide you through the installation process. It will:
    - Auto-detect Root's installation path
      - Windows: `%LOCALAPPDATA%\Root\current\Root.exe`
      - Linux: checks `~/Applications/Root.AppImage`, `~/Downloads/Root.AppImage`,
@@ -66,16 +76,28 @@ automatically.
      - `UprootedHook.deps.json`
      - `uprooted-preload.js`
      - `uprooted.css`
-   - Set CLR profiler environment variables (user-scoped)
+   - Set CLR profiler environment variables (user-scoped, using both `DOTNET_` and
+     `CORECLR_` prefixes for compatibility with .NET 10+ and .NET 8/9)
    - Patch Root's HTML files with `<script>` and `<link>` tags for the TypeScript layer
 
-4. **Click Install** and wait for the process to complete.
+4. **Follow the TUI prompts** and wait for the process to complete.
 
 5. **Restart Root.** Open Root normally -- Uprooted will load automatically via
    the CLR profiler hook.
 
 6. **Verify:** Open Root's Settings page. You should see an "UPROOTED" section in the
    sidebar. See [Verification Steps](#verification-steps) for more details.
+
+### CLI Flags
+
+The installer supports the following command-line flags for non-interactive use:
+
+| Flag | Description |
+|------|-------------|
+| `--uninstall` | Remove Uprooted (files, env vars, HTML patches) |
+| `--repair` | Re-deploy files and re-patch HTML without changing settings |
+| `--diagnose` | Run installation diagnostics and print a report |
+| `--plain` | Disable the TUI and use plain text output (for scripts/CI) |
 
 ---
 
@@ -142,12 +164,16 @@ Uprooted supports two injection methods. Both accomplish the same result -- load
 
 6. **Sets persistent user-scoped environment variables:**
 
-   **Profiler method sets:**
+   **Profiler method sets (both prefixes for .NET 10+ and .NET 8/9 compatibility):**
    ```
-   CORECLR_ENABLE_PROFILING = 1
-   CORECLR_PROFILER          = {D1A6F5A0-1234-4567-89AB-CDEF01234567}
-   CORECLR_PROFILER_PATH     = %LOCALAPPDATA%\Root\uprooted\uprooted_profiler.dll
-   DOTNET_ReadyToRun          = 0
+   DOTNET_EnableDiagnostics    = 1
+   DOTNET_ENABLE_PROFILING     = 1
+   DOTNET_PROFILER             = {D1A6F5A0-1234-4567-89AB-CDEF01234567}
+   DOTNET_PROFILER_PATH        = %LOCALAPPDATA%\Root\uprooted\uprooted_profiler.dll
+   CORECLR_ENABLE_PROFILING    = 1
+   CORECLR_PROFILER            = {D1A6F5A0-1234-4567-89AB-CDEF01234567}
+   CORECLR_PROFILER_PATH       = %LOCALAPPDATA%\Root\uprooted\uprooted_profiler.dll
+   DOTNET_ReadyToRun           = 0
    ```
 
    **StartupHooks method sets:**
@@ -162,10 +188,11 @@ Uprooted supports two injection methods. Both accomplish the same result -- load
 
 ### Note on Environment Variable Scope
 
-The Profiler method sets `CORECLR_ENABLE_PROFILING=1` at user scope, which means
-**every .NET application** you run will attempt to load the profiler DLL. The
-profiler itself has a process guard (`Root.exe` only) and will immediately detach
-from any non-Root process. This is harmless but worth knowing.
+The Profiler method sets `DOTNET_ENABLE_PROFILING=1` and `CORECLR_ENABLE_PROFILING=1`
+at user scope, which means **every .NET application** you run will attempt to load the
+profiler DLL. The profiler itself has a process guard (`Root.exe` only) and will
+immediately detach from any non-Root process. This is harmless but worth knowing.
+Both prefixes are set because .NET 10+ reads `DOTNET_` while .NET 8/9 reads `CORECLR_`.
 
 If this concerns you, use the StartupHooks method instead, which only sets
 `DOTNET_STARTUP_HOOKS`. See [Troubleshooting](#troubleshooting) for more details.
@@ -229,13 +256,18 @@ sudo apt install gcc nodejs
 5. **Sets session-wide environment variables** by writing
    `~/.config/environment.d/uprooted.conf`:
    ```ini
+   DOTNET_EnableDiagnostics=1
+   DOTNET_ENABLE_PROFILING=1
+   DOTNET_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
+   DOTNET_PROFILER_PATH=~/.local/share/uprooted/libuprooted_profiler.so
    CORECLR_ENABLE_PROFILING=1
    CORECLR_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
    CORECLR_PROFILER_PATH=~/.local/share/uprooted/libuprooted_profiler.so
    DOTNET_ReadyToRun=0
    ```
-   These take effect after your next login. The wrapper script (below) provides
-   immediate use without re-logging.
+   Both `DOTNET_` (primary, .NET 10+) and `CORECLR_` (legacy, .NET 8/9) prefixes
+   are set for compatibility. These take effect after your next login. The wrapper
+   script (below) provides immediate use without re-logging.
 
 6. **Creates a wrapper script** at `~/.local/share/uprooted/launch-root.sh` that
    exports the profiler environment variables and then executes Root. This is
@@ -268,23 +300,19 @@ You have three options:
 ## Arch Linux
 
 An AUR-style PKGBUILD is available at `packaging/arch/PKGBUILD` in the repository.
-This package installs the Tauri GUI installer from the `.deb` release artifact.
 
-The PKGBUILD depends on:
-- `cairo`, `desktop-file-utils`, `gdk-pixbuf2`, `glib2`, `gtk3`
-- `hicolor-icon-theme`, `libsoup3`, `pango`, `webkit2gtk-4.1`
-
-The version and checksum placeholders (`%%VERSION%%`, `%%SHA256%%`, `%%DEB_NAME%%`)
-are filled in by the release CI pipeline. To build locally:
+The version and checksum placeholders (`%%VERSION%%`, `%%SHA256%%`) are filled in by
+the release CI pipeline. To build locally:
 
 ```bash
 cd packaging/arch/
-# Edit PKGBUILD to replace %%VERSION%%, %%DEB_NAME%%, and %%SHA256%% with actual values
+# Edit PKGBUILD to replace %%VERSION%% and %%SHA256%% with actual values
 makepkg -si
 ```
 
 A proper AUR submission (`uprooted-bin`) is planned for a future release. For now,
-use the standalone Linux install script or the Tauri installer `.AppImage`.
+use the standalone Linux install script or the console installer binary
+(`Uprooted-0.3.0-linux-amd64`).
 
 ---
 
@@ -314,7 +342,7 @@ Open the log file after launching Root. A successful startup looks like this:
 
 ```
 [HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.2.2 Loaded ===
+[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.3.0 Loaded ===
 [HH:MM:SS.fff] [Startup] ========================================
 [HH:MM:SS.fff] [Startup] Process: C:\Users\...\Root.exe
 [HH:MM:SS.fff] [Startup] PID: 12345
@@ -352,19 +380,28 @@ and plugins are not, the HTML files may not be patched. Check the log for
 
 ## Uninstallation
 
-### Tauri Installer
+### Console Installer
 
-If you installed via the Tauri GUI installer:
+If you installed via the console TUI installer, run it again with the `--uninstall`
+flag:
 
-1. Open the installer application.
-2. Click **Uninstall**.
-3. The installer will:
-   - Remove all deployed files from the Uprooted install directory
-   - Remove all environment variables (profiler and startup hooks)
-   - Strip injected tags from HTML files (or restore from backups)
-   - On Linux: remove the wrapper script, `.desktop` file, and
-     `environment.d/uprooted.conf`
-4. Restart Root to confirm it runs without Uprooted.
+```bash
+# Windows
+.\Uprooted-0.3.0-Setup.exe --uninstall
+
+# Linux
+./Uprooted-0.3.0-linux-amd64 --uninstall
+```
+
+The installer will:
+- Remove all deployed files from the Uprooted install directory
+- Remove all environment variables (both `DOTNET_` and `CORECLR_` profiler vars,
+  plus startup hooks)
+- Strip injected tags from HTML files (or restore from backups)
+- On Linux: remove the wrapper script, `.desktop` file, and
+  `environment.d/uprooted.conf`
+
+Restart Root to confirm it runs without Uprooted.
 
 ### PowerShell (Windows)
 
@@ -379,6 +416,10 @@ The script performs these steps:
 1. **Prompts to close Root** if it is running.
 
 2. **Removes all environment variables** (user-scoped):
+   - `DOTNET_EnableDiagnostics`
+   - `DOTNET_ENABLE_PROFILING`
+   - `DOTNET_PROFILER`
+   - `DOTNET_PROFILER_PATH`
    - `CORECLR_ENABLE_PROFILING`
    - `CORECLR_PROFILER`
    - `CORECLR_PROFILER_PATH`
@@ -431,6 +472,10 @@ everything Uprooted touches:
 %LOCALAPPDATA%\Root\uprooted\                              (entire directory)
 
 # Environment variables (user-scoped, HKCU\Environment)
+DOTNET_EnableDiagnostics
+DOTNET_ENABLE_PROFILING
+DOTNET_PROFILER
+DOTNET_PROFILER_PATH
 CORECLR_ENABLE_PROFILING
 CORECLR_PROFILER
 CORECLR_PROFILER_PATH
@@ -447,6 +492,10 @@ DOTNET_STARTUP_HOOKS
 
 To remove Windows environment variables manually:
 ```powershell
+[System.Environment]::SetEnvironmentVariable("DOTNET_EnableDiagnostics", $null, "User")
+[System.Environment]::SetEnvironmentVariable("DOTNET_ENABLE_PROFILING", $null, "User")
+[System.Environment]::SetEnvironmentVariable("DOTNET_PROFILER", $null, "User")
+[System.Environment]::SetEnvironmentVariable("DOTNET_PROFILER_PATH", $null, "User")
 [System.Environment]::SetEnvironmentVariable("CORECLR_ENABLE_PROFILING", $null, "User")
 [System.Environment]::SetEnvironmentVariable("CORECLR_PROFILER", $null, "User")
 [System.Environment]::SetEnvironmentVariable("CORECLR_PROFILER_PATH", $null, "User")
@@ -505,10 +554,15 @@ Just restart Root and the hook will repair the patches itself.
 If automatic repair does not trigger (e.g. the hook DLL was also updated), you have
 these options:
 
-**Tauri installer:**
-1. Open the installer.
-2. Click **Repair**. This strips any old injection, re-deploys files, and re-patches
-   HTML fresh.
+**Console installer:**
+```bash
+# Windows
+.\Uprooted-0.3.0-Setup.exe --repair
+
+# Linux
+./Uprooted-0.3.0-linux-amd64 --repair
+```
+This strips any old injection, re-deploys files, and re-patches HTML fresh.
 
 **PowerShell (Windows):**
 ```powershell
@@ -565,18 +619,19 @@ overlay instead of modifying Content). If it does occur:
 
 - **Hook not loading:** Verify environment variables are set:
   ```powershell
-  # Windows (PowerShell)
+  # Windows (PowerShell) -- check both prefixes
+  [System.Environment]::GetEnvironmentVariable("DOTNET_ENABLE_PROFILING", "User")
   [System.Environment]::GetEnvironmentVariable("CORECLR_ENABLE_PROFILING", "User")
-  # Should output: 1
+  # Both should output: 1
   ```
   ```bash
   # Linux
   cat ~/.config/environment.d/uprooted.conf
   ```
 
-- **Wrong profiler path:** The `CORECLR_PROFILER_PATH` must point to the actual
-  profiler DLL/SO file. Verify the file exists at the path shown in the environment
-  variable.
+- **Wrong profiler path:** Both `DOTNET_PROFILER_PATH` and `CORECLR_PROFILER_PATH`
+  must point to the actual profiler DLL/SO file. Verify the file exists at the path
+  shown in the environment variables.
 
 ### Missing TypeScript features
 
@@ -591,15 +646,16 @@ Open one of the target HTML files and look for `<!-- uprooted:start -->`:
 
 If the markers are missing:
 1. Make sure Root has been launched at least once (to create the profile directory).
-2. Re-run the install script or use the Tauri installer's Repair button.
+2. Re-run the install script or use the console installer's `--repair` flag.
 3. Check the log for `[HtmlPatch]` errors.
 
 ### Environment variable leakage
 
-The Profiler method sets `CORECLR_ENABLE_PROFILING=1` at user scope. This means
-every .NET application you launch will attempt to load the profiler. The profiler
-has a process guard that immediately detaches from any process that is not
-`Root.exe`, so there is no functional impact.
+The Profiler method sets `DOTNET_ENABLE_PROFILING=1` and
+`CORECLR_ENABLE_PROFILING=1` at user scope. This means every .NET application you
+launch will attempt to load the profiler. The profiler has a process guard that
+immediately detaches from any process that is not `Root.exe`, so there is no
+functional impact.
 
 However, if this concerns you:
 
@@ -617,7 +673,7 @@ exist, the logger creates it. If the log file is still missing:
 - Verify the profile directory exists (launch Root once first).
 - Check file permissions on the profile directory.
 - On Linux, make sure the environment variables are actually set in your session
-  (`env | grep CORECLR`).
+  (`env | grep -E 'DOTNET_|CORECLR_'`).
 
 ### Log file location
 
@@ -659,6 +715,6 @@ All paths Uprooted uses on each platform.
 
 ---
 
-See [Installer Reference](INSTALLER.md) for technical details on how the Tauri
+See [Installer Reference](INSTALLER.md) for technical details on how the console
 installer works internally. See [Build Guide](BUILD.md) for building all layers
 from source.

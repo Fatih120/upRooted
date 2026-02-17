@@ -100,12 +100,15 @@ starts:
 | `DOTNET_ReadyToRun` | `0` | Disables precompiled native images (see [IL Injection](#il-injection)) |
 
 The legacy `COR_PROFILER` / `COR_ENABLE_PROFILING` variables are for .NET Framework.
-CoreCLR (.NET 5+) uses the `CORECLR_` prefix exclusively.
+CoreCLR (.NET 5+) recognizes both `CORECLR_` and `DOTNET_` prefixes for profiler
+variables. The `DOTNET_` prefix is the primary/canonical form for .NET 10+; the `CORECLR_`
+prefix is retained for backward compatibility with .NET 8/9. The Uprooted installer sets
+both prefixes to ensure the profiler loads regardless of the .NET runtime version.
 
 ### Loading Sequence
 
 1. Process starts, CoreCLR initializes.
-2. Runtime reads `CORECLR_ENABLE_PROFILING=1` and `CORECLR_PROFILER_PATH`.
+2. Runtime reads `CORECLR_ENABLE_PROFILING=1` (or its `DOTNET_` equivalent) and `CORECLR_PROFILER_PATH`.
 3. Runtime calls `LoadLibrary` (Windows) or `dlopen` (Linux) on the profiler DLL/SO.
 4. Runtime calls `DllGetClassObject(CLSID, IID_IClassFactory, &factory)`.
 5. Factory's `CreateInstance` returns a profiler object implementing `ICorProfilerCallback`.

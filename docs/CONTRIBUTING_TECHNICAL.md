@@ -30,7 +30,7 @@ commit format, PR process, and code style, see [CONTRIBUTING.md](../CONTRIBUTING
 
 Uprooted is a dual-layer client mod framework. Contributing effectively
 requires understanding that the C# hook, the TypeScript browser injection,
-the native CLR profiler, and the Tauri installer are all independent
+the native CLR profiler, and the console TUI installer are all independent
 components that must build and deploy together. This guide walks you through
 setting up each layer, verifying that it works, and diagnosing problems when
 it does not.
@@ -51,8 +51,7 @@ integrate with the rest of the system when deployed to a Root installation.
 | pnpm            | 10+              | Package management                 |
 | .NET SDK        | 10.0 (preview)   | C# hook compilation                |
 | MSVC / GCC      | VS 2022 / GCC 9+ | Native CLR profiler DLL/SO        |
-| Rust            | stable            | Tauri installer backend           |
-| Tauri CLI       | 2.x               | Installer build                   |
+| Rust            | stable            | Console TUI installer             |
 | Root Communications | desktop app   | Runtime testing target            |
 | Python          | 3.8+             | Log analysis script (optional)     |
 
@@ -99,28 +98,17 @@ pnpm dev
 
 ### Rust Installer Setup
 
-The installer is a Tauri 2 application with a Vite frontend and Rust backend.
+The installer is a console TUI application built with ratatui and crossterm.
 
 ```bash
 # Install Rust stable toolchain
 rustup install stable
 
-# Install installer frontend dependencies
-cd installer && pnpm install
-
-# Verify Tauri CLI
-cd installer && pnpm tauri --version
-
-# Build the installer (requires all artifacts staged first -- see Build Guide)
-cd installer && pnpm tauri build
+# Build the installer
+cd installer/src-tauri && cargo build --release
 ```
 
-On Linux, you also need system packages for Tauri:
-
-```bash
-sudo apt-get install libwebkit2gtk-4.1-dev libappindicator3-dev \
-    librsvg2-dev patchelf
-```
+No system packages needed (no WebKitGTK dependency).
 
 ### Native Profiler Setup
 
@@ -158,7 +146,7 @@ The `scripts/build_installer.ps1` script locates MSVC automatically via
 ```
 uprooted-private/
   hook/                         # C# .NET hook (the core injection layer)
-    StartupHook.cs              #   5-phase startup sequence
+    StartupHook.cs              #   Multi-phase startup (Phase 0-5)
     AvaloniaReflection.cs       #   Reflection cache for ~80 Avalonia types
     SidebarInjector.cs          #   Timer-based sidebar injection (200ms poll)
     ContentPages.cs             #   Settings page UI builders
@@ -178,9 +166,8 @@ uprooted-private/
     api/                        #   Bridge proxy, CSS injection, DOM utilities
     plugins/                    #   Built-in plugins (themes, sentry-blocker, etc.)
 
-  installer/                    # Tauri 2 installer application
-    src/                        #   Vite frontend (install/uninstall UI)
-    src-tauri/                  #   Rust backend (detection, patching, deployment)
+  installer/                    # Console TUI installer (Rust)
+    src-tauri/                  #   Rust source (detection, patching, deployment, TUI)
       src/embedded.rs           #   Artifact embedding via include_bytes!()
       artifacts/                #   Staging directory for build artifacts
 
@@ -241,9 +228,9 @@ All tests should pass. Currently covers `ColorUtils` and `GradientBrush` logic.
 powershell -File scripts/build_installer.ps1
 ```
 
-This builds all layers, stages artifacts, and produces the final installer.
-It will report errors if any stage fails and verify that all five required
-artifacts are present before starting the Tauri build.
+This builds all layers, stages artifacts, and produces the final `uprooted.exe`
+installer. It will report errors if any stage fails and verify that all
+required artifacts are present before starting the Rust build.
 
 ---
 
@@ -464,7 +451,7 @@ source files through DevTools.
 
 | Symptom | Likely Cause | Fix |
 | ------- | ------------ | --- |
-| Hook does not load at all | Profiler environment variables not set, or wrong `CORECLR_PROFILER_PATH` | Run `scripts/diagnose.ps1` to check env vars. Verify `CORECLR_ENABLE_PROFILING=1`, `CORECLR_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}`, and `CORECLR_PROFILER_PATH` points to an existing `uprooted_profiler.dll`. |
+| Hook does not load at all | Profiler environment variables not set, or wrong `DOTNET_PROFILER_PATH` | Run `scripts/diagnose.ps1` to check env vars. Verify `DOTNET_ENABLE_PROFILING=1`, `DOTNET_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}`, and `DOTNET_PROFILER_PATH` points to an existing `uprooted_profiler.dll`. Legacy `CORECLR_` prefix vars should also be set for .NET 8/9 compatibility. |
 | UI freeze when navigating away from settings | Direct modification of `ContentControl.Content` | Never set `ContentControl.Content` directly. Use Grid overlay pattern instead. See Architecture doc, Critical Rules section. |
 | `MissingMethodException` at runtime | Using `System.Text.Json` in hook code | `System.Text.Json` fails in the profiler context. Use the INI-based `UprootedSettings` class for all serialization. Parse manually if needed. |
 | Sidebar items do not appear | Timing issue -- settings page not fully loaded when injector runs | Check log for `[Injector]` messages. The `SidebarInjector` uses a 200ms timer poll. If Root's UI takes longer to render, the injector may miss its window. Restart Root and reopen Settings. |
@@ -534,7 +521,7 @@ source files through DevTools.
 
 ### Installer Changes
 
-1. **All five artifacts must be staged** before `pnpm tauri build`. Missing
+1. **All artifacts must be staged** before `cargo build --release`. Missing
    artifacts cause a compile-time error because `include_bytes!()` is
    resolved at build time.
 

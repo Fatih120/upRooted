@@ -118,13 +118,22 @@ int WINAPI wWinMain(HINSTANCE hInst, HINSTANCE hPrev, LPWSTR lpCmdLine, int nCmd
         return 1;
     }
 
-    /* Set CLR profiler env vars if Uprooted is enabled and profiler DLL exists */
+    /* Set CLR profiler env vars if Uprooted is enabled and profiler DLL exists.
+     * .NET 10 requires DOTNET_ prefix; CORECLR_ prefix kept for older runtimes. */
     if (IsUprootedEnabled() && ProfilerExists(profilerDll)) {
+        /* .NET 10+ (DOTNET_ prefix) */
+        SetEnvironmentVariableW(L"DOTNET_EnableDiagnostics", L"1");
+        SetEnvironmentVariableW(L"DOTNET_ENABLE_PROFILING", L"1");
+        SetEnvironmentVariableW(L"DOTNET_PROFILER",
+            L"{D1A6F5A0-1234-4567-89AB-CDEF01234567}");
+        SetEnvironmentVariableW(L"DOTNET_PROFILER_PATH", profilerDll);
+        SetEnvironmentVariableW(L"DOTNET_ReadyToRun", L"0");
+
+        /* Legacy (.NET 8/9, CORECLR_ prefix) */
         SetEnvironmentVariableW(L"CORECLR_ENABLE_PROFILING", L"1");
         SetEnvironmentVariableW(L"CORECLR_PROFILER",
             L"{D1A6F5A0-1234-4567-89AB-CDEF01234567}");
         SetEnvironmentVariableW(L"CORECLR_PROFILER_PATH", profilerDll);
-        SetEnvironmentVariableW(L"DOTNET_ReadyToRun", L"0");
     }
 
     /* Build command line: "Root.exe" <original args> */

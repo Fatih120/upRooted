@@ -1,48 +1,68 @@
-# Uprooted Hook - Session State (2026-02-16)
+# Uprooted Hook - Session State (2026-02-17)
 
-## Release: v0.2.2
+## Release: v0.2.5
 
-### What Changed
+## Critical Finding: Root's Chat is Avalonia-Native
 
-#### Fix: Linux AppImage Loading Failure
-Three interconnected fixes for Uprooted failing to load when Root is launched as an AppImage on Linux:
+Root v0.9.92's chat UI is rendered **entirely in native Avalonia controls**, NOT in DotNetBrowser.
+Confirmed through extensive investigation on 2026-02-17:
 
-1. **AppImage-aware profiler process guard** (`tools/uprooted_profiler_linux.c`)
-   - Old: strict `strcmp(exeName, "Root")` rejected AppImage binary names
-   - New: accepts case-insensitive "root", checks `APPIMAGE` env var, accepts `Root-*` prefixes
-   - Added `#define _GNU_SOURCE` for `strcasestr`
+- Avalonia visual tree: 1647+ nodes, **0 browser-like controls**
+- DotNetBrowser loads `rootapp://app/__index.html` — a shell page with `<iframe id="app-iframe">`
+- The iframe **permanently stays at `about:blank`** with no `src` attribute, no content
+- IBrowser.Title = "Root App Container", Size = 1280x800, URL = `rootapp://app/__index.html`
+- DotNetBrowser is auxiliary (WebRTC, OAuth, etc.), NOT the chat renderer
 
-2. **Runtime env var detection** (`installer/src-tauri/src/hook.rs`)
-   - Added `env_vars_active` field to `HookStatus` -- checks actual `std::env::var()` on Linux
-   - Config files say "configured" but env vars aren't active until re-login
-   - Installer now warns: "configured (not active -- restart session or use wrapper)"
-   - Added `~/.profile` as fallback for non-systemd sessions (X11, login shells)
-   - Uninstaller cleans up `~/.profile` entries
+**Implication**: Link embeds, NSFW filter on chat, or any feature modifying chat messages
+must use **Avalonia-native approaches** (visual tree manipulation), NOT JavaScript injection.
 
-3. **Installer frontend warnings** (`installer/src/pages/main.ts`, `installer/src/lib/tauri.ts`)
-   - Status dot shows yellow when env vars configured but not active
-   - Log warns with actionable fix: "restart session or use wrapper"
-   - Scenario analysis detects the gap and suggests app menu launch
+## DotNetBrowser Discovery Chain (working)
 
-4. **Linux installer diagnostics** (`install-uprooted-linux.sh`)
-   - Added `--diagnose` mode: checks env vars in current shell, config files, deployed files, running Root processes (reads `/proc/PID/environ`), log files, HTML patch status
-   - Added `~/.profile` fallback alongside `environment.d`
-   - Install output now suggests `--diagnose` if things aren't working
+Phase 5 successfully finds IBrowser via ViewModel chain walking:
 
-#### Feature: NSFW Content Filter Plugin (complete)
+```
+MainWindow.DataContext (MainViewModel)
+  → _memberProfileViewModelFactory
+    → <directMessageOpenerService>P
+      → <browserService>P
+        → _engineManager (BrowserEngineManager)
+          → .Engine (IEngine)
+            → .Profiles[0].Browsers.__values (ConcurrentDictionary)
+              → IBrowser (BrowserRpcService)
+```
 
-Full Google Cloud Vision SafeSearch-based content filter. See previous session notes for details.
+Key details:
+- Assembly gate: only require `DotNetBrowser` or `DotNetBrowser.Core` (NOT AvaloniaUi — Root doesn't ship it)
+- Event-driven detection via `AppDomain.AssemblyLoad` + `ManualResetEventSlim`, 90s timeout
+- `Repository<BrowserId, IBrowserImpl>` doesn't implement IEnumerable — must access private `_values` field
+- ExecuteJavaScript: `IFrame.ExecuteJavaScript(String, Boolean)` — 2 params, bool defaults to false
+- Diagnostic readback: set `document.title` from JS, read `IBrowser.Title` from C#
 
-**New files:** `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`, `hook/nsfw-filter.js`
-**Modified:** UprootedSettings, ContentPages, SidebarInjector, StartupHook (Phase 5), HtmlPatchVerifier, UprootedHook.csproj
+## DotNetBrowser Shell Page
 
-#### Version Bump: 0.1.96 -> 0.2.2
+```html
+<html lang="en">
+<head>
+  <title>Root App Container</title>
+  <style>html, body { margin:0; padding:0; width:100%; height:100%; overflow:hidden; }
+  iframe { display:block; width:100%; height:100%; border:none; }</style>
+</head>
+<body>
+  <iframe id="app-iframe"></iframe>  <!-- permanently about:blank, no src -->
+</body>
+</html>
+```
 
-Bumped across all files: package.json (x2), Cargo.toml, Cargo.lock, tauri.conf.json, C# source, TypeScript plugins, install scripts, PKGBUILD, site, all docs, _publish staging.
+## Loaded Assemblies (relevant)
 
-## Current Architecture
+- DotNetBrowser v3.4.0.6253, DotNetBrowser.Core v3.4.0.6253, DotNetBrowser.Logging v3.4.0.6253
+- DotNetBrowser.AvaloniaUi: **NOT loaded** (Root doesn't ship it)
+- Root v0.9.92.0, RootApp.Client.Avalonia v0.9.92.0
+- Avalonia 11.3.12, .NET 10.0.3, Chromium 144.0.0.0
+- Chromium flags: `--incognito`, `--disable-web-security`
 
-### Startup Phases
+## Startup Phases
+
 | Phase | File | Purpose |
 |-------|------|---------|
 | 0 | HtmlPatchVerifier | Verify/repair HTML patches + FileSystemWatcher |
@@ -51,34 +71,33 @@ Bumped across all files: package.json (x2), Cargo.toml, Cargo.lock, tauri.conf.j
 | 3 | StartupHook | Wait for MainWindow (60s) |
 | 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
 | 4 | SidebarInjector | Start settings page monitor (200ms poll) |
-| 5 | NsfwFilter | Background thread: DotNetBrowser discovery + JS injection |
+| 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
+| 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
-### Sidebar Nav Items
-1. Uprooted -> `BuildUprootedPage()`
-2. Plugins -> `BuildPluginsPage()` (includes Content Filter as a plugin card with gear/info lightboxes)
-3. Themes -> `BuildThemesPage()`
+## Files Modified in This Session
 
-### Release Artifacts (v0.2.2)
-| Platform | Artifact | CI Workflow |
-|----------|----------|-------------|
-| Windows | `Uprooted-0.2.2.exe` | build-installer.yml |
-| Linux (Debian/Ubuntu) | `uprooted_0.2.2_amd64.deb` | build-linux.yml |
-| Linux (portable) | `Uprooted-0.2.2.AppImage` | build-linux.yml |
-| Arch Linux | `uprooted-bin-0.2.2-1-x86_64.pkg.tar.zst` | build-linux.yml (build-arch job) |
+| File | Changes |
+|------|---------|
+| `hook/DotNetBrowserReflection.cs` | Fixed assembly gate (removed AvaloniaUi), added `FindBrowserDirect()` with 5 strategies, `GetAllFrames()`, profile→browser navigation via private ConcurrentDictionary, broadened ExecJS search, enhanced diagnostics |
+| `hook/StartupHook.cs` | Event-based assembly detection (ManualResetEventSlim + AssemblyLoad), 90s timeout |
+| `hook/LinkEmbedInjector.cs` | FindBrowserDirect fallback, iframe bridge wrapper approach, diagnostic readback via document.title |
+| `hook/NsfwFilter.cs` | FindBrowserDirect fallback in TryInject() |
 
-## Build & Test
+## Next Steps
+
+Link embeds need a fundamentally different approach:
+1. **Avalonia-native embeds** — Watch for URL-containing TextBlock/TextPresenter in chat visual tree
+2. **Fetch OG metadata from C#** — Use HttpClient or DotNetBrowser for fetching (it has --disable-web-security)
+3. **Create native Avalonia controls** — Border + StackPanel + TextBlocks + Image as embed cards
+4. **Insert below messages** — Find parent container and add embed card after the message element
+
+## Deployment
 
 ```powershell
-# Windows:
-Stop-Process -Name Root -Force -ErrorAction SilentlyContinue; Start-Sleep 1
-dotnet build hook -c Release
-powershell -ExecutionPolicy Bypass -File scripts\test-hook.ps1
-Get-Content "$env:LOCALAPPDATA\Root Communications\Root\profile\default\uprooted-hook.log" -Tail 30
+Stop-Process -Name Root,chromium -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 5
+Copy-Item -Force 'hook\bin\Release\net10.0\UprootedHook.dll' "$env:LOCALAPPDATA\Root\uprooted\UprootedHook.dll"
+# Then launch Root manually
 ```
 
-```bash
-# Linux:
-./install-uprooted-linux.sh --diagnose  # Check installation health
-./install-uprooted-linux.sh             # Build and install from source
-~/.local/share/uprooted/launch-root.sh  # Launch Root with Uprooted
-```
+Hook log: `%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-hook.log`

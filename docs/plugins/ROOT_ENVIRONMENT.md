@@ -25,7 +25,7 @@ Runtime context for plugin developers. Understanding Root's Chromium environment
 
 ## Chromium Environment
 
-Root.exe is a .NET 10 / Avalonia desktop app that embeds **DotNetBrowser** (a Chromium wrapper) for its web UI. Your plugin code runs inside this Chromium instance.
+Root.exe is a .NET 10 / Avalonia desktop app that embeds **DotNetBrowser** (a Chromium wrapper) for auxiliary web functions (WebRTC voice/video, OAuth, sub-app iframes). Your plugin code runs inside this Chromium instance. Note: the chat UI is rendered in native Avalonia controls, not in DotNetBrowser.
 
 Key properties:
 
@@ -157,7 +157,7 @@ The WebRTC context (where your plugin runs) is loaded separately from the sub-ap
 
 ### Navigation Events Plugins Can Observe
 
-Root's overall navigation model is SPA-like from the user's perspective. The native Avalonia shell provides the persistent sidebar and window chrome, while the DotNetBrowser control swaps content as the user navigates between chat, communities, settings, and other views.
+Root's overall navigation model is SPA-like from the user's perspective. The native Avalonia shell provides the persistent sidebar, window chrome, and all chat/community UI. DotNetBrowser handles sub-apps (polls, task tracker, etc.) and WebRTC voice/video. The plugin context (WebRTC bundle) runs inside DotNetBrowser's Chromium.
 
 Plugins can observe navigation in several ways:
 
@@ -411,7 +411,7 @@ These are only populated when a voice session is active. They may be `undefined`
 | Global | Always Present | Description |
 |--------|----------------|-------------|
 | `__UPROOTED_SETTINGS__` | Yes | Settings object with `enabled`, `plugins`, `customCss` |
-| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"0.2.2"`) |
+| `__UPROOTED_VERSION__` | Yes | Version string (e.g. `"0.3.0"`) |
 | `__UPROOTED_LOADER__` | Yes | PluginLoader instance |
 
 ### Other Root Globals
@@ -583,9 +583,9 @@ This table tracks which Uprooted versions have been tested against which Root Co
 
 | Uprooted Version | Root Version(s) | Status | Notes |
 |-------------------|-----------------|--------|-------|
-| 0.1.x | 0.9.86+ | Supported | Current development line |
-| 0.1.92+ | 0.9.86 - 0.9.90 | Tested | Verified working |
-| 0.2.2 | 0.9.86 - latest | In development | Active development target |
+| 0.1.x | 0.9.86+ | Legacy | Original development line |
+| 0.2.x | 0.9.86 - 0.9.91 | Stable | Verified working |
+| 0.3.0 | 0.9.86 - latest | In development | Active development target |
 
 ### Compatibility Notes
 

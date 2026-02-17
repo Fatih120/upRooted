@@ -84,6 +84,11 @@ static const MYGUID CLSID_UprootedProfiler =
 | `CORECLR_PROFILER_PATH` | Path to DLL/SO | Filesystem path the runtime loads via `LoadLibrary`/`dlopen`. |
 | `DOTNET_ReadyToRun` | `0` | Disables R2R precompiled images. See [Why DOTNET_ReadyToRun=0](#why-dotnet_readytorun0). |
 
+> **Note:** The installer sets both `DOTNET_` (primary, .NET 10+) and `CORECLR_` (legacy)
+> prefixes for all profiler variables. .NET 10 recognizes both, but the `DOTNET_` prefix is
+> canonical going forward. The `CORECLR_` prefix is retained for compatibility with .NET 8/9
+> runtimes.
+
 See [Installation Guide](INSTALLATION.md) for deployment details on each platform.
 
 ---

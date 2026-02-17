@@ -81,26 +81,40 @@ internal class NsfwFilter : IDisposable
     {
         try
         {
-            // Step 1: Find BrowserView in visual tree
-            var browserView = _browserReflection.FindBrowserView(_avaloniaReflection, _mainWindow);
-            if (browserView == null)
-            {
-                Logger.Log("NsfwFilter", "BrowserView not found in visual tree");
-                return false;
-            }
-            _lastBrowserView = browserView;
-            Logger.Log("NsfwFilter", $"BrowserView found: {browserView.GetType().FullName}");
+            object? browser = null;
 
-            // Step 2: Get IBrowser from BrowserView
-            var browser = _browserReflection.GetBrowser(browserView);
+            // Strategy 1: Find BrowserView in visual tree → get IBrowser from it
+            var browserView = _browserReflection.FindBrowserView(_avaloniaReflection, _mainWindow);
+            if (browserView != null)
+            {
+                _lastBrowserView = browserView;
+                Logger.Log("NsfwFilter", $"BrowserView found: {browserView.GetType().FullName}");
+                browser = _browserReflection.GetBrowser(browserView);
+                if (browser == null)
+                    Logger.Log("NsfwFilter", "IBrowser not available from BrowserView, trying direct discovery");
+            }
+            else
+            {
+                Logger.Log("NsfwFilter", "BrowserView not found in visual tree, trying direct discovery");
+            }
+
+            // Strategy 2: Direct IBrowser discovery (scan Root's assemblies)
             if (browser == null)
             {
-                Logger.Log("NsfwFilter", "IBrowser not available from BrowserView");
-                return false;
+                browser = _browserReflection.FindBrowserDirect();
+                if (browser == null)
+                {
+                    Logger.Log("NsfwFilter", "IBrowser not found via any discovery method");
+                    return false;
+                }
+                Logger.Log("NsfwFilter", $"IBrowser found via direct discovery: {browser.GetType().FullName}");
             }
-            Logger.Log("NsfwFilter", $"IBrowser acquired: {browser.GetType().FullName}");
+            else
+            {
+                Logger.Log("NsfwFilter", $"IBrowser acquired: {browser.GetType().FullName}");
+            }
 
-            // Step 3: Get MainFrame from IBrowser
+            // Get MainFrame from IBrowser
             var frame = _browserReflection.GetMainFrame(browser);
             if (frame == null)
             {
@@ -110,7 +124,7 @@ internal class NsfwFilter : IDisposable
             _lastFrame = frame;
             Logger.Log("NsfwFilter", $"MainFrame acquired: {frame.GetType().FullName}");
 
-            // Step 4: Inject config
+            // Inject config
             var configJson = BuildConfigJson();
             var configScript = $"window.{ConfigGlobalName}={configJson};";
             if (!_browserReflection.ExecuteJavaScript(frame, configScript))
@@ -120,7 +134,7 @@ internal class NsfwFilter : IDisposable
             }
             Logger.Log("NsfwFilter", "Config injected");
 
-            // Step 5: Inject filter script
+            // Inject filter script
             if (!_browserReflection.ExecuteJavaScript(frame, _filterScript!))
             {
                 Logger.Log("NsfwFilter", "Failed to inject filter script");

@@ -116,6 +116,13 @@ foreach ($jsFile in $jsFiles) {
     }
 }
 
+# Set DOTNET_ profiler env vars (.NET 10+ requires this prefix, CORECLR_ no longer works)
+[Environment]::SetEnvironmentVariable("DOTNET_EnableDiagnostics", "1", "User")
+[Environment]::SetEnvironmentVariable("DOTNET_ENABLE_PROFILING", "1", "User")
+[Environment]::SetEnvironmentVariable("DOTNET_PROFILER", "{D1A6F5A0-1234-4567-89AB-CDEF01234567}", "User")
+[Environment]::SetEnvironmentVariable("DOTNET_PROFILER_PATH", $DstProfilerDll, "User")
+Write-OK "DOTNET_ profiler env vars set"
+
 Write-OK "Artifacts copied:"
 Write-OK "  uprooted_profiler.dll ($([math]::Round((Get-Item $DstProfilerDll).Length / 1KB, 1)) KB)"
 Write-OK "  UprootedHook.dll ($([math]::Round((Get-Item $DstHookDll).Length / 1KB, 1)) KB)"
