@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-17)
 
-## Release: v0.2.5
+## Release: v0.3.2
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 

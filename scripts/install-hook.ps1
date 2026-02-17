@@ -223,7 +223,7 @@ if (Test-Path $SettingsFile) {
 }
 
 $settings["Enabled"] = "true"
-if (-not $settings.ContainsKey("Version")) { $settings["Version"] = "0.2.5" }
+if (-not $settings.ContainsKey("Version")) { $settings["Version"] = "0.3.2" }
 if (-not $settings.ContainsKey("ActiveTheme")) { $settings["ActiveTheme"] = "default-dark" }
 
 $content = ($settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join "`n"
