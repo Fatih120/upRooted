@@ -11,7 +11,7 @@
  *    - First module with System.Object TypeRef wins (e.g. Sentry.dll, RootApp.*.dll)
  * 3. JITCompilationStarted: on first method in target module, inject IL that:
  *    a) Calls Assembly.LoadFrom("path/to/UprootedHook.dll")
- *    b) Calls Assembly.CreateInstance("UprootedHook.Entry")
+ *    b) Calls Assembly.GetType("UprootedHook.Entry") + Activator.CreateInstance(type)
  *    c) Wrapped in try/catch for safety
  * 4. CreateInstance triggers [ModuleInitializer] and constructor in our DLL
  * 5. Our managed code spawns background thread to inject Avalonia UI
@@ -219,7 +219,8 @@ static UINT_PTR g_targetModuleId = 0;
 
 /* MemberRef tokens created in the target module */
 static unsigned int g_tokLoadFromMR = 0;    /* MemberRef: Assembly.LoadFrom(string) */
-static unsigned int g_tokCreateInstMR = 0;  /* MemberRef: Assembly.CreateInstance(string) */
+static unsigned int g_tokGetTypeMR = 0;     /* MemberRef: Assembly.GetType(string) */
+static unsigned int g_tokActivatorCreateInstMR = 0;  /* MemberRef: Activator.CreateInstance(Type) */
 static unsigned int g_tokExceptionTR = 0;   /* TypeRef: System.Exception */
 static unsigned int g_tokPathString = 0;    /* UserString: DLL path */
 static unsigned int g_tokTypeString = 0;    /* UserString: type name */
@@ -409,8 +410,8 @@ static void LogTypeRefCount(void* pImport, void** importVt) {
 }
 
 /* Prepare cross-module tokens in a candidate target module.
- * Creates MemberRef for Assembly.LoadFrom and Assembly.CreateInstance,
- * creates TypeRef for Exception, creates UserString tokens.
+ * Creates MemberRef for Assembly.LoadFrom, Assembly.GetType, and Activator.CreateInstance,
+ * creates TypeRef for Exception/Type/Activator, creates UserString tokens.
  * Called from ModuleLoadFinished for each candidate module.
  * Returns TRUE if all tokens were created (this module is our target). */
 static BOOL PrepareTargetModule(UINT_PTR moduleId) {
@@ -495,21 +496,85 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
         if (hr != 0) goto fail;
     }
 
-    /* Step 4: Create MemberRef for Assembly.CreateInstance(string) */
+    /* Step 4a: Find or create TypeRef for System.Type
+     * (needed for GetType return type and Activator.CreateInstance param type) */
     {
-        typedef HRESULT (__stdcall *DefineMemberRefFn)(
-            void* self, unsigned int tkImport, LPCWSTR szName,
-            const BYTE* pvSigBlob, ULONG cbSigBlob,
-            unsigned int* pmr);
-        DefineMemberRefFn defineMemberRef = (DefineMemberRefFn)emitVt[VT_ME_DefineMemberRef];
+        unsigned int tokTypeTR = SearchTypeRef(pImport, importVt, L"System.Type", NULL);
+        if (tokTypeTR) {
+            PLogFmt("  Found Type TypeRef=0x%08X", tokTypeTR);
+        } else {
+            typedef HRESULT (__stdcall *DefineTypeRefByNameFn)(
+                void* self, unsigned int tkResolutionScope, LPCWSTR szName,
+                unsigned int* ptr);
+            DefineTypeRefByNameFn defineTypeRef2 = (DefineTypeRefByNameFn)emitVt[VT_ME_DefineTypeRefByName];
+            hr = defineTypeRef2(pEmit, runtimeScope, L"System.Type", &tokTypeTR);
+            PLogFmt("  DefineTypeRef Type hr=0x%08X token=0x%08X", hr, tokTypeTR);
+            if (hr != 0) goto fail;
+        }
 
-        /* Signature: instance, 1 param, returns OBJECT, takes STRING */
-        BYTE sig[] = { 0x20, 0x01, 0x1C, 0x0E };
-        hr = defineMemberRef(pEmit, tokAssemblyTR, L"CreateInstance",
-                             sig, sizeof(sig), &g_tokCreateInstMR);
-        PLogFmt("  CreateInstance MemberRef hr=0x%08X token=0x%08X",
-                hr, g_tokCreateInstMR);
-        if (hr != 0) goto fail;
+        /* Step 4b: Find or create TypeRef for System.Activator */
+        unsigned int tokActivatorTR = SearchTypeRef(pImport, importVt, L"System.Activator", NULL);
+        if (tokActivatorTR) {
+            PLogFmt("  Found Activator TypeRef=0x%08X", tokActivatorTR);
+        } else {
+            typedef HRESULT (__stdcall *DefineTypeRefByNameFn)(
+                void* self, unsigned int tkResolutionScope, LPCWSTR szName,
+                unsigned int* ptr);
+            DefineTypeRefByNameFn defineTypeRef2 = (DefineTypeRefByNameFn)emitVt[VT_ME_DefineTypeRefByName];
+            hr = defineTypeRef2(pEmit, runtimeScope, L"System.Activator", &tokActivatorTR);
+            PLogFmt("  DefineTypeRef Activator hr=0x%08X token=0x%08X", hr, tokActivatorTR);
+            if (hr != 0) goto fail;
+        }
+
+        /* Step 4c: Create MemberRef for Assembly.GetType(string) -> Type */
+        {
+            typedef HRESULT (__stdcall *DefineMemberRefFn)(
+                void* self, unsigned int tkImport, LPCWSTR szName,
+                const BYTE* pvSigBlob, ULONG cbSigBlob,
+                unsigned int* pmr);
+            DefineMemberRefFn defineMemberRef = (DefineMemberRefFn)emitVt[VT_ME_DefineMemberRef];
+
+            /* Signature: instance, 1 param, returns CLASS(Type), takes STRING */
+            BYTE sig[16];
+            int len = 0;
+            sig[len++] = 0x20;  /* HASTHIS calling convention (instance) */
+            sig[len++] = 0x01;  /* 1 parameter */
+            sig[len++] = 0x12;  /* ELEMENT_TYPE_CLASS */
+            len += CompressToken(tokTypeTR, sig + len);
+            sig[len++] = 0x0E;  /* ELEMENT_TYPE_STRING */
+
+            hr = defineMemberRef(pEmit, tokAssemblyTR, L"GetType",
+                                 sig, (ULONG)len, &g_tokGetTypeMR);
+            PLogFmt("  GetType MemberRef hr=0x%08X token=0x%08X (sigLen=%d)",
+                    hr, g_tokGetTypeMR, len);
+            if (hr != 0) goto fail;
+        }
+
+        /* Step 4d: Create MemberRef for Activator.CreateInstance(Type) -> object
+         * NOTE: We use Activator.CreateInstance instead of Assembly.CreateInstance
+         * because Assembly.CreateInstance gets trimmed in .NET single-file deployments. */
+        {
+            typedef HRESULT (__stdcall *DefineMemberRefFn)(
+                void* self, unsigned int tkImport, LPCWSTR szName,
+                const BYTE* pvSigBlob, ULONG cbSigBlob,
+                unsigned int* pmr);
+            DefineMemberRefFn defineMemberRef = (DefineMemberRefFn)emitVt[VT_ME_DefineMemberRef];
+
+            /* Signature: static, 1 param, returns OBJECT, takes CLASS(Type) */
+            BYTE sig[16];
+            int len = 0;
+            sig[len++] = 0x00;  /* DEFAULT calling convention (static) */
+            sig[len++] = 0x01;  /* 1 parameter */
+            sig[len++] = 0x1C;  /* ELEMENT_TYPE_OBJECT */
+            sig[len++] = 0x12;  /* ELEMENT_TYPE_CLASS */
+            len += CompressToken(tokTypeTR, sig + len);
+
+            hr = defineMemberRef(pEmit, tokActivatorTR, L"CreateInstance",
+                                 sig, (ULONG)len, &g_tokActivatorCreateInstMR);
+            PLogFmt("  Activator.CreateInstance MemberRef hr=0x%08X token=0x%08X (sigLen=%d)",
+                    hr, g_tokActivatorCreateInstMR, len);
+            if (hr != 0) goto fail;
+        }
     }
 
     /* Step 5: Find or create TypeRef for System.Exception */
@@ -632,7 +697,8 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
 fail:
     PLog("  Token creation FAILED");
     g_tokLoadFromMR = 0;
-    g_tokCreateInstMR = 0;
+    g_tokGetTypeMR = 0;
+    g_tokActivatorCreateInstMR = 0;
     g_tokExceptionTR = 0;
     g_tokPathString = 0;
     g_tokTypeString = 0;
@@ -644,13 +710,13 @@ fail:
 /* ---- IL Injection ---- */
 
 /*
- * Inject Assembly.LoadFrom + CreateInstance into a JIT'd method.
+ * Inject Assembly.LoadFrom + GetType + Activator.CreateInstance into a JIT'd method.
  * The injected IL is wrapped in try/catch for safety.
  * Returns TRUE on success.
  *
  * New IL body layout:
  *   [Fat header 12 bytes]
- *   [Injection IL 26 bytes]   <- try { LoadFrom + CreateInstance } catch { }
+ *   [Injection IL 31 bytes]   <- try { LoadFrom + GetType + CreateInstance } catch { }
  *   [Original IL code]
  *   [Padding to 4-byte boundary]
  *   [Exception handling section 28 bytes]
@@ -713,20 +779,23 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
 
     /* Step 3: Build injection IL
      *
-     * Layout with try/catch:
-     *   offset 0:  ldstr <pathString>           (5 bytes)  - TRY START
-     *   offset 5:  call <LoadFrom>              (5 bytes)
-     *   offset 10: ldstr <typeString>           (5 bytes)
-     *   offset 15: callvirt <CreateInstance>    (5 bytes)
-     *   offset 20: pop                          (1 byte)
-     *   offset 21: leave.s +3                   (2 bytes)  - jump to offset 26
-     *   offset 23: pop                          (1 byte)   - CATCH START (pop exception)
-     *   offset 24: leave.s +0                   (2 bytes)  - jump to offset 26
-     *   offset 26: <original code starts>
+     * Uses Assembly.GetType + Activator.CreateInstance instead of
+     * Assembly.CreateInstance, which gets trimmed in .NET single-file apps.
      *
-     * TryOffset=0, TryLength=23, HandlerOffset=23, HandlerLength=3
+     *   offset  0: ldstr <pathString>              (5 bytes)  TRY START
+     *   offset  5: call Assembly.LoadFrom           (5 bytes)
+     *   offset 10: ldstr <typeString>              (5 bytes)
+     *   offset 15: callvirt Assembly.GetType        (5 bytes)
+     *   offset 20: call Activator.CreateInstance    (5 bytes)
+     *   offset 25: pop                             (1 byte)
+     *   offset 26: leave.s +3                      (2 bytes)  -> offset 31
+     *   offset 28: pop                             (1 byte)   CATCH START
+     *   offset 29: leave.s 0                       (2 bytes)  -> offset 31
+     *   offset 31: <original code>
+     *
+     * TryOffset=0, TryLength=28, HandlerOffset=28, HandlerLength=3
      */
-    #define INJECT_SIZE 26
+    #define INJECT_SIZE 31
 
     BYTE injection[INJECT_SIZE];
     int p = 0;
@@ -748,11 +817,15 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
     injection[p++] = IL_LDSTR;
     *(unsigned int*)(injection + p) = g_tokTypeString; p += 4;
 
-    /* callvirt Assembly.CreateInstance(string) via MemberRef */
+    /* callvirt Assembly.GetType(string) via MemberRef -> Type on stack */
     injection[p++] = IL_CALLVIRT;
-    *(unsigned int*)(injection + p) = g_tokCreateInstMR; p += 4;
+    *(unsigned int*)(injection + p) = g_tokGetTypeMR; p += 4;
 
-    /* pop (discard CreateInstance result) */
+    /* call Activator.CreateInstance(Type) via MemberRef -> object on stack */
+    injection[p++] = IL_CALL;
+    *(unsigned int*)(injection + p) = g_tokActivatorCreateInstMR; p += 4;
+
+    /* pop (discard result) */
     injection[p++] = IL_POP;
 
     /* leave.s +3 (jump over catch handler to original code) */
@@ -854,13 +927,13 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
     BYTE* clause = ehSection + 4;
     *(unsigned int*)(clause + 0)  = 0x00000000;  /* Flags: COR_ILEXCEPTION_CLAUSE_NONE (catch) */
     *(unsigned int*)(clause + 4)  = 0;           /* TryOffset */
-    *(unsigned int*)(clause + 8)  = 23;          /* TryLength (bytes 0-22: ldstr+call+ldstr+callvirt+pop+leave.s) */
-    *(unsigned int*)(clause + 12) = 23;          /* HandlerOffset */
-    *(unsigned int*)(clause + 16) = 3;           /* HandlerLength (bytes 23-25: pop+leave.s) */
+    *(unsigned int*)(clause + 8)  = 28;          /* TryLength */
+    *(unsigned int*)(clause + 12) = 28;          /* HandlerOffset */
+    *(unsigned int*)(clause + 16) = 3;           /* HandlerLength */
     *(unsigned int*)(clause + 20) = g_tokExceptionTR;  /* ClassToken (TypeRef) */
 
     PLogFmt("DoInjectIL: EH clause: try=[0,%u) handler=[%u,%u) catch=0x%08X",
-            23, 23, 26, g_tokExceptionTR);
+            28, 28, 31, g_tokExceptionTR);
 
     /* Step 10: Set the new IL body */
     typedef HRESULT (__stdcall *SetILFunctionBodyFn)(
