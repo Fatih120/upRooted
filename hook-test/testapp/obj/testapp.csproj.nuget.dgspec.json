@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\testapp\\testapp.csproj": {}
+    "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\testapp\\testapp.csproj": {}
   },
   "projects": {
-    "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\testapp\\testapp.csproj": {
+    "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\testapp\\testapp.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\testapp\\testapp.csproj",
+        "projectUniqueName": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\testapp\\testapp.csproj",
         "projectName": "testapp",
-        "projectPath": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\testapp\\testapp.csproj",
+        "projectPath": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\testapp\\testapp.csproj",
         "packagesPath": "C:\\Users\\bash\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\testapp\\obj\\",
+        "outputPath": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\testapp\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\bash\\AppData\\Roaming\\NuGet\\NuGet.Config"

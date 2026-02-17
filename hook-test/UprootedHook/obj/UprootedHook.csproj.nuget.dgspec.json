@@ -1,17 +1,17 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\UprootedHook\\UprootedHook.csproj": {}
+    "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\UprootedHook\\UprootedHook.csproj": {}
   },
   "projects": {
-    "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\UprootedHook\\UprootedHook.csproj": {
+    "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\UprootedHook\\UprootedHook.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\UprootedHook\\UprootedHook.csproj",
+        "projectUniqueName": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\UprootedHook\\UprootedHook.csproj",
         "projectName": "UprootedHook",
-        "projectPath": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\UprootedHook\\UprootedHook.csproj",
+        "projectPath": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\UprootedHook\\UprootedHook.csproj",
         "packagesPath": "C:\\Users\\bash\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\bash\\claude\\Root.Dev\\uprooted\\hook-test\\UprootedHook\\obj\\",
+        "outputPath": "C:\\Users\\bash\\workspace\\no-more-configs\\projects\\uprooted\\uprooted-private\\hook-test\\UprootedHook\\obj\\",
         "projectStyle": "PackageReference",
         "configFilePaths": [
           "C:\\Users\\bash\\AppData\\Roaming\\NuGet\\NuGet.Config"
