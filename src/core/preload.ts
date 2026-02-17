@@ -14,6 +14,7 @@ import { injectCss, removeCss } from "../api/css.js";
 import sentryBlockerPlugin from "../plugins/sentry-blocker/index.js";
 import themesPlugin from "../plugins/themes/index.js";
 import settingsPanelPlugin from "../plugins/settings-panel/index.js";
+import linkEmbedsPlugin from "../plugins/link-embeds/index.js";
 
 declare const __UPROOTED_VERSION__: string;
 
@@ -49,6 +50,7 @@ function main(): void {
     loader.register(sentryBlockerPlugin);
     loader.register(themesPlugin);
     loader.register(settingsPanelPlugin);
+    loader.register(linkEmbedsPlugin);
 
     // Inject global custom CSS if set
     if (settings.customCss) {
