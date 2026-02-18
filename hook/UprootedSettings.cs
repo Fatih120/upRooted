@@ -3,7 +3,7 @@ namespace Uprooted;
 internal class UprootedSettings
 {
     public bool Enabled { get; set; } = true;
-    public string Version { get; set; } = "0.3.5";
+    public string Version { get; set; } = "0.3.6rc";
     public string ActiveTheme { get; set; } = "default-dark";
     public Dictionary<string, bool> Plugins { get; set; } = new();
     public string CustomCss { get; set; } = "";
@@ -125,7 +125,11 @@ internal class UprootedSettings
                 "CustomBackground=" + CustomBackground,
                 "NsfwFilterEnabled=" + (NsfwFilterEnabled ? "true" : "false"),
                 "NsfwApiKey=" + NsfwApiKey,
-                "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "MessageLogger.LogDeletes=" + (MessageLoggerLogDeletes ? "true" : "false"),
+                "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
+                "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
+                "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages
             };
             foreach (var (name, enabled) in Plugins)
             {

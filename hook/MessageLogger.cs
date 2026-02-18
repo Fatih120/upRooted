@@ -59,7 +59,6 @@ internal class MessageLogger
 
     // Pending remove batch for channel switch detection
     private readonly List<string> _pendingRemoves = new();
-    private DateTime _lastRemoveTime;
 
     // Visual indicator tracking
     private readonly List<object> _injectedIndicators = new();

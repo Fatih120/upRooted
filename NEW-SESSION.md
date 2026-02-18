@@ -7,7 +7,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.3.5. Target: Root v0.9.92+.
+Version: 0.3.6rc. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -37,19 +37,21 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 319 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | ~340 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1280 | 200ms timer poll, sidebar injection, header management, click events |
-| `ContentPages.cs` | 2277 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | ~2450 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | 2360 | ResourceDictionary overrides, live theme preview (2nd largest) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
-| `UprootedSettings.cs` | 130 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
+| `UprootedSettings.cs` | ~145 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
+| `MessageLogger.cs` | ~630 | Message logger: discovery scan, collection subscription, edit/delete detection, visual indicators |
+| `MessageStore.cs` | ~200 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
@@ -98,7 +100,7 @@ Two independent injection layers into one app:
 
 **Source:** `hook/SESSION_STATE.md` (2026-02-17)
 
-**Versions:** 0.3.5 | Target Root 0.9.92
+**Versions:** 0.3.6rc | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -120,6 +122,7 @@ Two independent injection layers into one app:
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
+- MessageLogger plugin: Phase 1 discovery scan, collection subscription via Expression.Lambda, edit/delete detection, visual indicators, flat-file persistence (MessageStore.cs), settings UI with toggle pills
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)
@@ -127,6 +130,7 @@ Two independent injection layers into one app:
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
+- MessageLogger property names TBD -- Phase 1 discovery scan needed to map Root's ViewModel
 
 ## 7. Build Commands
 
@@ -259,4 +263,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-*Quick-start reference for Uprooted v0.3.5. Last updated 2026-02-17.*
+*Quick-start reference for Uprooted v0.3.6rc. Last updated 2026-02-18.*

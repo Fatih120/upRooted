@@ -350,16 +350,19 @@ internal static class ContentPages
         {
             KnownPlugins = new PluginInfo[]
             {
-                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.5",
+                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.6rc",
                     Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.5",
+                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.6rc",
                     Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
-                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.5",
+                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.6rc",
                     Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
                     DefaultEnabled = true, HasSettings = true, TestingStatus = 1 },
-                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.5",
+                new() { Id = "message-logger", DisplayName = "Message Logger", Version = "0.3.6rc",
+                    Description = "Logs deleted and edited messages. Shows visual indicators in chat with original content.",
+                    DefaultEnabled = true, HasSettings = true, TestingStatus = 0 },
+                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.6rc",
                     Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
@@ -1934,6 +1937,8 @@ internal static class ContentPages
         // Plugin-specific settings content
         if (pluginId == "content-filter")
             BuildContentFilterSettings(r, content, settings, font);
+        else if (pluginId == "message-logger")
+            BuildMessageLoggerSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -2141,6 +2146,178 @@ internal static class ContentPages
 
             r.AddChild(content, optionRow);
         }
+    }
+
+    /// <summary>
+    /// Build the message logger settings UI inside a lightbox container.
+    /// Toggle: Log Deletes, Toggle: Log Edits, Toggle: Ignore Self, Number: Max Messages.
+    /// </summary>
+    private static void BuildMessageLoggerSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // Log Deletes toggle
+        BuildSettingsToggle(r, content, "Log Deleted Messages",
+            "Record messages that are deleted by other users",
+            settings.MessageLoggerLogDeletes, font, isEnabled =>
+            {
+                settings.MessageLoggerLogDeletes = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Log Edits toggle
+        BuildSettingsToggle(r, content, "Log Edited Messages",
+            "Record message content before edits",
+            settings.MessageLoggerLogEdits, font, isEnabled =>
+            {
+                settings.MessageLoggerLogEdits = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Ignore Self toggle
+        BuildSettingsToggle(r, content, "Ignore Own Messages",
+            "Don't log your own deleted or edited messages",
+            settings.MessageLoggerIgnoreSelf, font, isEnabled =>
+            {
+                settings.MessageLoggerIgnoreSelf = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Max Messages
+        var maxTitle = CreateSectionHeader(r, "RETENTION", font);
+        if (maxTitle != null)
+        {
+            r.SetMargin(maxTitle, 0, 20, 0, 0);
+            r.AddChild(content, maxTitle);
+        }
+
+        var maxRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (maxRow != null)
+        {
+            r.SetMargin(maxRow, 0, 12, 0, 0);
+            r.SetVerticalAlignment(maxRow, "Center");
+
+            var maxLabel = r.CreateTextBlock("Max logged messages:", 13, TextMuted);
+            r.SetFontWeightNumeric(maxLabel, 450);
+            ApplyFont(r, maxLabel, font);
+            r.SetVerticalAlignment(maxLabel, "Center");
+            r.AddChild(maxRow, maxLabel);
+
+            var maxBox = r.CreateTextBox("10000", settings.MessageLoggerMaxMessages.ToString(), 20);
+            if (maxBox != null)
+            {
+                maxBox.GetType().GetProperty("FontSize")?.SetValue(maxBox, 13.0);
+                r.SetWidth(maxBox, 80);
+                r.SetHeight(maxBox, 32);
+                r.SetBackground(maxBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetForeground(maxBox, TextWhite);
+                ApplyFont(r, maxBox, font);
+                if (r.CornerRadiusType != null)
+                {
+                    var cr = Activator.CreateInstance(r.CornerRadiusType, 6.0, 6.0, 6.0, 6.0);
+                    maxBox.GetType().GetProperty("CornerRadius")?.SetValue(maxBox, cr);
+                }
+
+                var maxBoxRef = maxBox;
+                r.SubscribeEvent(maxBox, "LostFocus", () =>
+                {
+                    var text = r.GetTextBoxText(maxBoxRef)?.Trim() ?? "";
+                    if (int.TryParse(text, out var val) && val > 0 && val <= 100000)
+                    {
+                        settings.MessageLoggerMaxMessages = val;
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+                    }
+                });
+
+                r.AddChild(maxRow, maxBox);
+            }
+
+            r.AddChild(content, maxRow);
+        }
+
+        var retentionHelp = r.CreateTextBlock(
+            "Oldest messages are automatically removed when this limit is exceeded.",
+            12, TextDim);
+        if (retentionHelp != null)
+        {
+            ApplyFont(r, retentionHelp, font);
+            r.SetTextWrapping(retentionHelp, "Wrap");
+            r.SetMargin(retentionHelp, 0, 8, 0, 0);
+        }
+        r.AddChild(content, retentionHelp);
+    }
+
+    /// <summary>
+    /// Build a toggle row for plugin settings: label + description on left, pill toggle on right.
+    /// Reusable pattern for any boolean setting.
+    /// </summary>
+    private static void BuildSettingsToggle(AvaloniaReflection r, object container,
+        string label, string description, bool currentValue, object? font, Action<bool> onChanged)
+    {
+        var row = r.CreatePanel();
+        if (row == null) return;
+        r.SetMargin(row, 0, 14, 0, 0);
+
+        // Left side: label + description
+        var leftStack = r.CreateStackPanel(vertical: true, spacing: 2);
+        if (leftStack != null)
+        {
+            r.SetHorizontalAlignment(leftStack, "Left");
+            r.SetVerticalAlignment(leftStack, "Center");
+            r.SetMargin(leftStack, 0, 0, 60, 0);
+
+            var nameText = r.CreateTextBlock(label, 13, TextWhite);
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.AddChild(leftStack, nameText);
+
+            var descText = r.CreateTextBlock(description, 12, TextMuted);
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.AddChild(leftStack, descText);
+
+            r.AddChild(row, leftStack);
+        }
+
+        // Right side: toggle pill
+        bool[] state = { currentValue };
+        var toggleBg = currentValue ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
+        var pill = r.CreateBorder(toggleBg, 10);
+        if (pill != null)
+        {
+            r.SetWidth(pill, 40);
+            r.SetHeight(pill, 20);
+            r.SetHorizontalAlignment(pill, "Right");
+            r.SetVerticalAlignment(pill, "Center");
+            r.SetCursorHand(pill);
+
+            var dot = r.CreateBorder("#FFFFFF", 7);
+            if (dot != null)
+            {
+                r.SetWidth(dot, 14);
+                r.SetHeight(dot, 14);
+                r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
+                r.SetMargin(dot, 3, 3, 3, 3);
+                r.SetBorderChild(pill, dot);
+
+                var pillRef = pill;
+                var dotRef = dot;
+                r.SubscribeEvent(pill, "PointerPressed", () =>
+                {
+                    state[0] = !state[0];
+                    r.SetBackground(pillRef, state[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20));
+                    r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
+                    onChanged(state[0]);
+                });
+            }
+
+            r.AddChild(row, pill);
+        }
+
+        r.AddChild(container, row);
     }
 
     /// <summary>

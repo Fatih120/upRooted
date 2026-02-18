@@ -1,6 +1,6 @@
-# Uprooted Hook - Session State (2026-02-17)
+# Uprooted Hook - Session State (2026-02-18)
 
-## Release: v0.3.5
+## Release: v0.3.6rc
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
@@ -73,9 +73,10 @@ Key details:
 | 4 | SidebarInjector | Start settings page monitor (200ms poll) |
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
+| 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
-## Link Embed Engine (v0.3.3–0.3.5)
+## Link Embed Engine (v0.3.3–0.3.6rc)
 
 The Avalonia-native link embed engine is broadly functional:
 
@@ -107,13 +108,21 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
+| `hook/MessageLogger.cs` | New file: chat message logger with Phase 1 discovery, collection subscription, edit/delete detection, visual indicators |
+| `hook/MessageStore.cs` | New file: flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
+| `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization |
+| `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
+| `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI |
 
 ## Next Steps
 
-1. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
-2. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
-3. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
-4. **Plugin toggle functionality** — Wire up Plugins page toggles for runtime enable/disable
+1. **MessageLogger Phase 1 discovery** — Deploy and run Phase 1 discovery scan, read hook log for ViewModel property names
+2. **MessageLogger property constants** — Update MessageLogger property name constants based on discovery results
+3. **MessageLogger collection subscription** — Test collection subscription for add/remove/replace events
+4. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
+5. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
+6. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+7. **Plugin toggle functionality** — Wire up Plugins page toggles for runtime enable/disable
 
 ## Deployment
 
