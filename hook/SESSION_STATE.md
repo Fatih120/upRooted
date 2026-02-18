@@ -104,7 +104,9 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/AnimatedImage.cs` | New file: animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
 | `hook/UprootedSettings.cs` | 10s TTL settings cache to reduce disk I/O |
 | `hook/SidebarInjector.cs` | Back arrow management: hide left-side RootSvgButton by position, set header title TextBlock, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper |
-| `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings" |
+| `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
+| `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
+| `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
 
 ## Next Steps
 

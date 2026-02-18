@@ -12,11 +12,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`)
 - Per-embed animation timers with automatic cleanup on card removal
 - Graceful fallback: if SkiaSharp frame APIs are unavailable or trimmed, renders static first frame (zero regression)
+- Theme: "Cosmic Smoothie" preset — deep purple accent (`#7328BA`) with dark space background (`#0A041E`), full TreeColorMap + ResourceDictionary + CSS variables
 
 ### Changed
 - Link embeds: skip Tenor URLs (`tenor.com`, `media.tenor.com`) — Root renders these natively, avoids double-embedding
 - Settings sidebar: "Uprooted" nav item renamed to "About"
 - Settings content headers: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"
+- Plugin search box: increased font size (13→14), added horizontal padding and vertical centering for better placeholder text fit
 
 ### Fixed
 - Settings crash: clicking the back arrow on Uprooted tabs no longer freezes Root — back arrow hidden by position detection (left-side RootSvgButton in header Grid), `DetachedFromVisualTree` safety net clears ScrollViewer before recursive detach, Button events use `Click` instead of `PointerPressed` (Avalonia class handler suppression)

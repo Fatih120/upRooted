@@ -42,8 +42,8 @@ Two independent injection layers into one app:
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1280 | 200ms timer poll, sidebar injection, header management, click events |
-| `ContentPages.cs` | 2270 | Settings page builders (Uprooted, Plugins, Themes) |
-| `ThemeEngine.cs` | 2218 | ResourceDictionary overrides, live theme preview (2nd largest) |
+| `ContentPages.cs` | 2277 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ThemeEngine.cs` | 2360 | ResourceDictionary overrides, live theme preview (2nd largest) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | 130 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
@@ -118,6 +118,8 @@ Two independent injection layers into one app:
 - Settings cache: 10s TTL on `UprootedSettings.Load()` to reduce disk I/O
 - Console TUI installer replaces Tauri GUI (~600KB vs ~100MB)
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
+- Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
+- Plugin search box: font size bump, horizontal padding, vertical centering
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)

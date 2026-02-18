@@ -425,8 +425,14 @@ internal static class ContentPages
             var searchBox = r.CreateTextBox("Search for a plugin...", "", 100);
             if (searchBox != null)
             {
-                searchBox.GetType().GetProperty("FontSize")?.SetValue(searchBox, 13.0);
+                searchBox.GetType().GetProperty("FontSize")?.SetValue(searchBox, 14.0);
                 r.SetHeight(searchBox, 36);
+                r.SetPadding(searchBox, 10, 0, 10, 0);
+                if (r.VerticalAlignmentType != null)
+                {
+                    var center = Enum.Parse(r.VerticalAlignmentType, "Center");
+                    searchBox.GetType().GetProperty("VerticalContentAlignment")?.SetValue(searchBox, center);
+                }
                 r.SetBackground(searchBox, ColorUtils.Lighten(CardBg, 5));
                 r.SetForeground(searchBox, TextWhite);
                 ApplyFont(r, searchBox, font);
@@ -1232,8 +1238,9 @@ internal static class ContentPages
         var allPresets = new[]
         {
             ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default"),
-            ("Crimson",  "crimson",      "#1A0A0A", "#C42B1C", "Deep red accent"),
-            ("Loki",     "loki",         "#0F1210", "#2A5A40", "Gold and green"),
+            ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
+            ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
+            ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
         };
 
         var presetsRow = r.CreateStackPanel(vertical: false, spacing: 8);

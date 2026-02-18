@@ -912,6 +912,49 @@ internal class ThemeEngine
             ["#fff2f2f2"] = "#fff8eaea",
         },
 
+        ["cosmic-smoothie"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            // Blue accents -> purple
+            ["#ff3b6af8"] = "#ff7328ba",
+            ["#ff4a78f9"] = "#ff8a3fd2",
+            ["#ff2e59d1"] = "#ff5c1e98",
+            ["#ff2148af"] = "#ff451674",
+            ["#ff5b88ff"] = "#ffa15de6",
+            ["#ff3366ff"] = "#ff8b40d3",    // unique (not #ff8a3fd2)
+            ["#663b6af8"] = "#667328ba",
+            ["#333b6af8"] = "#337328ba",
+            ["#193b6af8"] = "#197328ba",
+
+            // ContentPages card background
+            ["#ff0f1923"] = "#ff120620",    // CardBg -> purple card
+
+            // Structural dark backgrounds -> deep purple
+            ["#ff0d1521"] = "#ff0a041e",    // Main dark bg
+            ["#ff07101b"] = "#ff060216",    // Darker bg
+            ["#ff090e13"] = "#ff080318",    // Near-black bg
+            ["#ff0a1a2e"] = "#ff0c041a",    // Another dark bg
+            ["#ff101c2e"] = "#ff0e0620",    // Slightly lighter dark bg
+            ["#ff121a26"] = "#ff100822",    // DM/chat panel bg
+            ["#ff141e2b"] = "#ff160c28",    // Panel bg
+            ["#ff282828"] = "#ff201430",    // Neutral gray -> purple gray
+            ["#ff4f5c6f"] = "#ff584870",    // Gray-blue metadata -> muted purple
+
+            // Dark borders -> purple-tinted
+            ["#ff242c36"] = "#ff302040",    // Border
+            ["#ff1a2230"] = "#ff241636",    // Darker border
+            ["#ff505050"] = "#ff463448",    // Gray border -> purple-gray
+
+            // Text: semi-transparent variants
+            ["#a3f2f2f2"] = "#a3f0e8f4",
+            ["#66f2f2f2"] = "#66f0e8f4",
+            // NOTE: #19ffffff/#0affffff (hover overlays) intentionally excluded -
+            // theming them makes hover effects persist permanently
+
+            // Text: purple tint
+            ["#ffdedede"] = "#ffe4d8ee",
+            ["#fff2f2f2"] = "#fff4ecf8",
+        },
+
         ["loki"] = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
         {
             // Blue accents -> Moss green (trestle palette)
@@ -2125,6 +2168,105 @@ internal class ThemeEngine
 
             // Selection highlight
             ["TextSelectionHighlightColor"]      = "#60C42B1C",
+        },
+
+        ["cosmic-smoothie"] = new Dictionary<string, string>
+        {
+            // === Root's custom theme keys (Styles[0].Resources) ===
+            ["ThemeAccentColor"]     = "#7328BA",
+            ["ThemeAccentColor2"]    = "#8A3FD2",
+            ["ThemeAccentColor3"]    = "#5C1E98",
+            ["ThemeAccentColor4"]    = "#451674",
+            ["ThemeAccentBrush"]     = "#7328BA",
+            ["ThemeAccentBrush2"]    = "#8A3FD2",
+            ["ThemeAccentBrush3"]    = "#5C1E98",
+            ["ThemeAccentBrush4"]    = "#451674",
+            ["ThemeForegroundLowColor"]  = "#8CF0E8F4",
+            ["ThemeForegroundLowBrush"]  = "#8CF0E8F4",
+            ["HighlightForegroundColor"] = "#7328BA",
+            ["HighlightForegroundBrush"] = "#7328BA",
+            ["ErrorColor"]               = "#FF4444",
+            ["ErrorLowColor"]            = "#80FF4444",
+            ["ErrorBrush"]               = "#FF4444",
+            ["ErrorLowBrush"]            = "#80FF4444",
+            ["DatePickerFlyoutPresenterHighlightFill"]  = "#7328BA",
+            ["TimePickerFlyoutPresenterHighlightFill"]  = "#7328BA",
+
+            // === Standard FluentTheme keys (MergedDictionary) ===
+            // System accent colors
+            ["SystemAccentColor"]       = "#7328BA",
+            ["SystemAccentColorDark1"]  = "#5C1E98",
+            ["SystemAccentColorDark2"]  = "#451674",
+            ["SystemAccentColorDark3"]  = "#2F1050",
+            ["SystemAccentColorLight1"] = "#8A3FD2",
+            ["SystemAccentColorLight2"] = "#A15DE6",
+            ["SystemAccentColorLight3"] = "#B87CEF",
+
+            // Text fill colors
+            ["TextFillColorPrimary"]    = "#FFF4ECF8",
+            ["TextFillColorSecondary"]  = "#C8F4ECF8",
+            ["TextFillColorTertiary"]   = "#8CF4ECF8",
+            ["TextFillColorDisabled"]   = "#5CF4ECF8",
+
+            // Control fills
+            ["ControlFillColorDefault"]   = "#15FFFFFF",
+            ["ControlFillColorSecondary"] = "#10FFFFFF",
+            ["ControlFillColorTertiary"]  = "#08FFFFFF",
+            ["ControlFillColorDisabled"]  = "#06FFFFFF",
+
+            // Solid backgrounds
+            ["SolidBackgroundFillColorBase"]        = "#0A041E",
+            ["SolidBackgroundFillColorSecondary"]   = "#100822",
+            ["SolidBackgroundFillColorTertiary"]    = "#160C28",
+            ["SolidBackgroundFillColorQuarternary"] = "#1C102E",
+
+            // Card/layer
+            ["CardBackgroundFillColorDefault"]       = "#207328BA",
+            ["CardBackgroundFillColorDefaultBrush"]  = "#207328BA",
+            ["LayerFillColorDefault"]                = "#08FFFFFF",
+            ["LayerFillColorAlt"]                    = "#0AFFFFFF",
+
+            // Accent fill brushes
+            ["AccentFillColorDefaultBrush"]    = "#7328BA",
+            ["AccentFillColorSecondaryBrush"]  = "#8A3FD2",
+            ["AccentFillColorTertiaryBrush"]   = "#5C1E98",
+            ["AccentFillColorDisabledBrush"]   = "#5C7328BA",
+
+            // Strokes
+            ["ControlStrokeColorDefault"]   = "#3DF4ECF8",
+            ["ControlStrokeColorSecondary"] = "#25F4ECF8",
+            ["CardStrokeColorDefault"]      = "#30F4ECF8",
+            ["SurfaceStrokeColorDefault"]   = "#407328BA",
+
+            // Button backgrounds
+            ["ButtonBackground"]                   = "#157328BA",
+            ["ButtonBackgroundPointerOver"]         = "#257328BA",
+            ["ButtonBackgroundPressed"]             = "#107328BA",
+            ["ButtonBackgroundDisabled"]            = "#08FFFFFF",
+
+            // ListBox selection
+            ["ListBoxItemBackgroundPointerOver"]    = "#157328BA",
+            ["ListBoxItemBackgroundPressed"]        = "#207328BA",
+            ["ListBoxItemBackgroundSelected"]       = "#257328BA",
+            ["ListBoxItemBackgroundSelectedPointerOver"]  = "#307328BA",
+            ["ListBoxItemBackgroundSelectedPressed"]      = "#207328BA",
+
+            // ToggleSwitch
+            ["ToggleSwitchFillOn"]               = "#7328BA",
+            ["ToggleSwitchFillOnPointerOver"]    = "#8A3FD2",
+            ["ToggleSwitchFillOnPressed"]        = "#5C1E98",
+
+            // ScrollBar
+            ["ScrollBarThumbFill"]               = "#507328BA",
+            ["ScrollBarThumbFillPointerOver"]    = "#807328BA",
+            ["ScrollBarThumbFillPressed"]        = "#7328BA",
+
+            // TextControl
+            ["TextControlBackgroundFocused"]     = "#207328BA",
+            ["TextControlBorderBrushFocused"]    = "#7328BA",
+
+            // Selection highlight
+            ["TextSelectionHighlightColor"]      = "#607328BA",
         },
 
         ["loki"] = new Dictionary<string, string>

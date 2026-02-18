@@ -9,6 +9,9 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
+- [ ] **Hide file names on image/video embeds** — Direct image/video link embeds show the file name as the title, but it's redundant since the URL is already visible. Hide file names by default, keep the domain label. Add a "Show embedded file names" toggle in the Link Embeds plugin settings.
+  - Files: `hook/LinkEmbedEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
+
 - [ ] **Reddit link embeds** — Reddit post URLs should render rich embeds (title, subreddit, vote count, comment count). Reddit serves OG tags to crawlers; may need bot UA similar to Twitter/X handling.
   - Files: `hook/LinkEmbedEngine.cs`
 
@@ -29,6 +32,9 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 
 - [ ] **Deep merge for settings** — Replace shallow spread merge with recursive merge that correctly combines nested objects (especially `plugins` map).
   - Files: `src/core/settings.ts`
+
+- [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
+  - Files: `hook/ThemeEngine.cs`
 
 ## Code Quality
 
@@ -66,6 +72,8 @@ Smaller fixes and cleanup that improve reliability.
 
 Items not yet committed to but worth tracking.
 
+- [ ] Simplify user-facing descriptions on About and Themes settings tabs — current text exposes too many backend/implementation details (e.g. "ResourceDictionary overrides", "reflection"). Rewrite for end users.
+  - Files: `hook/ContentPages.cs`
 - [ ] Structural fallback for settings page detection (currently depends on "APP SETTINGS" text)
 - [ ] Avalonia version detection + graceful degradation
 - [ ] Bridge version negotiation (`__nativeToWebRtc` / `__webRtcToNative`)
