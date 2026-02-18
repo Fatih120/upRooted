@@ -13,6 +13,12 @@ internal class UprootedSettings
     public string NsfwApiKey { get; set; } = "";
     public double NsfwThreshold { get; set; } = 0.6;
 
+    // MessageLogger settings
+    public bool MessageLoggerLogDeletes { get; set; } = true;
+    public bool MessageLoggerLogEdits { get; set; } = true;
+    public bool MessageLoggerIgnoreSelf { get; set; } = false;
+    public int MessageLoggerMaxMessages { get; set; } = 10000;
+
     private static string? _settingsPath;
 
     // Time-based cache: avoid re-reading from disk on every 500ms timer tick
@@ -70,6 +76,13 @@ internal class UprootedSettings
                         if (double.TryParse(val, System.Globalization.NumberStyles.Float,
                             System.Globalization.CultureInfo.InvariantCulture, out var threshold))
                             settings.NsfwThreshold = threshold;
+                        break;
+                    case "MessageLogger.LogDeletes": settings.MessageLoggerLogDeletes = val == "true"; break;
+                    case "MessageLogger.LogEdits": settings.MessageLoggerLogEdits = val == "true"; break;
+                    case "MessageLogger.IgnoreSelf": settings.MessageLoggerIgnoreSelf = val == "true"; break;
+                    case "MessageLogger.MaxMessages":
+                        if (int.TryParse(val, out var maxMsg) && maxMsg > 0)
+                            settings.MessageLoggerMaxMessages = maxMsg;
                         break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];

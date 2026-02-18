@@ -199,6 +199,35 @@ internal class StartupHook
                 Logger.Log("Startup", "Phase 4.5b: Link embeds plugin disabled, skipping");
             }
 
+            // Phase 4.5c: Message Logger (discovery + logging + visual indicators)
+            var msgLogSettings = UprootedSettings.Load();
+            var wantMsgLogger = !msgLogSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) || mlEnabled;
+
+            if (wantMsgLogger)
+            {
+                var mlWindow = mainWindow!;
+                var mlResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(20_000); // Wait 20s for chat to populate
+                        Logger.Log("Startup", "Phase 4.5c: Starting message logger...");
+                        var logger = new MessageLogger(mlResolver, mlWindow);
+                        logger.Initialize();
+                        Logger.Log("Startup", "Phase 4.5c OK: Message logger active");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5c error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5c: Message logger disabled, skipping");
+            }
+
             // Phase 5: DotNetBrowser features (NSFW filter)
             var phase5Settings = UprootedSettings.Load();
             var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
