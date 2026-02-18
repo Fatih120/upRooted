@@ -20,7 +20,9 @@ internal class AutoUpdater
     private const string StableDownloadBase = "https://github.com/watchthelight/uprooted/releases/download";
 
     // Developer channel (private repo)
-    private const string DevApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases/latest";
+    // Use /releases?per_page=1 instead of /releases/latest — the latter only returns
+    // non-prerelease releases, but dev-channel builds are published as pre-releases.
+    private const string DevApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1";
     private const string DevDownloadBase = "https://github.com/The-Uprooted-Project/uprooted-private/releases/download";
 
     private const int CheckIntervalHours = 6;
