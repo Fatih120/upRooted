@@ -168,7 +168,7 @@ internal class LinkEmbedEngine
 
     // Domains where Root renders embeds natively — skip to avoid double-embedding
     private static readonly Regex NativeEmbedDomainRegex = new(
-        @"^https?://(?:(?:media\.)?tenor\.com)/",
+        @"^https?://(?:(?:media\.)?tenor\.com|rootapp\.gg)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow)
