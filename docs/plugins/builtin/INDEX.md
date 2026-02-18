@@ -15,6 +15,12 @@ Uprooted ships four built-in plugins that run in the DotNetBrowser Chromium laye
 | [Settings Panel](settings-panel.md) | Injects Uprooted UI into Root's settings sidebar | None | `src/plugins/settings-panel/` |
 | [Link Embeds](link-embeds.md) | Discord-style rich link previews and YouTube embeds | YouTube toggle, website toggle, max embeds | `src/plugins/link-embeds/` |
 
+### Planned
+
+| Plugin | Purpose | Settings | Layer |
+|--------|---------|----------|-------|
+| [Message Logger](message-logger.md) | Logs deleted and edited messages with visual indicators | Delete/edit toggles, display style, retention, ignore filters | C# hook (Avalonia-native) |
+
 ## Load Order
 
 Plugins are registered and started in this order:
