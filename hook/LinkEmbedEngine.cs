@@ -16,7 +16,7 @@ internal class LinkEmbedEngine
 {
     private const int ScanIntervalMs = 500;
     private const int MaxUrlsPerScan = 20;
-    private const int HttpTimeoutSeconds = 5;
+    private const int HttpTimeoutSeconds = 10;
     private const int MaxHtmlBytes = 50 * 1024; // 50KB HTML read limit
     private const double MaxCardWidth = 400.0;
     private const int MaxImageBytes = 5 * 1024 * 1024;   // 5MB
@@ -73,13 +73,16 @@ internal class LinkEmbedEngine
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // OG meta tags: <meta property="og:title" content="...">
+    // Bridge pattern explicitly matches complete HTML attributes (key="value" or key='value')
+    // to handle tags with extra attributes like itemProp="image" between property and content.
+    private const string AttrBridge = @"(?:\s+[a-zA-Z_][\w.:-]*\s*=\s*(?:""[^""]*""|'[^']*'))*";
     private static readonly Regex OgRegex = new(
-        @"<meta\s+(?:[^>]*?\s)?(?:property|name)\s*=\s*[""']([^""']+)[""'][^>]*?\scontent\s*=\s*[""']([^""']*)[""'][^>]*?/?>",
+        @"<meta\s+(?:\s*[a-zA-Z_][\w.:-]*\s*=\s*(?:""[^""]*""|'[^']*'))*\s*(?:property|name)\s*=\s*[""']([^""']+)[""']" + AttrBridge + @"\s+content\s*=\s*[""']([^""']*)[""'][^>]*/?>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Reverse order: <meta content="..." property="og:title">
     private static readonly Regex OgRegexReverse = new(
-        @"<meta\s+(?:[^>]*?\s)?content\s*=\s*[""']([^""']*)[""'][^>]*?\s(?:property|name)\s*=\s*[""']([^""']+)[""'][^>]*?/?>",
+        @"<meta\s+(?:\s*[a-zA-Z_][\w.:-]*\s*=\s*(?:""[^""]*""|'[^']*'))*\s*content\s*=\s*[""']([^""']*)[""']" + AttrBridge + @"\s+(?:property|name)\s*=\s*[""']([^""']+)[""'][^>]*/?>",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     // Fallback <title> tag
@@ -165,6 +168,18 @@ internal class LinkEmbedEngine
     private static readonly Regex TwitterDomainRegex = new(
         @"^https?://(?:twitter\.com|x\.com)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Reddit domains — dedicated handler for subreddit labels + orange accent
+    private static readonly Regex RedditDomainRegex = new(
+        @"^https?://(?:www\.|old\.|np\.|new\.)?reddit\.com/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Extract subreddit name from /r/<name> path segment
+    private static readonly Regex RedditSubredditRegex = new(
+        @"/r/([a-zA-Z0-9_]+)",
+        RegexOptions.Compiled);
+
+    private const string RedditAccentColor = "#FF4500"; // Reddit orange
 
     // Domains where Root renders embeds natively — skip to avoid double-embedding
     private static readonly Regex NativeEmbedDomainRegex = new(
@@ -358,7 +373,31 @@ internal class LinkEmbedEngine
                         try
                         {
                             var imgBytes = HttpGetBytes(imageUrl);
-                            if (imgBytes == null) return;
+
+                            // OG fallback: if image fast-path URL served HTML instead of image bytes,
+                            // fetch the page as HTML, parse OG tags, and try the real og:image URL.
+                            // Common for Zipline /view/ and /u/ paths that have .png extension but serve viewer pages.
+                            if (imgBytes == null && capturedData.Image == capturedData.Url)
+                            {
+                                Logger.Log("LinkEmbed", $"Phase B: image fast-path failed for {imageUrl}, trying OG fallback");
+                                var ogData = FetchOgMetadata(capturedData.Url);
+                                if (ogData?.Image != null && ogData.Image != capturedData.Url)
+                                {
+                                    var realImageUrl = ResolveImageUrl(ogData.Image, capturedData.Url);
+                                    if (realImageUrl != null)
+                                    {
+                                        imgBytes = HttpGetBytes(realImageUrl);
+                                        if (imgBytes != null)
+                                            Logger.Log("LinkEmbed", $"Phase B: OG fallback found image: {realImageUrl}");
+                                    }
+                                }
+                            }
+
+                            if (imgBytes == null)
+                            {
+                                Logger.Log("LinkEmbed", $"Phase B: image fetch returned null for {imageUrl}");
+                                return;
+                            }
                             if (imgBytes.Length > MaxImageBytes || imgBytes.Length < 100)
                             {
                                 Logger.Log("LinkEmbed", $"Image skipped (size={imgBytes.Length}): {imageUrl}");
@@ -482,6 +521,7 @@ internal class LinkEmbedEngine
                             if (imgBorder != null)
                             {
                                 _r.SetClipToBounds(imgBorder, true);
+                                _r.SetHorizontalAlignment(imgBorder, "Left");
                                 _r.SetBorderChild(imgBorder, img);
                                 imageElement = imgBorder;
                             }
@@ -523,6 +563,7 @@ internal class LinkEmbedEngine
                         if (imgBorder != null)
                         {
                             _r.SetClipToBounds(imgBorder, true);
+                            _r.SetHorizontalAlignment(imgBorder, "Left");
                             _r.SetBorderChild(imgBorder, img);
                             imageElement = imgBorder;
                         }
@@ -729,44 +770,21 @@ internal class LinkEmbedEngine
 
     /// <summary>
     /// Fetch URL content as byte[] via reflection-based HTTP.
-    /// Tries GetByteArrayAsync first, falls back to GetAsync + stream copy.
+    /// Uses SendAsync as primary path (GetByteArrayAsync is always trimmed in Root).
+    /// Validates HTTP status code (2xx) and Content-Type (image/*) to reject
+    /// Cloudflare challenge pages and other non-image responses.
     /// </summary>
     private static byte[]? HttpGetBytes(string url)
     {
         EnsureHttpResolved();
         if (s_httpClient == null) return null;
 
-        // Try GetByteArrayAsync if available
-        if (s_getByteArrayAsync != null)
-        {
-            try
-            {
-                var task = s_getByteArrayAsync.Invoke(s_httpClient, new object[] { url });
-                if (task != null)
-                {
-                    var result = task.GetType().GetProperty("Result")?.GetValue(task) as byte[];
-                    if (result != null) return result;
-                }
-            }
-            catch { } // Fall through to GetAsync
-        }
-
-        // Fallback: GetAsync or SendAsync → response.Content stream → byte array
         try
         {
             object? response = null;
 
-            // Try GetAsync first (may take string or Uri depending on what survived trimming)
-            if (s_getAsync != null)
-            {
-                var paramType = s_getAsync.GetParameters()[0].ParameterType;
-                object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
-                var task = s_getAsync.Invoke(s_httpClient, new[] { arg });
-                response = task?.GetType().GetProperty("Result")?.GetValue(task);
-            }
-
-            // Deep fallback: SendAsync(new HttpRequestMessage(HttpMethod.Get, url))
-            if (response == null && s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
+            // Use SendAsync as primary path — always survives trimming
+            if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
                 var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
                 var sendParams = s_sendAsync.GetParameters();
@@ -782,15 +800,70 @@ internal class LinkEmbedEngine
                 response = task?.GetType().GetProperty("Result")?.GetValue(task);
             }
 
-            if (response == null) return null;
+            // Fallback: GetAsync (may take string or Uri depending on what survived trimming)
+            if (response == null && s_getAsync != null)
+            {
+                var paramType = s_getAsync.GetParameters()[0].ParameterType;
+                object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
+                var task = s_getAsync.Invoke(s_httpClient, new[] { arg });
+                response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            }
 
-            var content = response.GetType().GetProperty("Content")?.GetValue(response);
-            if (content == null) return null;
+            if (response == null)
+            {
+                Logger.Log("LinkEmbed", $"HTTP GET bytes: no response for {url}");
+                return null;
+            }
 
-            // ReadAsStreamAsync() → Task<Stream>
-            var readTask = content.GetType().GetMethod("ReadAsStreamAsync",
+            // Check HTTP status code — reject non-2xx (Cloudflare 403/503, redirects to login, etc.)
+            try
+            {
+                var statusCode = response.GetType().GetProperty("StatusCode")?.GetValue(response);
+                if (statusCode != null)
+                {
+                    var statusInt = (int)statusCode;
+                    if (statusInt < 200 || statusInt >= 300)
+                    {
+                        Logger.Log("LinkEmbed", $"HTTP GET bytes: status {statusInt} for {url}");
+                        return null;
+                    }
+                }
+            }
+            catch { } // StatusCode reflection failed — proceed anyway
+
+            // Check Content-Type — reject non-image responses (catches Cloudflare 200-with-HTML-challenge)
+            try
+            {
+                var content = response.GetType().GetProperty("Content")?.GetValue(response);
+                if (content != null)
+                {
+                    var headers = content.GetType().GetProperty("Headers")?.GetValue(content);
+                    if (headers != null)
+                    {
+                        var ctProp = headers.GetType().GetProperty("ContentType");
+                        var ctValue = ctProp?.GetValue(headers)?.ToString();
+                        if (ctValue != null)
+                        {
+                            var ctLower = ctValue.ToLowerInvariant();
+                            if (!ctLower.StartsWith("image/"))
+                            {
+                                Logger.Log("LinkEmbed", $"HTTP GET bytes: non-image Content-Type '{ctValue}' for {url}");
+                                return null;
+                            }
+                        }
+                        // Content-Type absent — proceed (some CDNs omit it)
+                    }
+                }
+            }
+            catch { } // Content-Type check failed — proceed anyway
+
+            // Read response body as bytes
+            var responseContent = response.GetType().GetProperty("Content")?.GetValue(response);
+            if (responseContent == null) return null;
+
+            var readTask = responseContent.GetType().GetMethod("ReadAsStreamAsync",
                 BindingFlags.Public | BindingFlags.Instance,
-                null, Type.EmptyTypes, null)?.Invoke(content, null);
+                null, Type.EmptyTypes, null)?.Invoke(responseContent, null);
             if (readTask == null) return null;
 
             var stream = readTask.GetType().GetProperty("Result")?.GetValue(readTask) as System.IO.Stream;
@@ -863,6 +936,22 @@ internal class LinkEmbedEngine
             }
 
             if (response == null) return (null, null);
+
+            // Check HTTP status code — reject non-2xx
+            try
+            {
+                var statusCode = response.GetType().GetProperty("StatusCode")?.GetValue(response);
+                if (statusCode != null)
+                {
+                    var statusInt = (int)statusCode;
+                    if (statusInt < 200 || statusInt >= 300)
+                    {
+                        Logger.Log("LinkEmbed", $"HGWCT: status {statusInt} for {url}");
+                        return (null, null);
+                    }
+                }
+            }
+            catch { } // StatusCode reflection failed — proceed anyway
 
             // Read Content-Type header
             string? contentType = null;
@@ -949,7 +1038,19 @@ internal class LinkEmbedEngine
                 return data;
             }
 
-            // Generic OG + oEmbed discovery (handles Twitter, Reddit, any oEmbed site)
+            // Reddit — dedicated handler for subreddit label + orange accent
+            if (RedditDomainRegex.IsMatch(url))
+            {
+                var redditData = FetchRedditMetadata(url);
+                if (redditData != null)
+                {
+                    _metadataCache[url] = redditData;
+                    return redditData;
+                }
+                // Fall through to generic if Reddit-specific fetch failed
+            }
+
+            // Generic OG + oEmbed discovery (handles Twitter, any oEmbed site)
             var data2 = FetchOgMetadata(url);
             _metadataCache[url] = data2;
             return data2;
@@ -1281,6 +1382,86 @@ internal class LinkEmbedEngine
     }
 
     /// <summary>
+    /// Fetch Reddit metadata via old.reddit.com OG tags.
+    /// old.reddit.com serves lighter HTML with reliable OG tags in the first few KB.
+    /// Returns null if no title found — caller falls through to generic OG path.
+    /// </summary>
+    private EmbedData? FetchRedditMetadata(string url)
+    {
+        // Extract subreddit from URL for provider label
+        string provider = "Reddit";
+        var subMatch = RedditSubredditRegex.Match(url);
+        if (subMatch.Success)
+            provider = "r/" + subMatch.Groups[1].Value;
+
+        // Normalize fetch URL to old.reddit.com (lighter HTML, reliable OG tags)
+        // Only rewrite www/new/np prefixes — leave old.reddit.com as-is
+        var fetchUrl = Regex.Replace(url,
+            @"^(https?://)(?:www\.|new\.|np\.)?reddit\.com/",
+            "$1old.reddit.com/",
+            RegexOptions.IgnoreCase);
+
+        if (Verbose) Logger.Log("LinkEmbed", $"Reddit fetch: {url} -> {fetchUrl}");
+
+        var (contentType, html) = HttpGetWithContentType(fetchUrl);
+        if (html == null) return null;
+
+        // Content-Type gate: only parse HTML
+        if (contentType != null)
+        {
+            var ct = contentType.ToLowerInvariant();
+            if (!ct.Contains("text/html") && !ct.Contains("text/xhtml") && !ct.Contains("application/xhtml"))
+            {
+                Logger.Log("LinkEmbed", $"Reddit: non-HTML Content-Type '{contentType}' for {fetchUrl}");
+                return null;
+            }
+        }
+
+        // Limit to first 50KB for parsing
+        if (html.Length > MaxHtmlBytes)
+            html = html[..MaxHtmlBytes];
+
+        // Parse OG tags
+        var ogTags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (Match m in OgRegex.Matches(html))
+        {
+            var prop = m.Groups[1].Value;
+            var content = m.Groups[2].Value;
+            if (!ogTags.ContainsKey(prop))
+                ogTags[prop] = System.Net.WebUtility.HtmlDecode(content);
+        }
+
+        foreach (Match m in OgRegexReverse.Matches(html))
+        {
+            var content = m.Groups[1].Value;
+            var prop = m.Groups[2].Value;
+            if (!ogTags.ContainsKey(prop))
+                ogTags[prop] = System.Net.WebUtility.HtmlDecode(content);
+        }
+
+        ogTags.TryGetValue("og:title", out var title);
+        ogTags.TryGetValue("og:description", out var description);
+        ogTags.TryGetValue("og:image", out var image);
+
+        // Fallback to <title> tag
+        if (string.IsNullOrEmpty(title))
+        {
+            var titleMatch = TitleRegex.Match(html);
+            if (titleMatch.Success)
+                title = System.Net.WebUtility.HtmlDecode(titleMatch.Groups[1].Value.Trim());
+        }
+
+        if (string.IsNullOrEmpty(title)) return null;
+
+        if (description != null && description.Length > 200)
+            description = description[..197] + "...";
+
+        Logger.Log("LinkEmbed", $"Reddit fetched for {url}: title=\"{title}\", provider={provider}");
+        return new EmbedData(url, provider, null, title, description, image, RedditAccentColor, null);
+    }
+
+    /// <summary>
     /// Decode JSON string escapes: \", \\, \/, \uXXXX
     /// </summary>
     private static string DecodeJsonString(string raw)
@@ -1410,6 +1591,7 @@ internal class LinkEmbedEngine
                             if (imgBorder != null)
                             {
                                 _r.SetClipToBounds(imgBorder, true);
+                                _r.SetHorizontalAlignment(imgBorder, "Left");
                                 _r.SetBorderChild(imgBorder, img);
                                 imageElement = imgBorder;
                             }
@@ -1459,6 +1641,7 @@ internal class LinkEmbedEngine
                                 if (imgBorder != null)
                                 {
                                     _r.SetClipToBounds(imgBorder, true);
+                                    _r.SetHorizontalAlignment(imgBorder, "Left");
                                     _r.SetBorderChild(imgBorder, img);
                                     imageElement = imgBorder;
                                 }

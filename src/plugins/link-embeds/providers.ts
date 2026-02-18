@@ -60,9 +60,15 @@ export function parseOpenGraph(html: string): {
   const result: Record<string, string> = {};
 
   // Match <meta property="og:..." content="..."> and <meta name="og:..." content="...">
-  // Also pick up theme-color meta tag
-  const metaRegex =
-    /<meta\s+(?:[^>]*?\s)?(?:property|name)\s*=\s*["']([^"']+)["'][^>]*?\scontent\s*=\s*["']([^"']*)["'][^>]*?\/?>/gi;
+  // Also pick up theme-color meta tag.
+  // Bridge pattern explicitly skips complete HTML attributes (key="value" pairs)
+  // to handle tags with extra attributes like itemProp="image" or data-next-head=""
+  // between the property and content attributes.
+  const attrBridge = `(?:\\s+[a-zA-Z_][\\w.:-]*\\s*=\\s*(?:"[^"]*"|'[^']*'))*`;
+  const metaRegex = new RegExp(
+    `<meta\\s+(?:\\s*[a-zA-Z_][\\w.:-]*\\s*=\\s*(?:"[^"]*"|'[^']*'))*\\s*(?:property|name)\\s*=\\s*["']([^"']+)["']${attrBridge}\\s+content\\s*=\\s*["']([^"']*)["'][^>]*/?>`,
+    "gi",
+  );
 
   let match: RegExpExecArray | null;
   while ((match = metaRegex.exec(html)) !== null) {
@@ -71,8 +77,10 @@ export function parseOpenGraph(html: string): {
   }
 
   // Also try reversed attribute order: content before property
-  const metaRegexReverse =
-    /<meta\s+(?:[^>]*?\s)?content\s*=\s*["']([^"']*)["'][^>]*?\s(?:property|name)\s*=\s*["']([^"']+)["'][^>]*?\/?>/gi;
+  const metaRegexReverse = new RegExp(
+    `<meta\\s+(?:\\s*[a-zA-Z_][\\w.:-]*\\s*=\\s*(?:"[^"]*"|'[^']*'))*\\s*content\\s*=\\s*["']([^"']*)["']${attrBridge}\\s+(?:property|name)\\s*=\\s*["']([^"']+)["'][^>]*/?>`,
+    "gi",
+  );
 
   while ((match = metaRegexReverse.exec(html)) !== null) {
     const [, value, key] = match;
