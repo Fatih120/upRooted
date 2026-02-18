@@ -413,6 +413,32 @@ internal static class ContentPages
                 r.AddChild(updatesContent, btn);
             }
 
+            // Restart notice after update applied
+            if (wasUpdated)
+            {
+                var restartRow = r.CreateStackPanel(vertical: false, spacing: 8);
+                if (restartRow != null)
+                {
+                    r.SetVerticalAlignment(restartRow, "Center");
+                    var restartIcon = r.CreateTextBlock("\u26A0", 14, AccentGreen);
+                    ApplyFont(r, restartIcon, font);
+                    r.AddChild(restartRow, restartIcon);
+
+                    var restartText = r.CreateTextBlock("Restart Root to use the new version", 13, AccentGreen);
+                    r.SetFontWeightNumeric(restartText, 500);
+                    ApplyFont(r, restartText, font);
+                    r.AddChild(restartRow, restartText);
+                }
+                var restartBanner = r.CreateBorder(AccentGreen + "15", 8, restartRow);
+                if (restartBanner != null)
+                {
+                    r.SetPadding(restartBanner, 14, 10, 14, 10);
+                    r.SetMargin(restartBanner, 0, 14, 0, 0);
+                    SetBorderStroke(r, restartBanner, AccentGreen + "40", 1);
+                    r.AddChild(updatesContent, restartBanner);
+                }
+            }
+
             r.SetBorderChild(updatesCard, updatesContent);
             r.AddChild(page, updatesCard);
         }
@@ -529,13 +555,13 @@ internal static class ContentPages
             {
                 new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.6rc",
                     Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-                    DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
+                    DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "Themes", Version = "0.3.6rc",
                     Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.6rc",
                     Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
-                    DefaultEnabled = true, HasSettings = true, TestingStatus = 1 },
+                    DefaultEnabled = true, HasSettings = true, TestingStatus = 2 },
                 new() { Id = "message-logger", DisplayName = "Message Logger", Version = "0.3.6rc",
                     Description = "Logs deleted and edited messages. Shows visual indicators in chat with original content.",
                     DefaultEnabled = true, HasSettings = true, TestingStatus = 0 },
@@ -580,6 +606,82 @@ internal static class ContentPages
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
+
+        // Snapshot initial plugin states so we can hide the banner when user reverts
+        var initialPluginStates = new Dictionary<string, bool>();
+        if (KnownPlugins != null)
+        {
+            foreach (var plugin in KnownPlugins)
+            {
+                bool isOn = plugin.Id == "content-filter"
+                    ? settings.NsfwFilterEnabled
+                    : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
+                initialPluginStates[plugin.Id] = isOn;
+            }
+        }
+
+        // Restart notice banner (hidden until a plugin state diverges from initial)
+        object? restartBanner = null;
+        {
+            var bannerOuter = r.CreatePanel();
+            if (bannerOuter != null)
+            {
+                var bannerContent = r.CreateStackPanel(vertical: false, spacing: 8);
+                if (bannerContent != null)
+                {
+                    r.SetVerticalAlignment(bannerContent, "Center");
+                    var icon = r.CreateTextBlock("\u26A0", 14, "#E0A030");
+                    ApplyFont(r, icon, font);
+                    r.AddChild(bannerContent, icon);
+
+                    var bannerText = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#E0A030");
+                    r.SetFontWeightNumeric(bannerText, 500);
+                    ApplyFont(r, bannerText, font);
+                    r.AddChild(bannerContent, bannerText);
+                }
+
+                // Restart button (right-aligned)
+                var restartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                r.SetFontWeightNumeric(restartBtnText, 500);
+                ApplyFont(r, restartBtnText, font);
+                r.SetHorizontalAlignment(restartBtnText, "Center");
+                var restartBtn = r.CreateBorder("#E0A030", 6, restartBtnText);
+                if (restartBtn != null)
+                {
+                    r.SetPadding(restartBtn, 12, 5, 12, 5);
+                    r.SetHorizontalAlignment(restartBtn, "Right");
+                    r.SetVerticalAlignment(restartBtn, "Center");
+                    r.SetCursorHand(restartBtn);
+                    r.SubscribeEvent(restartBtn, "PointerPressed", RestartRoot);
+                    r.SubscribeEvent(restartBtn, "PointerEntered", () =>
+                        r.SetBackground(restartBtn, ColorUtils.Lighten("#E0A030", 10)));
+                    r.SubscribeEvent(restartBtn, "PointerExited", () =>
+                        r.SetBackground(restartBtn, "#E0A030"));
+                }
+
+                var innerBorder = r.CreateBorder("#E0A03015", 8, bannerContent);
+                if (innerBorder != null)
+                {
+                    r.SetPadding(innerBorder, 14, 10, 14, 10);
+                    SetBorderStroke(r, innerBorder, "#E0A03040", 1);
+                }
+
+                // Use Panel overlay: banner content stretches, restart button right-aligned
+                if (innerBorder != null) r.AddChild(bannerOuter, innerBorder);
+                if (restartBtn != null)
+                {
+                    r.SetMargin(restartBtn, 0, 0, 14, 0);
+                    r.AddChild(bannerOuter, restartBtn);
+                }
+
+                r.SetMargin(bannerOuter, 0, 12, 0, 0);
+                r.SetIsVisible(bannerOuter, false);
+                r.AddChild(page, bannerOuter);
+                restartBanner = bannerOuter;
+            }
+        }
+        var restartBannerRef = restartBanner;
+        var initialStatesRef = initialPluginStates;
 
         // State for search and filter
         string[] searchText = { "" };
@@ -695,7 +797,7 @@ internal static class ContentPages
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
-                plugin.HasSettings, plugin.TestingStatus);
+                restartBannerRef, plugin.HasSettings, plugin.TestingStatus);
             if (card != null)
             {
                 cardIds.Add(plugin.Id);
@@ -820,8 +922,9 @@ internal static class ContentPages
     private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
         string pluginId, string displayName, string description,
         bool isEnabled, object? font, ThemeEngine? themeEngine,
-        int[] filterMode, Action? onRebuildNeeded, bool hasSettings = false,
-        int testingStatus = -1)
+        int[] filterMode, Action? onRebuildNeeded, object? restartBanner = null,
+        Dictionary<string, bool>? initialStates = null,
+        bool hasSettings = false, int testingStatus = -1)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -949,6 +1052,10 @@ internal static class ContentPages
                     try { settings.Save(); }
                     catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
                     Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+
+                    // Show restart banner for plugins that need it (themes apply live)
+                    if (pluginId != "themes" && restartBanner != null)
+                        r.SetIsVisible(restartBanner, true);
 
                     // Rebuild grid if filter is active so toggled plugins appear/disappear
                     if (filterMode[0] != 0)
