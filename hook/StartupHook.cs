@@ -124,15 +124,17 @@ internal class StartupHook
                         themeEngine.SetCustomPingColor(savedSettings.CustomPingColor);
                     }
 
-                    // Diagnostics disabled (uncomment for debugging)
-                    // var te = themeEngine;
-                    // System.Threading.ThreadPool.QueueUserWorkItem(_ => {
-                    //     Thread.Sleep(25000);
-                    //     resolver.RunOnUIThread(() => {
-                    //         try { te.DumpVisualTreeColors(); }
-                    //         catch { }
-                    //     });
-                    // });
+                    // Ping color diagnostic: dumps visual tree colors 10s after startup
+                    // to identify the exact color used by mention/reply highlight borders.
+                    // Remove after confirming the source hex in Step 2.
+                    var te = themeEngine;
+                    System.Threading.ThreadPool.QueueUserWorkItem(_ => {
+                        Thread.Sleep(10_000);
+                        resolver.RunOnUIThread(() => {
+                            try { te.DumpVisualTreeColors(); }
+                            catch { }
+                        });
+                    });
                 }
                 catch (Exception ex)
                 {

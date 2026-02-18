@@ -35,6 +35,9 @@ internal class ThemeEngine
 
     // Custom ping/reply highlight color override (persists across theme switches)
     private string? _customPingColor;
+    // The RGB suffix (RRGGBB, no alpha, uppercase) of the accent color at the time the
+    // ping color was last applied — used to match semi-transparent variants in tree walks.
+    private string? _pingSourceRgbSuffix;
 
     public string? ActiveThemeName => _activeThemeName;
 
@@ -1108,6 +1111,25 @@ internal class ThemeEngine
                         colorCounts[key] = existing + 1;
                     }
 
+                    // Ping color: tagged controls keep their custom color through theme switches.
+                    // Override any _activeColorMap remapping for BorderBrush/Background.
+                    if (!string.IsNullOrEmpty(_customPingColor) && tag == "uprooted-ping-color" &&
+                        (propName == "BorderBrush" || propName == "Background"))
+                    {
+                        var pingNorm = NormalizeArgb(_customPingColor);
+                        // Match if: already has our ping color, or has an accent-family color
+                        // (same RGB regardless of alpha), or would be remapped by theme walker
+                        bool isAlreadyPing = string.Equals(colorStr, pingNorm, StringComparison.OrdinalIgnoreCase);
+                        bool isAccentFamily = !string.IsNullOrEmpty(_pingSourceRgbSuffix) &&
+                            colorStr.EndsWith(_pingSourceRgbSuffix, StringComparison.OrdinalIgnoreCase);
+                        bool isInColorMap = _activeColorMap.ContainsKey(colorStr);
+                        if (isAlreadyPing || isAccentFamily || isInColorMap)
+                        {
+                            pending.Add((visual, prop, _customPingColor));
+                            continue; // Skip normal _activeColorMap for this property
+                        }
+                    }
+
                     if (_activeColorMap.TryGetValue(colorStr, out var replacement))
                     {
                         pending.Add((visual, prop, replacement));
@@ -1863,6 +1885,8 @@ internal class ThemeEngine
         {
             try { RestoreThemeHighlightKeys(restorePalette); }
             catch (Exception ex) { Logger.Log("Theme", "Highlight restore error: " + ex.Message); }
+            try { RemovePingColorFromVisualTree(); }
+            catch (Exception ex) { Logger.Log("Theme", "Ping color clear error: " + ex.Message); }
         });
     }
 
@@ -1892,6 +1916,11 @@ internal class ThemeEngine
                 if (brush != null) _r.AddResource(styleRes, "HighlightForegroundBrush", brush);
                 var selColor = _r.ParseColor(alphaHex);
                 if (selColor != null) _r.AddResource(styleRes, "TextSelectionHighlightColor", selColor);
+                // Override ThemeAccentBrush family — what Root actually uses for mention border
+                var accentColor = _r.ParseColor(hex);
+                if (accentColor != null) _r.AddResource(styleRes, "ThemeAccentColor", accentColor);
+                var accentBrush = _r.CreateBrush(hex);
+                if (accentBrush != null) _r.AddResource(styleRes, "ThemeAccentBrush", accentBrush);
             }
             catch (Exception ex) { Logger.Log("Theme", "Ping override Styles[0] error: " + ex.Message); }
         }
@@ -1912,9 +1941,18 @@ internal class ThemeEngine
                 if (selColor != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColor", selColor);
                 var selBrush = _r.CreateBrush(alphaHex);
                 if (selBrush != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColorBrush", selBrush);
+                // Override ThemeAccentBrush family in MergedDictionary as well
+                var accentColor2 = _r.ParseColor(hex);
+                if (accentColor2 != null) _r.AddResource(_injectedDict, "ThemeAccentColor", accentColor2);
+                var accentBrush2 = _r.CreateBrush(hex);
+                if (accentBrush2 != null) _r.AddResource(_injectedDict, "ThemeAccentBrush", accentBrush2);
             }
             catch (Exception ex) { Logger.Log("Theme", "Ping override MergedDict error: " + ex.Message); }
         }
+
+        // Walk the visual tree: tag controls that carry the accent color on their
+        // BorderBrush / Background and set them to the ping color directly.
+        ApplyPingColorToVisualTree(hex);
 
         Logger.Log("Theme", "Ping color override applied: " + hex);
     }
@@ -1961,6 +1999,103 @@ internal class ThemeEngine
             catch (Exception ex) { Logger.Log("Theme", "Highlight key restore failed for " + key + ": " + ex.Message); }
         }
         Logger.Log("Theme", "Theme highlight keys restored from palette");
+    }
+
+    /// <summary>
+    /// Walk the visual tree and tag every control whose BorderBrush or Background
+    /// uses the current theme accent (any alpha variant, matched by RGB suffix).
+    /// Those controls are tagged "uprooted-ping-color" and painted with pingHex
+    /// immediately via LocalValue so they override any Style binding.
+    /// Must run on UI thread.
+    /// </summary>
+    private void ApplyPingColorToVisualTree(string pingHex)
+    {
+        var accentNorm = NormalizeArgb(GetAccentColor() ?? "#3B6AF8"); // "#FFRRGGBB"
+        _pingSourceRgbSuffix = accentNorm.Substring(3).ToUpperInvariant();  // "RRGGBB"
+
+        var topLevels = _r.GetAllTopLevels();
+        int tagged = 0;
+        foreach (var tl in topLevels)
+            tagged += WalkAndTagPingColor(tl, pingHex, _pingSourceRgbSuffix, 0);
+        Logger.Log("Theme", $"PingColor: tagged {tagged} controls (source=*{_pingSourceRgbSuffix})");
+    }
+
+    private int WalkAndTagPingColor(object visual, string pingHex, string accentRgbSuffix, int depth)
+    {
+        if (depth > 50) return 0;
+        var existingTag = _r.GetTag(visual);
+        if (existingTag == "uprooted-no-recolor") return 0;
+
+        int count = 0;
+        try
+        {
+            foreach (var propName in new[] { "BorderBrush", "Background" })
+            {
+                var prop = visual.GetType().GetProperty(propName);
+                if (prop == null) continue;
+                try
+                {
+                    var brush = prop.GetValue(visual);
+                    if (brush == null) continue;
+                    var colorStr = GetBrushColorString(brush);
+                    if (colorStr == null) continue;
+
+                    if (colorStr.EndsWith(accentRgbSuffix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _r.SetTag(visual, "uprooted-ping-color");
+                        var pingBrush = _r.CreateBrush(pingHex);
+                        if (pingBrush != null)
+                            prop.SetValue(visual, pingBrush);
+                        count++;
+                        break; // Tag the control once; don't double-process
+                    }
+                }
+                catch { }
+            }
+        }
+        catch { }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+            count += WalkAndTagPingColor(child, pingHex, accentRgbSuffix, depth + 1);
+
+        return count;
+    }
+
+    /// <summary>
+    /// Remove "uprooted-ping-color" tags from all controls and ClearValue their
+    /// BorderBrush / Background so DynamicResource or the next theme walk restores them.
+    /// Must run on UI thread.
+    /// </summary>
+    private void RemovePingColorFromVisualTree()
+    {
+        var topLevels = _r.GetAllTopLevels();
+        int cleared = 0;
+        foreach (var tl in topLevels)
+            cleared += WalkAndClearPingColor(tl, 0);
+        _pingSourceRgbSuffix = null;
+        Logger.Log("Theme", $"PingColor: cleared {cleared} tagged controls");
+    }
+
+    private int WalkAndClearPingColor(object visual, int depth)
+    {
+        if (depth > 50) return 0;
+        int count = 0;
+
+        if (_r.GetTag(visual) == "uprooted-ping-color")
+        {
+            _r.SetTag(visual, ""); // Clear the tag so subsequent walks skip ping-color handling
+            foreach (var propName in new[] { "BorderBrush", "Background" })
+            {
+                var fieldName = AvaloniaReflection.PropertyToFieldName(propName);
+                try { _r.ClearValueSilent(visual, fieldName); } catch { }
+            }
+            count++;
+        }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+            count += WalkAndClearPingColor(child, depth + 1);
+
+        return count;
     }
 
     // ===== Custom Theme Generation =====
