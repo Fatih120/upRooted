@@ -22,11 +22,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Pipe-delimited append-only format (`MSG|EDIT|DEL` record types) with URI-encoded fields
   - Buffered flush every 5 seconds, automatic retention enforcement (configurable max messages)
   - File: `hook/MessageStore.cs`; location: `{profileDir}/uprooted-message-log.dat`
-- **AutoUpdater** — in-process background updater
-  - Checks public GitHub releases API every 6 hours; downloads `UprootedHook.dll`, deps, `uprooted-preload.js`, `uprooted.css`, and JS plugin files
+- **AutoUpdater** — in-process background updater with encrypted package delivery
+  - Checks GitHub releases API every 6 hours; downloads single encrypted `.uprpkg` package containing all update files
+  - Multi-layer XOR decryption: 64-byte master key + per-build 32-byte nonce + position-dependent key derivation
   - Files overwritten in-place; changes take effect on next Root restart (no user action required)
   - Developer channel (password-gated, pulls from private repo releases)
-  - SHA-256 hash verification planned; reflection-based `HttpClient` to avoid trimmed method exceptions
+  - Reflection-based `HttpClient` to avoid trimmed method exceptions
+  - Packing tool: `scripts/pack-update.py` (standalone Python, `--verify` round-trip flag)
   - File: `hook/AutoUpdater.cs`
 - **Updates settings page** in native Avalonia UI — "Auto-check for updates", "Update notifications", and "Update channel" (stable/dev) controls; wired to `AutoUpdate.*` INI keys
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input

@@ -17,12 +17,15 @@
   - Right-click context menu on logged messages for "Clear message history"
   - Settings page: Log Deletes toggle, Log Edits toggle, Ignore Own Messages toggle, Max Messages retention limit
   - New files: `hook/MessageLogger.cs` (1393 lines), `hook/MessageStore.cs` (232 lines)
-- **Auto-updater** — in-process update checker that polls GitHub releases, downloads updated files to a staging directory, verifies integrity, then overwrites in-place. Changes take effect on next Root restart.
+- **Auto-updater** — in-process update checker that polls GitHub releases, downloads a single encrypted package, decrypts and unpacks to a staging directory, verifies integrity, then overwrites in-place. Changes take effect on next Root restart.
   - Periodic background checks (every 6 hours, throttled by last-check timestamp)
   - Manual "Check for Updates" button in About → UPDATES card
   - Version comparison supporting pre-release suffixes (e.g. `0.3.6rc` < `0.3.6`)
   - HTTP via reflection (same trimming-safe pattern as LinkEmbedEngine)
   - Settings: auto-check toggle, notification toggle, persisted last-check timestamp
+  - Encrypted `.uprpkg` package format — all 6 update files bundled into a single binary with multi-layer XOR encryption (64-byte master key + per-build 32-byte nonce + position-dependent derivation)
+  - Packing tool: `scripts/pack-update.py` (standalone, no pip deps) with `--verify` round-trip flag
+  - Release artifacts reduced from 8 files to 3 (Windows installer, Linux installer, `auto-update.uprpkg`)
   - New file: `hook/AutoUpdater.cs`
 - **Developer update channel** — password-gated channel that pulls pre-release builds from the private repo instead of public releases
   - Channel selector in About → UPDATES card (green "Stable" badge / gold "Developer" badge)

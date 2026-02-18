@@ -114,7 +114,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
-| `hook/MessageLogger.cs` | Chat message logger — per-type property cache, event-based deletion detection (Remove events + debounce), post-subscription settling filter, Discord-style deleted message rows, channel switch handling, freshness checks |
+| `hook/MessageLogger.cs` | Chat message logger (1393 lines) — per-type property cache, event-based deletion detection with diagnostic instrumentation (HasBeenDeleted probe, Add/Remove correlation, remove index tracking, one-time property dump), bulk threshold raised to 10, flush-before-clear on channel switch, Discord-style deleted message rows |
 | `hook/MessageStore.cs` | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only: MSG\|DEL\|EDIT\|CLR records) |
 | `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization (20s delay for chat population) |
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
@@ -124,35 +124,42 @@ The Avalonia-native link embed engine is broadly functional:
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
-**Status:** Core architecture working, deletion detection functional but undergoing refinement.
+**Status:** Diagnostic build deployed — gathering data to distinguish real deletions from buffer management removes.
 
 ### Working
 - **Phase 1 discovery**: Finds `RootMessageItemsControl` in visual tree, resolves ViewModel property accessors (MessageId, Content, AuthorId, Timestamp) via per-type cache
 - **Collection subscription**: `ObservableCollection.CollectionChanged` via `Expression.Lambda` — handles Add, Remove, Replace, Reset events
 - **Per-type property cache**: `Dictionary<Type, TypeProps>` handles multiple ViewModel types (MessageViewModel, ChannelStartMessageViewModel, ReplyUserTagViewModel) with nested `.Message` bridge property resolution
+- **Diagnostic instrumentation** (Phase 1): Probes `HasBeenDeleted` on every removed item, tracks Add/Remove correlation per flush window, logs remove indices (`OldStartingIndex`), one-time dump of ALL boolean properties on first Remove event
 - **Deletion detection**: Event-based via Remove events (not polling). Buffered per-tick with debounce:
-  - 3+ removes in one tick = channel switch → discard
-  - 1-2 removes = real deletions → persist + display
+  - 10+ removes in one tick = channel switch → discard
+  - Fewer removes: checked individually against settling filter and diagnostic data
+- **Flush-before-clear**: Channel switch paths flush buffered removes before discarding, preventing real deletions from being lost
 - **Post-subscription settling filter**: Messages present at subscription time (`_initialSnapshotIds`) are protected from false-positive removes for 30s after channel switch. Messages arriving AFTER subscription (via Add events) are trusted immediately — zero delay
 - **Channel switch handling**: Bulk removes detected, control freshness check every ~7.5s detects when Root swaps `RootMessageItemsControl` instances
 - **Flat-file persistence**: `MessageStore.cs` — pipe-delimited, URI-encoded, append-only (MSG|DEL|EDIT|CLR record types)
 - **Visual indicators**: Discord-style deleted message rows — full-width red-tinted background stripe with red left accent border, right-click "Clear message history" context menu
+
+### Known Issues — Being Fixed
+- **False positives**: Root's ObservableCollection IS a windowed/virtualized data source — Remove events fire for buffer management (scroll-off, window shifts), NOT just real deletions. Diagnostic build deployed to discover how to distinguish the two.
+- **Wrong injection position**: Deleted message cards always appear at the bottom of the chat panel instead of in-place near the original message position.
 
 ### Not Yet Working / Disabled
 - **Edit detection**: Disabled — `PollEdits` produces false positives from content changes during message send/render. `ApplyEditIndicators` injects TextBlocks that break Avalonia's message layout (greyed out messages, "(edited 12x)" on every message)
 - **Discord-style edit indicators**: Planned — show original content faded above new content with "(edited)" label, matching Discord's MessageLogger style
 
 ### Key Learnings
-- Root's `ObservableCollection` is a dynamic windowed view — ID-diff polling is fundamentally unreliable for deletion detection
-- `CollectionChanged` Remove events are the only reliable signal for actual message deletion
+- **Root's ObservableCollection is VIRTUALIZED** — Remove events fire for buffer management (scroll-off, window shifts), not just real deletions. The original assumption (Remove = real deletion) was wrong.
 - Root fires straggler Remove events 8-12s after channel switch (buffer settling) — must be filtered
 - Different ViewModel types have different `PropertyInfo` objects that throw `TargetException` on wrong types — per-type cache is essential
 - Root creates new `RootMessageItemsControl` instances on channel switch; old ones linger in the visual tree with stale data
 
 ## Next Steps
 
-1. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
-2. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
+1. **MessageLogger Phase 2** — Analyze diagnostic logs to determine deletion detection strategy: HasBeenDeleted property (best), Add/Remove correlation heuristic, or re-verification queue
+2. **MessageLogger Phase 3** — Fix injection position (insert deleted cards near original message position, not at bottom)
+3. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
+4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
 3. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
 4. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree

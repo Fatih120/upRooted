@@ -19,6 +19,9 @@ internal class UprootedSettings
     public bool MessageLoggerIgnoreSelf { get; set; } = false;
     public int MessageLoggerMaxMessages { get; set; } = 10000;
 
+    // Custom ping/reply highlight color (empty = use theme default)
+    public string CustomPingColor { get; set; } = "";
+
     // Auto-update settings
     public bool AutoUpdateEnabled { get; set; } = true;
     public bool AutoUpdateNotify { get; set; } = true;
@@ -91,6 +94,7 @@ internal class UprootedSettings
                         if (int.TryParse(val, out var maxMsg) && maxMsg > 0)
                             settings.MessageLoggerMaxMessages = maxMsg;
                         break;
+                    case "CustomPingColor": settings.CustomPingColor = val; break;
                     case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
                     case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
                     case "AutoUpdate.Channel": settings.AutoUpdateChannel = val; break;

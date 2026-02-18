@@ -10,6 +10,9 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
+- [ ] **MessageLogger: fix false-positive deletions** — Root's ObservableCollection is a windowed/virtualized data source; Remove events fire for buffer management (scroll-off, window shifts), not just real deletions. Diagnostic instrumentation deployed (probes HasBeenDeleted, tracks Add/Remove correlation, logs remove indices). Pending: analyze logs, implement Phase 2 detection fix (Strategy A: HasBeenDeleted property, B: Add/Remove correlation, or C: re-verification queue), then Phase 3 injection position fix (insert near original position, not at bottom).
+  - Files: `hook/MessageLogger.cs`
+
 - [ ] **MessageLogger: fix edit detection** — Edit detection (`PollEdits`) is currently disabled due to false positives from content changes during message send/render. Need a reliable approach — likely snapshot-on-Add (only compare content of messages that arrived via Add events, not initial snapshot) or property-change subscription if Root exposes one.
   - Files: `hook/MessageLogger.cs`
 
