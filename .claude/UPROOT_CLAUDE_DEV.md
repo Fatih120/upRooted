@@ -69,7 +69,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 
 | Command | Purpose | When to use |
 |---------|---------|-------------|
-| `/hi` | Read `NEW-SESSION.md`, `docs/INDEX.md`, and this file; orient in the codebase | Start of a new session (first time) |
+| `/hi` | Two-phase onboard: orient in codebase, then ask what's planned and deep-read all relevant docs | Start of a new session (first time) |
 | `/ok` | **Doc sweep:** update session state, changelog, tasks, NEW-SESSION, CLAUDE.md to match committed code | After committing and pushing work |
 | `/build-hook` | `dotnet build hook/ -c Release` | Quick build check after C# changes |
 | `/build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |

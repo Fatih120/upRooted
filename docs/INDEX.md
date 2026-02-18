@@ -136,7 +136,9 @@ For setting up a development environment.
 
 | Topic                        | Document                                                      | Section                     |
 | ---------------------------- | ------------------------------------------------------------- | --------------------------- |
+| AddHandler routing strategies | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | Pitfalls                    |
 | Avalonia patterns            | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | --                          |
+| AvaloniaEdit (compose input) | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | Third-Party Controls        |
 | Avalonia reflection          | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Avalonia reflection cache   |
 | Avalonia visual tree         | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Visual tree traversal       |
 | Branch rules                 | [Contributing](../CONTRIBUTING.md)                            | Branch Rules                |
@@ -144,6 +146,8 @@ For setting up a development environment.
 | Bridge proxies               | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)     | Bridge proxy system         |
 | Build pipeline               | [Build Guide](install/BUILD.md)                               | --                          |
 | Chromium context             | [Root Environment](plugins/ROOT_ENVIRONMENT.md)               | Chromium context            |
+| ClearURLs                    | [Hook Reference](framework/HOOK_REFERENCE.md)                 | ClearUrlsEngine             |
+| Compose input interception   | [Hook Reference](framework/HOOK_REFERENCE.md)                 | ClearUrlsEngine             |
 | CLR profiler attach          | [CLR Profiler](framework/CLR_PROFILER.md)                     | Attach flow                 |
 | CLR profiler concepts        | [.NET Runtime](framework/DOTNET_RUNTIME.md)                   | CLR Profiler API            |
 | Color utilities              | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)     | Color utilities             |
@@ -186,5 +190,6 @@ For setting up a development environment.
 | Theme engine                 | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)     | Theme engine                |
 | Theme system (Root)          | [Root Environment](plugins/ROOT_ENVIRONMENT.md)               | Theme system                |
 | Link embeds                  | [Link Embeds](plugins/builtin/link-embeds.md)                 | --                          |
+| Message send interception    | [Hook Reference](framework/HOOK_REFERENCE.md)                 | ClearUrlsEngine             |
 | Settings panel (browser)     | [Settings Panel](plugins/builtin/settings-panel.md)           | --                          |
 | Built-in plugins             | [Built-in Plugins Index](plugins/builtin/INDEX.md)            | --                          |

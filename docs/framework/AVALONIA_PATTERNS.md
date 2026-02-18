@@ -315,7 +315,7 @@ _r.RunOnUIThread(() => {
 | `Grid` | Row/column layout -- 2-column plugin cards, sidebar structure |
 | `Border` | Single-child decorator: Background, CornerRadius, BorderThickness |
 | `TextBlock` | Text display: FontSize, FontWeight, Foreground, TextWrapping |
-| `TextBox` | Text input: Watermark, MaxLength (CLR setters trimmed) |
+| `TextBox` | Text input: Watermark, MaxLength (CLR setters trimmed). **Not the compose input** (see below) |
 | `ScrollViewer` | Scrollable wrapper for NavContainer and content pages |
 | `ContentControl` | Root's content area (never modify Content directly) |
 | `Canvas` | Absolute positioning via Left/Top attached properties |
@@ -357,6 +357,41 @@ public bool IsTextBlock(object? obj)
 public bool IsPanel(object? obj)
     => obj != null && PanelType?.IsAssignableFrom(obj.GetType()) == true;
 ```
+
+### Third-Party Controls: AvaloniaEdit
+
+Root's message compose area uses `AvaloniaEdit.TextEditor`, a third-party code editor
+library — NOT `Avalonia.Controls.TextBox`. This is significant because:
+
+- `AvaloniaReflection.TextBoxType` does NOT match (0 TextBoxes in the chat visual tree)
+- AvaloniaEdit types are NOT trimmed (third-party libraries survive Root's single-file
+  trimming), so CLR `PropertyInfo.GetValue`/`SetValue` work normally
+- The visual tree path is: `RootMessageTextboxView` > `TextEditor` > `TextArea` >
+  `TextView` > `TextLayer`
+
+| AvaloniaEdit Type | Purpose |
+|-------------------|---------|
+| `AvaloniaEdit.TextEditor` | Top-level control, has `Text` CLR property for reading/writing content |
+| `AvaloniaEdit.Editing.TextArea` | Actual editing surface, receives keyboard input |
+| `AvaloniaEdit.Rendering.TextView` | Text rendering layer |
+
+To interact with compose input, resolve these types from loaded assemblies (NOT via
+`AvaloniaReflection`):
+
+```csharp
+foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+{
+    if (asm.GetName().Name?.StartsWith("AvaloniaEdit") == true)
+        foreach (var t in asm.GetTypes())
+        {
+            if (t.FullName == "AvaloniaEdit.TextEditor") textEditorType = t;
+            if (t.FullName == "AvaloniaEdit.Editing.TextArea") textAreaType = t;
+        }
+}
+```
+
+See [Hook Reference: Compose Input Interception](HOOK_REFERENCE.md#clearurlsengine-compose-input-interception)
+for the full Enter key interception technique.
 
 ---
 
@@ -638,10 +673,30 @@ var cr = Activator.CreateInstance(r.CornerRadiusType, 5.0, 5.0, 0.0, 0.0);
 The enum lives in `Avalonia.Controls.Primitives`, not a pre-cached type. Resolve
 via `assembly.GetType()` (`hook/SidebarInjector.cs:658-661`).
 
+### AddHandler Requires All Routing Strategies for AvaloniaEdit Enter Key
+
+AvaloniaEdit marks Enter (`Key.Return`) as `Handled=true` internally. This means:
+- CLR `EventInfo.AddEventHandler` does NOT receive Enter (fires for modifier keys only)
+- `AddHandler` with `RoutingStrategies.Bubble` alone does NOT receive Enter
+- You MUST use all three strategies combined (`Bubble | Tunnel | Direct = 7`) with
+  `handledEventsToo=true`
+
+```csharp
+// Will NOT work:
+addHandler.Invoke(target, new[] { routedEvent, handler, bubble, (object)true });
+
+// WILL work:
+var all = Enum.ToObject(routingType, 4 | 2 | 1); // Bubble | Tunnel | Direct
+addHandler.Invoke(target, new[] { routedEvent, handler, all, (object)true });
+```
+
+Hook `TextArea` (not `TextEditor`) — it's the actual input surface and receives events
+first. See [Hook Reference: Compose Input Interception](HOOK_REFERENCE.md#clearurlsengine-compose-input-interception).
+
 ### Never Use localStorage in TypeScript
 
 Root runs Chromium with `--incognito`. `localStorage` is not persisted.
 
 ---
 
-*Last updated: 2026-02-16*
+*Last updated: 2026-02-18*

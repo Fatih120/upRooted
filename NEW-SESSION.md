@@ -49,6 +49,7 @@ Two independent injection layers into one app:
 | `UprootedSettings.cs` | ~145 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
 | `MessageLogger.cs` | ~1230 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
@@ -100,7 +101,7 @@ Two independent injection layers into one app:
 
 ## 6. Current State
 
-**Source:** `hook/SESSION_STATE.md` (2026-02-17)
+**Source:** `hook/SESSION_STATE.md` (2026-02-18)
 
 **Versions:** 0.3.6rc | Target Root 0.9.92
 
@@ -124,6 +125,7 @@ Two independent injection layers into one app:
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
+- ClearURLs plugin: strips tracking params (utm_source, fbclid, gclid, si, etc.) from URLs on send via AvaloniaEdit TextArea routed event interception
 - MessageLogger plugin (WIP): event-based deletion detection via CollectionChanged Remove events, per-type ViewModel property cache, post-subscription settling filter, Discord-style deleted message rows (red-tinted stripe + left accent), channel switch handling, flat-file persistence (MessageStore.cs), settings UI with toggle pills. Edit detection disabled pending reliability fix.
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)

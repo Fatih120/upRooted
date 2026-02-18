@@ -16,7 +16,8 @@
 1. [Overview](#overview)
 2. [Entry Points](#entry-points)
 3. [Startup Sequence](#startup-sequence)
-4. [AvaloniaReflection Deep Dive](#avaloniareflection-deep-dive)
+4. [ClearUrlsEngine: Compose Input Interception](#clearurlsengine-compose-input-interception)
+5. [AvaloniaReflection Deep Dive](#avaloniareflection-deep-dive)
    - [Advanced AvaloniaReflection Patterns](#advanced-avaloniareflection-patterns)
 5. [Visual Tree Discovery](#visual-tree-discovery)
 6. [Sidebar Injection](#sidebar-injection)
@@ -298,6 +299,35 @@ scans all loaded assemblies. Results are logged for architecture discovery and d
 This phase confirmed that the Avalonia visual tree contains 1647+ nodes and 0 browser
 controls — leading to the discovery that chat is Avalonia-native.
 
+### Phase 4.5a: ClearURLs
+
+**Time:** 14 seconds after Phase 4
+**Failure mode:** Non-fatal; URLs are simply not cleaned
+
+**File:** `hook/ClearUrlsEngine.cs` (467 lines)
+
+Strips tracking parameters (utm_source, fbclid, gclid, si, etc.) from URLs in the
+compose editor when the user presses Enter to send. Uses timer-based discovery (2s
+interval) to find AvaloniaEdit TextArea controls in the visual tree, then attaches
+KeyDown handlers via Avalonia's `AddHandler` with `handledEventsToo=true`.
+
+See [ClearUrlsEngine: Compose Input Interception](#clearurlsengine-compose-input-interception) for the full technical reference.
+
+### Phase 4.5b: Link Embeds
+
+**Time:** 15 seconds after Phase 4
+**Failure mode:** Non-fatal; links simply don't get embeds
+
+**File:** `hook/LinkEmbedEngine.cs`
+
+Starts the Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes
+containing URLs, fetches OG/oEmbed metadata via reflection-based HttpClient, and injects
+native Avalonia embed cards. Supports YouTube (dedicated oEmbed), Twitter/X and
+embed-fixer domains (bot UA + oEmbed discovery), direct image URLs (zero-network fast
+path), animated GIF/WebP playback (via `AnimatedImage.cs` + SkiaSharp reflection), and
+generic sites via OpenGraph tags with Content-Type gating. Tenor URLs are skipped (Root
+renders them natively).
+
 ### Phase 5: DotNetBrowser Feature Loading
 
 **Timeout:** 90 seconds (event-driven, not polling)
@@ -316,8 +346,6 @@ On detection:
    `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`
    (ConcurrentDictionary).
 3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines) — still JS injection, needs Avalonia-native redesign.
-
-**Phase 4.5b** (separate from Phase 5): Starts `LinkEmbedEngine` (`hook/LinkEmbedEngine.cs`) — the Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes containing URLs, fetches OG/oEmbed metadata via reflection-based HttpClient, and injects native Avalonia embed cards. Supports YouTube (dedicated oEmbed), Twitter/X and embed-fixer domains (bot UA + oEmbed discovery), direct image URLs (zero-network fast path), animated GIF/WebP playback (via `AnimatedImage.cs` + SkiaSharp reflection), and generic sites via OpenGraph tags with Content-Type gating. Tenor URLs are skipped (Root renders them natively).
 
 **Known limitation:** NSFW filter still uses DotNetBrowser JS injection and cannot affect chat (chat is Avalonia-native). Needs full redesign.
 
@@ -451,6 +479,100 @@ Animated `.gif` and `.webp` URLs play inline using SkiaSharp's `SKCodec`, resolv
 ### Verbose Logging
 
 Set `UPROOTED_VERBOSE=1` environment variable to enable step-by-step HTTP diagnostic logs (`HGWCT[1]` through `HGWCT[7]`), oEmbed JSON body dumps, and parsed field summaries. Error logs are always enabled regardless of this flag.
+
+---
+
+## ClearUrlsEngine: Compose Input Interception
+
+**File:** `hook/ClearUrlsEngine.cs` (467 lines)
+
+Strips tracking parameters from URLs in the compose editor when the user presses Enter.
+This is the first plugin to intercept outgoing messages, and the patterns here are
+reusable for any feature that needs to modify text before it is sent.
+
+### Root's Compose Input
+
+Root's message compose area is **AvaloniaEdit.TextEditor** — a third-party code editor
+library, NOT `Avalonia.Controls.TextBox`. The visual tree path is:
+
+```
+RootMessageTextboxView > TextEditor > TextArea > TextView > TextLayer
+```
+
+Key characteristics:
+- `AvaloniaReflection.TextBoxType` (`Avalonia.Controls.TextBox`) does NOT match — there
+  are 0 TextBox controls in the chat visual tree
+- `TextEditor.Text` CLR property works for reading and writing (AvaloniaEdit is
+  third-party, not subject to Root's single-file trimming)
+- Multiple TextEditor instances exist (one per open channel/DM); timer-based discovery
+  finds new ones as channels are opened
+
+### Enter Key Interception
+
+AvaloniaEdit marks Enter (Key.Return) as `Handled=true` internally. This means:
+
+1. **CLR event handlers** (`EventInfo.AddEventHandler`) do NOT receive Enter — they fire
+   for modifier keys (Ctrl, Shift) but AvaloniaEdit swallows Enter before CLR sees it
+2. **Avalonia AddHandler with `RoutingStrategies.Bubble` alone** does NOT receive Enter
+3. **The working approach:** `AddHandler` with ALL routing strategies
+   (`Bubble | Tunnel | Direct = 7`) AND `handledEventsToo=true`
+
+```csharp
+// Must combine all three strategies — Bubble alone is insufficient
+var bubble = (int)Enum.Parse(routingStrategiesType, "Bubble");   // 4
+var tunnel = (int)Enum.Parse(routingStrategiesType, "Tunnel");   // 2
+var direct = (int)Enum.Parse(routingStrategiesType, "Direct");   // 1
+var routingAll = Enum.ToObject(routingStrategiesType, bubble | tunnel | direct); // 7
+
+// Non-generic AddHandler(RoutedEvent, Delegate, RoutingStrategies, bool)
+addHandlerMethod.Invoke(textArea, new[] {
+    keyDownRoutedEvent,  // InputElement.KeyDownEvent
+    handler,             // Expression.Lambda-compiled delegate
+    routingAll,          // RoutingStrategies.Bubble | Tunnel | Direct
+    (object)true         // handledEventsToo
+});
+```
+
+**Hook TextArea, not TextEditor.** TextArea is the actual editing surface (child of
+TextEditor) and fires first. Read/write text via the parent TextEditor's CLR `Text`
+property.
+
+**Timing:** The handler fires BEFORE Root processes the Enter key, so modifying
+`TextEditor.Text` in the handler changes what gets sent.
+
+### Discovery and Hooking
+
+Timer-based discovery (2s interval) walks the visual tree via
+`VisualTreeWalker.DescendantsDepthFirst()`:
+
+1. Find nodes assignable from `AvaloniaEdit.Editing.TextArea`
+2. Walk up via `Parent` property to find the parent `TextEditor`
+3. Attach KeyDown handler to TextArea via `AddHandler`
+4. Track hooked controls by `RuntimeHelpers.GetHashCode` to avoid double-hooking
+5. When TextArea is hooked, also mark the parent TextEditor to prevent fallback hooking
+
+### URL Cleaning
+
+On Enter key:
+1. Read `TextEditor.Text` via CLR property
+2. Fast reject: skip if text doesn't contain `?`
+3. Match URLs via regex (`https?://[^\s<>"')\]]+`)
+4. For each URL with a query string, split on `&` and filter out tracking parameters
+   (33 params in a case-insensitive HashSet)
+5. Preserve fragments (`#hash`), non-tracking params, and URL structure
+6. Write cleaned text back to `TextEditor.Text`
+7. Idempotent: if no tracking params found, no write occurs
+
+### Reusing This Pattern
+
+Any feature that needs to intercept outgoing messages can follow this same pattern:
+
+1. Resolve `AvaloniaEdit.TextEditor` and `AvaloniaEdit.Editing.TextArea` from loaded
+   assemblies (scan `AppDomain.CurrentDomain.GetAssemblies()`)
+2. Timer-based discovery to find TextArea controls in the visual tree
+3. `AddHandler` with all routing strategies + `handledEventsToo=true` on TextArea
+4. Read/write text via parent TextEditor's CLR `Text` property
+5. Handler fires before Root processes Enter — modifications affect sent content
 
 ---
 

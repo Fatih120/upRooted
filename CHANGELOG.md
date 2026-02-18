@@ -57,6 +57,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.3.5] - 2026-02-18
 
 ### Added
+- ClearURLs plugin — strips tracking parameters (utm_source, fbclid, gclid, si, etc.) from URLs in the compose editor when the user presses Enter to send (`hook/ClearUrlsEngine.cs`). Hooks AvaloniaEdit.TextEditor's TextArea via Avalonia routed events with `handledEventsToo=true` (all routing strategies required). 33 tracking params, idempotent, fragment-preserving.
 - Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`), with per-embed animation timers and automatic cleanup on card removal; graceful fallback to static first frame if SkiaSharp frame APIs are unavailable
 - Link embeds: direct image URL fast path — `.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` URLs render instantly with zero network
 - Link embeds: oEmbed discovery — scans HTML for `<link rel="alternate" type="application/json+oembed">` to support any oEmbed-compatible site

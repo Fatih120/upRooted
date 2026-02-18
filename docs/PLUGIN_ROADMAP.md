@@ -43,46 +43,33 @@ See [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md
 
 ## Planned Plugins
 
-### ClearURLs
+### ClearURLs (IMPLEMENTED - v0.3.5)
 
 **Inspired by:** Vencord's ClearURLs plugin (which uses the [ClearURLs](https://docs.clearurls.xyz/latest/) browser extension rule database to strip tracking parameters from URLs).
 
-**Layer:** C# hook (chat is Avalonia-native)
+**Layer:** C# hook (`hook/ClearUrlsEngine.cs`)
 
-#### Approaches
+**Status:** Shipped. Strips tracking parameters from URLs in the compose editor when the user presses Enter to send.
 
-**Approach 1 - Display-time cleaning (cosmetic)**
+#### Implementation
 
-Watch the visual tree for URL TextBlocks in chat messages. When a URL is detected, parse it, strip known tracking parameters (utm_source, fbclid, etc.), and update the displayed text. The original URL is still what was sent/received over the wire, but the user sees the clean version.
+**Compose-input interception** — hooks AvaloniaEdit.TextEditor's TextArea child via Avalonia's `AddHandler(RoutedEvent, Delegate, RoutingStrategies, handledEventsToo=true)` with all routing strategies (Bubble|Tunnel|Direct). When Enter is pressed, scans the editor text for URLs with tracking parameters and strips them in-place before the message is dispatched.
 
-- Pros: No new infrastructure needed. Follows the same visual tree watching pattern as LinkEmbedEngine.
-- Cons: Cosmetic only. Clicking the link still navigates to the tracking URL. Other users still see the dirty URL.
+Key technical details:
+- Root's compose input is `AvaloniaEdit.TextEditor`, not `Avalonia.Controls.TextBox`
+- AvaloniaEdit marks Enter as `Handled=true` — requires `handledEventsToo=true` AND all three routing strategies (Bubble alone is insufficient)
+- TextEditor.Text CLR property works (AvaloniaEdit is third-party, not subject to Root's trimming)
+- Timer-based discovery (2s interval) finds TextArea controls in the visual tree
+- 33 tracking parameters in a case-insensitive HashSet for O(1) lookup
+- Idempotent: if no tracking params remain, no write occurs
+- Fragment (#hash) preserving
 
-**Approach 2 - Send-time interception (real cleaning)**
+#### Future enhancements
 
-Intercept outgoing messages at the gRPC layer before they reach Root's API. Strip tracking parameters from URLs in message content so clean URLs are actually sent. Recipients see clean URLs too.
-
-- Pros: URLs are genuinely cleaned. Other users benefit.
-- Cons: Requires gRPC message interception (not yet built). Modifies user's outgoing message content, which some users may not expect.
-
-Both approaches can coexist - display-time for incoming messages, send-time for outgoing.
-
-#### Rules source
-
-Fetch from the ClearURLs project's [rules database](https://docs.clearurls.xyz/latest/specs/rules/) (same approach as Vencord) or bundle a static snapshot. The rules database is a JSON file mapping domain patterns to parameter names to strip.
-
-#### Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| Enabled | bool | true | Master toggle |
-| Clean outgoing | bool | false | Strip tracking params from messages you send (requires gRPC interception) |
-| Custom rules | text | (empty) | Additional domain=param rules in key-value format |
-| Domain exceptions | text | (empty) | Comma-separated domains to skip cleaning |
-
-#### Complexity
-
-Medium. URL parsing and regex rules are straightforward. The harder part is intercepting message content at the right layer. Display-time cleaning can ship first using the LinkEmbedEngine pattern; send-time cleaning depends on the gRPC interception prerequisite.
+- Display-time cleaning of incoming messages (cosmetic, visual tree approach)
+- gRPC send-time interception (alternative to compose-input approach)
+- ClearURLs rules database import for broader coverage
+- Custom rules and domain exceptions settings
 
 ---
 
@@ -116,6 +103,7 @@ Use a simple flat-file format (not System.Text.Json - broken in profiler context
 - Deletion timestamp (if deleted)
 
 Retention policy needed to prevent unbounded growth:
+
 - Option A: Last N messages (e.g., 1000)
 - Option B: Time-based (e.g., last 24 hours)
 - Option C: Size-based (e.g., max 10MB)
@@ -129,20 +117,21 @@ Modify the visual tree to show logged messages:
 
 #### Settings
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| Log Deletes | bool | true | Log deleted messages |
-| Log Edits | bool | true | Log edited messages |
-| Delete Style | select | "red overlay" | How deleted messages are shown: "red overlay" or "red text" |
-| Collapse Deleted | bool | false | Collapse deleted message content behind a click-to-reveal |
-| Inline Edits | bool | true | Show edit history inline vs. tooltip-only |
-| Ignore Bots | bool | false | Skip logging bot messages |
-| Ignore Self | bool | false | Skip logging your own messages |
-| Ignore Users | text | (empty) | Comma-separated user IDs to exclude from logging |
+| Setting          | Type   | Default       | Description                                                 |
+| ---------------- | ------ | ------------- | ----------------------------------------------------------- |
+| Log Deletes      | bool   | true          | Log deleted messages                                        |
+| Log Edits        | bool   | true          | Log edited messages                                         |
+| Delete Style     | select | "red overlay" | How deleted messages are shown: "red overlay" or "red text" |
+| Collapse Deleted | bool   | false         | Collapse deleted message content behind a click-to-reveal   |
+| Inline Edits     | bool   | true          | Show edit history inline vs. tooltip-only                   |
+| Ignore Bots      | bool   | false         | Skip logging bot messages                                   |
+| Ignore Self      | bool   | false         | Skip logging your own messages                              |
+| Ignore Users     | text   | (empty)       | Comma-separated user IDs to exclude from logging            |
 
 #### Complexity
 
 High. This plugin requires either:
+
 - gRPC interception infrastructure (new capability, not yet built), or
 - Reliable visual tree change detection that can distinguish real deletions from VirtualizingStackPanel recycling
 
@@ -258,7 +247,7 @@ Several capabilities need to exist before the planned plugins can reach their fu
 
 ### gRPC message interception layer
 
-Both ClearURLs (send-time cleaning) and MessageLogger (deletion/edit detection) benefit from gRPC interception. This would be a framework-level capability - not plugin-specific - that intercepts gRPC-web traffic between Root's UI and its backend. See [gRPC Protocol](research/GRPC_PROTOCOL.md) for the protocol reference.
+ClearURLs v1 ships without gRPC (uses compose-input interception instead), but future display-time cleaning of incoming messages and MessageLogger (deletion/edit detection) would benefit from gRPC interception. This would be a framework-level capability - not plugin-specific - that intercepts gRPC-web traffic between Root's UI and its backend. See [gRPC Protocol](research/GRPC_PROTOCOL.md) for the protocol reference.
 
 ### Plugin toggle functionality in native UI
 
@@ -274,7 +263,7 @@ A utility that can distinguish genuine content changes (message added, message d
 
 Space for additional plugin concepts as they emerge. When adding a new idea, include at minimum: the inspiration source, which layer it needs (C# hook vs. TypeScript browser), and a rough complexity estimate.
 
-- *(Ideas will be added here as they are proposed)*
+- _(Ideas will be added here as they are proposed)_
 
 ---
 

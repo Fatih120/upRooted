@@ -170,6 +170,34 @@ internal class StartupHook
                 });
             }
 
+            // Phase 4.5a: ClearURLs (strip tracking params from chat URLs)
+            var clearUrlsSettings = UprootedSettings.Load();
+            var wantClearUrls = !clearUrlsSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) || cuEnabled;
+            if (wantClearUrls)
+            {
+                var cuWindow = mainWindow!;
+                var cuResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(14_000);
+                        Logger.Log("Startup", "Phase 4.5a: Starting ClearURLs engine...");
+                        var engine = new ClearUrlsEngine(cuResolver, cuWindow);
+                        engine.Initialize();
+                        Logger.Log("Startup", "Phase 4.5a OK: ClearURLs active");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5a error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5a: ClearURLs plugin disabled, skipping");
+            }
+
             // Phase 4.5b: Native link embeds (Avalonia-only, no DotNetBrowser)
             var embedSettings = UprootedSettings.Load();
             var wantLinkEmbeds = !embedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) || leEnabled;
