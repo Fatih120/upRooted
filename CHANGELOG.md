@@ -6,6 +6,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.3.44] - 2026-02-18
+
+### Changed
+- Linux installer: auto-fetches latest release version from GitHub API (10s timeout, graceful fallback to bundled version) — stale scripts now self-update to correct download URL
+- Linux installer: `.desktop` file creation is now opt-in via `--desktop` flag (was auto-created, annoyed users)
+- Linux installer: download errors now distinguish HTTP 404 (version not found) from network errors, with actionable suggestions
+- Linux installer: validates tarball integrity (gzip magic bytes) before extraction — catches corrupt downloads
+- Linux installer: `find_root()` lists all searched paths on failure with a `find` command hint
+- Linux installer: build-from-source now falls back to pre-built artifacts on failure instead of dying
+- Linux installer: post-install/repair messaging uses prominent ANSI box emphasizing "MUST log out and log back in"
+- Linux installer: added `/usr/bin/Root.AppImage` to auto-detection candidates
+
 ## [0.3.43] - 2026-02-18
 
 ### Fixed

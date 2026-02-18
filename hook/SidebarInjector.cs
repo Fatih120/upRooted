@@ -62,7 +62,7 @@ internal class SidebarInjector
     private object? _nativeFontFamily;                   // CircularXX TT font from native controls
 
     // Version box injection (grey box at bottom of sidebar)
-    private object? _versionTextBlock;                   // "Uprooted 0.3.43" TextBlock in version box
+    private object? _versionTextBlock;                   // "Uprooted 0.3.44" TextBlock in version box
     private object? _versionContainer;                   // StackPanel containing version texts
 
     // Thread safety
@@ -787,7 +787,7 @@ internal class SidebarInjector
     // ===== Version box injection =====
 
     /// <summary>
-    /// Inject "Uprooted 0.3.43" into the grey version info box at the bottom of the sidebar.
+    /// Inject "Uprooted 0.3.44" into the grey version info box at the bottom of the sidebar.
     /// The box lives in SidebarGrid Row=1 and contains "Root Version: X.Y.Z" and "System Info: ...".
     /// </summary>
     private void InjectVersionText()
@@ -822,7 +822,7 @@ internal class SidebarInjector
                 return;
             }
 
-            // Create "Uprooted 0.3.43" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
+            // Create "Uprooted 0.3.44" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
             var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, "#66f2f2f2");
             if (versionText == null) return;
 
