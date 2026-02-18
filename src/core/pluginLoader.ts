@@ -96,7 +96,7 @@ export class PluginLoader {
   async startAll(): Promise<void> {
     for (const [name] of this.plugins) {
       const pluginSettings = this.settings.plugins[name];
-      const enabled = pluginSettings?.enabled ?? true;
+      const enabled = pluginSettings?.enabled ?? false;
       if (enabled) {
         await this.start(name);
       }

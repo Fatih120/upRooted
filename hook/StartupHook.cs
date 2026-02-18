@@ -180,7 +180,7 @@ internal class StartupHook
 
             // Phase 4.5a: ClearURLs (strip tracking params from chat URLs)
             var clearUrlsSettings = UprootedSettings.Load();
-            var wantClearUrls = !clearUrlsSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) || cuEnabled;
+            var wantClearUrls = clearUrlsSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled;
             if (wantClearUrls)
             {
                 var cuWindow = mainWindow!;
@@ -208,7 +208,7 @@ internal class StartupHook
 
             // Phase 4.5b: Native link embeds (Avalonia-only, no DotNetBrowser)
             var embedSettings = UprootedSettings.Load();
-            var wantLinkEmbeds = !embedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) || leEnabled;
+            var wantLinkEmbeds = embedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled;
 
             if (wantLinkEmbeds)
             {
@@ -238,7 +238,7 @@ internal class StartupHook
 
             // Phase 4.5c: Message Logger (discovery + logging + visual indicators)
             var msgLogSettings = UprootedSettings.Load();
-            var wantMsgLogger = !msgLogSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) || mlEnabled;
+            var wantMsgLogger = msgLogSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled;
 
             if (wantMsgLogger)
             {

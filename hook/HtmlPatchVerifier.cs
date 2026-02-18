@@ -299,10 +299,23 @@ internal class HtmlPatchVerifier : IDisposable
 
         // Fallback: build minimal JSON from INI settings (no System.Text.Json!)
         var settings = UprootedSettings.Load();
+
+        // Build plugins JSON: map Dictionary<string, bool> to TS-expected format
+        // TS expects: { "name": { "enabled": bool, "config": {} } }
+        var pluginsJson = new System.Text.StringBuilder("{");
+        var first = true;
+        foreach (var (name, enabled) in settings.Plugins)
+        {
+            if (!first) pluginsJson.Append(',');
+            pluginsJson.Append($"\"{name}\":{{\"enabled\":{(enabled ? "true" : "false")},\"config\":{{}}}}");
+            first = false;
+        }
+        pluginsJson.Append('}');
+
         return "{" +
                $"\"enabled\":{(settings.Enabled ? "true" : "false")}," +
                $"\"customCss\":{EscapeJsonString(settings.CustomCss)}," +
-               "\"plugins\":{}" +
+               $"\"plugins\":{pluginsJson}" +
                "}";
     }
 

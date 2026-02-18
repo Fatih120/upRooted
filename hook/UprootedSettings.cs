@@ -32,6 +32,9 @@ internal class UprootedSettings
     public string LastUpdateCheck { get; set; } = "";
     public string PendingUpdateVersion { get; set; } = "";
 
+    // Migration flag: tracks whether we've migrated from enabled-by-default to disabled-by-default plugins
+    public bool PluginDefaultsMigrated { get; set; } = false;
+
     private static string? _settingsPath;
 
     // Time-based cache: avoid re-reading from disk on every 500ms timer tick
@@ -64,6 +67,8 @@ internal class UprootedSettings
         var path = GetSettingsPath();
         if (!File.Exists(path))
         {
+            // New install: mark migration as done (no legacy plugins to preserve)
+            settings.PluginDefaultsMigrated = true;
             _cached = settings;
             _cachedAt = DateTime.UtcNow;
             return settings;
@@ -104,6 +109,7 @@ internal class UprootedSettings
                     case "AutoUpdate.Channel": settings.AutoUpdateChannel = val; break;
                     case "AutoUpdate.LastCheck": settings.LastUpdateCheck = val; break;
                     case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
+                    case "Migrated.PluginDefaults": settings.PluginDefaultsMigrated = val == "true"; break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
                         settings.Plugins[pluginName] = val == "true";
@@ -116,6 +122,30 @@ internal class UprootedSettings
         {
             Logger.Log("Settings", $"Failed to load settings: {ex.Message}");
         }
+
+        // One-time migration: existing users upgrading from enabled-by-default plugins.
+        // Explicitly enable all legacy plugins that don't have an explicit entry,
+        // preserving the user's previous experience where everything was on.
+        if (!settings.PluginDefaultsMigrated)
+        {
+            string[] legacyEnabled = { "sentry-blocker", "themes", "settings-panel", "link-embeds", "clear-urls", "message-logger" };
+            foreach (var name in legacyEnabled)
+            {
+                if (!settings.Plugins.ContainsKey(name))
+                    settings.Plugins[name] = true;
+            }
+            settings.PluginDefaultsMigrated = true;
+            try
+            {
+                settings.Save();
+                Logger.Log("Settings", "Migration: preserved legacy plugin defaults (all enabled), flag saved");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Settings", $"Migration save failed: {ex.Message}");
+            }
+        }
+
         _cached = settings;
         _cachedAt = DateTime.UtcNow;
         return settings;
@@ -156,7 +186,8 @@ internal class UprootedSettings
                 "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
                 "AutoUpdate.Channel=" + AutoUpdateChannel,
                 "AutoUpdate.LastCheck=" + LastUpdateCheck,
-                "AutoUpdate.PendingVersion=" + PendingUpdateVersion
+                "AutoUpdate.PendingVersion=" + PendingUpdateVersion,
+                "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false")
             };
             foreach (var (name, enabled) in Plugins)
             {
