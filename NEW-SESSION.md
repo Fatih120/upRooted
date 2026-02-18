@@ -139,6 +139,16 @@ cd installer/src-tauri && cargo build --release
 powershell -File scripts/build_installer.ps1
 ```
 
+### Devcontainer Deployment
+
+Claude runs inside a devcontainer and **cannot deploy or launch Root**. If `/deploy` fails with permission errors, that's expected — the container has no access to the Windows host filesystem.
+
+**The user handles deployment and log tailing on their Windows machine:**
+- `scripts/deploy-hook.ps1` — stops Root, copies the DLL, relaunches
+- `scripts/watch-log.ps1` — tails the hook log in real time
+
+The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the container produces output visible to both sides. Claude builds, the user deploys.
+
 ## 8. Where Things Live
 
 | Question | Answer |
