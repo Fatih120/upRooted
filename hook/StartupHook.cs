@@ -116,6 +116,14 @@ internal class StartupHook
                     {
                         Logger.Log("Startup", "Using default theme (no override)");
                     }
+
+                    // Apply saved custom ping color override (persists across theme switches)
+                    if (!string.IsNullOrEmpty(savedSettings.CustomPingColor) && ColorUtils.IsValidHex(savedSettings.CustomPingColor))
+                    {
+                        Logger.Log("Startup", "Applying saved custom ping color: " + savedSettings.CustomPingColor);
+                        themeEngine.SetCustomPingColor(savedSettings.CustomPingColor);
+                    }
+
                     // Diagnostics disabled (uncomment for debugging)
                     // var te = themeEngine;
                     // System.Threading.ThreadPool.QueueUserWorkItem(_ => {

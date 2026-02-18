@@ -1164,13 +1164,13 @@ internal static class ContentPages
         {
             var statusLabel = TestingLabels[testingStatus];
             var statusColor = TestingColors[testingStatus];
-            var badge = r.CreateBorder(statusColor + "20", 6);
+            var badge = r.CreateBorder(ColorUtils.WithAlpha(statusColor, 0x20), 6);
             if (badge != null)
             {
                 r.SetMargin(badge, 0, 10, 0, 0);
                 r.SetHorizontalAlignment(badge, "Left");
                 r.SetPadding(badge, 8, 3, 8, 3);
-                SetBorderStroke(r, badge, statusColor + "60", 0.5);
+                SetBorderStroke(r, badge, ColorUtils.WithAlpha(statusColor, 0x60), 0.5);
 
                 var badgeText = r.CreateTextBlock(statusLabel, 11, statusColor);
                 r.SetFontWeightNumeric(badgeText, 500);
@@ -1639,6 +1639,18 @@ internal static class ContentPages
         if (customSection != null)
             r.AddChild(page, customSection);
 
+        // === HIGHLIGHT OVERRIDE section ===
+        var pingHeader = CreateSectionHeader(r, "HIGHLIGHT OVERRIDE", font);
+        if (pingHeader != null)
+        {
+            r.SetMargin(pingHeader, 0, 16, 0, 12);
+            r.AddChild(page, pingHeader);
+        }
+
+        var pingSection = BuildPingColorSection(r, settings, font, themeEngine, onThemeChanged);
+        if (pingSection != null)
+            r.AddChild(page, pingSection);
+
         // About themes card
         var aboutCard = CreateCard(r);
         if (aboutCard != null)
@@ -1912,6 +1924,209 @@ internal static class ContentPages
             }
 
             r.AddChild(outerContent, applyRow);
+        }
+
+        r.SetBorderChild(card, outerContent);
+        return card;
+    }
+
+    /// <summary>
+    /// Build the highlight override card for custom ping/reply highlight color.
+    /// Toggle + color input + swatch + reset button. Persists across theme switches.
+    /// </summary>
+    private static object? BuildPingColorSection(AvaloniaReflection r, UprootedSettings settings,
+        object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
+    {
+        bool isActive = !string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor);
+        var inactiveBorder = ColorUtils.Lighten(CardBg, 12);
+        var borderColor = isActive ? settings.CustomPingColor : inactiveBorder;
+
+        var card = r.CreateBorder(CardBg, 12);
+        if (card == null) return null;
+        SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
+
+        var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (outerContent == null) return card;
+        r.SetMargin(outerContent, 20, 16, 20, 16);
+
+        // Header row with toggle indicator + label
+        var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (headerRow != null)
+        {
+            r.SetVerticalAlignment(headerRow, "Center");
+            r.SetBackground(headerRow, "Transparent"); // Hit-testing
+
+            // Toggle indicator (filled circle when active, empty when inactive)
+            var toggleOuter = r.CreateBorder(null, 4);
+            if (toggleOuter != null)
+            {
+                r.SetWidth(toggleOuter, 20);
+                r.SetHeight(toggleOuter, 20);
+                SetBorderStroke(r, toggleOuter, isActive ? (settings.CustomPingColor ?? AccentGreen) : ColorUtils.Lighten(CardBg, 25), 2.0);
+                r.SetVerticalAlignment(toggleOuter, "Center");
+                if (isActive)
+                {
+                    var innerDot = r.CreateBorder(settings.CustomPingColor ?? AccentGreen, 2);
+                    if (innerDot != null)
+                    {
+                        r.SetWidth(innerDot, 10);
+                        r.SetHeight(innerDot, 10);
+                        r.SetMargin(innerDot, 3, 3, 3, 3);
+                    }
+                    r.SetBorderChild(toggleOuter, innerDot);
+                }
+                r.AddChild(headerRow, toggleOuter);
+            }
+
+            var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
+            if (textStack != null)
+            {
+                var nameText = r.CreateTextBlock("Custom ping color", 14, TextWhite);
+                r.SetFontWeightNumeric(nameText, 450);
+                ApplyFont(r, nameText, font);
+                r.AddChild(textStack, nameText);
+
+                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
+                ApplyFont(r, descText, font);
+                r.SetTextWrapping(descText, "Wrap");
+                r.AddChild(textStack, descText);
+
+                r.AddChild(headerRow, textStack);
+            }
+
+            // Click handler: toggle off when active (clears override)
+            r.SetCursorHand(headerRow);
+            r.SubscribeEvent(headerRow, "PointerPressed", () =>
+            {
+                try
+                {
+                    if (!string.IsNullOrEmpty(settings.CustomPingColor))
+                    {
+                        // Disable: clear custom ping color
+                        settings.CustomPingColor = "";
+                        themeEngine?.ClearCustomPingColor();
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+
+                        if (onThemeChanged != null)
+                        {
+                            r.RunOnUIThread(() =>
+                            {
+                                try { onThemeChanged.Invoke(); }
+                                catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                            });
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Theme", "Ping color toggle error: " + ex.Message);
+                }
+            });
+
+            r.AddChild(outerContent, headerRow);
+        }
+
+        // Color input row (only interactable when active or to activate)
+        var initialColor = isActive ? (settings.CustomPingColor ?? "#FF0000") : "#FF0000";
+
+        // Track last-known value to skip no-op TextChanged events
+        string[] lastPingColor = new[] { initialColor };
+
+        // Debounced auto-save
+        System.Threading.Timer? saveTimer = null;
+        Action debounceSave = () =>
+        {
+            saveTimer?.Dispose();
+            saveTimer = new System.Threading.Timer(_ =>
+            {
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("Theme", "Ping auto-save error: " + sx.Message); }
+            }, null, 1000, System.Threading.Timeout.Infinite);
+        };
+
+        var pingSwatch = r.CreateBorder(initialColor, 4);
+        r.SetTag(pingSwatch, "uprooted-no-recolor");
+        var colorRow = BuildColorInputRow(r, "Color", initialColor, font, pingSwatch,
+            hex =>
+            {
+                if (string.Equals(hex, lastPingColor[0], StringComparison.OrdinalIgnoreCase)) return;
+                lastPingColor[0] = hex;
+
+                settings.CustomPingColor = hex;
+                themeEngine?.SetCustomPingColor(hex);
+                debounceSave();
+
+                // If this is the first color entry (was inactive), rebuild to show active state
+                if (!isActive && onThemeChanged != null)
+                {
+                    r.RunOnUIThread(() =>
+                    {
+                        try { onThemeChanged.Invoke(); }
+                        catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                    });
+                }
+            });
+        if (colorRow != null)
+        {
+            r.SetMargin(colorRow, 32, 12, 0, 0);
+            r.AddChild(outerContent, colorRow);
+        }
+
+        // Reset button (only shown when active)
+        if (isActive)
+        {
+            var resetRow = r.CreateStackPanel(vertical: false, spacing: 0);
+            if (resetRow != null)
+            {
+                r.SetMargin(resetRow, 32, 12, 0, 0);
+
+                var resetBtn = r.CreateBorder(ColorUtils.Lighten(CardBg, 10), 8);
+                if (resetBtn != null)
+                {
+                    r.SetCursorHand(resetBtn);
+                    var resetText = r.CreateTextBlock("Reset", 13, TextMuted);
+                    r.SetFontWeightNumeric(resetText, 500);
+                    ApplyFont(r, resetText, font);
+                    r.SetPadding(resetBtn, 16, 6, 16, 6);
+                    r.SetBorderChild(resetBtn, resetText);
+
+                    r.SubscribeEvent(resetBtn, "PointerPressed", () =>
+                    {
+                        try
+                        {
+                            settings.CustomPingColor = "";
+                            themeEngine?.ClearCustomPingColor();
+                            try { settings.Save(); }
+                            catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+
+                            if (onThemeChanged != null)
+                            {
+                                r.RunOnUIThread(() =>
+                                {
+                                    try { onThemeChanged.Invoke(); }
+                                    catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                                });
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Theme", "Ping color reset error: " + ex.Message);
+                        }
+                    });
+
+                    // Hover effects
+                    var btnBg = ColorUtils.Lighten(CardBg, 10);
+                    r.SubscribeEvent(resetBtn, "PointerEntered", () =>
+                        r.SetBackground(resetBtn, ColorUtils.Lighten(btnBg, 10)));
+                    r.SubscribeEvent(resetBtn, "PointerExited", () =>
+                        r.SetBackground(resetBtn, btnBg));
+
+                    r.AddChild(resetRow, resetBtn);
+                }
+
+                r.AddChild(outerContent, resetRow);
+            }
         }
 
         r.SetBorderChild(card, outerContent);

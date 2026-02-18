@@ -46,7 +46,7 @@ uprooted-private/
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
 │   ├── ContentPages.cs                # Settings page builders
-│   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview)
+│   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview, custom ping color override)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
 │   ├── VisualTreeWalker.cs            # Visual tree DFS traversal

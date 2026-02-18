@@ -33,6 +33,9 @@ internal class ThemeEngine
     // can always be traced back to Root's originals (not intermediate theme colors).
     private readonly Dictionary<string, string> _rootOriginals = new(StringComparer.OrdinalIgnoreCase);
 
+    // Custom ping/reply highlight color override (persists across theme switches)
+    private string? _customPingColor;
+
     public string? ActiveThemeName => _activeThemeName;
 
     public ThemeEngine(AvaloniaReflection r)
@@ -356,6 +359,10 @@ internal class ThemeEngine
         // Update DWM title bar color
         if (palette.TryGetValue("SolidBackgroundFillColorBase", out var titleBarBg))
             UpdateTitleBarColor(titleBarBg);
+
+        // Re-apply custom ping color override after live theme update
+        if (!string.IsNullOrEmpty(_customPingColor))
+            ApplyPingColorOverride();
     }
 
     /// <summary>
@@ -581,6 +588,10 @@ internal class ThemeEngine
         // === Phase 5: Update DWM title bar color ===
         if (palette.TryGetValue("SolidBackgroundFillColorBase", out var titleBarBg))
             UpdateTitleBarColor(titleBarBg);
+
+        // === Phase 6: Apply custom ping color override if set ===
+        if (!string.IsNullOrEmpty(_customPingColor))
+            ApplyPingColorOverride();
 
         return true;
     }
@@ -1808,6 +1819,148 @@ internal class ThemeEngine
             if (p.TryGetValue("SolidBackgroundFillColorBase", out var hex)) return hex;
         }
         return "#0D1521"; // Root's default dark bg
+    }
+
+    // ===== Custom Ping Color Override =====
+
+    /// <summary>
+    /// Set a custom ping/reply highlight color. Applied immediately and persists across theme switches.
+    /// </summary>
+    public void SetCustomPingColor(string hex)
+    {
+        _customPingColor = hex;
+        Logger.Log("Theme", "Custom ping color set: " + hex);
+        _r.RunOnUIThread(() =>
+        {
+            try { ApplyPingColorOverride(); }
+            catch (Exception ex) { Logger.Log("Theme", "Ping color apply error: " + ex.Message); }
+        });
+    }
+
+    /// <summary>
+    /// Clear the custom ping color override. Re-applies the current theme's default highlight.
+    /// </summary>
+    public void ClearCustomPingColor()
+    {
+        _customPingColor = null;
+        Logger.Log("Theme", "Custom ping color cleared");
+
+        // Build the palette to restore from: active theme or Root's defaults
+        var palette = GetPalette();
+        if (palette == null)
+        {
+            // Default-dark theme: use Root's original highlight values
+            palette = new Dictionary<string, string>
+            {
+                ["HighlightForegroundColor"] = "#3B6AF8",
+                ["HighlightForegroundBrush"] = "#3B6AF8",
+                ["TextSelectionHighlightColor"] = "#603B6AF8",
+            };
+        }
+
+        var restorePalette = palette;
+        _r.RunOnUIThread(() =>
+        {
+            try { RestoreThemeHighlightKeys(restorePalette); }
+            catch (Exception ex) { Logger.Log("Theme", "Highlight restore error: " + ex.Message); }
+        });
+    }
+
+    public string? GetCustomPingColor() => _customPingColor;
+
+    /// <summary>
+    /// Override highlight resource keys with the custom ping color.
+    /// Called after ApplyThemeInternal() and by SetCustomPingColor().
+    /// Must run on UI thread.
+    /// </summary>
+    private void ApplyPingColorOverride()
+    {
+        if (string.IsNullOrEmpty(_customPingColor)) return;
+
+        var hex = _customPingColor;
+        var alphaHex = ColorUtils.WithAlpha(hex, 0x60);
+
+        // Override in Styles[0].Resources
+        var styleRes = _r.GetStyleResources(0);
+        if (styleRes != null)
+        {
+            try
+            {
+                var color = _r.ParseColor(hex);
+                if (color != null) _r.AddResource(styleRes, "HighlightForegroundColor", color);
+                var brush = _r.CreateBrush(hex);
+                if (brush != null) _r.AddResource(styleRes, "HighlightForegroundBrush", brush);
+                var selColor = _r.ParseColor(alphaHex);
+                if (selColor != null) _r.AddResource(styleRes, "TextSelectionHighlightColor", selColor);
+            }
+            catch (Exception ex) { Logger.Log("Theme", "Ping override Styles[0] error: " + ex.Message); }
+        }
+
+        // Override in injected MergedDictionary
+        if (_injectedDict != null)
+        {
+            try
+            {
+                var color = _r.ParseColor(hex);
+                if (color != null) _r.AddResource(_injectedDict, "HighlightForegroundColor", color);
+                var brush = _r.CreateBrush(hex);
+                if (brush != null) _r.AddResource(_injectedDict, "HighlightForegroundBrush", brush);
+                // Auto-generate brush variant for Color key
+                var brush2 = _r.CreateBrush(hex);
+                if (brush2 != null) _r.AddResource(_injectedDict, "HighlightForegroundColorBrush", brush2);
+                var selColor = _r.ParseColor(alphaHex);
+                if (selColor != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColor", selColor);
+                var selBrush = _r.CreateBrush(alphaHex);
+                if (selBrush != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColorBrush", selBrush);
+            }
+            catch (Exception ex) { Logger.Log("Theme", "Ping override MergedDict error: " + ex.Message); }
+        }
+
+        Logger.Log("Theme", "Ping color override applied: " + hex);
+    }
+
+    /// <summary>
+    /// Restore highlight keys from the active theme palette (used by ClearCustomPingColor).
+    /// Must run on UI thread.
+    /// </summary>
+    private void RestoreThemeHighlightKeys(Dictionary<string, string> palette)
+    {
+        var highlightKeys = new[] { "HighlightForegroundColor", "HighlightForegroundBrush", "TextSelectionHighlightColor" };
+
+        var styleRes = _r.GetStyleResources(0);
+        foreach (var key in highlightKeys)
+        {
+            if (!palette.TryGetValue(key, out var hex)) continue;
+            try
+            {
+                bool isBrush = key.Contains("Brush");
+                if (isBrush)
+                {
+                    var brush = _r.CreateBrush(hex);
+                    if (brush != null)
+                    {
+                        if (styleRes != null) _r.AddResource(styleRes, key, brush);
+                        if (_injectedDict != null) _r.AddResource(_injectedDict, key, brush);
+                    }
+                }
+                else
+                {
+                    var color = _r.ParseColor(hex);
+                    if (color != null)
+                    {
+                        if (styleRes != null) _r.AddResource(styleRes, key, color);
+                        if (_injectedDict != null)
+                        {
+                            _r.AddResource(_injectedDict, key, color);
+                            var brush = _r.CreateBrush(hex);
+                            if (brush != null) _r.AddResource(_injectedDict, key + "Brush", brush);
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log("Theme", "Highlight key restore failed for " + key + ": " + ex.Message); }
+        }
+        Logger.Log("Theme", "Theme highlight keys restored from palette");
     }
 
     // ===== Custom Theme Generation =====

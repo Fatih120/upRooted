@@ -15,17 +15,18 @@ For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 5. [Tree Fingerprinting](#tree-fingerprinting)
 6. [Color Audit Algorithm](#color-audit-algorithm)
 7. [Custom Theme Generation](#custom-theme-generation)
-8. [Revert Mechanics](#revert-mechanics)
-9. [CSS Variable Bridge](#css-variable-bridge)
-10. [Error Handling](#error-handling)
-11. [Key Data Structures](#key-data-structures)
-12. [Performance Considerations](#performance-considerations)
+8. [Custom Ping Color Override](#custom-ping-color-override)
+9. [Revert Mechanics](#revert-mechanics)
+10. [CSS Variable Bridge](#css-variable-bridge)
+11. [Error Handling](#error-handling)
+12. [Key Data Structures](#key-data-structures)
+13. [Performance Considerations](#performance-considerations)
 
 ---
 
 ## Overview
 
-**File:** `hook/ThemeEngine.cs` (2360 lines)
+**File:** `hook/ThemeEngine.cs` (~2510 lines)
 
 The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at
@@ -53,9 +54,9 @@ with the TypeScript layer indirectly -- when a theme is applied, `ContentPages` 
 its static color fields, and the TypeScript theme plugin reads CSS variables injected
 into the browser DOM. See [CSS Variable Bridge](#css-variable-bridge) for details.
 
-### Five-Phase Application
+### Six-Phase Application
 
-Theme application proceeds through five phases in `ApplyThemeInternal`
+Theme application proceeds through six phases in `ApplyThemeInternal`
 (`hook/ThemeEngine.cs:365-586`):
 
 | Phase | What it does | Target |
@@ -65,6 +66,7 @@ Theme application proceeds through five phases in `ApplyThemeInternal`
 | 3 | Build visual tree color maps with cross-mapping | Hardcoded ARGB controls |
 | 4 | Immediate walk + continuous 500ms timer + `LayoutUpdated` hook | All visual tree nodes |
 | 5 | Set DWM title bar color via Win32 API | Windows title bar |
+| 6 | Apply custom ping color override if set | Highlight resource keys |
 
 ---
 
@@ -627,6 +629,61 @@ foreach (var key in keys)
 This nudges the green channel by +1 until uniqueness is achieved. The visual
 difference of a single green channel step is imperceptible, but it ensures the
 reverse map (replacement -> original) is bijective.
+
+---
+
+## Custom Ping Color Override
+
+The custom ping color feature lets users override the mention/reply highlight color
+independently from the active theme. The override persists across theme switches --
+applying a new theme will change everything except the highlight color.
+
+### Target Resource Keys
+
+| Key | Location | Override Value |
+|-----|----------|---------------|
+| `HighlightForegroundColor` | `Styles[0].Resources` + `MergedDictionary` | User's chosen color |
+| `HighlightForegroundBrush` | `Styles[0].Resources` + `MergedDictionary` | User's chosen color (auto-generated brush) |
+| `TextSelectionHighlightColor` | `Styles[0].Resources` + `MergedDictionary` | User's chosen color with `0x60` alpha |
+
+### How It Works
+
+**`ApplyPingColorOverride()`** is the core method. It:
+
+1. Parses the stored hex color (`_customPingColor`).
+2. Generates a semi-transparent variant (`0x60` alpha) for text selection.
+3. Overrides the three keys in `Styles[0].Resources` (Color + Brush).
+4. Overrides the same keys in the injected `MergedDictionary`.
+
+**Integration points:**
+
+- **Phase 6 in `ApplyThemeInternal()`**: After all theme phases complete, re-applies
+  the ping color override. This ensures theme switches don't clobber the override.
+- **End of `UpdateCustomThemeLive()`**: After live preview updates resources, re-applies
+  the override so color picker drag doesn't reset it.
+- **Phase 3.5 at startup**: `StartupHook` loads `CustomPingColor` from settings and
+  calls `SetCustomPingColor()` after theme initialization.
+
+### Clearing the Override
+
+**`ClearCustomPingColor()`** restores the highlight keys to the active theme's values:
+
+1. Sets `_customPingColor = null`.
+2. Reads the active theme's palette via `GetPalette()`.
+3. Calls `RestoreThemeHighlightKeys(palette)` to write the theme's original highlight
+   values back to both resource locations.
+4. **Default-dark fallback**: If no theme is active (`_activeThemeName == null`), uses
+   Root's hardcoded defaults (`#3B6AF8` for highlight, `#603B6AF8` for selection).
+
+### UI Integration
+
+The "HIGHLIGHT OVERRIDE" card on the Themes settings page (`ContentPages.BuildPingColorSection()`) provides:
+
+- Toggle indicator (filled/empty circle) showing whether the override is active.
+- Color input row (hex TextBox + swatch) with live preview on change.
+- Reset button to clear the override.
+- Debounced auto-save (1s timer).
+- Swatch tagged `uprooted-no-recolor` to prevent tree walker interference.
 
 ---
 

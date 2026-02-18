@@ -66,13 +66,6 @@ internal class MessageLogger
     // Diagnostic counters: track Add/Remove correlation per flush window
     private int _addsSinceFlush;
     private int _removesSinceFlush;
-    private bool _firstRemoveDumped; // one-time property dump on first Remove event
-
-    // Post-subscription settling filter: messages in the initial snapshot may be removed
-    // by Root's buffer management within ~30s of subscribing. Messages that arrive AFTER
-    // subscription (via Add events) are always trusted immediately.
-    private HashSet<string> _initialSnapshotIds = new();
-    private DateTime _lastSubscriptionTime = DateTime.MinValue;
 
     private struct BufferedRemove
     {
@@ -347,7 +340,13 @@ internal class MessageLogger
                 var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
                 if (TryResolveOnProps(nested, prop.PropertyType.Name, prop, tp))
                 {
-                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name}");
+                    // HasBeenDeleted/HasBeenEdited may live on the bridge target, not the ViewModel
+                    if (tp.HasBeenDeleted == null)
+                        tp.HasBeenDeleted = FindProp(nested, "HasBeenDeleted", "IsDeleted");
+                    if (tp.HasBeenEdited == null)
+                        tp.HasBeenEdited = FindProp(nested, "HasBeenEdited", "IsEdited");
+
+                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name} (HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}, HasBeenEdited={tp.HasBeenEdited?.Name ?? "?"})");
                     _typePropsCache[type] = tp;
                     _propertiesResolved = true;
                     _messageItemType = type;
@@ -384,7 +383,7 @@ internal class MessageLogger
 
         Logger.Log(Tag, $"Props on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
             $"Id={id.Name}, Content={content.Name}, " +
-            $"HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}");
+            $"HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}, HasBeenEdited={tp.HasBeenEdited?.Name ?? "?"}");
         return true;
     }
 
@@ -650,7 +649,7 @@ internal class MessageLogger
         if (!_propertiesResolved) return;
         try
         {
-            var snapshotIds = new HashSet<string>();
+            int snapshotCount = 0;
             var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
             if (en == null) return;
             while (en.MoveNext())
@@ -661,14 +660,9 @@ internal class MessageLogger
                 if (msgId == null) continue;
                 _contentSnapshot[msgId] = ReadContent(item) ?? "";
                 CacheMessage(item, msgId);
-                snapshotIds.Add(msgId);
+                snapshotCount++;
             }
-            // Record which messages were present at subscription time.
-            // Root may settle its buffer by removing these shortly after subscription.
-            // Messages arriving AFTER this point (via Add events) are always trusted.
-            _initialSnapshotIds = snapshotIds;
-            _lastSubscriptionTime = DateTime.UtcNow;
-            Logger.Log(Tag, $"Snapshot: {snapshotIds.Count} messages cached");
+            Logger.Log(Tag, $"Snapshot: {snapshotCount} messages cached");
         }
         catch (Exception ex) { Logger.Log(Tag, $"Snapshot error: {ex.Message}"); }
     }
@@ -768,13 +762,6 @@ internal class MessageLogger
                 catch { }
             }
 
-            // One-time property dump: log ALL boolean properties on first Remove
-            if (!_firstRemoveDumped)
-            {
-                _firstRemoveDumped = true;
-                DumpBooleanProperties(item);
-            }
-
             _removesSinceFlush++;
             _pendingRemoves.Add(new BufferedRemove
             {
@@ -785,69 +772,6 @@ internal class MessageLogger
             });
             Logger.Log(Tag, $"[remove-event] buffered: {msgId} idx={removeIndex} deleted={hasBeenDeleted?.ToString() ?? "null"} ({Truncate(content, 40)})");
         }
-    }
-
-    /// <summary>
-    /// One-time diagnostic: dump ALL boolean properties on a message ViewModel
-    /// to discover any deletion-related flags Root exposes.
-    /// </summary>
-    private void DumpBooleanProperties(object item)
-    {
-        try
-        {
-            var type = item.GetType();
-            Logger.Log(Tag, $"[DIAG] Property dump for {type.FullName}:");
-
-            // Dump direct properties
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                try
-                {
-                    if (prop.PropertyType == typeof(bool) || prop.PropertyType == typeof(bool?))
-                    {
-                        var val = prop.GetValue(item);
-                        Logger.Log(Tag, $"[DIAG]   {type.Name}.{prop.Name} = {val}");
-                    }
-                }
-                catch (Exception ex) { Logger.Log(Tag, $"[DIAG]   {type.Name}.{prop.Name} = ERROR({ex.Message})"); }
-            }
-
-            // Also dump bridge target properties if available
-            var tp = GetTypeProps(item);
-            if (tp?.Bridge != null)
-            {
-                try
-                {
-                    var target = tp.Bridge.GetValue(item);
-                    if (target != null)
-                    {
-                        var targetType = target.GetType();
-                        Logger.Log(Tag, $"[DIAG] Bridge target {targetType.FullName}:");
-                        foreach (var prop in targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-                        {
-                            try
-                            {
-                                if (prop.PropertyType == typeof(bool) || prop.PropertyType == typeof(bool?))
-                                {
-                                    var val = prop.GetValue(target);
-                                    Logger.Log(Tag, $"[DIAG]   {targetType.Name}.{prop.Name} = {val}");
-                                }
-                            }
-                            catch (Exception ex) { Logger.Log(Tag, $"[DIAG]   {targetType.Name}.{prop.Name} = ERROR({ex.Message})"); }
-                        }
-                    }
-                }
-                catch { }
-            }
-
-            // Also dump ALL properties (not just bool) with their types for complete picture
-            Logger.Log(Tag, $"[DIAG] All properties on {type.Name}:");
-            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
-            {
-                Logger.Log(Tag, $"[DIAG]   {prop.Name}: {prop.PropertyType.Name}");
-            }
-        }
-        catch (Exception ex) { Logger.Log(Tag, $"[DIAG] Dump error: {ex.Message}"); }
     }
 
     /// <summary>

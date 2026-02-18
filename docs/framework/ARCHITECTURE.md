@@ -152,16 +152,16 @@ uprooted-private/
 |-- hook/                             # C# .NET hook (CLR profiler injection layer)
 |   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
 |   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs         (366)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
+|   |-- StartupHook.cs        (~430)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
 |   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
 |   |-- AvaloniaReflection.cs (2030)  # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
 |   |-- SidebarInjector.cs    (1366)  # Timer-based sidebar monitor, injection, click events.
-|   |-- ContentPages.cs      (2628)  # Settings page builders (Uprooted, Plugins, Themes).
-|   |-- ThemeEngine.cs        (2360)  # Native Avalonia theme: ResourceDictionary overrides.
+|   |-- ContentPages.cs     (~3400)  # Settings page builders (Uprooted, Plugins, Themes).
+|   |-- ThemeEngine.cs       (~2510)  # Native Avalonia theme: ResourceDictionary overrides + custom ping color.
 |   |-- ColorPickerPopup.cs    (533)  # HSL color picker popup for custom theme colors.
 |   |-- ColorUtils.cs          (262)  # Color parsing, HSL conversion, contrast calculation.
-|   |-- UprootedSettings.cs    (161)  # INI-based settings (System.Text.Json workaround).
+|   |-- UprootedSettings.cs   (~170)  # INI-based settings (System.Text.Json workaround).
 |   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
 |   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
 |   |-- BrowserDiscovery.cs    (496)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
@@ -306,7 +306,7 @@ This section describes the key classes and modules that form the framework's bac
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
 | `SidebarInjector` | `hook/SidebarInjector.cs` | Settings page monitor. 200ms timer polls the visual tree, detects settings page open/close, injects the UPROOTED sidebar section, manages content page overlays, handles click events and cleanup. |
 | `ContentPages` | `hook/ContentPages.cs` | Page builders for the Uprooted, Plugins, and Themes settings pages. Creates native Avalonia controls via reflection, matching Root's exact card styling (background, corner radius, border, padding, typography). |
-| `ThemeEngine` | `hook/ThemeEngine.cs` | Native Avalonia theme engine. Overrides resources in `Application.Styles[0].Resources` and injects a `ResourceDictionary` into `Application.Resources.MergedDictionaries`. Supports named themes, custom accent/background, and full revert to originals. 2360 lines. |
+| `ThemeEngine` | `hook/ThemeEngine.cs` | Native Avalonia theme engine. Overrides resources in `Application.Styles[0].Resources` and injects a `ResourceDictionary` into `Application.Resources.MergedDictionaries`. Supports named themes, custom accent/background, custom ping color override, and full revert to originals. ~2510 lines. |
 | `ColorPickerPopup` | `hook/ColorPickerPopup.cs` | HSL color picker popup for selecting custom theme accent and background colors. Presented as an overlay on the Themes settings page. |
 | `ColorUtils` | `hook/ColorUtils.cs` | Color parsing, HSL conversion, luminance calculation, and contrast ratio computation. Used by `ThemeEngine` and `ContentPages`. |
 | `UprootedSettings` | `hook/UprootedSettings.cs` | INI-based settings persistence. Loads and saves key=value pairs from `uprooted-settings.ini` in the profile directory. Uses INI format instead of JSON because `System.Text.Json` is broken in the profiler-injected context. |

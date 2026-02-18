@@ -146,6 +146,7 @@ internal class UprootedSettings
                 "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
                 "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
                 "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
+                "CustomPingColor=" + CustomPingColor,
                 "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
                 "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
                 "AutoUpdate.Channel=" + AutoUpdateChannel,
