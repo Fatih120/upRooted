@@ -59,17 +59,33 @@ if ($rootProcs) {
 
 # Check env vars (live process env)
 Write-Host ""
-Write-Host "=== Current process env vars ==="
-Write-Host "CORECLR_ENABLE_PROFILING: $env:CORECLR_ENABLE_PROFILING"
-Write-Host "CORECLR_PROFILER: $env:CORECLR_PROFILER"
-Write-Host "CORECLR_PROFILER_PATH: $env:CORECLR_PROFILER_PATH"
+Write-Host "=== Current process env vars (DOTNET_* — .NET 10+) ==="
+Write-Host "DOTNET_EnableDiagnostics: $env:DOTNET_EnableDiagnostics"
+Write-Host "DOTNET_ENABLE_PROFILING: $env:DOTNET_ENABLE_PROFILING"
+Write-Host "DOTNET_PROFILER: $env:DOTNET_PROFILER"
+Write-Host "DOTNET_PROFILER_PATH: $env:DOTNET_PROFILER_PATH"
 Write-Host "DOTNET_ReadyToRun: $env:DOTNET_ReadyToRun"
+
+# Check for legacy CORECLR_ vars (deprecated, won't work on .NET 10+)
+$legacyVars = @("CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH")
+$hasLegacy = $false
+foreach ($v in $legacyVars) {
+    $val = [Environment]::GetEnvironmentVariable($v, "User")
+    if ($val) {
+        if (-not $hasLegacy) {
+            Write-Host ""
+            Write-Host "=== Legacy CORECLR_* vars detected (deprecated — use DOTNET_* instead) ===" -ForegroundColor Yellow
+            $hasLegacy = $true
+        }
+        Write-Host "  ${v}: $val" -ForegroundColor Yellow
+    }
+}
 
 # Check registry env vars
 Write-Host ""
 Write-Host "=== Registry env vars (HKCU\Environment) ==="
 $regEnv = Get-ItemProperty -Path "HKCU:\Environment" -ErrorAction SilentlyContinue
-$profVars = @("CORECLR_ENABLE_PROFILING", "CORECLR_PROFILER", "CORECLR_PROFILER_PATH", "DOTNET_ReadyToRun")
+$profVars = @("DOTNET_EnableDiagnostics", "DOTNET_ENABLE_PROFILING", "DOTNET_PROFILER", "DOTNET_PROFILER_PATH", "DOTNET_ReadyToRun")
 foreach ($v in $profVars) {
     $val = $regEnv.$v
     if ($val) {

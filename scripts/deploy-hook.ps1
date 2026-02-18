@@ -94,6 +94,8 @@ foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
     if (Test-Path $src) {
         Copy-Item $src (Join-Path $UprootedDir $jsFile) -Force
         Write-OK "  $jsFile"
+    } else {
+        Write-Warn "  $jsFile not found in build output (skipped)"
     }
 }
 

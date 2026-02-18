@@ -222,8 +222,18 @@ if (Test-Path $SettingsFile) {
     }
 }
 
+# Read version from package.json
+$pkgJsonPath = Join-Path $RepoRoot "package.json"
+$version = "unknown"
+if (Test-Path $pkgJsonPath) {
+    $pkgContent = Get-Content $pkgJsonPath -Raw
+    if ($pkgContent -match '"version"\s*:\s*"([^"]+)"') {
+        $version = $Matches[1]
+    }
+}
+
 $settings["Enabled"] = "true"
-if (-not $settings.ContainsKey("Version")) { $settings["Version"] = "0.3.6-rc" }
+if (-not $settings.ContainsKey("Version")) { $settings["Version"] = $version }
 if (-not $settings.ContainsKey("ActiveTheme")) { $settings["ActiveTheme"] = "default-dark" }
 
 $content = ($settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join "`n"

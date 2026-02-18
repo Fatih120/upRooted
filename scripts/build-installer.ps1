@@ -6,8 +6,8 @@
     1. Builds TypeScript layer (pnpm build -> dist/)
     2. Builds C# hook DLL (dotnet build -> UprootedHook.dll)
     3. Compiles native profiler DLL (cl.exe -> uprooted_profiler.dll)
-    4. Stages all 5 artifacts into installer/src-tauri/artifacts/
-    5. Builds Tauri app (cargo tauri build -> .exe)
+    4. Stages all artifacts into installer/src-tauri/artifacts/
+    5. Builds console TUI installer (cargo build --release -> Uprooted.exe)
 #>
 
 $ErrorActionPreference = "Stop"
@@ -28,8 +28,9 @@ Write-Host "  ==================================" -ForegroundColor Green
 Write-Host ""
 
 # Disable CLR profiling for this process so dotnet build doesn't lock DLLs
-if ($env:CORECLR_ENABLE_PROFILING -eq "1") {
+if ($env:DOTNET_ENABLE_PROFILING -eq "1" -or $env:CORECLR_ENABLE_PROFILING -eq "1") {
     Write-Step "Disabling CLR profiling for build process..."
+    $env:DOTNET_ENABLE_PROFILING = "0"
     $env:CORECLR_ENABLE_PROFILING = "0"
     Write-OK "Profiling disabled (this process only)"
 }
@@ -128,7 +129,9 @@ if (Test-Path $profilerDef) {
 }
 
 $clCmd = "`"$vcvarsall`" x64 && cl.exe /LD /O2 /Fe:`"$profilerOut`" `"$profilerC`" /link ole32.lib kernel32.lib shell32.lib $defArg"
+$ErrorActionPreference = "Continue"
 $clResult = cmd /c $clCmd 2>&1
+$ErrorActionPreference = "Stop"
 if ($LASTEXITCODE -ne 0) {
     Write-Err "cl.exe compilation failed:"
     $clResult | ForEach-Object { Write-Host "  $_" }
@@ -159,23 +162,28 @@ foreach ($f in $required) {
     Write-OK "  $f ($size bytes)"
 }
 
-# Step 4: Build Tauri installer
-Write-Step "Building Tauri app (cargo tauri build)..."
-Push-Location $InstallerDir
+# Step 4: Build console TUI installer
+Write-Step "Building console TUI installer (cargo build --release)..."
+$cargoDir = Join-Path $InstallerDir "src-tauri"
+Push-Location $cargoDir
 try {
-    $tauriResult = & pnpm tauri build 2>&1
+    $cargoResult = & cargo build --release 2>&1
     if ($LASTEXITCODE -ne 0) {
-        Write-Err "cargo tauri build failed:"
-        $tauriResult | ForEach-Object { Write-Host "  $_" }
+        Write-Err "cargo build failed:"
+        $cargoResult | ForEach-Object { Write-Host "  $_" }
         exit 1
     }
-    Write-OK "Tauri build complete"
+    Write-OK "Installer build complete"
 } finally {
     Pop-Location
 }
 
 # Find output
-$exePath = Join-Path $InstallerDir "src-tauri\target\release\Uprooted Installer.exe"
+$exePath = Join-Path $cargoDir "target\release\uprooted-installer.exe"
+if (-not (Test-Path $exePath)) {
+    # Try alternate name
+    $exePath = Join-Path $cargoDir "target\release\Uprooted Installer.exe"
+}
 if (Test-Path $exePath) {
     $exeSize = (Get-Item $exePath).Length
     Write-Host ""
@@ -183,8 +191,8 @@ if (Test-Path $exePath) {
     Write-OK "Output: $exePath"
     Write-OK "Size: $([math]::Round($exeSize / 1MB, 1)) MB"
 } else {
-    Write-Err "Expected output not found at: $exePath"
-    Write-Host "Check src-tauri\target\release\ for the built binary."
+    Write-Err "Expected output not found in: $(Join-Path $cargoDir 'target\release\')"
+    Write-Host "Check target\release\ for the built binary."
 }
 
 Write-Host ""

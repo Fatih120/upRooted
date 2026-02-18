@@ -1,6 +1,12 @@
 @echo off
-set DOTNET_STARTUP_HOOKS=C:\Users\bash\claude\Root.Dev\uprooted\hook\bin\Release\net10.0\UprootedHook.dll
-set UPROOTED_DIST=C:\Users\bash\claude\Root.Dev\uprooted\dist
+REM Launch Root with Uprooted hook via DOTNET_STARTUP_HOOKS
+REM Requires hook to be built first: dotnet build hook/ -c Release
+
+setlocal
+
+set "REPO_ROOT=%~dp0.."
+set DOTNET_STARTUP_HOOKS=%REPO_ROOT%\hook\bin\Release\net10.0\UprootedHook.dll
+set UPROOTED_DIST=%REPO_ROOT%\dist
 del /q "%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-hook.log" 2>nul
 echo Starting Root with Uprooted hook...
 start "" "%LOCALAPPDATA%\Root\current\Root.exe"

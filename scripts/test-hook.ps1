@@ -4,9 +4,10 @@ Remove-Item $hookLog -ErrorAction SilentlyContinue
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $profilerDll = Join-Path $scriptDir "..\tools\uprooted_profiler.dll"
 
-$env:CORECLR_ENABLE_PROFILING = "1"
-$env:CORECLR_PROFILER = "{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-$env:CORECLR_PROFILER_PATH = (Resolve-Path $profilerDll).Path
+$env:DOTNET_EnableDiagnostics = "1"
+$env:DOTNET_ENABLE_PROFILING = "1"
+$env:DOTNET_PROFILER = "{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
+$env:DOTNET_PROFILER_PATH = (Resolve-Path $profilerDll).Path
 $env:DOTNET_ReadyToRun = "0"
 
 $proc = Start-Process "$env:LOCALAPPDATA\Root\current\Root.exe" -PassThru

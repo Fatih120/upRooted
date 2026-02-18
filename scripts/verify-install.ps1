@@ -1,9 +1,9 @@
 $s = New-Object -ComObject WScript.Shell
 $paths = @(
-    'C:\Users\bash\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Root.lnk',
-    'C:\Users\bash\Desktop\Root.lnk',
-    'C:\Users\bash\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\Root.lnk',
-    'C:\Users\bash\AppData\Roaming\Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Root.lnk'
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Root.lnk"),
+    (Join-Path ([Environment]::GetFolderPath('Desktop')) "Root.lnk"),
+    (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Root.lnk"),
+    (Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Root.lnk")
 )
 Write-Host "--- Shortcuts ---"
 foreach ($p in $paths) {
@@ -14,7 +14,17 @@ foreach ($p in $paths) {
 }
 Write-Host ""
 Write-Host "--- Protocol Handler ---"
-Write-Host ((Get-ItemProperty 'HKCU:\SOFTWARE\Classes\rootapp\shell\open\command').'(default)')
+$regPath = 'HKCU:\SOFTWARE\Classes\rootapp\shell\open\command'
+if (Test-Path $regPath) {
+    Write-Host ((Get-ItemProperty $regPath).'(default)')
+} else {
+    Write-Host "<not registered>"
+}
 Write-Host ""
 Write-Host "--- Settings ---"
-Get-Content 'C:\Users\bash\AppData\Local\Root Communications\Root\profile\default\uprooted-settings.ini'
+$settingsPath = Join-Path $env:LOCALAPPDATA "Root Communications\Root\profile\default\uprooted-settings.ini"
+if (Test-Path $settingsPath) {
+    Get-Content $settingsPath
+} else {
+    Write-Host "<settings file not found>"
+}

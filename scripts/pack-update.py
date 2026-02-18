@@ -53,7 +53,8 @@ def pack(input_dir: str, output_path: str) -> dict[str, bytes]:
         if not os.path.isfile(path):
             print(f"ERROR: Missing file: {path}", file=sys.stderr)
             sys.exit(1)
-        data = open(path, "rb").read()
+        with open(path, "rb") as fh:
+            data = fh.read()
         if len(data) == 0:
             print(f"ERROR: Empty file: {path}", file=sys.stderr)
             sys.exit(1)
@@ -94,7 +95,8 @@ def pack(input_dir: str, output_path: str) -> dict[str, bytes]:
 
 def unpack(package_path: str) -> dict[str, bytes]:
     """Unpack and decrypt a .uprpkg file. Returns filename -> decrypted bytes."""
-    data = open(package_path, "rb").read()
+    with open(package_path, "rb") as fh:
+        data = fh.read()
 
     if len(data) < 39:
         print("ERROR: Package too small", file=sys.stderr)
