@@ -43,6 +43,14 @@ internal class LinkEmbedEngine
     private readonly List<object> _injectedCards = new();
     private readonly Dictionary<string, Action> _animatedDisposables = new(); // dispose timers on card removal
 
+    // Video thumbnail extraction via DotNetBrowser Chromium (JS → <video> → <canvas> → base64)
+    private static readonly SemaphoreSlim s_videoThumbSemaphore = new(1, 1);
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> s_videoThumbFailed = new();
+    private const int VideoThumbTimeoutMs = 12_000;
+    private const int VideoThumbPollMs = 200;
+    private const string VideoThumbPrefix = "UPROOTED_THUMB:";
+    private const string VideoThumbError = "UPROOTED_THUMB_ERR";
+
     // HTTP via reflection — Root's single-file trimming removes HttpClient methods at JIT time.
     // Using reflection avoids MissingMethodException during JIT compilation.
     private static object? s_httpClient;
@@ -421,6 +429,28 @@ internal class LinkEmbedEngine
                     });
                 }
             }
+
+            // Phase B for video URLs: extract first-frame thumbnail via DotNetBrowser Chromium
+            if (data.VideoId != null && string.IsNullOrEmpty(data.Image))
+            {
+                var capturedData = data;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        var thumbBytes = ExtractVideoThumbnail(capturedData.Url);
+                        if (thumbBytes != null && thumbBytes.Length >= 100)
+                        {
+                            _imageBytesCache[capturedData.Url] = thumbBytes;
+                            ReplaceVideoPlaceholderWithThumbnail(capturedData, thumbBytes);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("LinkEmbed", $"Phase B video thumb error for {url}: {ex.Message}");
+                    }
+                });
+            }
         }
         catch (Exception ex)
         {
@@ -590,6 +620,234 @@ internal class LinkEmbedEngine
             catch (Exception ex)
             {
                 Logger.Log("LinkEmbed", $"AddImageToExistingCard error: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Extract the first frame of a video as JPEG bytes using DotNetBrowser's Chromium.
+    /// Injects a hidden &lt;video&gt; element, waits for loadeddata, draws to &lt;canvas&gt;,
+    /// then writes the base64 data URL to document.title for retrieval via IBrowser.Title.
+    /// Serialized via semaphore since document.title is a global channel.
+    /// </summary>
+    private static byte[]? ExtractVideoThumbnail(string videoUrl)
+    {
+        Logger.Log("LinkEmbed", $"Video thumb: starting extraction for {videoUrl}");
+
+        // Skip known failures
+        if (s_videoThumbFailed.ContainsKey(videoUrl))
+        {
+            Logger.Log("LinkEmbed", $"Video thumb: skipping known failure {videoUrl}");
+            return null;
+        }
+
+        // Wait for DotNetBrowser shared references to become available
+        if (!DotNetBrowserReflection.IsReady)
+            Logger.Log("LinkEmbed", $"Video thumb: waiting for DotNetBrowser to become ready...");
+        var waitStart = Environment.TickCount64;
+        while (!DotNetBrowserReflection.IsReady)
+        {
+            if (Environment.TickCount64 - waitStart > 30_000)
+            {
+                Logger.Log("LinkEmbed", "Video thumb: DotNetBrowser not ready after 30s, skipping");
+                s_videoThumbFailed[videoUrl] = 1;
+                return null;
+            }
+            Thread.Sleep(500);
+        }
+
+        var instance = DotNetBrowserReflection.SharedInstance;
+        var browser = DotNetBrowserReflection.SharedBrowser;
+        var frame = DotNetBrowserReflection.SharedFrame;
+        if (instance == null || browser == null || frame == null)
+        {
+            Logger.Log("LinkEmbed", "Video thumb: shared references null despite IsReady");
+            s_videoThumbFailed[videoUrl] = 1;
+            return null;
+        }
+
+        // Serialize — document.title is a single global channel
+        if (!s_videoThumbSemaphore.Wait(VideoThumbTimeoutMs))
+        {
+            Logger.Log("LinkEmbed", $"Video thumb: semaphore timeout for {videoUrl}");
+            return null;
+        }
+
+        string? originalTitle = null;
+        try
+        {
+            originalTitle = instance.GetBrowserTitle(browser);
+
+            // JS: create hidden video, on loadeddata draw first frame to canvas, write base64 to document.title
+            var js = $@"(function(){{
+  try {{
+    var v = document.createElement('video');
+    v.crossOrigin = 'anonymous';
+    v.muted = true;
+    v.style.display = 'none';
+    v.addEventListener('loadeddata', function() {{
+      try {{
+        var c = document.createElement('canvas');
+        c.width = v.videoWidth;
+        c.height = v.videoHeight;
+        c.getContext('2d').drawImage(v, 0, 0);
+        document.title = '{VideoThumbPrefix}' + c.toDataURL('image/jpeg', 0.7);
+      }} catch(e) {{
+        document.title = '{VideoThumbError}';
+      }} finally {{
+        v.remove();
+      }}
+    }});
+    v.addEventListener('error', function() {{
+      document.title = '{VideoThumbError}';
+      v.remove();
+    }});
+    v.src = '{EscapeJsString(videoUrl)}';
+    document.body.appendChild(v);
+  }} catch(e) {{
+    document.title = '{VideoThumbError}';
+  }}
+}})();";
+
+            if (!instance.ExecuteJavaScript(frame, js))
+            {
+                Logger.Log("LinkEmbed", $"Video thumb: JS execution failed for {videoUrl}");
+                s_videoThumbFailed[videoUrl] = 1;
+                return null;
+            }
+
+            // Poll IBrowser.Title for result
+            var pollStart = Environment.TickCount64;
+            while (Environment.TickCount64 - pollStart < VideoThumbTimeoutMs)
+            {
+                Thread.Sleep(VideoThumbPollMs);
+                var title = instance.GetBrowserTitle(browser);
+                if (title == null) continue;
+
+                if (title == VideoThumbError)
+                {
+                    Logger.Log("LinkEmbed", $"Video thumb: JS reported error for {videoUrl}");
+                    s_videoThumbFailed[videoUrl] = 1;
+                    return null;
+                }
+
+                if (title.StartsWith(VideoThumbPrefix, StringComparison.Ordinal))
+                {
+                    var dataUrl = title.Substring(VideoThumbPrefix.Length);
+                    // Strip data URL header: "data:image/jpeg;base64,"
+                    var commaIdx = dataUrl.IndexOf(',');
+                    if (commaIdx < 0)
+                    {
+                        Logger.Log("LinkEmbed", $"Video thumb: malformed data URL for {videoUrl}");
+                        s_videoThumbFailed[videoUrl] = 1;
+                        return null;
+                    }
+                    var base64 = dataUrl.Substring(commaIdx + 1);
+                    try
+                    {
+                        var bytes = Convert.FromBase64String(base64);
+                        Logger.Log("LinkEmbed", $"Video thumb: extracted {bytes.Length} bytes for {videoUrl}");
+                        return bytes;
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("LinkEmbed", $"Video thumb: base64 decode failed for {videoUrl}: {ex.Message}");
+                        s_videoThumbFailed[videoUrl] = 1;
+                        return null;
+                    }
+                }
+            }
+
+            // Timeout
+            Logger.Log("LinkEmbed", $"Video thumb: timeout ({VideoThumbTimeoutMs}ms) for {videoUrl}");
+            s_videoThumbFailed[videoUrl] = 1;
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("LinkEmbed", $"Video thumb: error for {videoUrl}: {ex.Message}");
+            s_videoThumbFailed[videoUrl] = 1;
+            return null;
+        }
+        finally
+        {
+            // Restore original title
+            if (originalTitle != null && instance != null && frame != null)
+            {
+                try
+                {
+                    instance.ExecuteJavaScript(frame,
+                        $"document.title = '{EscapeJsString(originalTitle)}';");
+                }
+                catch { }
+            }
+            s_videoThumbSemaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Escape a string for use inside a JS single-quoted string literal.
+    /// </summary>
+    private static string EscapeJsString(string s)
+    {
+        return s.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", "\\n").Replace("\r", "\\r");
+    }
+
+    /// <summary>
+    /// Replace the dark video placeholder in an existing card with a real thumbnail + play button.
+    /// Called on a background thread after ExtractVideoThumbnail succeeds.
+    /// </summary>
+    private void ReplaceVideoPlaceholderWithThumbnail(EmbedData data, byte[] thumbBytes)
+    {
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                var embedTag = "uprooted-link-embed:" + data.Url;
+
+                // Find the existing card
+                object? card = null;
+                foreach (var c in _injectedCards)
+                {
+                    if (_r.GetTag(c) == embedTag)
+                    {
+                        card = c;
+                        break;
+                    }
+                }
+                if (card == null) return;
+
+                // Get the StackPanel content
+                var content = _r.GetBorderChild(card);
+                if (content == null) return;
+
+                var children = _r.GetChildren(content);
+                if (children == null || children.Count == 0) return;
+
+                // The last child should be the dark placeholder — remove it
+                var lastChild = children[children.Count - 1];
+                if (lastChild != null)
+                    _r.RemoveChild(content, lastChild);
+
+                // Create bitmap from thumbnail bytes
+                object? bitmap;
+                using (var ms = new System.IO.MemoryStream(thumbBytes))
+                {
+                    bitmap = _r.CreateBitmapFromStream(ms);
+                }
+                if (bitmap == null) return;
+
+                // Build thumbnail with play button overlay
+                var imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
+                if (imageElement != null)
+                {
+                    _r.AddChild(content, imageElement);
+                    Logger.Log("LinkEmbed", $"Video placeholder replaced with thumbnail: {data.Url}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("LinkEmbed", $"ReplaceVideoPlaceholder error: {ex.Message}");
             }
         });
     }
@@ -1856,12 +2114,12 @@ internal class LinkEmbedEngine
     private object? BuildVideoPlaceholder(string url)
     {
         // Dark background rectangle (16:9 aspect ratio)
-        var bgBorder = _r.CreateBorder("#1a1a2e", cornerRadius: 0);
+        var bgBorder = _r.CreateBorder("#2d2d44", cornerRadius: 0);
         if (bgBorder == null) return null;
         _r.SetWidth(bgBorder, MaxImageWidth);
         _r.SetHeight(bgBorder, Math.Round(MaxImageWidth * 9.0 / 16.0)); // 16:9
 
-        // Play button: semi-transparent circle with triangle
+        // Play button: red circle with white triangle (YouTube-style)
         var playIcon = _r.CreateTextBlock("\u25B6", 24, "#FFFFFF"); // ▶
         if (playIcon != null)
         {
