@@ -365,7 +365,7 @@ internal class AutoUpdater
             {
                 var src = Path.Combine(stagingDir, filename);
                 var dst = Path.Combine(uprootedDir, filename);
-                File.Copy(src, dst, overwrite: true);
+                CopyFileRobust(src, dst);
                 Logger.Log("AutoUpdate", $"  Applied: {filename}");
             }
 
@@ -387,6 +387,28 @@ internal class AutoUpdater
             _lastError = $"Apply failed: {ex.Message}";
             Logger.Log("AutoUpdate", $"Download/apply error: {ex.Message}");
             // Leave staging dir for debugging, don't overwrite production files
+        }
+    }
+
+    /// <summary>
+    /// Copy src to dst, using rename-then-copy if the destination is locked (e.g. loaded DLL).
+    /// On Windows, renaming a loaded DLL is permitted — the old handle stays valid.
+    /// </summary>
+    private static void CopyFileRobust(string src, string dst)
+    {
+        try
+        {
+            File.Copy(src, dst, overwrite: true);
+        }
+        catch (IOException) when (File.Exists(dst))
+        {
+            // File is locked (e.g. UprootedHook.dll loaded in-process).
+            // Rename the old file out of the way first — Windows allows this even for loaded DLLs.
+            var old = dst + ".old";
+            try { File.Delete(old); } catch { /* stale .old from previous run, ignore */ }
+            File.Move(dst, old);
+            File.Copy(src, dst);
+            try { File.Delete(old); } catch { /* non-fatal — cleaned up on next run */ }
         }
     }
 
