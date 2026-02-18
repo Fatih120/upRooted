@@ -30,23 +30,27 @@ internal class MessageLogger
 
     private Timer? _scanTimer;
     private int _scanning;
+    private int _heartbeatCounter;
 
     // Discovery results
     private object? _chatItemsControl;
     private object? _currentItemsSource;
     private Type? _messageItemType;
 
-    // Property accessors on nested Message object
-    private PropertyInfo? _propMessageObject; // ViewModel.Message bridge
-    private PropertyInfo? _propMessageId;
-    private PropertyInfo? _propContent;
-    private PropertyInfo? _propAuthorId;
-    private PropertyInfo? _propTimestamp;
-    private bool _propertiesResolved;
+    // Per-type property accessor cache (different ViewModel types have different PropertyInfo)
+    private readonly Dictionary<Type, TypeProps> _typePropsCache = new();
+    private bool _propertiesResolved; // true once at least one type is resolved
 
-    // ViewModel-level properties
-    private PropertyInfo? _propHasBeenDeleted;
-    private PropertyInfo? _propHasBeenEdited;
+    private class TypeProps
+    {
+        public PropertyInfo? Bridge;     // ViewModel.Message bridge (null if direct)
+        public PropertyInfo? MessageId;
+        public PropertyInfo? Content;
+        public PropertyInfo? AuthorId;
+        public PropertyInfo? Timestamp;
+        public PropertyInfo? HasBeenDeleted;
+        public PropertyInfo? HasBeenEdited;
+    }
 
     // Collection subscription
     private Delegate? _collectionChangedHandler;
@@ -55,6 +59,11 @@ internal class MessageLogger
 
     // Channel tracking
     private string _currentChannelId = "";
+
+    // Remove debounce — rapid Removes = channel switch, not deletions
+    private readonly List<(object item, DateTime time)> _pendingRemoves = new();
+    private const int ChannelSwitchThreshold = 3; // 3+ removes in window = channel switch
+    private const int DebounceWindowMs = 300;
 
     // Message caches
     private readonly Dictionary<string, CachedMessage> _messageCache = new();
@@ -118,6 +127,20 @@ internal class MessageLogger
             {
                 try
                 {
+                    _heartbeatCounter++;
+                    if (_heartbeatCounter % 20 == 0) // every ~30s
+                    {
+                        int srcCount = 0;
+                        try
+                        {
+                            if (_currentItemsSource != null)
+                                srcCount = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
+                        }
+                        catch { }
+                        Logger.Log(Tag, $"[heartbeat] subscribed={_subscribed} resolved={_propertiesResolved} srcItems={srcCount} snapshots={_contentSnapshot.Count} cache={_messageCache.Count}");
+                    }
+
+                    FlushPendingRemoves(settings);
                     EnsureCollectionSubscription();
                     if (_propertiesResolved)
                     {
@@ -200,8 +223,8 @@ internal class MessageLogger
         try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
         catch { }
 
-        // Resolve properties from first item
-        if (count > 0 && !_propertiesResolved)
+        // Resolve properties from first item (per-type cache handles duplicates)
+        if (count > 0)
         {
             try
             {
@@ -261,61 +284,78 @@ internal class MessageLogger
 
     // ===== Property Resolution =====
 
-    private void TryResolvePropertyAccessors(Type type)
+    /// <summary>
+    /// Resolve property accessors for a specific ViewModel type. Results are cached
+    /// per-type since different ViewModels (MessageViewModel, ChannelStartMessageViewModel)
+    /// have separate PropertyInfo objects that only work on their own type.
+    /// </summary>
+    private TypeProps? TryResolvePropertyAccessors(Type type)
     {
-        _messageItemType = type;
+        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
+
         var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var tp = new TypeProps
+        {
+            HasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted"),
+            HasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited")
+        };
 
-        // ViewModel-level booleans (HasBeenDeleted, HasBeenEdited) live on the outer type
-        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted");
-        _propHasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited");
+        // Try direct resolution first
+        if (TryResolveOnProps(props, type.Name, null, tp))
+        {
+            _typePropsCache[type] = tp;
+            _propertiesResolved = true;
+            _messageItemType = type;
+            return tp;
+        }
 
-        if (TryResolveOnProps(props, type.Name, null)) return;
-
+        // Try nested properties (e.g. ViewModel.Message)
         foreach (var prop in props)
         {
             if (prop.PropertyType.IsClass && prop.PropertyType != typeof(string) &&
                 !prop.PropertyType.IsArray && prop.PropertyType.Namespace != "System")
             {
                 var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                if (TryResolveOnProps(nested, prop.PropertyType.Name, prop))
-                { Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name}"); return; }
+                if (TryResolveOnProps(nested, prop.PropertyType.Name, prop, tp))
+                {
+                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name}");
+                    _typePropsCache[type] = tp;
+                    _propertiesResolved = true;
+                    _messageItemType = type;
+                    return tp;
+                }
             }
         }
+
+        return null;
     }
 
     /// <summary>
-    /// Late-resolve ViewModel-level properties (HasBeenDeleted, etc.) from a known
-    /// collection item. Called when the initial discovery resolved content props via
-    /// nested path but may have missed ViewModel-level booleans.
+    /// Get or resolve the TypeProps for an item. This is the main entry point
+    /// for reading properties — automatically handles type mismatches.
     /// </summary>
-    private void TryResolveLateViewModelProps(object item)
+    private TypeProps? GetTypeProps(object item)
     {
-        if (_propHasBeenDeleted != null) return; // already resolved
         var type = item.GetType();
-        var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted");
-        _propHasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited");
-        if (_propHasBeenDeleted != null)
-            Logger.Log(Tag, $"Late-resolved HasBeenDeleted on {type.Name}");
+        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
+        return TryResolvePropertyAccessors(type);
     }
 
-    private bool TryResolveOnProps(PropertyInfo[] props, string typeName, PropertyInfo? bridge)
+    private bool TryResolveOnProps(PropertyInfo[] props, string typeName, PropertyInfo? bridge, TypeProps tp)
     {
         var id = FindProp(props, "MessageId", "Id", "Uuid", "Nonce");
         var content = FindProp(props, "MessageContent", "Content", "Text", "Body", "RawContent");
         if (id == null || content == null) return false;
 
-        _propMessageObject = bridge;
-        _propMessageId = id;
-        _propContent = content;
-        _propAuthorId = FindProp(props, "SenderUserId", "AuthorId", "SenderId", "UserId");
-        _propTimestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt");
+        tp.Bridge = bridge;
+        tp.MessageId = id;
+        tp.Content = content;
+        tp.AuthorId = FindProp(props, "SenderUserId", "AuthorId", "SenderId", "UserId");
+        tp.Timestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt");
 
-        _propertiesResolved = true;
         Logger.Log(Tag, $"Props on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
             $"Id={id.Name}, Content={content.Name}, " +
-            $"HasBeenDeleted={_propHasBeenDeleted?.Name ?? "?"}");
+            $"HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}");
         return true;
     }
 
@@ -331,21 +371,42 @@ internal class MessageLogger
 
     private void EnsureCollectionSubscription()
     {
-        if (_chatItemsControl == null) return;
+        if (_chatItemsControl == null) { Logger.Log(Tag, "[ensure] no chatItemsControl"); return; }
 
         var currentSource = ReadItemsSource(_chatItemsControl);
-        if (currentSource == null) { TryRediscoverChat(); return; }
+        if (currentSource == null)
+        {
+            Logger.Log(Tag, "[ensure] ItemsSource is null — control may be dead, rediscovering");
+            _subscribed = false;
+            TryRediscoverChat();
+            return;
+        }
+
+        // Check if the control is still in the visual tree
+        bool controlAlive = _r.GetParent(_chatItemsControl) != null;
 
         if (!ReferenceEquals(currentSource, _currentItemsSource))
         {
-            Logger.Log(Tag, "ItemsSource changed — channel switch");
+            int newCount = 0;
+            try { newCount = (int)(currentSource.GetType().GetProperty("Count")?.GetValue(currentSource) ?? 0); }
+            catch { }
+            Logger.Log(Tag, $"[ensure] ItemsSource ref changed — new count={newCount}, alive={controlAlive}");
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
+            _pendingRemoves.Clear();
             _contentSnapshot.Clear();
             ClearInjectedCards();
             ReadCurrentChannelId();
             SubscribeToCollection(currentSource);
             SnapshotMessages(currentSource);
+        }
+        else if (!controlAlive)
+        {
+            Logger.Log(Tag, "[ensure] Control orphaned — rediscovering");
+            UnsubscribeCollection();
+            _chatItemsControl = null;
+            _currentItemsSource = null;
+            TryRediscoverChat();
         }
         else if (!_subscribed)
         {
@@ -361,12 +422,12 @@ internal class MessageLogger
             var tn = node.GetType().Name;
             if (!tn.Contains("ItemsControl") && tn != "ListBox" && tn != "ItemsRepeater") continue;
             var source = ReadItemsSource(node);
-            if (source == null || _messageItemType == null) continue;
+            if (source == null) continue;
             try
             {
                 var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
                 if (en != null && en.MoveNext() && en.Current != null &&
-                    _messageItemType.IsAssignableFrom(en.Current.GetType()))
+                    _typePropsCache.ContainsKey(en.Current.GetType()))
                 {
                     Logger.Log(Tag, $"Re-discovered chat: {tn}");
                     _chatItemsControl = node;
@@ -452,22 +513,46 @@ internal class MessageLogger
     {
         try
         {
-            var action = (int)(args.GetType().GetProperty("Action")?.GetValue(args) ?? -1);
+            var argsType = args.GetType();
+            var action = (int)(argsType.GetProperty("Action")?.GetValue(args) ?? -1);
+            var newItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
+            var oldItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+
+            Logger.Log(Tag, $"CC: action={action} new={newItems?.Count ?? 0} old={oldItems?.Count ?? 0}");
 
             switch (action)
             {
                 case 0: // Add
-                    var newItems = args.GetType().GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
+                    // Flush pending removes — if adds are coming in, the removes were a channel switch
+                    if (_pendingRemoves.Count > 0)
+                    {
+                        Logger.Log(Tag, $"Discarding {_pendingRemoves.Count} pending removes (Add arrived = channel switch)");
+                        _pendingRemoves.Clear();
+                        _contentSnapshot.Clear();
+                    }
                     if (newItems != null) HandleAdded(newItems);
                     break;
 
-                case 1: // Remove
-                    var oldItems = args.GetType().GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
-                    if (oldItems != null) HandleRemoved(oldItems);
+                case 1: // Remove — queue for debounce
+                    if (oldItems != null)
+                    {
+                        var now = DateTime.UtcNow;
+                        foreach (var item in oldItems)
+                            if (item != null) _pendingRemoves.Add((item, now));
+                    }
+                    break;
+
+                case 2: // Replace
+                    Logger.Log(Tag, "Collection Replace event");
+                    if (newItems != null) HandleAdded(newItems);
+                    break;
+
+                case 3: // Move
                     break;
 
                 case 4: // Reset
                     Logger.Log(Tag, "Collection Reset — channel switch");
+                    _pendingRemoves.Clear();
                     _contentSnapshot.Clear();
                     ClearInjectedCards();
                     break;
@@ -482,7 +567,6 @@ internal class MessageLogger
         foreach (var item in items)
         {
             if (item == null) continue;
-            TryResolveLateViewModelProps(item);
             var msgId = ReadMessageId(item);
             if (msgId == null) continue;
             _contentSnapshot[msgId] = ReadContent(item) ?? "";
@@ -490,36 +574,43 @@ internal class MessageLogger
         }
     }
 
-    private void HandleRemoved(System.Collections.IList items)
+    /// <summary>
+    /// Process the pending Remove queue after the debounce window. If many items were
+    /// removed rapidly (channel switch), discard them. If few items trickled in
+    /// (real deletions), process them.
+    /// </summary>
+    private void FlushPendingRemoves(UprootedSettings settings)
     {
-        if (!_propertiesResolved) return;
+        if (_pendingRemoves.Count == 0) return;
 
-        var settings = UprootedSettings.Load();
-        if (!settings.MessageLoggerLogDeletes) return;
+        var now = DateTime.UtcNow;
+        var oldest = _pendingRemoves[0].time;
+        if ((now - oldest).TotalMilliseconds < DebounceWindowMs) return; // still within window
 
-        // ObservableCollection Remove events = genuine data removal.
-        // Channel switches use ItemsSource reference swap (detected in EnsureCollectionSubscription)
-        // or Reset events — they do NOT fire individual Remove events.
-        // Virtualization only affects visual containers, not the data source.
-        // So all Remove events here are real deletions.
+        var count = _pendingRemoves.Count;
 
-        if (items.Count > 10)
-            Logger.Log(Tag, $"Bulk remove: {items.Count} items");
-
-        foreach (var item in items)
+        if (count >= ChannelSwitchThreshold)
         {
-            if (item == null) continue;
+            Logger.Log(Tag, $"Channel switch detected: {count} removes in {(now - oldest).TotalMilliseconds:F0}ms — discarding");
+            _pendingRemoves.Clear();
+            _contentSnapshot.Clear();
+            ClearInjectedCards();
+            return;
+        }
 
+        if (!_propertiesResolved || !settings.MessageLoggerLogDeletes)
+        {
+            _pendingRemoves.Clear();
+            return;
+        }
+
+        Logger.Log(Tag, $"Processing {count} pending remove(s) as deletion(s)");
+        foreach (var (item, _) in _pendingRemoves)
+        {
             var msgId = ReadMessageId(item);
             if (msgId == null) continue;
 
             _contentSnapshot.Remove(msgId);
-
-            // Check if we should ignore this user
-            if (settings.MessageLoggerIgnoreSelf)
-            {
-                // TODO: compare author ID with self user ID
-            }
 
             if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
             {
@@ -530,7 +621,6 @@ internal class MessageLogger
             }
             else if (!_messageCache.ContainsKey(msgId))
             {
-                // Message wasn't in cache yet — extract what we can from the still-available ViewModel
                 var cached2 = ExtractCachedMessage(item, msgId);
                 if (cached2 != null)
                 {
@@ -544,6 +634,7 @@ internal class MessageLogger
                 }
             }
         }
+        _pendingRemoves.Clear();
     }
 
     // ===== Edit Detection via Polling =====
@@ -768,7 +859,9 @@ internal class MessageLogger
         foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
         {
             object? dc = ReadDC(node);
-            if (dc == null || _messageItemType == null || !_messageItemType.IsAssignableFrom(dc.GetType()))
+            if (dc == null) continue;
+            // Only process items we have resolved property accessors for
+            if (!_typePropsCache.ContainsKey(dc.GetType()) && TryResolvePropertyAccessors(dc.GetType()) == null)
                 continue;
 
             var msgId = ReadMessageId(dc);
@@ -858,41 +951,45 @@ internal class MessageLogger
         }
     }
 
-    private object? GetMessageTarget(object item)
+    private object? GetMessageTarget(object item, TypeProps tp)
     {
-        if (_propMessageObject == null) return item;
-        try { return _propMessageObject.GetValue(item); }
+        if (tp.Bridge == null) return item;
+        try { return tp.Bridge.GetValue(item); }
         catch { return null; }
     }
 
     private string? ReadMessageId(object item)
     {
-        if (_propMessageId == null) return null;
-        var t = GetMessageTarget(item);
+        var tp = GetTypeProps(item);
+        if (tp?.MessageId == null) return null;
+        var t = GetMessageTarget(item, tp);
         if (t == null) return null;
-        try { return _propMessageId.GetValue(t)?.ToString(); }
+        try { return tp.MessageId.GetValue(t)?.ToString(); }
         catch { return null; }
     }
 
     private string? ReadContent(object item)
     {
-        if (_propContent == null) return null;
-        var t = GetMessageTarget(item);
+        var tp = GetTypeProps(item);
+        if (tp?.Content == null) return null;
+        var t = GetMessageTarget(item, tp);
         if (t == null) return null;
-        try { return _propContent.GetValue(t) as string; }
+        try { return tp.Content.GetValue(t) as string; }
         catch { return null; }
     }
 
     private CachedMessage? ExtractCachedMessage(object item, string msgId)
     {
-        var t = GetMessageTarget(item);
+        var tp = GetTypeProps(item);
+        if (tp == null) return null;
+        var t = GetMessageTarget(item, tp);
         if (t == null) return null;
         try
         {
             DateTime ts = DateTime.UtcNow;
-            if (_propTimestamp != null)
+            if (tp.Timestamp != null)
             {
-                var v = _propTimestamp.GetValue(t);
+                var v = tp.Timestamp.GetValue(t);
                 if (v is DateTimeOffset dto) ts = dto.UtcDateTime;
                 else if (v is DateTime dt) ts = dt;
             }
@@ -900,7 +997,7 @@ internal class MessageLogger
             {
                 MessageId = msgId,
                 ChannelId = _currentChannelId,
-                AuthorId = _propAuthorId != null ? (_propAuthorId.GetValue(t)?.ToString() ?? "") : "",
+                AuthorId = tp.AuthorId != null ? (tp.AuthorId.GetValue(t)?.ToString() ?? "") : "",
                 AuthorName = "Unknown",
                 Timestamp = ts,
                 Content = ReadContent(item) ?? ""
