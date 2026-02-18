@@ -79,7 +79,7 @@ dotnet build hook/ -c Release
 cd installer/src-tauri && cargo build --release
 
 # Full installer with embedded artifacts
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 ### Running with Root

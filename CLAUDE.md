@@ -80,7 +80,7 @@ uprooted-private/
 │   ├── uprooted_profiler.def          # Profiler DLL export definitions
 │   └── (build scripts, proxy DLLs, diagnostic tools)
 ├── scripts/                           # Build and install automation
-│   ├── build_installer.ps1            # Full installer build with embedded artifacts
+│   ├── build-installer.ps1            # Full installer build with embedded artifacts
 │   ├── install-hook.ps1               # Hook deployment script
 │   ├── uninstall-hook.ps1             # Hook removal script
 │   ├── diagnose.ps1                   # Installation diagnostics

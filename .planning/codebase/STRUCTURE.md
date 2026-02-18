@@ -62,7 +62,7 @@ uprooted-private/
 │   ├── uninstall.ts            # Uninstallation CLI entry point
 │   ├── patch_binary.py         # Binary patching utility for Windows
 │   ├── install-hook.ps1        # PowerShell hook installation
-│   ├── build_installer.ps1     # Full installer build pipeline
+│   ├── build-installer.ps1     # Full installer build pipeline
 │   └── *.py, *.ps1             # Utilities and diagnostics
 ├── src/                        # Main Uprooted framework (browser-side)
 │   ├── api/                    # Public plugin API
@@ -155,7 +155,7 @@ uprooted-private/
 **scripts:**
 - Purpose: Build, installation, and utility scripts
 - Contains: esbuild bundler, HTML patcher, install/uninstall CLIs, installer build pipeline
-- Key files: `scripts/build.ts` (bundles preload + CSS), `scripts/install.ts` (CLI installer), `scripts/build_installer.ps1` (full installer build pipeline)
+- Key files: `scripts/build.ts` (bundles preload + CSS), `scripts/install.ts` (CLI installer), `scripts/build-installer.ps1` (full installer build pipeline)
 
 **installer/src:**
 - Purpose: Desktop application frontend for installation and configuration
@@ -299,7 +299,7 @@ uprooted-private/
 
 **installer/src-tauri/artifacts/:**
 - Purpose: Staging directory for build artifacts
-- Generated: Yes (by `scripts/build_installer.ps1`)
+- Generated: Yes (by `scripts/build-installer.ps1`)
 - Contents: `uprooted_profiler.dll`, `UprootedHook.dll`, `UprootedHook.deps.json`, `uprooted-preload.js`, `uprooted.css`
 
 **node_modules/:**
@@ -352,7 +352,7 @@ The installer is NOT part of the pnpm workspace because it has its own Cargo/Rus
 
 ## Installer Build Pipeline
 
-`scripts/build_installer.ps1` orchestrates the full installer build in 5 steps:
+`scripts/build-installer.ps1` orchestrates the full installer build in 5 steps:
 
 1. `pnpm build` — TypeScript layer -> `dist/uprooted-preload.js` + `dist/uprooted.css`
 2. `dotnet build hook/ -c Release` — C# hook -> `UprootedHook.dll`

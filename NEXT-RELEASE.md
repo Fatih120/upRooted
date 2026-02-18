@@ -83,6 +83,7 @@
 - **LinkEmbedEngine: image fast-path OG fallback** — URLs ending in `.png`/`.jpg`/etc. that serve HTML (e.g. Zipline `/view/`, `/u/` pages) now fall back to OG metadata fetch to find the real `og:image` URL
 - **LinkEmbedEngine: OG regex robustness** — bridge pattern in both C# and TypeScript parsers now explicitly matches complete HTML attributes, fixing failures on `<meta>` tags with extra attributes like `itemProp="image"` or `data-next-head=""`
 - **LinkEmbedEngine: HTTP timeout** — increased from 5s to 10s for CDN-hosted images
+- **Build scripts portability** — all `tools/*.cmd` scripts replaced hardcoded user paths with `%~dp0` relative paths and `vswhere.exe` auto-detection; `test-hook.ps1` updated from deprecated `CORECLR_*` to `DOTNET_*` env vars; `diagnose.ps1` now checks correct env vars; `verify-install.ps1` uses dynamic path resolution; `install-hook.ps1` reads version from `package.json`; `build-installer.ps1` updated from Tauri to console TUI build + fixed `cl.exe` stderr crash
 
 ### Documentation
 

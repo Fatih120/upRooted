@@ -85,6 +85,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **providers.ts**: same OG regex bridge fix applied to TypeScript `parseOpenGraph()` function
 - **LinkEmbedEngine**: HTTP timeout increased from 5s to 10s for CDN-hosted images
 
+- **Build scripts portability**: all `tools/*.cmd` scripts (`_build_profiler.cmd`, `_build.bat`, `build_all.cmd`, `build_proxy.cmd`, `build_uiohook_proxy.cmd`, `launch_hooked.cmd`) replaced hardcoded `C:\Users\bash\...` paths with `%~dp0` relative paths and `vswhere.exe` auto-detection
+- **test-hook.ps1**: updated from deprecated `CORECLR_*` env vars to `DOTNET_*` (required for .NET 10+)
+- **diagnose.ps1**: now checks `DOTNET_*` profiler env vars (primary) and warns if legacy `CORECLR_*` vars are detected
+- **verify-install.ps1**: replaced hardcoded user paths with dynamic `$env:APPDATA`/`$env:LOCALAPPDATA` resolution
+- **install-hook.ps1**: version now read from `package.json` instead of hardcoded string
+- **build-installer.ps1**: renamed from `build_installer.ps1`; updated from Tauri to console TUI installer build; profiling disable now handles both `DOTNET_*` and `CORECLR_*` vars; fixed `cl.exe` stderr banner crash (`$ErrorActionPreference` temporarily set to `Continue` around `2>&1`)
+- **deploy-hook.ps1**: JS files now warn when missing instead of silently skipping
+
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
 - Added `docs/plugins/builtin/message-logger.md` — MessageLogger design reference

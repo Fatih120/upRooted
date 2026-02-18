@@ -215,7 +215,7 @@ uprooted-private/
 |       `-- artifacts/              # Staging directory for build artifacts
 |-- scripts/                          # Build and utility scripts
 |   |-- build.ts                      # esbuild bundler: src/ -> dist/ (IIFE + CSS).
-|   |-- build_installer.ps1           # Full installer build pipeline (5 steps).
+|   |-- build-installer.ps1           # Full installer build pipeline (5 steps).
 |   |-- install.ts                    # CLI: calls patcher.install().
 |   |-- uninstall.ts                  # CLI: calls patcher.uninstall().
 |   |-- install-hook.ps1              # PowerShell hook installation helper.

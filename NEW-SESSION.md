@@ -85,7 +85,7 @@ Two independent injection layers into one app:
 | `tools/uprooted_profiler.c` | CLR profiler DLL source (Windows) |
 | `installer/src-tauri/src/patcher.rs` | Rust: HTML patch install/uninstall/repair |
 | `installer/src-tauri/src/hook.rs` | Rust: file deployment + env var management (DOTNET_ + CORECLR_) |
-| `scripts/build_installer.ps1` | Full installer build pipeline (5 steps) |
+| `scripts/build-installer.ps1` | Full installer build pipeline (5 steps) |
 | `scripts/build.ts` | esbuild bundler: `src/` -> `dist/` (IIFE + CSS) |
 | `scripts/pack-update.py` | Packs 6 update files into encrypted `.uprpkg` (standalone Python, `--verify` flag) |
 | `Install-Uprooted.ps1` | PowerShell one-click installer |
@@ -166,7 +166,7 @@ dotnet test tests/
 cd installer/src-tauri && cargo build --release
 
 # Full installer with all embedded artifacts
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 ### Devcontainer Deployment
@@ -196,7 +196,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Where is the profiler DLL source? | `tools/uprooted_profiler.c` |
 | Where is the installer backend? | `installer/src-tauri/src/` (Rust) |
 | Where is the HTML patcher? | `src/core/patcher.ts` (TS) or `hook/HtmlPatchVerifier.cs` (C# self-heal) |
-| Where are build scripts? | `scripts/` -- `build.ts`, `build_installer.ps1`, `install-hook.ps1` |
+| Where are build scripts? | `scripts/` -- `build.ts`, `build-installer.ps1`, `install-hook.ps1` |
 | Where is the hook log? | `%LOCALAPPDATA%/Root Communications/Root/profile/default/uprooted-hook.log` |
 | Where is the profiler log? | `%LOCALAPPDATA%/Root/uprooted/profiler.log` |
 | Where is session state? | `hook/SESSION_STATE.md` |

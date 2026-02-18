@@ -115,7 +115,7 @@ dotnet build hook/ -c Release
 pnpm build
 
 # Full installer pipeline (PowerShell)
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 
 # Console TUI installer
 cd installer/src-tauri && cargo build --release

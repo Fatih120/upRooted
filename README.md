@@ -141,7 +141,7 @@ uprooted-private/
     detection.rs              Root installation detection
 
   scripts/                  build and install automation
-    build_installer.ps1       full installer build with embedded artifacts
+    build-installer.ps1       full installer build with embedded artifacts
     install-hook.ps1          hook deployment script
     diagnose.ps1              installation diagnostics
 ```
@@ -159,7 +159,7 @@ pnpm build
 cd installer/src-tauri && cargo build --release
 
 # full installer with all embedded artifacts
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 ## the boot sequence

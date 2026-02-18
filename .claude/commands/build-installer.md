@@ -28,7 +28,7 @@ After the build, report:
 For a full build including all embedded artifacts (TypeScript bundle, C# hook, profiler DLL):
 
 ```
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 This pipeline:

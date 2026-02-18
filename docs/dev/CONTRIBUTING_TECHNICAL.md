@@ -136,7 +136,7 @@ gcc -shared -fPIC -O2 \
   tools/uprooted_profiler_linux.c
 ```
 
-The `scripts/build_installer.ps1` script locates MSVC automatically via
+The `scripts/build-installer.ps1` script locates MSVC automatically via
 `vswhere.exe` on Windows, so you rarely need to compile the profiler manually.
 
 ---
@@ -225,7 +225,7 @@ All tests should pass. Currently covers `ColorUtils` and `GradientBrush` logic.
 ### Full Pipeline (Windows)
 
 ```powershell
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 This builds all layers, stages artifacts, and produces the final `uprooted.exe`
@@ -578,7 +578,7 @@ Windows-specific unless noted.
 
 | Script                   | Language   | Purpose                                           |
 | ------------------------ | ---------- | ------------------------------------------------- |
-| `build_installer.ps1`   | PowerShell | Full pipeline: build all layers, stage artifacts, produce installer binary |
+| `build-installer.ps1`   | PowerShell | Full pipeline: build all layers, stage artifacts, produce installer binary |
 | `build.ts`              | TypeScript | esbuild bundler for TypeScript layer (called by `pnpm build`) |
 
 ### Install / Uninstall Scripts

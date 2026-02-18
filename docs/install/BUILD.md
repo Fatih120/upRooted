@@ -239,7 +239,7 @@ EXPORTS
 
 **Important:** You must run from a Visual Studio Developer Command Prompt
 or call `vcvarsall.bat x64` first to set up the MSVC environment. The
-`build_installer.ps1` script locates `vcvarsall.bat` automatically via
+`build-installer.ps1` script locates `vcvarsall.bat` automatically via
 `vswhere.exe`.
 
 ### Linux (gcc)
@@ -358,13 +358,13 @@ separate frontend build step.
 
 ## Full Pipeline
 
-The `scripts/build_installer.ps1` PowerShell script orchestrates the
+The `scripts/build-installer.ps1` PowerShell script orchestrates the
 entire build from source to distributable installer.
 
 ### Command
 
 ```powershell
-powershell -File scripts/build_installer.ps1
+powershell -File scripts/build-installer.ps1
 ```
 
 ### Step-by-Step
