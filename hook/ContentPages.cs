@@ -170,7 +170,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Uprooted", 20, TextWhite);
+        var pageTitle = r.CreateTextBlock("Uprooted", 15, TextWhite);
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -671,7 +671,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Plugin Settings", 20, TextWhite);
+        var pageTitle = r.CreateTextBlock("Plugin Settings", 15, TextWhite);
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -1377,7 +1377,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName, 26, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName, 16, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -1395,7 +1395,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 22, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 16, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -1415,7 +1415,7 @@ internal static class ContentPages
         }
 
         // Description
-        var descText = r.CreateTextBlock(description, 17, TextMuted);
+        var descText = r.CreateTextBlock(description, 13, TextMuted);
         if (descText != null)
         {
             ApplyFont(r, descText, font);
@@ -1503,7 +1503,7 @@ internal static class ContentPages
         };
         foreach (var item in items)
         {
-            var itemText = r.CreateTextBlock(item, 16, TextDim);
+            var itemText = r.CreateTextBlock(item, 12, TextDim);
             if (itemText != null)
             {
                 ApplyFont(r, itemText, font);
@@ -1590,7 +1590,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Theme Settings", 20, TextWhite);
+        var pageTitle = r.CreateTextBlock("Theme Settings", 15, TextWhite);
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -1641,14 +1641,6 @@ internal static class ContentPages
         var customSection = BuildCustomThemeSection(r, settings, font, themeEngine, onThemeChanged);
         if (customSection != null)
             r.AddChild(page, customSection);
-
-        // === HIGHLIGHT OVERRIDE section ===
-        var pingHeader = CreateSectionHeader(r, "HIGHLIGHT OVERRIDE", font);
-        if (pingHeader != null)
-        {
-            r.SetMargin(pingHeader, 0, 16, 0, 12);
-            r.AddChild(page, pingHeader);
-        }
 
         var pingSection = BuildPingColorSection(r, settings, font, themeEngine, onThemeChanged);
         if (pingSection != null)
@@ -1747,7 +1739,7 @@ internal static class ContentPages
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock("Pick your own accent and background", 16, TextMuted);
+                var descText = r.CreateTextBlock("Pick your own accent and background", 12, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -1814,7 +1806,7 @@ internal static class ContentPages
         };
 
         // Accent row: label + textbox + swatch
-        var accentSwatch = r.CreateBorder(settings.CustomAccent, 4);
+        var accentSwatch = r.CreateBorder(settings.CustomAccent, 6);
         var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch,
             accentHex =>
             {
@@ -1835,7 +1827,7 @@ internal static class ContentPages
         }
 
         // Background row: label + textbox + swatch
-        var bgSwatch = r.CreateBorder(settings.CustomBackground, 4);
+        var bgSwatch = r.CreateBorder(settings.CustomBackground, 6);
         var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch,
             bgHex =>
             {
@@ -1935,7 +1927,8 @@ internal static class ContentPages
 
     /// <summary>
     /// Build the highlight override card for custom ping/reply highlight color.
-    /// Toggle + color input + swatch + reset button. Persists across theme switches.
+    /// Ping Color toggle card. Label+description on left, pill toggle on right.
+    /// Color input row below. Persists across theme switches.
     /// </summary>
     private static object? BuildPingColorSection(AvaloniaReflection r, UprootedSettings settings,
         object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
@@ -1952,73 +1945,59 @@ internal static class ContentPages
         if (outerContent == null) return card;
         r.SetMargin(outerContent, 20, 16, 20, 16);
 
-        // Header row with toggle indicator + label
-        var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
-        if (headerRow != null)
+        // Header: Panel overlay — label+description on left, toggle pill on right
+        var headerPanel = r.CreatePanel();
+        if (headerPanel != null)
         {
-            r.SetVerticalAlignment(headerRow, "Center");
-            r.SetBackground(headerRow, "Transparent"); // Hit-testing
-
-            // Toggle indicator (filled circle when active, empty when inactive)
-            var toggleOuter = r.CreateBorder(null, 4);
-            if (toggleOuter != null)
-            {
-                r.SetWidth(toggleOuter, 20);
-                r.SetHeight(toggleOuter, 20);
-                SetBorderStroke(r, toggleOuter, isActive ? (settings.CustomPingColor ?? AccentGreen) : ColorUtils.Lighten(CardBg, 25), 2.0);
-                r.SetVerticalAlignment(toggleOuter, "Center");
-                if (isActive)
-                {
-                    var innerDot = r.CreateBorder(settings.CustomPingColor ?? AccentGreen, 2);
-                    if (innerDot != null)
-                    {
-                        r.SetWidth(innerDot, 10);
-                        r.SetHeight(innerDot, 10);
-                        r.SetMargin(innerDot, 3, 3, 3, 3);
-                    }
-                    r.SetBorderChild(toggleOuter, innerDot);
-                }
-                r.AddChild(headerRow, toggleOuter);
-            }
-
+            // Left side: label + description
             var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
             if (textStack != null)
             {
-                var nameText = r.CreateTextBlock("Custom ping color", 14, TextWhite);
+                r.SetHorizontalAlignment(textStack, "Left");
+                r.SetVerticalAlignment(textStack, "Center");
+                r.SetMargin(textStack, 0, 0, 60, 0); // right margin avoids toggle overlap
+
+                var nameText = r.CreateTextBlock("Ping Color", 14, TextWhite);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 16, TextMuted);
+                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
                 ApplyFont(r, descText, font);
                 r.SetTextWrapping(descText, "Wrap");
                 r.AddChild(textStack, descText);
 
-                r.AddChild(headerRow, textStack);
+                r.AddChild(headerPanel, textStack);
             }
 
-            // Click handler: toggle off when active (clears override)
-            r.SetCursorHand(headerRow);
-            r.SubscribeEvent(headerRow, "PointerPressed", () =>
+            // Right side: pill toggle
+            var togglePill = BuildToggleSwitch(r, isActive, font, enabled =>
             {
                 try
                 {
-                    if (!string.IsNullOrEmpty(settings.CustomPingColor))
+                    if (enabled)
                     {
-                        // Disable: clear custom ping color
+                        // Use saved color (or fallback) when toggling on
+                        var color = (!string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor))
+                            ? settings.CustomPingColor : "#7B68EE";
+                        settings.CustomPingColor = color;
+                        themeEngine?.SetCustomPingColor(color);
+                    }
+                    else
+                    {
                         settings.CustomPingColor = "";
                         themeEngine?.ClearCustomPingColor();
-                        try { settings.Save(); }
-                        catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+                    }
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
 
-                        if (onThemeChanged != null)
+                    if (onThemeChanged != null)
+                    {
+                        r.RunOnUIThread(() =>
                         {
-                            r.RunOnUIThread(() =>
-                            {
-                                try { onThemeChanged.Invoke(); }
-                                catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
-                            });
-                        }
+                            try { onThemeChanged.Invoke(); }
+                            catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                        });
                     }
                 }
                 catch (Exception ex)
@@ -2026,12 +2005,18 @@ internal static class ContentPages
                     Logger.Log("Theme", "Ping color toggle error: " + ex.Message);
                 }
             });
+            if (togglePill != null)
+            {
+                r.SetHorizontalAlignment(togglePill, "Right");
+                r.SetVerticalAlignment(togglePill, "Center");
+                r.AddChild(headerPanel, togglePill);
+            }
 
-            r.AddChild(outerContent, headerRow);
+            r.AddChild(outerContent, headerPanel);
         }
 
-        // Color input row (only interactable when active or to activate)
-        var initialColor = isActive ? (settings.CustomPingColor ?? "#FF0000") : "#FF0000";
+        // Color input row
+        var initialColor = isActive ? (settings.CustomPingColor ?? "#7B68EE") : "#7B68EE";
 
         // Track last-known value to skip no-op TextChanged events
         string[] lastPingColor = new[] { initialColor };
@@ -2048,7 +2033,7 @@ internal static class ContentPages
             }, null, 1000, System.Threading.Timeout.Infinite);
         };
 
-        var pingSwatch = r.CreateBorder(initialColor, 4);
+        var pingSwatch = r.CreateBorder(initialColor, 6);
         r.SetTag(pingSwatch, "uprooted-no-recolor");
         var colorRow = BuildColorInputRow(r, "Color", initialColor, font, pingSwatch,
             hex =>
@@ -2060,7 +2045,7 @@ internal static class ContentPages
                 themeEngine?.SetCustomPingColor(hex);
                 debounceSave();
 
-                // If this is the first color entry (was inactive), rebuild to show active state
+                // If this is the first color entry (was inactive), rebuild to activate
                 if (!isActive && onThemeChanged != null)
                 {
                     r.RunOnUIThread(() =>
@@ -2072,64 +2057,8 @@ internal static class ContentPages
             });
         if (colorRow != null)
         {
-            r.SetMargin(colorRow, 32, 12, 0, 0);
+            r.SetMargin(colorRow, 0, 12, 0, 0);
             r.AddChild(outerContent, colorRow);
-        }
-
-        // Reset button (only shown when active)
-        if (isActive)
-        {
-            var resetRow = r.CreateStackPanel(vertical: false, spacing: 0);
-            if (resetRow != null)
-            {
-                r.SetMargin(resetRow, 32, 12, 0, 0);
-
-                var resetBtn = r.CreateBorder(ColorUtils.Lighten(CardBg, 10), 8);
-                if (resetBtn != null)
-                {
-                    r.SetCursorHand(resetBtn);
-                    var resetText = r.CreateTextBlock("Reset", 13, TextMuted);
-                    r.SetFontWeightNumeric(resetText, 500);
-                    ApplyFont(r, resetText, font);
-                    r.SetPadding(resetBtn, 16, 6, 16, 6);
-                    r.SetBorderChild(resetBtn, resetText);
-
-                    r.SubscribeEvent(resetBtn, "PointerPressed", () =>
-                    {
-                        try
-                        {
-                            settings.CustomPingColor = "";
-                            themeEngine?.ClearCustomPingColor();
-                            try { settings.Save(); }
-                            catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
-
-                            if (onThemeChanged != null)
-                            {
-                                r.RunOnUIThread(() =>
-                                {
-                                    try { onThemeChanged.Invoke(); }
-                                    catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
-                                });
-                            }
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Log("Theme", "Ping color reset error: " + ex.Message);
-                        }
-                    });
-
-                    // Hover effects
-                    var btnBg = ColorUtils.Lighten(CardBg, 10);
-                    r.SubscribeEvent(resetBtn, "PointerEntered", () =>
-                        r.SetBackground(resetBtn, ColorUtils.Lighten(btnBg, 10)));
-                    r.SubscribeEvent(resetBtn, "PointerExited", () =>
-                        r.SetBackground(resetBtn, btnBg));
-
-                    r.AddChild(resetRow, resetBtn);
-                }
-
-                r.AddChild(outerContent, resetRow);
-            }
         }
 
         r.SetBorderChild(card, outerContent);
@@ -2148,7 +2077,7 @@ internal static class ContentPages
         r.SetVerticalAlignment(row, "Center");
 
         // Label
-        var labelText = r.CreateTextBlock(label, 19, TextMuted);
+        var labelText = r.CreateTextBlock(label, 13, TextMuted);
         r.SetFontWeightNumeric(labelText, 450);
         ApplyFont(r, labelText, font);
         r.SetWidth(labelText, 110);
@@ -2159,7 +2088,7 @@ internal static class ContentPages
         if (textBox != null)
         {
             r.SetWidth(textBox, 120);
-            textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 17.0);
+            textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
             r.SetBackground(textBox, ColorUtils.Lighten(CardBg, 5));
             r.SetForeground(textBox, TextWhite);
             ApplyFont(r, textBox, font);
@@ -2478,7 +2407,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName + " Settings", 26, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName + " Settings", 16, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -2496,7 +2425,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 22, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 16, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -2604,7 +2533,7 @@ internal static class ContentPages
             if (saveBtn != null)
             {
                 r.SetCursorHand(saveBtn);
-                var saveBtnText = r.CreateTextBlock("Save API Key", 17, TextWhite);
+                var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -2731,12 +2660,12 @@ internal static class ContentPages
             if (textStack != null)
             {
                 r.SetVerticalAlignment(textStack, "Center");
-                var nameText = r.CreateTextBlock(label, 19, TextWhite);
+                var nameText = r.CreateTextBlock(label, 13, TextWhite);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(desc, 16, TextMuted);
+                var descText = r.CreateTextBlock(desc, 12, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -2881,7 +2810,7 @@ internal static class ContentPages
             r.SetMargin(maxRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(maxRow, "Center");
 
-            var maxLabel = r.CreateTextBlock("Max logged messages:", 19, TextMuted);
+            var maxLabel = r.CreateTextBlock("Max logged messages:", 13, TextMuted);
             r.SetFontWeightNumeric(maxLabel, 450);
             ApplyFont(r, maxLabel, font);
             r.SetVerticalAlignment(maxLabel, "Center");
@@ -2969,12 +2898,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 60, 0);
 
-            var nameText = r.CreateTextBlock(label, 19, TextWhite);
+            var nameText = r.CreateTextBlock(label, 13, TextWhite);
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock(description, 16, TextMuted);
+            var descText = r.CreateTextBlock(description, 12, TextMuted);
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3040,12 +2969,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 140, 0);
 
-            var nameText = r.CreateTextBlock("Update channel", 19, TextWhite);
+            var nameText = r.CreateTextBlock("Update channel", 13, TextWhite);
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 16, TextMuted);
+            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 12, TextMuted);
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3144,7 +3073,7 @@ internal static class ContentPages
         r.AddChild(promptRow, passBox);
 
         // Submit button
-        var submitText = r.CreateTextBlock("Go", 17, TextWhite);
+        var submitText = r.CreateTextBlock("Go", 13, TextWhite);
         r.SetFontWeightNumeric(submitText, 500);
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");
@@ -3160,7 +3089,7 @@ internal static class ContentPages
         }
 
         // Result text (for success/error feedback)
-        var resultText = r.CreateTextBlock("", 16, "#E04040");
+        var resultText = r.CreateTextBlock("", 12, "#E04040");
         ApplyFont(r, resultText, font);
         r.SetVerticalAlignment(resultText, "Center");
         r.AddChild(promptRow, resultText);
@@ -3294,7 +3223,7 @@ internal static class ContentPages
     /// </summary>
     private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font)
     {
-        var header = r.CreateTextBlock(text, 18, TextDim);
+        var header = r.CreateTextBlock(text, 11, TextDim);
         r.SetFontWeightNumeric(header, 500);
         ApplyFont(r, header, font);
         return header;

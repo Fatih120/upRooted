@@ -235,6 +235,8 @@ if (Test-Path $pkgJsonPath) {
 $settings["Enabled"] = "true"
 if (-not $settings.ContainsKey("Version")) { $settings["Version"] = $version }
 if (-not $settings.ContainsKey("ActiveTheme")) { $settings["ActiveTheme"] = "default-dark" }
+# Mark migration as done so the hook doesn't enable all legacy plugins on first launch
+if (-not $settings.ContainsKey("Migrated.PluginDefaults")) { $settings["Migrated.PluginDefaults"] = "true" }
 
 $content = ($settings.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join "`n"
 Set-Content $SettingsFile $content -NoNewline
