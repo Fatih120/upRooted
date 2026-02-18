@@ -1,6 +1,6 @@
 # New Session Quick-Start
 
-> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md)
+> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md) | [Tasks](TASKS.md)
 
 ---
 
@@ -49,7 +49,7 @@ Two independent injection layers into one app:
 | `UprootedSettings.cs` | 91 | INI-based settings (System.Text.Json workaround) |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `LinkEmbedInjector.cs` | 312 | Link embed JS injection (needs Avalonia-native redesign) |
+| `LinkEmbedEngine.cs` | 1260 | Avalonia-native link embed engine (OG fetch + visual tree injection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 28 | Thread-safe file logging, swallows own exceptions |
@@ -111,11 +111,12 @@ Two independent injection layers into one app:
 - Phase 4.5 (BrowserDiscovery) and Phase 5 (DotNetBrowser features) implemented
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
 - Event-driven DotNetBrowser assembly detection (ManualResetEventSlim, 90s timeout)
-- NsfwFilter and LinkEmbedInjector: JS injection works technically but targets wrong surface (chat is not in browser)
+- LinkEmbedEngine: Avalonia-native link embeds live at Phase 4.5b (YouTube working, generic sites need improvement)
 - C# settings persistence fully working via INI format (UprootedSettings)
 
 **Known issues:**
-- Link embeds + NSFW filter need Avalonia-native redesign (chat is not in DotNetBrowser)
+- Link embeds: YouTube works; generic sites (Twitter, images) fail due to OG fetch limitations (bot UA, no image-only path)
+- NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
 

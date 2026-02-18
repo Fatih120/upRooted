@@ -80,16 +80,16 @@ Key details:
 |------|---------|
 | `hook/DotNetBrowserReflection.cs` | Fixed assembly gate (removed AvaloniaUi), added `FindBrowserDirect()` with 5 strategies, `GetAllFrames()`, profile→browser navigation via private ConcurrentDictionary, broadened ExecJS search, enhanced diagnostics |
 | `hook/StartupHook.cs` | Event-based assembly detection (ManualResetEventSlim + AssemblyLoad), 90s timeout |
-| `hook/LinkEmbedInjector.cs` | FindBrowserDirect fallback, iframe bridge wrapper approach, diagnostic readback via document.title |
+| `hook/LinkEmbedEngine.cs` | Avalonia-native link embed engine (1260 lines): visual tree scan, OG metadata fetch via reflection-based HttpClient, native embed card injection. Replaces dead-end LinkEmbedInjector.cs |
 | `hook/NsfwFilter.cs` | FindBrowserDirect fallback in TryInject() |
 
 ## Next Steps
 
-Link embeds need a fundamentally different approach:
-1. **Avalonia-native embeds** — Watch for URL-containing TextBlock/TextPresenter in chat visual tree
-2. **Fetch OG metadata from C#** — Use HttpClient or DotNetBrowser for fetching (it has --disable-web-security)
-3. **Create native Avalonia controls** — Border + StackPanel + TextBlocks + Image as embed cards
-4. **Insert below messages** — Find parent container and add embed card after the message element
+Link embed engine is live (Phase 4.5b) but needs improvement for non-YouTube sites:
+1. **Better User-Agent** — Twitter/X and others reject `Uprooted/0.2` bot UA; needs browser-like UA string
+2. **Direct image URL detection** — Check Content-Type before parsing HTML; render image-only embeds for `.jpg`, `.png`, `.gif` URLs
+3. **Fallback oEmbed providers** — Twitter, Reddit, etc. have oEmbed endpoints like YouTube does
+4. **JS-rendered OG fallback** — Some sites serve no OG tags in static HTML; may need DotNetBrowser fetch as fallback
 
 ## Deployment
 

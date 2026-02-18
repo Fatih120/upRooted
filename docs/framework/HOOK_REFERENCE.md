@@ -57,7 +57,7 @@ The hook layer consists of 18 source files in the `hook/` directory:
 | `HtmlPatchVerifier.cs` | 344 | Self-healing HTML patch system with FileSystemWatcher |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `LinkEmbedInjector.cs` | 312 | Link embed JS injection (needs Avalonia-native redesign) |
+| `LinkEmbedEngine.cs` | 1260 | Avalonia-native link embed engine (OG fetch, visual tree injection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `UprootedSettings.cs` | 91 | INI-based settings persistence |
 | `Logger.cs` | 28 | Thread-safe file logging |
@@ -312,12 +312,11 @@ On detection:
 2. Discovers `IBrowser` via ViewModel chain walking: `MainWindow.DataContext` →
    `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`
    (ConcurrentDictionary).
-3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines).
-4. Initializes `LinkEmbedInjector.TryInject()` (`hook/LinkEmbedInjector.cs`, 312 lines).
+3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines) — still JS injection, needs Avalonia-native redesign.
 
-**Known limitation:** Chat is Avalonia-native, so JS injection into DotNetBrowser does
-not modify chat messages. Both `NsfwFilter` and `LinkEmbedInjector` need Avalonia-native
-redesign to target chat content.
+**Phase 4.5b** (separate from Phase 5): Starts `LinkEmbedEngine` (`hook/LinkEmbedEngine.cs`, 1260 lines) — the Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes containing URLs, fetches OG metadata via reflection-based HttpClient, and injects native Avalonia embed cards. YouTube fully working; generic sites need improvement (bot-hostile UAs, missing image-only path).
+
+**Known limitation:** NSFW filter still uses DotNetBrowser JS injection and cannot affect chat (chat is Avalonia-native). Needs full redesign.
 
 ---
 
@@ -1713,7 +1712,7 @@ Returns:
 |--------|-----------|-------------|
 | `Entry.cs` | `StartupHook`, `Logger` | Calls `Initialize()` |
 | `NativeEntry.cs` | `StartupHook`, `Logger` | Calls `Initialize()` |
-| `StartupHook.cs` | `HtmlPatchVerifier`, `AvaloniaReflection`, `VisualTreeWalker`, `SidebarInjector`, `ThemeEngine`, `DotNetBrowserReflection`, `BrowserDiscovery`, `NsfwFilter`, `LinkEmbedInjector`, `UprootedSettings`, `Logger` | Orchestrates all phases (0-5) |
+| `StartupHook.cs` | `HtmlPatchVerifier`, `AvaloniaReflection`, `VisualTreeWalker`, `SidebarInjector`, `ThemeEngine`, `DotNetBrowserReflection`, `BrowserDiscovery`, `NsfwFilter`, `LinkEmbedEngine`, `UprootedSettings`, `Logger` | Orchestrates all phases (0-5) |
 | `AvaloniaReflection.cs` | `Logger` | Logs resolution results |
 | `VisualTreeWalker.cs` | `AvaloniaReflection`, `Logger` | Uses reflection for tree traversal |
 | `SidebarInjector.cs` | `AvaloniaReflection`, `VisualTreeWalker`, `ContentPages`, `ThemeEngine`, `UprootedSettings`, `Logger` | Orchestrates injection + content |
@@ -1724,7 +1723,7 @@ Returns:
 | `HtmlPatchVerifier.cs` | `PlatformPaths`, `UprootedSettings`, `Logger` | HTML patch + watch |
 | `DotNetBrowserReflection.cs` | `AvaloniaReflection`, `Logger` | DotNetBrowser type resolution + IBrowser discovery |
 | `BrowserDiscovery.cs` | `AvaloniaReflection`, `Logger` | Diagnostic visual tree + assembly dump |
-| `LinkEmbedInjector.cs` | `DotNetBrowserReflection`, `Logger` | JS injection into DotNetBrowser |
+| `LinkEmbedEngine.cs` | `AvaloniaReflection`, `VisualTreeWalker`, `ContentPages`, `ColorUtils`, `UprootedSettings`, `Logger` | Avalonia-native link embed engine |
 | `NsfwFilter.cs` | `DotNetBrowserReflection`, `Logger` | JS injection into DotNetBrowser |
 | `UprootedSettings.cs` | `PlatformPaths`, `Logger` | INI persistence |
 | `Logger.cs` | `PlatformPaths` | File path for log |

@@ -19,6 +19,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | CLR Profiler | [`docs/framework/CLR_PROFILER.md`](framework/CLR_PROFILER.md) | Native C profiler DLL (IL injection, environment variables, attach flow) | Framework contributors |
 | Installer Reference | [`docs/framework/INSTALLER.md`](framework/INSTALLER.md) | Tauri/Rust installer (detection, patching, file deployment) | Framework contributors |
 | Build Guide | [`docs/install/BUILD.md`](install/BUILD.md) | Build pipeline for all layers (C# hook, TypeScript bundle, Rust installer) | Contributors |
+| Tasks | [`TASKS.md`](../TASKS.md) | Active task board — pick up work, track progress | Contributors |
 | Roadmap | [`docs/ROADMAP.md`](ROADMAP.md) | Known issues, planned features, and future direction | Everyone |
 | Changelog (public) | [`CHANGELOG_PUBLIC.md`](../CHANGELOG_PUBLIC.md) | GitHub release notes mirror (v0.1.6 — present) | Everyone |
 | Changelog (internal) | [`CHANGELOG.md`](../CHANGELOG.md) | Detailed Keep a Changelog format | Contributors |

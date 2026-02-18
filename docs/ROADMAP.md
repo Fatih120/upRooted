@@ -29,10 +29,11 @@ The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
-**Chat is Avalonia-native -- link embeds and NSFW filter need redesign**
-Root's chat UI (messages, channels, community views) is rendered entirely in native Avalonia controls, NOT in DotNetBrowser. Investigation on 2026-02-17 confirmed: 1647+ Avalonia visual tree nodes, 0 browser controls, DotNetBrowser's shell page iframe permanently at `about:blank`. Link embeds and NSFW filter currently inject JavaScript into DotNetBrowser, which has no effect on chat content. These features require Avalonia-native visual tree approaches (watching for URL-containing TextBlocks, creating native embed controls) instead.
-- Files: `hook/LinkEmbedInjector.cs`, `hook/NsfwFilter.cs`, `hook/DotNetBrowserReflection.cs`
-- Approach: Watch visual tree for URL TextBlocks, fetch OG metadata via C#, create native Avalonia embed controls
+**Link embeds incomplete for non-YouTube sites**
+The Avalonia-native link embed engine (`LinkEmbedEngine.cs`, Phase 4.5b) works for YouTube (oEmbed + predictable thumbnails) but fails on many other sites: Twitter/X returns no OG tags to bot-like User-Agents, direct image URLs are rejected (no image-only embed path), and some sites require JS rendering for OG metadata. NSFW filter still uses the old DotNetBrowser JS injection approach and needs Avalonia-native redesign.
+- Files: `hook/LinkEmbedEngine.cs`, `hook/NsfwFilter.cs`
+- Link embed improvements needed: better User-Agent, direct image URL detection, fallback oEmbed providers
+- NSFW filter: needs full Avalonia-native redesign (visual tree image interception)
 
 **Settings page text-based detection fragile**
 The sidebar injector locates the settings page by searching the visual tree for the exact text "APP SETTINGS". If Root renames this label, native UI injection silently fails with no error visible to the user.

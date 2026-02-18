@@ -121,8 +121,8 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
        |   (ManualResetEventSlim, 90s timeout)
        |   +-- DotNetBrowserReflection (type cache)
        |   +-- IBrowser discovery via ViewModel chain
-       |   +-- NsfwFilter JS injection
-       |   +-- LinkEmbedInjector JS injection
+       |   +-- NsfwFilter JS injection (needs redesign)
+       +-- Phase 4.5b: LinkEmbedEngine (Avalonia-native)
        |
   UI thread dispatch via RunOnUIThread()
 ```
@@ -165,7 +165,7 @@ uprooted-private/
 |   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
 |   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
 |   |-- BrowserDiscovery.cs    (498)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
-|   |-- LinkEmbedInjector.cs   (312)  # Link embed JS injection into DotNetBrowser (needs redesign).
+|   |-- LinkEmbedEngine.cs    (1260)  # Avalonia-native link embed engine (OG fetch + visual tree injection).
 |   |-- NsfwFilter.cs          (305)  # NSFW filter JS injection (needs redesign for Avalonia-native chat).
 |   |-- Logger.cs                (28) # Thread-safe file logging to uprooted-hook.log.
 |   |-- UprootedHook.csproj          # .NET 10.0 project file, nullable enabled.
@@ -310,8 +310,8 @@ This section describes the key classes and modules that form the framework's bac
 | `PlatformPaths` | `hook/PlatformPaths.cs` | Cross-platform path resolution. Returns profile directory and Uprooted install directory for Windows and Linux. |
 | `DotNetBrowserReflection` | `hook/DotNetBrowserReflection.cs` | Reflection cache for DotNetBrowser types (IBrowser, IFrame, IEngine). Discovers IBrowser via ViewModel chain walking. Provides `ExecuteJavaScript` wrapper. |
 | `BrowserDiscovery` | `hook/BrowserDiscovery.cs` | Phase 4.5 diagnostic scanner. Dumps full visual tree structure and loaded assemblies after 10s delay to aid in architecture discovery. |
-| `LinkEmbedInjector` | `hook/LinkEmbedInjector.cs` | Injects link embed JavaScript into DotNetBrowser. Currently non-functional for chat (chat is Avalonia-native, not browser-rendered). Needs Avalonia-native redesign. |
-| `NsfwFilter` | `hook/NsfwFilter.cs` | Injects NSFW filter JavaScript into DotNetBrowser. Currently non-functional for chat (same reason as LinkEmbedInjector). Needs Avalonia-native redesign. |
+| `LinkEmbedEngine` | `hook/LinkEmbedEngine.cs` | Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes with URLs, fetches OG metadata via reflection-based HttpClient, builds native embed cards. YouTube fully working; generic sites need improvement (bot-hostile UAs, no image-only path). |
+| `NsfwFilter` | `hook/NsfwFilter.cs` | Injects NSFW filter JavaScript into DotNetBrowser. Currently non-functional for chat (chat is Avalonia-native, not browser-rendered). Needs Avalonia-native redesign. |
 | `Logger` | `hook/Logger.cs` | Thread-safe file logging. Writes to `uprooted-hook.log` in the profile directory with timestamps and `[Category]` prefixes. Swallows its own exceptions to avoid crashing Root. |
 
 ### TypeScript Browser Layer
@@ -440,16 +440,25 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 - **Action:** Performs a full DFS visual tree dump of the main window and scans all loaded assemblies. Results are logged for diagnostic purposes.
 - **Failure mode:** Non-fatal. Purely informational.
 
+### Phase 4.5b: Native Link Embeds
+
+**Purpose:** Start the Avalonia-native link embed engine after chat has populated.
+
+- **File:** `hook/StartupHook.cs`, `hook/LinkEmbedEngine.cs`
+- **Thread:** Background (15s delay for chat to populate, then 500ms poll timer)
+- **Mechanism:** `LinkEmbedEngine` scans the visual tree for `CTextBlock` / `RootMarkdownTextBlock` nodes containing URLs, fetches OG metadata via reflection-based HttpClient, and injects native Avalonia embed cards below messages.
+- **Status:** YouTube fully working (oEmbed + predictable thumbnails). Generic sites need improvement: bot-hostile User-Agents cause Twitter/X failures, direct image URLs are rejected, some sites need JS rendering for OG tags.
+
 ### Phase 5: DotNetBrowser Feature Loading
 
-**Purpose:** Detect DotNetBrowser assemblies and initialize browser-dependent features (NSFW filter, link embeds).
+**Purpose:** Detect DotNetBrowser assemblies and initialize browser-dependent features (NSFW filter).
 
-- **File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`, `hook/LinkEmbedInjector.cs`
+- **File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`
 - **Thread:** Background
 - **Detection:** Event-driven via `AppDomain.CurrentDomain.AssemblyLoad` event + `ManualResetEventSlim`. Waits for an assembly matching `DotNetBrowser` or `DotNetBrowser.Core` (NOT `DotNetBrowser.AvaloniaUi`, which Root does not ship).
 - **Timeout:** 90 seconds
-- **On success:** Resolves DotNetBrowser types via `DotNetBrowserReflection`, discovers `IBrowser` via ViewModel chain walking (`MainWindow.DataContext` → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`), then initializes `NsfwFilter` and `LinkEmbedInjector`.
-- **Known limitation:** Chat is Avalonia-native, so JS injection into DotNetBrowser does not affect chat messages. Link embeds and NSFW filter need Avalonia-native redesign.
+- **On success:** Resolves DotNetBrowser types via `DotNetBrowserReflection`, discovers `IBrowser` via ViewModel chain walking (`MainWindow.DataContext` → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`), then initializes `NsfwFilter`.
+- **Known limitation:** NSFW filter uses JS injection into DotNetBrowser which cannot affect chat (chat is Avalonia-native). Needs Avalonia-native redesign.
 
 ### TypeScript Startup (Independent)
 
@@ -727,10 +736,10 @@ The CLR profiler environment variables are set as user-scoped environment variab
 
 Root's chat UI, channel lists, and community views are rendered entirely in native Avalonia controls (1647+ visual tree nodes, 0 browser controls). DotNetBrowser is auxiliary -- used for WebRTC voice/video, OAuth flows, and sub-app iframes (polls, task tracker, etc.). The shell page at `rootapp://app/__index.html` contains an `<iframe id="app-iframe">` that permanently stays at `about:blank`.
 
-This means `LinkEmbedInjector` and `NsfwFilter` (which inject JavaScript into DotNetBrowser) cannot modify chat messages. These features need architectural redesign to use Avalonia-native visual tree approaches instead.
+Link embeds have been redesigned: `LinkEmbedEngine.cs` (Phase 4.5b) scans the Avalonia visual tree for URL-containing CTextBlocks and injects native embed cards. YouTube works; generic sites need improvement. `NsfwFilter` still uses DotNetBrowser JS injection and cannot modify chat — it needs Avalonia-native redesign.
 
-- **Files:** `hook/LinkEmbedInjector.cs`, `hook/NsfwFilter.cs`
-- **Approach needed:** Watch for URL-containing TextBlocks in the chat visual tree, fetch OG metadata via C#, create native Avalonia embed controls
+- **Link embeds (done):** `hook/LinkEmbedEngine.cs` — Avalonia-native, visual tree scan + OG fetch + native card injection
+- **NSFW filter (needs redesign):** `hook/NsfwFilter.cs` — still JS injection, must move to visual tree image interception
 
 ### `after` Patch Handler Not Implemented
 

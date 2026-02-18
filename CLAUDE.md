@@ -12,9 +12,9 @@ For comprehensive documentation, start with [docs/INDEX.md](docs/INDEX.md).
 
 Read `docs/INDEX.md` for navigation, `docs/framework/ARCHITECTURE.md` for architecture reference.
 
-### Quick Context for AI Sessions
+### First Thing Every Session: Run `/hi`
 
-For a context-efficient onboarding reference, see [NEW-SESSION.md](NEW-SESSION.md). It provides a structured reference card covering architecture, critical rules, file map, and current state in ~230 lines.
+**At the start of every new session, run the `/hi` command.** It reads `NEW-SESSION.md`, `docs/INDEX.md`, and `.claude/UPROOT_CLAUDE_DEV.md` to orient you in the codebase -- architecture, critical rules, file map, current state, and available dev tools. Do this before any other work.
 
 ## Collaboration
 
@@ -55,7 +55,7 @@ uprooted-private/
 │   ├── UprootedSettings.cs            # INI-based settings (no System.Text.Json)
 │   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
 │   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
-│   ├── LinkEmbedInjector.cs           # Link embed JS injection (needs Avalonia-native redesign)
+│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG fetch + visual tree injection)
 │   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging
@@ -116,6 +116,7 @@ uprooted-private/
 │   └── archives/                      # Miscellaneous notes, one-off fixes, historical context
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
+├── TASKS.md                           # Active task board (read by /hi each session)
 ├── CHANGELOG.md                       # Internal changelog (Keep a Changelog format)
 ├── CHANGELOG_PUBLIC.md                # Public changelog (mirrors GitHub release notes)
 ├── CONTRIBUTING.md                    # Contribution guidelines

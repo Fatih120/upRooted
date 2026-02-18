@@ -209,7 +209,7 @@ Extensive investigation on 2026-02-17 (Root v0.9.92) revealed that **Root's chat
 **Implications for Uprooted:**
 
 - JavaScript injection into DotNetBrowser **cannot** modify chat messages, channel lists, or community views
-- Features like link embeds and NSFW filtering that target chat content must use **Avalonia-native approaches**: watching the visual tree for URL-containing TextBlocks, creating native embed controls, etc.
+- Link embeds have been redesigned as Avalonia-native (`LinkEmbedEngine.cs`): scans visual tree for URL-containing CTextBlocks, fetches OG metadata, injects native embed cards. NSFW filtering still needs Avalonia-native redesign.
 - TypeScript plugins in the WebRTC context can still intercept bridge calls and modify sub-app behavior
 - The DotNetBrowser shell page's about:blank iframe is a dead end — injecting JS there has no visible effect on the chat UI
 

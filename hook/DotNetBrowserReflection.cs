@@ -5,7 +5,7 @@ namespace Uprooted;
 /// <summary>
 /// Cached reflection handles for DotNetBrowser types, properties, and methods.
 /// Follows AvaloniaReflection patterns: assembly scanning, type caching, nullable returns.
-/// Used by NsfwFilter and LinkEmbedInjector to execute JavaScript in browser frames.
+/// Used by NsfwFilter to execute JavaScript in browser frames.
 ///
 /// Supports deferred resolution: if ExecuteJavaScript method can't be found at type-scan time
 /// (e.g. because it lives on a concrete class rather than the interface), it will be resolved

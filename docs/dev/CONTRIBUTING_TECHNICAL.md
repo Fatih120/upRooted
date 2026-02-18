@@ -572,6 +572,8 @@ Run through this before submitting a pull request.
 All scripts live in the `scripts/` directory. PowerShell scripts (`.ps1`) are
 Windows-specific unless noted.
 
+**Encoding rule:** PowerShell 5.1 (the default on Windows) interprets `.ps1` files as Windows-1252 unless they have a UTF-8 BOM. If a script contains non-ASCII characters (em-dashes, accented letters, etc.), PowerShell will misparse them as broken strings and fail with cryptic `TerminatorExpectedAtEndOfString` errors. Either keep scripts ASCII-only or add a UTF-8 BOM (`EF BB BF`).
+
 ### Build Scripts
 
 | Script                   | Language   | Purpose                                           |
@@ -583,8 +585,9 @@ Windows-specific unless noted.
 
 | Script                   | Language   | Purpose                                           |
 | ------------------------ | ---------- | ------------------------------------------------- |
-| `install-hook.ps1`      | PowerShell | Deploy hook DLL, profiler, and launcher to Root; patch shortcuts and protocol handlers |
+| `install-hook.ps1`      | PowerShell | First-time setup: deploy artifacts, patch shortcuts, set env vars, patch protocol handler |
 | `uninstall-hook.ps1`    | PowerShell | Reverse everything `install-hook.ps1` did; restore shortcuts and registry |
+| `deploy-hook.ps1`       | PowerShell | Hot-deploy DLL only: stop Root + chromium, copy artifacts, relaunch. Day-to-day dev loop on Windows |
 | `install.ts`            | TypeScript | Lightweight HTML-only patching (no native hook); called by `pnpm install-root` |
 | `uninstall.ts`          | TypeScript | Reverse HTML patches; called by `pnpm uninstall-root` |
 

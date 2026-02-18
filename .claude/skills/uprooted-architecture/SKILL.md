@@ -32,7 +32,7 @@ Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds nati
 - `VisualTreeWalker.cs` — 554-line structural discovery (fragile, text-anchor based)
 - `HtmlPatchVerifier.cs` — Phase 0 self-healing patches
 - `BrowserDiscovery.cs` — Phase 4.5 diagnostic scanner
-- `LinkEmbedEngine.cs` — Link embed rendering (needs Avalonia-native redesign)
+- `LinkEmbedEngine.cs` — Avalonia-native link embed engine (Phase 4.5b, YouTube working, generic sites need fixes)
 - `NsfwFilter.cs` — Content filter JS injection (needs Avalonia-native redesign)
 
 ### Layer 2: TypeScript Browser Injection (`src/`)
