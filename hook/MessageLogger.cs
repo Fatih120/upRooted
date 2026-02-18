@@ -192,7 +192,7 @@ internal class MessageLogger
             if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
 
             var typeName = node.GetType().Name;
-            if (typeName == "ItemsControl" || typeName == "ListBox" || typeName == "ItemsRepeater")
+            if (typeName.Contains("ItemsControl") || typeName == "ListBox" || typeName == "ItemsRepeater")
                 itemsControls.Add(node);
         }
 
@@ -305,10 +305,23 @@ internal class MessageLogger
             }
         }
 
-        // Mark as candidate chat collection if it has items and supports change notification
-        if (itemCount >= 1 && implementsINCC && _chatItemsControl == null)
+        // Mark as candidate chat collection if it's the actual message list.
+        // Identify by control type name (RootMessageItemsControl) or by items being MessageViewModels.
+        bool isChatControl = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
+        if (!isChatControl && itemCount > 0)
         {
-            Logger.Log(Tag, "  *** CANDIDATE chat messages collection ***");
+            try
+            {
+                var enumerator2 = (itemsSource as System.Collections.IEnumerable)?.GetEnumerator();
+                if (enumerator2 != null && enumerator2.MoveNext() && enumerator2.Current != null)
+                    isChatControl = enumerator2.Current.GetType().Name.Contains("MessageViewModel");
+            }
+            catch { }
+        }
+
+        if (isChatControl && implementsINCC && _chatItemsControl == null)
+        {
+            Logger.Log(Tag, $"  *** Chat messages collection found: {typeName}, {itemCount} items ***");
             _chatItemsControl = itemsControl;
             _currentItemsSource = itemsSource;
         }
@@ -540,7 +553,8 @@ internal class MessageLogger
         foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
         {
             var typeName = node.GetType().Name;
-            if (typeName != "ItemsControl" && typeName != "ListBox" && typeName != "ItemsRepeater")
+            // Match RootMessageItemsControl, ItemsControl, ListBox, ItemsRepeater
+            if (!typeName.Contains("ItemsControl") && typeName != "ListBox" && typeName != "ItemsRepeater")
                 continue;
 
             object? source = null;
