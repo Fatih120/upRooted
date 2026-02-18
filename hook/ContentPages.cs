@@ -2382,14 +2382,56 @@ internal static class ContentPages
                 r.SetBorderChild(saveBtn, saveBtnText);
 
                 var apiTextBoxRef = apiTextBox;
+                var saveBtnRef = saveBtn;
+                var saveBtnTextRef = saveBtnText;
                 r.SubscribeEvent(saveBtn, "PointerPressed", () =>
                 {
                     var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
+
+                    // Always save the key (clearing is valid)
                     settings.NsfwApiKey = key;
                     try { settings.Save(); }
                     catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
                     NsfwFilterInstance?.UpdateConfig();
-                    Logger.Log("ContentFilter", $"API key saved (length={key.Length})");
+
+                    if (string.IsNullOrEmpty(key))
+                    {
+                        r.TextBlockType?.GetProperty("Text")?.SetValue(saveBtnTextRef, "Key cleared");
+                        r.SetBackground(saveBtnRef, "#B08030");
+                        Logger.Log("ContentFilter", "API key cleared");
+                        ResetButtonAfterDelay(r, saveBtnRef, saveBtnTextRef, "Save API Key", AccentGreen);
+                        return;
+                    }
+
+                    // Show validating state and check on background thread
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(saveBtnTextRef, "Validating...");
+                    r.SetBackground(saveBtnRef, "#606060");
+                    Logger.Log("ContentFilter", $"API key saved (length={key.Length}), validating...");
+
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        var valid = ValidateVisionApiKey(key);
+                        r.RunOnUIThread(() =>
+                        {
+                            if (valid == true)
+                            {
+                                r.TextBlockType?.GetProperty("Text")?.SetValue(saveBtnTextRef, "Valid!");
+                                r.SetBackground(saveBtnRef, AccentGreen);
+                            }
+                            else if (valid == false)
+                            {
+                                r.TextBlockType?.GetProperty("Text")?.SetValue(saveBtnTextRef, "Invalid key");
+                                r.SetBackground(saveBtnRef, "#C04040");
+                            }
+                            else
+                            {
+                                // null = couldn't reach API (offline, etc.)
+                                r.TextBlockType?.GetProperty("Text")?.SetValue(saveBtnTextRef, "Saved");
+                                r.SetBackground(saveBtnRef, AccentGreen);
+                            }
+                            ResetButtonAfterDelay(r, saveBtnRef, saveBtnTextRef, "Save API Key", AccentGreen);
+                        });
+                    });
                 });
 
                 var btnAccent = AccentGreen;
@@ -2506,6 +2548,57 @@ internal static class ContentPages
 
             r.AddChild(content, optionRow);
         }
+    }
+
+    /// <summary>
+    /// Validate a Google Cloud Vision API key by making a GET request to the annotate endpoint.
+    /// Returns true (valid), false (invalid/forbidden), or null (network error/can't determine).
+    /// Valid key + missing body → 400; invalid key → 403.
+    /// </summary>
+    private static bool? ValidateVisionApiKey(string apiKey)
+    {
+        try
+        {
+            AutoUpdater.EnsureHttpResolved();
+            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_getAsync == null)
+            {
+                Logger.Log("ContentFilter", "HTTP not resolved, can't validate key");
+                return null;
+            }
+
+            var url = $"https://vision.googleapis.com/v1/images:annotate?key={Uri.EscapeDataString(apiKey)}";
+            var paramType = AutoUpdater.s_getAsync.GetParameters()[0].ParameterType;
+            object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
+            var task = AutoUpdater.s_getAsync.Invoke(AutoUpdater.s_httpClient, new[] { arg });
+            var response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            if (response == null) return null;
+
+            var statusCode = response.GetType().GetProperty("StatusCode")?.GetValue(response);
+            int code = statusCode != null ? (int)statusCode : 0;
+            Logger.Log("ContentFilter", $"Vision API key validation: HTTP {code}");
+
+            // 400 = valid key (bad request body), 200 = valid key
+            // 403 = invalid/disabled key, 401 = unauthorized
+            return code != 403 && code != 401;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ContentFilter", $"Vision API key validation error: {ex.Message}");
+            return null;
+        }
+    }
+
+    private static void ResetButtonAfterDelay(AvaloniaReflection r, object btn, object? btnText, string label, string bgColor)
+    {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            Thread.Sleep(3000);
+            r.RunOnUIThread(() =>
+            {
+                r.TextBlockType?.GetProperty("Text")?.SetValue(btnText, label);
+                r.SetBackground(btn, bgColor);
+            });
+        });
     }
 
     /// <summary>
