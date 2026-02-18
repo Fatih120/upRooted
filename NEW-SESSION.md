@@ -7,7 +7,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.3.44. Target: Root v0.9.92+.
+Version: 0.3.5. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -98,7 +98,7 @@ Two independent injection layers into one app:
 
 **Source:** `hook/SESSION_STATE.md` (2026-02-17)
 
-**Versions:** 0.3.44 | Target Root 0.9.92
+**Versions:** 0.3.5 | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -238,6 +238,8 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Root Environment | `docs/plugins/ROOT_ENVIRONMENT.md` | Root internals -- DOM, CSS variables, Chromium context |
 | Plugin Examples | `docs/plugins/EXAMPLES.md` | Annotated example plugins covering common patterns |
 | Advanced Plugin Dev | `docs/plugins/ADVANCED_DEVELOPMENT.md` | Advanced plugin patterns and techniques |
+| Plugin Roadmap | `docs/PLUGIN_ROADMAP.md` | Planned plugins with architecture notes and implementation strategies |
+| Built-in Plugins | `docs/plugins/builtin/INDEX.md` | Per-plugin docs for all shipped plugins (sentry-blocker, themes, settings-panel, link-embeds) |
 
 ### Research and Deep Dives
 
@@ -257,4 +259,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-*Quick-start reference for Uprooted v0.3.44. Last updated 2026-02-17.*
+*Quick-start reference for Uprooted v0.3.5. Last updated 2026-02-17.*

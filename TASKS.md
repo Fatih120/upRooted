@@ -2,6 +2,7 @@
 
 > Active task board for Uprooted contributors. Pick up items, mark them done, add new ones.
 > For strategic direction and long-term goals, see [docs/ROADMAP.md](docs/ROADMAP.md).
+> For planned plugins and implementation strategies, see [docs/PLUGIN_ROADMAP.md](docs/PLUGIN_ROADMAP.md).
 
 ---
 

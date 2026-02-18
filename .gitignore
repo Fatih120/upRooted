@@ -41,6 +41,7 @@ Uprooted/
 # Publish / release artifacts
 _publish/
 *.exe
+artifacts/
 
 # Compiled tool binaries (built locally)
 tools/*.exe

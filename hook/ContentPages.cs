@@ -350,16 +350,16 @@ internal static class ContentPages
         {
             KnownPlugins = new PluginInfo[]
             {
-                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.44",
+                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.5",
                     Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.44",
+                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.5",
                     Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
-                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.44",
+                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.5",
                     Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
                     DefaultEnabled = true, HasSettings = true, TestingStatus = 1 },
-                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.44",
+                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.5",
                     Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };

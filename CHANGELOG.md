@@ -6,65 +6,43 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.3.44] - 2026-02-18
-
-### Changed
-- Linux installer: auto-fetches latest release version from GitHub API (10s timeout, graceful fallback to bundled version) — stale scripts now self-update to correct download URL
-- Linux installer: `.desktop` file creation is now opt-in via `--desktop` flag (was auto-created, annoyed users)
-- Linux installer: download errors now distinguish HTTP 404 (version not found) from network errors, with actionable suggestions
-- Linux installer: validates tarball integrity (gzip magic bytes) before extraction — catches corrupt downloads
-- Linux installer: `find_root()` lists all searched paths on failure with a `find` command hint
-- Linux installer: build-from-source now falls back to pre-built artifacts on failure instead of dying
-- Linux installer: post-install/repair messaging uses prominent ANSI box emphasizing "MUST log out and log back in"
-- Linux installer: added `/usr/bin/Root.AppImage` to auto-detection candidates
-
-## [0.3.43] - 2026-02-18
-
-### Fixed
-- Linux installer: standalone script (`install-uprooted-linux.sh`) now auto-detects when run outside the repo and uses pre-built artifacts instead of failing with `ERR_PNPM_NO_PKG_MANIFEST`
-- Link embeds: skip rootapp.gg invite links (Root renders these natively, avoids double-embedding)
-- Link embeds: fallback to domain-only card when URL returns no OG metadata or title (e.g. Google Docs login redirects, JS-only SPAs)
-
-## [0.3.4] - 2026-02-17
+## [0.3.5] - 2026-02-18
 
 ### Added
-- Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`)
-- Per-embed animation timers with automatic cleanup on card removal
-- Graceful fallback: if SkiaSharp frame APIs are unavailable or trimmed, renders static first frame (zero regression)
-- Theme: "Cosmic Smoothie" preset — deep purple accent (`#7328BA`) with dark space background (`#0A041E`), full TreeColorMap + ResourceDictionary + CSS variables
-
-### Changed
-- Link embeds: skip Tenor URLs (`tenor.com`, `media.tenor.com`) — Root renders these natively, avoids double-embedding
-- Settings sidebar: "Uprooted" nav item renamed to "About"
-- Settings content headers: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"
-- Plugin search box: increased font size (13→14), added horizontal padding and vertical centering for better placeholder text fit
-
-### Fixed
-- Settings crash: clicking the back arrow on Uprooted tabs no longer freezes Root — back arrow hidden by position detection (left-side RootSvgButton in header Grid), `DetachedFromVisualTree` safety net clears ScrollViewer before recursive detach, Button events use `Click` instead of `PointerPressed` (Avalonia class handler suppression)
-- Settings header: Uprooted tabs now show page title and preserve X close button, matching Root's native `TabName [spacer] X` format
-- Settings section header: "UPROOTED" sidebar section now uses 40px wrapper matching native ListBoxItem height for consistent vertical spacing
-
-## [0.3.3] - 2026-02-17
-
-### Added
+- Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`), with per-embed animation timers and automatic cleanup on card removal; graceful fallback to static first frame if SkiaSharp frame APIs are unavailable
 - Link embeds: direct image URL fast path — `.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` URLs render instantly with zero network
 - Link embeds: oEmbed discovery — scans HTML for `<link rel="alternate" type="application/json+oembed">` to support any oEmbed-compatible site
 - Link embeds: Content-Type gate — skips OG parsing for PDFs, binaries; synthesizes image embed for `image/*` responses
 - Link embeds: `twitter:image`, `twitter:title`, `twitter:description` meta tag fallbacks
 - Link embeds: oEmbed photo type support — extracts `url` field for photo-type oEmbed responses per spec
+- Link embeds: fallback to domain-only card when URL returns no OG metadata or title (e.g. Google Docs login redirects, JS-only SPAs)
+- Theme: "Cosmic Smoothie" preset — deep purple accent (`#7328BA`) with dark space background (`#0A041E`), full TreeColorMap + ResourceDictionary + CSS variables
 - Settings cache: 10-second TTL cache on `UprootedSettings.Load()` to avoid disk I/O on every 500ms timer tick
 
 ### Changed
 - Link embeds: Chrome-like User-Agent replaces bot UA (`Uprooted/0.2`) for better site compatibility
 - Link embeds: per-request bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) that serve OG only to crawlers
 - Link embeds: embed-fixer domain normalization — fixupx/fxtwitter/fixvx URLs normalized to vxtwitter.com for richer OG metadata with images
-- Link embeds: `HttpGetWithContentType` uses `ReadAsStreamAsync` + `StreamReader` instead of trimmed `ReadAsStringAsync`
+- Link embeds: skip Tenor URLs (`tenor.com`, `media.tenor.com`) and rootapp.gg invite links — Root renders these natively, avoids double-embedding
 - Link embeds: verbose diagnostic logging gated behind `UPROOTED_VERBOSE=1` env var
+- Settings sidebar: "Uprooted" nav item renamed to "About"
+- Settings content headers: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"
+- Plugin search box: increased font size (13→14), added horizontal padding and vertical centering for better placeholder text fit
+- Linux installer: auto-fetches latest release version from GitHub API (10s timeout, graceful fallback to bundled version)
+- Linux installer: `.desktop` file creation is now opt-in via `--desktop` flag (was auto-created)
+- Linux installer: download errors now distinguish HTTP 404 from network errors, with actionable suggestions
+- Linux installer: validates tarball integrity (gzip magic bytes) before extraction
+- Linux installer: build-from-source falls back to pre-built artifacts on failure
+- Linux installer: standalone script auto-detects when run outside the repo and uses pre-built artifacts
+- Linux installer: post-install/repair messaging uses prominent ANSI box emphasizing "MUST log out and log back in"
 - Deploy script: launch Root.exe directly instead of UprootedLauncher.exe
 
 ### Fixed
-- Link embeds: `DecodeJsonString` crash — `Regex.Replace` with `MatchEvaluator` lambda triggers trimmed method in Root's binary; replaced with manual `\uXXXX` decoding loop
-- Link embeds: oEmbed endpoint fetch failures — `ReadAsStringAsync` triggers trimmed charset/encoding methods on JSON responses; switched to `ReadAsStreamAsync` + `StreamReader`
+- Settings crash: clicking the back arrow on Uprooted tabs no longer freezes Root — back arrow hidden by position detection, `DetachedFromVisualTree` safety net clears ScrollViewer before recursive detach, Button events use `Click` instead of `PointerPressed`
+- Settings header: Uprooted tabs now show page title and preserve X close button, matching Root's native `TabName [spacer] X` format
+- Settings section header: "UPROOTED" sidebar section now uses 40px wrapper matching native ListBoxItem height for consistent vertical spacing
+- Link embeds: `DecodeJsonString` crash — `Regex.Replace` with `MatchEvaluator` lambda triggers trimmed method; replaced with manual `\uXXXX` decoding loop
+- Link embeds: oEmbed endpoint fetch failures — `ReadAsStringAsync` triggers trimmed charset/encoding methods; switched to `ReadAsStreamAsync` + `StreamReader`
 
 ## [0.3.2] - 2026-02-17
 
@@ -141,8 +119,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
-[0.3.4]: https://github.com/watchthelight/uprooted-private/compare/v0.3.3...v0.3.4
-[0.3.3]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.3
+[0.3.5]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.5
 [0.3.2]: https://github.com/watchthelight/uprooted-private/compare/v0.3.0...v0.3.2
 [0.3.0]: https://github.com/watchthelight/uprooted-private/compare/v0.2.3...v0.3.0
 [0.2.3]: https://github.com/watchthelight/uprooted-private/compare/v0.2.2...v0.2.3

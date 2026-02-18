@@ -45,4 +45,4 @@ All built-in plugins run inside DotNetBrowser's embedded Chromium instance. Key 
 |--------|------|---------|
 | `window.__UPROOTED_SETTINGS__` | `UprootedSettings` | Settings loaded from `uprooted-settings.json` by the installer/patcher |
 | `window.__UPROOTED_LOADER__` | `PluginLoader` | Plugin lifecycle manager (used by settings-panel) |
-| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.3.44"`) |
+| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.3.5"`) |
