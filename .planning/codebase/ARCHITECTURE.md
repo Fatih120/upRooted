@@ -1,17 +1,17 @@
 # Architecture
 
-**Analysis Date:** 2026-02-16
+**Analysis Date:** 2026-02-17
 
 ## Pattern Overview
 
-**Overall:** Dual-layer client modification framework with bridge interception and native UI injection
+**Overall:** Dual-layer client modification framework with CLR profiler injection and TypeScript HTML injection
 
 Uprooted has two independent injection layers that operate in parallel:
 
-1. **C# .NET hook** (`hook/`) — Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar.
-2. **TypeScript browser injection** (`src/`) — Injects into Root's embedded Chromium (DotNetBrowser) context via HTML `<script>` tags. Provides the plugin/theme runtime and bridge proxy system.
+1. **C# .NET hook** (`hook/`) — Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar, applies themes via resource dictionary manipulation, and discovers DotNetBrowser features.
+2. **TypeScript browser injection** (`src/`) — Injects into Root's embedded Chromium (DotNetBrowser) context via HTML `<script>` tags. Provides the plugin runtime, theme CSS engine, bridge proxy system, and link embeds.
 
-The C# layer handles native UI integration. The TypeScript layer handles web content modification. They share no runtime state but target the same application. The only shared state is the settings JSON file and the visual result (both layers inject into the same app).
+The C# layer handles native UI integration and Avalonia theming. The TypeScript layer handles web content modification, bridge interception, and link embed rendering. They share no runtime state but target the same application. The only shared state is the settings file on disk and the visual result (both layers inject into the same app).
 
 **Key Characteristics:**
 - Dual-layer architecture: C# native injection + TypeScript browser injection
@@ -21,6 +21,8 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - Plugin system with lifecycle hooks (start/stop) and declarative patches
 - Settings persistence via file-based JSON outside browser (localStorage unavailable in incognito mode)
 - Modular plugin API exposing DOM, CSS, native, and bridge utilities
+- Self-healing HTML patches via FileSystemWatcher (Phase 0)
+- Avalonia-native link embed engine (Phase 4.5b)
 
 ## Layers
 
@@ -28,7 +30,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 
 **CLR Profiler Layer:**
 - Purpose: Get managed code executing inside Root's .NET process
-- Location: `tools/uprooted_profiler.dll` (C/MSVC source)
+- Location: `tools/uprooted_profiler.c` (source) and `tools/uprooted_profiler.dll` (compiled)
 - Contains: `ICorProfilerCallback` implementation, IL injection into first suitable method
 - Mechanism: Prepends IL to a target method that calls `Assembly.LoadFrom("UprootedHook.dll")` + `CreateInstance("UprootedHook.Entry")`, wrapped in try/catch
 - Depends on: Environment variables (`CORECLR_ENABLE_PROFILING`, `CORECLR_PROFILER`, `CORECLR_PROFILER_PATH`, `DOTNET_ReadyToRun=0`)
@@ -38,16 +40,28 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - Purpose: Initialize Uprooted inside Root's .NET process
 - Location: `hook/Entry.cs`, `hook/NativeEntry.cs`, `hook/StartupHook.cs`
 - Contains: `[ModuleInitializer]` + constructor entry (both guarded by `Interlocked.CompareExchange` for one-time init), process name guard, background thread spawning
-- Pattern: Background thread runs 4-phase wait sequence:
-  1. Wait for Avalonia assemblies to load (30s timeout, poll 250ms)
-  2. Resolve all Avalonia types via reflection into `AvaloniaReflection` cache
-  3. Wait for `Application.Current` (30s timeout, poll 500ms)
-  4. Wait for `MainWindow` via `ApplicationLifetime` (60s timeout, poll 500ms)
+- Pattern: Background thread runs multi-phase startup (Phase 0-5):
+  - Phase 0: HTML patch verification + self-healing
+  - Phase 1: Wait for Avalonia assemblies to load (30s timeout, poll 250ms)
+  - Phase 2: Resolve all Avalonia types via reflection into `AvaloniaReflection` cache
+  - Phase 3: Wait for `Application.Current` (30s timeout, poll 500ms)
+  - Phase 3+: Wait for `MainWindow` via `ApplicationLifetime` (60s timeout, poll 500ms)
+  - Phase 3.5: Theme engine initialization
+  - Phase 4: SidebarInjector.StartMonitoring() (200ms timer)
+  - Phase 4.5: Browser discovery diagnostic (10s delay)
+  - Phase 4.5b: LinkEmbedEngine startup (15s delay, then 500ms poll)
+  - Phase 5: DotNetBrowser feature loading detection
 - Critical rule: Must never block Root's startup — all heavy work on background thread
+
+**HTML Patch Verifier Layer:**
+- Purpose: Ensure HTML injection markers exist in Root's profile HTML files; self-heal when Root auto-updates overwrite them
+- Location: `hook/HtmlPatchVerifier.cs`
+- Contains: Marker verification, file re-patching, `FileSystemWatcher` for directory monitoring
+- Mechanism: Phase 0 runs on background thread before Avalonia needed. Scans profile HTML files for injection markers. If missing, re-patches in place. Creates FileSystemWatcher for each HTML directory with 2-second cooldown to debounce rapid overwrites.
 
 **Avalonia Reflection Layer:**
 - Purpose: Resolve and cache Avalonia types, properties, and methods via reflection
-- Location: `hook/AvaloniaReflection.cs` (815 lines — largest and most critical file)
+- Location: `hook/AvaloniaReflection.cs` (1943 lines — largest and most critical file)
 - Contains: Dictionary of ~80 Avalonia types built by scanning loaded assemblies filtered by `"Avalonia"` prefix, cached `PropertyInfo`/`MethodInfo` handles, control creation helpers
 - Why needed: Root.exe is a single-file .NET 10 binary — `Type.GetType("Avalonia.Controls.TextBlock, Avalonia.Controls")` does NOT work because assembly-qualified names can't be resolved
 - Key design decisions:
@@ -58,7 +72,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 
 **Visual Tree Walker Layer:**
 - Purpose: Discover Root's settings page structure by walking the Avalonia visual tree
-- Location: `hook/VisualTreeWalker.cs` (331 lines)
+- Location: `hook/VisualTreeWalker.cs` (554 lines)
 - Contains: `FindSettingsLayout()` algorithm that discovers settings page via structural analysis
 - Algorithm:
   1. Depth-first search for TextBlock with `Text == "APP SETTINGS"` (anchor point)
@@ -71,7 +85,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 
 **Sidebar Injector Layer:**
 - Purpose: Monitor settings page state and inject/remove UPROOTED section
-- Location: `hook/SidebarInjector.cs` (610 lines)
+- Location: `hook/SidebarInjector.cs` (1088 lines)
 - Contains: 200ms timer-based polling, injection/cleanup logic, click event handling, content page management
 - Mechanism: Timer fires on UI thread, lightweight check for "APP SETTINGS" TextBlock, inject if found and not already injected, cleanup if not found
 - Injected controls:
@@ -84,22 +98,71 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 
 **Content Pages Layer:**
 - Purpose: Build native Avalonia settings pages through reflection
-- Location: `hook/ContentPages.cs` (443 lines)
+- Location: `hook/ContentPages.cs` (1753 lines)
 - Contains: Page builders for Uprooted, Plugins, Themes pages — all via reflection-based control creation matching Root's exact card styling
 - Styling invariants: card background `#081408`, corner radius 12, border `#19ffffff` thickness 0.5, inner padding 24px, page margin 24/24/24/0
-- Current limitations: Theme switching and plugin management are display-only (no click handlers yet)
+- Current limitations: Theme switching and plugin management have click handlers but are display-only for plugin toggles; theme switching is live
+
+**Theme Engine Layer:**
+- Purpose: Apply native Avalonia theme overrides at runtime
+- Location: `hook/ThemeEngine.cs` (2218 lines)
+- Contains: Resource dictionary manipulation, visual tree color override, theme persistence
+- Mechanism: Overrides `Application.Styles[0].Resources` and injects into `Application.Resources.MergedDictionaries`. Walks visual tree to replace hardcoded brush values. Supports named themes and custom accent/background colors.
+- Critical pattern: Never modify colors on controls directly — override resource dictionaries first so new controls pick up the theme automatically
+
+**Color Picker Popup Layer:**
+- Purpose: HSL color picker popup for custom theme accent and background
+- Location: `hook/ColorPickerPopup.cs` (533 lines)
+- Contains: HSV color picker UI, gradient rendering, color conversion
+- Presented as an overlay on the Themes settings page
+
+**Color Utils Layer:**
+- Purpose: Color parsing, HSL/HSV conversion, contrast calculation
+- Location: `hook/ColorUtils.cs` (262 lines)
+- Contains: Hex parsing, color space conversions, luminance/contrast math
+- Used by: ThemeEngine and ContentPages
 
 **Hook Settings Layer:**
-- Purpose: Settings for the C# hook (placeholder)
-- Location: `hook/UprootedSettings.cs` (42 lines)
-- Contains: Returns hardcoded defaults only
-- Known bug: `System.Text.Json` causes `MissingMethodException` in profiler-injected context, preventing JSON deserialization. Workaround needed (manual parsing or different assembly context).
+- Purpose: Settings for the C# hook (INI-based)
+- Location: `hook/UprootedSettings.cs` (91 lines)
+- Contains: INI file reading/writing (no System.Text.Json due to profiler context constraint)
+- Known bug: `System.Text.Json` causes `MissingMethodException` in profiler-injected context, preventing JSON deserialization. INI format is workaround.
 
 **Hook Logging Layer:**
 - Purpose: Thread-safe file logging for the C# hook
-- Location: `hook/Logger.cs` (30 lines)
+- Location: `hook/Logger.cs` (28 lines)
 - Contains: Writes to `uprooted-hook.log` in profile directory with timestamps and categories
 - Critical rule: Logger swallows its own exceptions to avoid crashing Root
+
+**DotNetBrowser Reflection Layer:**
+- Purpose: Discover and cache DotNetBrowser types for browser-dependent features
+- Location: `hook/DotNetBrowserReflection.cs` (1914 lines)
+- Contains: Type cache for DotNetBrowser.Core types, IBrowser discovery via ViewModel chain, ExecuteJavaScript wrapper
+- Pattern: Walks ViewModel hierarchy to find IBrowser instances
+
+**Browser Discovery Layer:**
+- Purpose: Phase 4.5 diagnostic scanner for architecture discovery
+- Location: `hook/BrowserDiscovery.cs` (498 lines)
+- Contains: Full visual tree dump, loaded assembly inventory
+- Timing: 10-second delay after Phase 4 to allow UI to render
+
+**Link Embed Engine Layer:**
+- Purpose: Avalonia-native link embed rendering with OG metadata fetch
+- Location: `hook/LinkEmbedEngine.cs` (1260 lines)
+- Contains: Visual tree scanning for URL-containing CTextBlocks, OG metadata fetching via HttpClient, native embed card injection
+- Timing: Phase 4.5b (15s delay after startup, 500ms poll timer)
+- Status: YouTube fully working (oEmbed + predictable thumbnails). Generic sites need improvement (bot-hostile UAs, direct image URLs rejected, some sites need JS rendering)
+
+**NSFW Filter Layer:**
+- Purpose: NSFW content filtering via JavaScript injection
+- Location: `hook/NsfwFilter.cs` (305 lines)
+- Contains: JS injection wrapper for DotNetBrowser
+- Known limitation: Chat is Avalonia-native, not browser-rendered, so filter cannot modify chat messages. Needs Avalonia-native redesign.
+
+**Platform Paths Layer:**
+- Purpose: Cross-platform path resolution
+- Location: `hook/PlatformPaths.cs` (29 lines)
+- Contains: Profile directory and Uprooted install path resolution for Windows and Linux
 
 ### TypeScript Browser Injection Layers
 
@@ -144,9 +207,10 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - Purpose: Core functionality provided with Uprooted
 - Location: `src/plugins/`
 - Contains:
-  - `sentry-blocker`: Intercepts fetch/XHR/sendBeacon to block Sentry telemetry
-  - `themes`: Applies CSS variable overrides for theme customization
-  - `settings-panel`: Injects settings UI into Root's web-rendered sidebar
+  - `sentry-blocker/`: Intercepts fetch/XHR/sendBeacon to block Sentry telemetry
+  - `themes/`: Applies CSS variable overrides for theme customization
+  - `settings-panel/`: Injects settings UI into Root's web-rendered sidebar
+  - `link-embeds/`: Renders link previews in chat using DOM injection and OG metadata
 - Depends on: Plugin API, types, settings
 - Used by: Preload script during initialization
 
@@ -179,9 +243,9 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 7. When that method is JIT-compiled and called, IL loads `UprootedHook.dll`
 8. `Entry.ModuleInit()` fires via `[ModuleInitializer]` (or constructor fallback)
 9. `StartupHook.Initialize()` spawns background thread
-10. Thread runs 4-phase wait: Avalonia assemblies -> type resolution -> Application.Current -> MainWindow
-11. `SidebarInjector.StartMonitoring()` begins 200ms timer
-12. Timer detects settings page open -> `VisualTreeWalker` discovers layout -> injects UPROOTED section
+10. Thread runs multi-phase startup: Phase 0 (HTML patches) → Phase 1-3 (Avalonia wait) → Phase 3.5 (theme init) → Phase 4 (sidebar monitor) → Phase 4.5 (diagnostic) → Phase 4.5b (link embeds) → Phase 5 (DotNetBrowser features)
+11. SidebarInjector.StartMonitoring() begins 200ms timer
+12. Timer detects settings page open -> VisualTreeWalker discovers layout -> injects UPROOTED section
 13. User sees "Uprooted", "Plugins", "Themes" in the settings sidebar
 
 **TypeScript Injection Lifecycle:**
@@ -194,6 +258,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 6. Built-in plugins start in order:
    - sentry-blocker: wraps fetch/XHR/sendBeacon earliest (before Sentry init)
    - themes: applies CSS variables based on settings
+   - link-embeds: sets up DOM observer for link rendering
    - settings-panel: injects UI components into DOM
 7. When plugins are disabled via settings panel, they can be stopped and restarted at runtime
 
@@ -212,12 +277,12 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 
 **Installation Flow (Installer App):**
 
-1. User runs Uprooted Installer (Tauri desktop app)
+1. User runs Uprooted Installer (Tauri desktop app or CLI)
 2. Installer deploys 5 files to `%LOCALAPPDATA%\Root\uprooted\`:
    - `uprooted_profiler.dll` (CLR profiler, native C DLL)
    - `UprootedHook.dll` + `UprootedHook.deps.json` (managed hook assembly)
    - `uprooted-preload.js` + `uprooted.css` (TypeScript injection payload)
-3. Sets user-scoped CLR profiler env vars via Windows registry + broadcasts `WM_SETTINGCHANGE`
+3. Sets user-scoped CLR profiler env vars via Windows registry (or shell profile on Linux) and broadcasts `WM_SETTINGCHANGE`
 4. Patches HTML files in Root's profile directory (WebRtcBundle + RootApps)
 5. Uninstall reverses all three steps: removes env vars, restores HTML backups, deletes deployed files
 
@@ -228,19 +293,20 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - **Active Plugins:** PluginLoader maintains Set of started plugin names
 - **Event Handlers:** PluginLoader maintains Map of `[eventName:methodName] -> handler[]` for efficient dispatch
 - **C# Hook State:** `SidebarInjector` maintains injection state with interlocked flags for thread safety
+- **Link Embeds State:** LinkEmbedEngine scans visual tree periodically, maintains set of processed URLs to avoid duplicates
 
 ## Key Abstractions
 
 **UprootedPlugin Interface:**
 - Purpose: Standardized plugin definition contract
-- Examples: `src/plugins/themes/index.ts`, `src/plugins/sentry-blocker/index.ts`, `src/plugins/settings-panel/index.ts`
+- Examples: `src/plugins/themes/index.ts`, `src/plugins/sentry-blocker/index.ts`, `src/plugins/settings-panel/index.ts`, `src/plugins/link-embeds/index.ts`
 - Pattern: Export default object satisfying `UprootedPlugin` type with name, version, start/stop lifecycle hooks, patches array, and optional CSS
 
 **Patch System:**
 - Purpose: Declaratively intercept bridge method calls
 - Pattern: Plugin defines `patches` array with bridge ("nativeToWebRtc" or "webRtcToNative"), method name, and optional before/replace callbacks
 - Priority: `replace` > `before`. If `replace` is set, `before` is ignored. `after` is defined but not yet invoked by the loader.
-- Examples: Sentry-blocker wraps fetch at platform level; themes sets CSS variables; settings panel observes DOM
+- Examples: Sentry-blocker wraps fetch at platform level; themes sets CSS variables; settings panel observes DOM; link-embeds renders previews
 
 **Settings Schema:**
 - Purpose: Global settings + per-plugin config with defaults
@@ -276,7 +342,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 **Managed Hook Entry (C#):**
 - Location: `hook/Entry.cs` -> `hook/StartupHook.cs`
 - Triggers: Profiler-injected IL calls `Assembly.LoadFrom` + `CreateInstance`
-- Responsibilities: One-time init guard, process name check, spawn background thread, 4-phase Avalonia wait, start sidebar monitoring
+- Responsibilities: One-time init guard, process name check, spawn background thread, multi-phase Avalonia/DotNetBrowser wait, start sidebar monitoring
 
 **Browser Runtime Entry (TS):**
 - Location: `src/core/preload.ts`
@@ -308,6 +374,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - Profiler IL injection wrapped in try/catch — if DLL fails to load, Root continues normally
 - One-time init via `Interlocked.CompareExchange` prevents double execution
 - Background thread for all heavy work — never block Root's startup or UI thread
+- Phase failures are logged but non-fatal for early phases; later phases abort gracefully
 
 **TypeScript Patterns:**
 - **Preload:** Errors caught at top level, displayed in red banner at top of page with stack trace
@@ -315,6 +382,7 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - **Bridge Events:** Handler errors logged but don't interrupt event chain
 - **Settings Load:** Falls back to `DEFAULT_SETTINGS` if JSON parse fails or file missing
 - **Installation:** Errors logged to console, process exits with status 1
+- **Link Embeds:** OG fetch errors logged, element still renders with fallback content
 
 ## Cross-Cutting Concerns
 
@@ -324,15 +392,16 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - C#: Thread-safe file logging to `uprooted-hook.log` with `[Category]` prefix and timestamps
 
 **Threading (C#):**
-- Background thread for initialization (4-phase wait)
+- Background thread for initialization (multi-phase wait and browser feature detection)
 - Timer callback dispatches to UI thread via `Dispatcher.UIThread`
 - `_injecting` interlocked flag prevents concurrent CheckAndInject calls
 - `_ourItemClicked` flag coordinates pointer events between custom items and ListBox
 
 **Threading (TypeScript):**
 - Single-threaded (browser main thread)
-- MutationObserver callbacks debounced (80ms)
+- MutationObserver callbacks debounced (80ms) in settings panel
 - Plugin `start()` is async-safe but called sequentially (`await` in loop)
+- Link embed rendering uses RAF (requestAnimationFrame) for DOM insertion
 
 **Validation:**
 - Settings validation deferred to each layer (installer validates, preload trusts)
@@ -350,7 +419,8 @@ The C# layer handles native UI integration. The TypeScript layer handles web con
 - Event handler registration uses Map for O(1) lookup
 - CSS injection uses ID-keyed `<style>` elements for efficient updates
 - C# sidebar injector uses 200ms timer polling (not event-driven — Avalonia RoutedEvent subscription via reflection unreliable)
+- Link embed engine uses 500ms poll with deduplication to avoid reprocessing URLs
 
 ---
 
-*Architecture analysis: 2026-02-16*
+*Architecture analysis: 2026-02-17*
