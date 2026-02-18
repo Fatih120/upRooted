@@ -314,7 +314,7 @@ On detection:
    (ConcurrentDictionary).
 3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines) — still JS injection, needs Avalonia-native redesign.
 
-**Phase 4.5b** (separate from Phase 5): Starts `LinkEmbedEngine` (`hook/LinkEmbedEngine.cs`, 1589 lines) — the Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes containing URLs, fetches OG/oEmbed metadata via reflection-based HttpClient, and injects native Avalonia embed cards. Supports YouTube (dedicated oEmbed), Twitter/X and embed-fixer domains (bot UA + oEmbed discovery), direct image URLs (zero-network fast path), and generic sites via OpenGraph tags with Content-Type gating.
+**Phase 4.5b** (separate from Phase 5): Starts `LinkEmbedEngine` (`hook/LinkEmbedEngine.cs`) — the Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes containing URLs, fetches OG/oEmbed metadata via reflection-based HttpClient, and injects native Avalonia embed cards. Supports YouTube (dedicated oEmbed), Twitter/X and embed-fixer domains (bot UA + oEmbed discovery), direct image URLs (zero-network fast path), animated GIF/WebP playback (via `AnimatedImage.cs` + SkiaSharp reflection), and generic sites via OpenGraph tags with Content-Type gating. Tenor URLs are skipped (Root renders them natively).
 
 **Known limitation:** NSFW filter still uses DotNetBrowser JS injection and cannot affect chat (chat is Avalonia-native). Needs full redesign.
 
@@ -404,7 +404,8 @@ oEmbed spec defines four types. Image location varies by type:
 `FetchMetadata()` routes URLs through a priority chain:
 
 ```
-1. Cache hit?              → return cached
+0. Native embed domain?    → skip (Tenor — Root handles natively)
+1. Cache hit?              → return cached (animated images re-inject from byte cache)
 2. Image URL regex?        → SynthesizeImageEmbed (zero network)
 3. YouTube regex?          → FetchYouTubeMetadata (oEmbed + page scrape fallback)
 4. All other URLs          → FetchOgMetadata:
@@ -414,7 +415,35 @@ oEmbed spec defines four types. Image location varies by type:
    d. Content-Type gate (HTML → proceed, image/* → synthesize, other → bail)
    e. oEmbed discovery (<link> tags in HTML) → TryOEmbedDiscovery
    f. OG tag parsing (og:*, twitter:* fallbacks)
+
+Image rendering (all paths):
+   → Fetch image bytes → cache in _imageBytesCache
+   → AnimatedImage.IsAnimated(bytes)?
+     → Yes: DecodeFrames → CreateAnimatedControl (timer-based playback)
+     → No:  Bitmap(Stream) static image (existing behavior)
 ```
+
+### Animated Image Playback
+
+**File:** `hook/AnimatedImage.cs`
+
+Animated `.gif` and `.webp` URLs play inline using SkiaSharp's `SKCodec`, resolved via reflection from assemblies already loaded in Root's process (Avalonia ships SkiaSharp as its rendering backend).
+
+**Detection:** `MightBeAnimated()` checks magic bytes (GIF87a/GIF89a for GIF, RIFF+WEBP header for WebP). For WebP, detection delegates to `SKCodec.FrameCount` rather than parsing VP8X flags (fragile across WebP variants). `IsAnimated()` confirms multi-frame via SKCodec.
+
+**Frame extraction:** For each frame (capped at 100): `SKCodec.GetPixels()` with `SKCodecOptions { FrameIndex = i }` → `SKImage.FromBitmap()` → `SKImage.Encode(Png)` → `SKData.ToArray()` → Avalonia `Bitmap(Stream)`. PNG round-trip avoids needing WriteableBitmap/PixelFormat reflection.
+
+**Playback:** Per-embed `System.Threading.Timer` cycles frames on the UI thread via `RunOnUIThread()`. Per-frame delays from GIF/WebP metadata (minimum 20ms floor). Dispose action stops timer on card removal.
+
+**SkiaSharp API quirks:**
+- `SKCodec.FrameCount` property absent in Root's SkiaSharp version — use `FrameInfo[].Length` as fallback
+- `SKCodec.GetPixels` is 4-param `(SKImageInfo, IntPtr, int rowBytes, SKCodecOptions)`, not the 3-param version documented in most examples
+- `SKCodec.Create(SKData)` preferred over `Create(SKStream)` — avoids stream lifecycle issues
+- `SKData.CreateCopy(byte[])` used to create independent data copies for codec input
+
+**Native embed domain skip:** Tenor URLs (`tenor.com`, `media.tenor.com`) are skipped in `FetchAndInject()` because Root renders Tenor embeds natively. Without this, animated GIFs from Tenor would double-embed.
+
+**Graceful fallback:** If any SkiaSharp type or method is missing or trimmed, all `AnimatedImage` methods return null/false. The caller falls back to static first-frame rendering via `Bitmap(Stream)` — existing behavior, zero regression.
 
 ### Verbose Logging
 

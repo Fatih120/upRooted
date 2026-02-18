@@ -56,6 +56,7 @@ uprooted-private/
 │   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
 │   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
 │   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG fetch + visual tree injection)
+│   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging

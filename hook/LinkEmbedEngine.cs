@@ -41,6 +41,7 @@ internal class LinkEmbedEngine
     private readonly Dictionary<string, EmbedData?> _metadataCache = new();
     private readonly Dictionary<string, byte[]> _imageBytesCache = new();
     private readonly List<object> _injectedCards = new();
+    private readonly Dictionary<string, Action> _animatedDisposables = new(); // dispose timers on card removal
 
     // HTTP via reflection — Root's single-file trimming removes HttpClient methods at JIT time.
     // Using reflection avoids MissingMethodException during JIT compilation.
@@ -163,6 +164,11 @@ internal class LinkEmbedEngine
     // Twitter/X domains — also serve OG only to bots
     private static readonly Regex TwitterDomainRegex = new(
         @"^https?://(?:twitter\.com|x\.com)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Domains where Root renders embeds natively — skip to avoid double-embedding
+    private static readonly Regex NativeEmbedDomainRegex = new(
+        @"^https?://(?:(?:media\.)?tenor\.com)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow)
@@ -309,6 +315,13 @@ internal class LinkEmbedEngine
     {
         try
         {
+            // Skip domains where Root renders embeds natively (avoids double-embedding)
+            if (NativeEmbedDomainRegex.IsMatch(url))
+            {
+                if (Verbose) Logger.Log("LinkEmbed", $"Skipping native embed domain: {url}");
+                return;
+            }
+
             var data = FetchMetadata(url);
             if (data == null) return;
             if (string.IsNullOrEmpty(data.Title)) return;
@@ -383,15 +396,14 @@ internal class LinkEmbedEngine
                     }
                 }
 
-                object? bitmap = null;
-                try
+                // Dispose any existing animated timer for this URL before re-creating
+                if (_animatedDisposables.TryGetValue(data.Url, out var oldDispose))
                 {
-                    using var ms = new System.IO.MemoryStream(imageBytes);
-                    bitmap = _r.CreateBitmapFromStream(ms);
+                    oldDispose();
+                    _animatedDisposables.Remove(data.Url);
                 }
-                catch { }
 
-                var card = BuildEmbedCard(data, bitmap);
+                var card = BuildEmbedCard(data, bitmap: null, imageBytes: imageBytes);
                 if (card == null) return;
 
                 _r.SetTag(card, embedTag);
@@ -437,43 +449,78 @@ internal class LinkEmbedEngine
                 }
                 if (card == null) return;
 
-                // Create bitmap on UI thread
-                object? bitmap;
-                using (var ms = new System.IO.MemoryStream(imageBytes))
-                {
-                    bitmap = _r.CreateBitmapFromStream(ms);
-                }
-                if (bitmap == null) return;
-
                 // Get the StackPanel (child of the Border card)
                 var content = _r.GetBorderChild(card);
                 if (content == null) return;
 
-                // Build image element (with play button overlay for YouTube)
-                object? imageElement;
-                if (data.VideoId != null)
-                {
-                    imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
-                }
-                else
-                {
-                    var img = _r.CreateImage("Uniform");
-                    if (img == null) return;
-                    _r.SetImageSource(img, bitmap);
-                    _r.SetMaxHeight(img, MaxImageHeight);
-                    _r.SetMaxWidth(img, MaxImageWidth);
-                    _r.SetHorizontalAlignment(img, "Left");
+                object? imageElement = null;
 
-                    var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
-                    if (imgBorder != null)
+                // Try animated path first
+                if (data.VideoId == null && AnimatedImage.IsAnimated(imageBytes))
+                {
+                    var frames = AnimatedImage.DecodeFrames(imageBytes, _r);
+                    if (frames != null)
                     {
-                        _r.SetClipToBounds(imgBorder, true);
-                        _r.SetBorderChild(imgBorder, img);
-                        imageElement = imgBorder;
+                        var animated = AnimatedImage.CreateAnimatedControl(frames, _r);
+                        if (animated != null)
+                        {
+                            var img = animated.Value.control;
+                            _r.SetMaxHeight(img, MaxImageHeight);
+                            _r.SetMaxWidth(img, MaxImageWidth);
+                            _r.SetHorizontalAlignment(img, "Left");
+
+                            var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
+                            if (imgBorder != null)
+                            {
+                                _r.SetClipToBounds(imgBorder, true);
+                                _r.SetBorderChild(imgBorder, img);
+                                imageElement = imgBorder;
+                            }
+                            else
+                            {
+                                imageElement = img;
+                            }
+
+                            _animatedDisposables[data.Url] = animated.Value.dispose;
+                            Logger.Log("LinkEmbed", $"Animated image added to embed: {data.Url}");
+                        }
+                    }
+                }
+
+                // Fallback: static bitmap
+                if (imageElement == null)
+                {
+                    object? bitmap;
+                    using (var ms = new System.IO.MemoryStream(imageBytes))
+                    {
+                        bitmap = _r.CreateBitmapFromStream(ms);
+                    }
+                    if (bitmap == null) return;
+
+                    if (data.VideoId != null)
+                    {
+                        imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
                     }
                     else
                     {
-                        imageElement = img;
+                        var img = _r.CreateImage("Uniform");
+                        if (img == null) return;
+                        _r.SetImageSource(img, bitmap);
+                        _r.SetMaxHeight(img, MaxImageHeight);
+                        _r.SetMaxWidth(img, MaxImageWidth);
+                        _r.SetHorizontalAlignment(img, "Left");
+
+                        var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
+                        if (imgBorder != null)
+                        {
+                            _r.SetClipToBounds(imgBorder, true);
+                            _r.SetBorderChild(imgBorder, img);
+                            imageElement = imgBorder;
+                        }
+                        else
+                        {
+                            imageElement = img;
+                        }
                     }
                 }
 
@@ -1273,7 +1320,7 @@ internal class LinkEmbedEngine
         return ContentPages.TextWhite;
     }
 
-    private object? BuildEmbedCard(EmbedData data, object? bitmap = null)
+    private object? BuildEmbedCard(EmbedData data, object? bitmap = null, byte[]? imageBytes = null)
     {
         try
         {
@@ -1332,38 +1379,86 @@ internal class LinkEmbedEngine
             }
 
             // Image preview (only used for initial build with bitmap; Phase B adds image later)
-            if (bitmap != null)
+            if (bitmap != null || imageBytes != null)
             {
-                object? imageElement;
-                if (data.VideoId != null)
-                {
-                    imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
-                }
-                else
-                {
-                    var img = _r.CreateImage("Uniform");
-                    if (img != null)
-                    {
-                        _r.SetImageSource(img, bitmap);
-                        _r.SetMaxHeight(img, MaxImageHeight);
-                        _r.SetMaxWidth(img, MaxImageWidth);
-                        _r.SetHorizontalAlignment(img, "Left");
+                object? imageElement = null;
 
-                        var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
-                        if (imgBorder != null)
+                // Try animated path first if we have raw bytes
+                if (imageBytes != null && data.VideoId == null && AnimatedImage.IsAnimated(imageBytes))
+                {
+                    var frames = AnimatedImage.DecodeFrames(imageBytes, _r);
+                    if (frames != null)
+                    {
+                        var animated = AnimatedImage.CreateAnimatedControl(frames, _r);
+                        if (animated != null)
                         {
-                            _r.SetClipToBounds(imgBorder, true);
-                            _r.SetBorderChild(imgBorder, img);
-                            imageElement = imgBorder;
+                            var img = animated.Value.control;
+                            _r.SetMaxHeight(img, MaxImageHeight);
+                            _r.SetMaxWidth(img, MaxImageWidth);
+                            _r.SetHorizontalAlignment(img, "Left");
+
+                            var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
+                            if (imgBorder != null)
+                            {
+                                _r.SetClipToBounds(imgBorder, true);
+                                _r.SetBorderChild(imgBorder, img);
+                                imageElement = imgBorder;
+                            }
+                            else
+                            {
+                                imageElement = img;
+                            }
+
+                            // Track dispose action for cleanup
+                            _animatedDisposables[data.Url] = animated.Value.dispose;
+                            Logger.Log("LinkEmbed", $"Animated embed created for: {data.Url}");
+                        }
+                    }
+                }
+
+                // Fallback: static bitmap (non-animated, or animated decode failed)
+                if (imageElement == null && (bitmap != null || imageBytes != null))
+                {
+                    // Create static bitmap from bytes if we don't have one
+                    if (bitmap == null && imageBytes != null)
+                    {
+                        try
+                        {
+                            using var bmpMs = new System.IO.MemoryStream(imageBytes);
+                            bitmap = _r.CreateBitmapFromStream(bmpMs);
+                        }
+                        catch { }
+                    }
+
+                    if (bitmap != null)
+                    {
+                        if (data.VideoId != null)
+                        {
+                            imageElement = BuildThumbnailWithPlayButton(bitmap, data.Url);
                         }
                         else
                         {
-                            imageElement = img;
+                            var img = _r.CreateImage("Uniform");
+                            if (img != null)
+                            {
+                                _r.SetImageSource(img, bitmap);
+                                _r.SetMaxHeight(img, MaxImageHeight);
+                                _r.SetMaxWidth(img, MaxImageWidth);
+                                _r.SetHorizontalAlignment(img, "Left");
+
+                                var imgBorder = _r.CreateBorder(null, cornerRadius: 6);
+                                if (imgBorder != null)
+                                {
+                                    _r.SetClipToBounds(imgBorder, true);
+                                    _r.SetBorderChild(imgBorder, img);
+                                    imageElement = imgBorder;
+                                }
+                                else
+                                {
+                                    imageElement = img;
+                                }
+                            }
                         }
-                    }
-                    else
-                    {
-                        imageElement = null;
                     }
                 }
 

@@ -6,6 +6,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.3.4] - 2026-02-17
+
+### Added
+- Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`)
+- Per-embed animation timers with automatic cleanup on card removal
+- Graceful fallback: if SkiaSharp frame APIs are unavailable or trimmed, renders static first frame (zero regression)
+
+### Changed
+- Link embeds: skip Tenor URLs (`tenor.com`, `media.tenor.com`) — Root renders these natively, avoids double-embedding
+
 ## [0.3.3] - 2026-02-17
 
 ### Added
