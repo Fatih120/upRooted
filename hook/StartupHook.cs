@@ -310,14 +310,17 @@ internal class StartupHook
                 Logger.Log("Startup", "Phase 4.5e: Profile badge skipped (not on developer channel)");
             }
 
-            // Phase 5: DotNetBrowser features (NSFW filter)
+            // Phase 5: DotNetBrowser discovery (always) + NSFW filter (conditional)
+            // DotNetBrowser is needed for video thumbnail extraction (LinkEmbedEngine)
+            // and optionally for the NSFW content filter.
             var phase5Settings = UprootedSettings.Load();
             var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
 
-            if (wantNsfw)
             {
                 var capturedWindow = mainWindow!;
                 var capturedResolver = resolver;
+                var capturedWantNsfw = wantNsfw;
+                var capturedPhase5Settings = phase5Settings;
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try
@@ -331,9 +334,7 @@ internal class StartupHook
                             AssemblyLoadEventHandler handler = (_, args) =>
                             {
                                 var name = args.LoadedAssembly.GetName().Name ?? "";
-                                if (name.Equals("DotNetBrowser", StringComparison.OrdinalIgnoreCase) ||
-                                    name.Equals("DotNetBrowser.Core", StringComparison.OrdinalIgnoreCase) ||
-                                    name.Equals("DotNetBrowser.Chromium", StringComparison.OrdinalIgnoreCase))
+                                if (name.StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase))
                                 {
                                     Logger.Log("Startup", $"Phase 5: DotNetBrowser assembly loaded via event: {name}");
                                     assemblyEvent.Set();
@@ -369,26 +370,64 @@ internal class StartupHook
                             return;
                         }
 
-                        // NSFW filter
-                        Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
-                        var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
-                            phase5Settings, capturedWindow);
-                        ContentPages.NsfwFilterInstance = nsfwFilter;
+                        // Discover browser instance — must dispatch to UI thread since
+                        // ViewModel/ApplicationLifetime properties require UI thread access.
+                        // Retry with delays since Root may not have created the IBrowser yet.
+                        DotNetBrowserReflection.SharedInstance = browserReflection;
+                        var capturedBrowserReflection = browserReflection;
+                        object? browser = null;
+                        for (int attempt = 1; attempt <= 6; attempt++)
+                        {
+                            using var found = new ManualResetEventSlim(false);
+                            object? result = null;
+                            capturedResolver.RunOnUIThread(() =>
+                            {
+                                try { result = capturedBrowserReflection.FindBrowserDirect(); }
+                                catch (Exception ex) { Logger.Log("Startup", $"Phase 5: FindBrowserDirect UI error: {ex.Message}"); }
+                                found.Set();
+                            });
+                            found.Wait(TimeSpan.FromSeconds(15));
+                            browser = result;
+                            if (browser != null) break;
+                            Logger.Log("Startup", $"Phase 5: IBrowser not found (attempt {attempt}/6), retrying in 5s...");
+                            Thread.Sleep(5_000);
+                        }
 
-                        if (nsfwFilter.Initialize())
-                            Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
+                        if (browser != null)
+                        {
+                            DotNetBrowserReflection.SharedBrowser = browser;
+                            DotNetBrowserReflection.SharedFrame = browserReflection.GetMainFrame(browser);
+                            DotNetBrowserReflection.IsReady = true;
+                            Logger.Log("Startup", "Phase 5: DotNetBrowser shared references ready (browser + frame)");
+                        }
                         else
-                            Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
+                        {
+                            Logger.Log("Startup", "Phase 5: IBrowser not found after 6 attempts, video thumbnails unavailable");
+                        }
+
+                        // NSFW filter (conditional)
+                        if (capturedWantNsfw)
+                        {
+                            Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
+                            var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
+                                capturedPhase5Settings, capturedWindow);
+                            ContentPages.NsfwFilterInstance = nsfwFilter;
+
+                            if (nsfwFilter.Initialize())
+                                Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
+                            else
+                                Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
+                        }
+                        else
+                        {
+                            Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
+                        }
                     }
                     catch (Exception ex)
                     {
                         Logger.Log("Startup", $"Phase 5 error: {ex.Message}");
                     }
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
             }
         }
         catch (Exception ex)

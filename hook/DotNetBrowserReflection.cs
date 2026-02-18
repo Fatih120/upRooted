@@ -13,6 +13,12 @@ namespace Uprooted;
 /// </summary>
 internal class DotNetBrowserReflection
 {
+    // Shared references — set by StartupHook Phase 5, consumed by LinkEmbedEngine for video thumbnails
+    internal static DotNetBrowserReflection? SharedInstance { get; set; }
+    internal static object? SharedBrowser { get; set; }
+    internal static object? SharedFrame { get; set; }
+    internal static volatile bool IsReady;
+
     // DotNetBrowser types
     public Type? BrowserViewType { get; private set; }
     public Type? IBrowserType { get; private set; }
@@ -21,6 +27,7 @@ internal class DotNetBrowserReflection
     // Cached property/method handles
     private PropertyInfo? _browserViewBrowser;   // BrowserView.Browser -> IBrowser
     private PropertyInfo? _browserMainFrame;     // IBrowser.MainFrame -> IFrame
+    private PropertyInfo? _browserTitle;         // IBrowser.Title -> string
     private MethodInfo? _frameExecuteJavaScript;  // IFrame.ExecuteJavaScript(string) -> object
     private readonly object _deferredLock = new();
     private bool _deferredResolutionAttempted;
@@ -137,6 +144,9 @@ internal class DotNetBrowserReflection
 
         // IBrowser.MainFrame property
         _browserMainFrame = IBrowserType?.GetProperty("MainFrame", pub);
+
+        // IBrowser.Title property (used for video thumbnail extraction via document.title)
+        _browserTitle = IBrowserType?.GetProperty("Title", pub);
 
         // Log the MainFrame property return type -- may not be IFrame
         if (_browserMainFrame != null)
@@ -1768,6 +1778,19 @@ internal class DotNetBrowserReflection
     }
 
     /// <summary>
+    /// Get the browser's current document title (IBrowser.Title).
+    /// Used for video thumbnail extraction — JS writes base64 data to document.title.
+    /// </summary>
+    public string? GetBrowserTitle(object browser)
+    {
+        var prop = _browserTitle ?? browser.GetType().GetProperty("Title",
+            BindingFlags.Public | BindingFlags.Instance);
+        _browserTitle ??= prop;
+        try { return prop?.GetValue(browser) as string; }
+        catch { return null; }
+    }
+
+    /// <summary>
     /// Get all frames from IBrowser.AllFrames.
     /// Returns a list of frame objects (IFrame instances).
     /// </summary>
@@ -1893,19 +1916,16 @@ internal class DotNetBrowserReflection
     }
 
     /// <summary>
-    /// Check if core DotNetBrowser assemblies are loaded.
-    /// Only requires DotNetBrowser / DotNetBrowser.Core / DotNetBrowser.Chromium —
-    /// the AvaloniaUi assembly is NOT needed (IBrowser, IFrame, ExecuteJavaScript
-    /// all live in the core DotNetBrowser.dll).
+    /// Check if any DotNetBrowser assemblies are loaded.
+    /// Uses StartsWith to match all DotNetBrowser assemblies regardless of specific name
+    /// (e.g. DotNetBrowser, DotNetBrowser.Core, DotNetBrowser.Chromium, DotNetBrowser.AvaloniaUi).
     /// </summary>
     public static bool AreDotNetBrowserAssembliesLoaded()
     {
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             var name = asm.GetName().Name ?? "";
-            if (name.Equals("DotNetBrowser", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("DotNetBrowser.Core", StringComparison.OrdinalIgnoreCase) ||
-                name.Equals("DotNetBrowser.Chromium", StringComparison.OrdinalIgnoreCase))
+            if (name.StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase))
                 return true;
         }
         return false;
