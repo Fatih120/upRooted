@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 35 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | ~430 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | ~430 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
@@ -55,7 +55,7 @@ Two independent injection layers into one app:
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `AutoUpdater.cs` | ~810 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare) |
-| `ProfileBadgeInjector.cs` | ~340 | "Uprooted Dev" profile badge injector (dev channel only, popup tree scan) |
+| `ProfileBadgeInjector.cs` | ~535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 46 | Thread-safe file logging, swallows own exceptions |
@@ -131,7 +131,7 @@ Two independent injection layers into one app:
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
 - AutoUpdater: encrypted `.uprpkg` package download (single file replaces 6 individual artifacts), multi-layer XOR decryption, developer channel with encrypted PAT, staging + verify + overwrite
-- ProfileBadgeInjector: "Uprooted Dev" badge on profile popups (dev channel only), diagnostic tree dump on first detection
+- ProfileBadgeInjector: "Uprooted Dev" badge on profile popups for hardcoded developer usernames only (event-driven detection via OverlayLayer CollectionChanged + 500ms fallback poll, 5s startup delay)
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle, color input, swatch + color picker, reset. ThemeEngine applies as Phase 6 after theme apply + live updates.
@@ -145,7 +145,7 @@ Two independent injection layers into one app:
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
 - MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); deletion detection relies on Remove events which may need tuning for new Root behaviors
-- ProfileBadgeInjector: needs real-world popup structure from tree dump logs to refine heuristics
+- ProfileBadgeInjector: `IsProfilePopup` heuristic may false-positive on non-profile popups — needs tree dump log analysis to refine
 
 ## 7. Build Commands
 

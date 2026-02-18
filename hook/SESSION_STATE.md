@@ -76,7 +76,7 @@ Key details:
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
 | 4.5d | AutoUpdater | Background update check (every 6 hours), encrypted .uprpkg download + decrypt + apply |
-| 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (developer channel only, 25s delay) |
+| 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (dev channel + hardcoded usernames, 5s delay, event-driven + 500ms fallback) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
 ## Link Embed Engine (v0.3.3–0.3.6rc)
@@ -176,7 +176,7 @@ The Avalonia-native link embed engine is broadly functional:
 4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
 3. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
-6. **Refine ProfileBadgeInjector** — Check tree dump logs for actual popup structure, refine heuristics in `IsProfilePopup` and `InjectBadgeUnderUsername`
+6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
 
 ## ClearURLs Engine Notes
 

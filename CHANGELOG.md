@@ -34,7 +34,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
 - **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
-- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay; active only when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popup controls
+- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay; active only when update channel is set to Developer; event-driven detection via OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups; badge gated to hardcoded developer usernames
   - File: `hook/ProfileBadgeInjector.cs`
 - **ClearURLs engine** — strips tracking parameters from URLs in the compose editor before the message is sent
   - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` via `AddHandler(RoutedEvent, …, handledEventsToo: true)` with all routing strategies (Bubble|Tunnel|Direct) — required because AvaloniaEdit marks Enter as `Handled=true`
@@ -65,6 +65,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **ProfileBadgeInjector**: fixed `double?` to `double` implicit conversion error in username font size comparison
 - **ProfileBadgeInjector**: badge was appearing beside the username (inside the horizontal name row) instead of below it — fixed by walking up the visual tree to find the first vertical StackPanel (`Orientation == Vertical`), then inserting at the username row's index+1; added `IsVerticalPanel()` helper (checks `Orientation` property for StackPanels, falls back to Y-bounds delta comparison for Grid/DockPanel)
 - **ProfileBadgeInjector**: badge made smaller and centered (font 12→10, padding 10,4→7,2, dot 8×8→6×6, `HorizontalAlignment=Center`)
+- **ProfileBadgeInjector**: badge was appearing on every profile popup indiscriminately — now gated to hardcoded developer usernames (`DeveloperUsernames` HashSet, case-insensitive). Detection switched from 500ms-only polling to event-driven via `OverlayLayer.Children.CollectionChanged` (instant) + 500ms fallback poll for TopLevel popups. Startup delay reduced from 25s to 5s.
 - **Deploy script**: `deploy-hook.ps1` now relaunches Root via `UprootedLauncher.exe` (sets CLR profiler env vars) instead of bare `Root.exe`
 - **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
 - **ThemeEngine**: eliminated theme flash when opening settings or switching tabs — walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) triggered after injection completes, on ListBox selection changes, and on Uprooted tab switches; added 50ms rapid follow-up to catch async-loaded content faster
