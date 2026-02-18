@@ -15,9 +15,9 @@
   - Buffered flush every 5 seconds, automatic retention enforcement (configurable max messages)
   - Right-click context menu on logged messages for "Clear message history"
   - Settings page: Log Deletes toggle, Log Edits toggle, Ignore Own Messages toggle, Max Messages retention limit
-  - New files: `hook/MessageLogger.cs` (982 lines), `hook/MessageStore.cs` (216 lines)
+  - New files: `hook/MessageLogger.cs` (1185 lines), `hook/MessageStore.cs` (232 lines)
 - **Reusable settings toggle component** — `BuildSettingsToggle` in ContentPages for any boolean plugin setting (pill toggle with label + description)
-- **TUI installer mode selector** — running the installer without `--install`/`--uninstall`/`--repair` flags now shows an interactive menu with arrow key navigation (Install / Uninstall / Repair)
+- **TUI installer mode selector** — running the installer without `--uninstall`/`--repair`/`--plain` flags now shows an interactive menu with arrow key navigation (Install / Uninstall / Repair)
 
 ### Changed
 

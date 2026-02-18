@@ -59,11 +59,11 @@ internal class MessageLogger
 
     // Channel tracking
     private string _currentChannelId = "";
+    private int _freshnessCounter;
 
-    // Remove debounce — rapid Removes = channel switch, not deletions
-    private readonly List<(object item, DateTime time)> _pendingRemoves = new();
-    private const int ChannelSwitchThreshold = 3; // 3+ removes in window = channel switch
-    private const int DebounceWindowMs = 300;
+    // Deletion detection via ID-diff polling (not CollectionChanged events)
+    private HashSet<string> _previousIdSnapshot = new();
+    private bool _idSnapshotInitialized;
 
     // Message caches
     private readonly Dictionary<string, CachedMessage> _messageCache = new();
@@ -140,11 +140,15 @@ internal class MessageLogger
                         Logger.Log(Tag, $"[heartbeat] subscribed={_subscribed} resolved={_propertiesResolved} srcItems={srcCount} snapshots={_contentSnapshot.Count} cache={_messageCache.Count}");
                     }
 
-                    FlushPendingRemoves(settings);
                     EnsureCollectionSubscription();
                     if (_propertiesResolved)
                     {
-                        PollEdits(settings);
+                        PollDeletions(settings);
+                        // TODO: PollEdits has false positives (content changes during send/render)
+                        // TODO: ApplyEditIndicators breaks message layout (greyed out, "(edited)" on every msg)
+                        // Disabled until edit detection is reliable.
+                        // PollEdits(settings);
+                        // InjectDeletedMessageCards skips edit indicators when edits disabled
                         InjectDeletedMessageCards(settings);
                     }
                 }
@@ -223,18 +227,6 @@ internal class MessageLogger
         try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
         catch { }
 
-        // Resolve properties from first item (per-type cache handles duplicates)
-        if (count > 0)
-        {
-            try
-            {
-                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
-                if (en != null && en.MoveNext() && en.Current != null)
-                    TryResolvePropertyAccessors(en.Current.GetType());
-            }
-            catch { }
-        }
-
         // Only adopt the actual chat message collection
         bool isChat = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
         if (!isChat && count > 0)
@@ -250,6 +242,18 @@ internal class MessageLogger
 
         if (isChat && hasINCC && _chatItemsControl == null)
         {
+            // Resolve properties from first item (only for chat controls, not emoji pickers etc.)
+            if (count > 0)
+            {
+                try
+                {
+                    var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
+                    if (en != null && en.MoveNext() && en.Current != null)
+                        TryResolvePropertyAccessors(en.Current.GetType());
+                }
+                catch { }
+            }
+
             Logger.Log(Tag, $"Chat collection: {typeName}, {count} items");
             _chatItemsControl = ic;
             _currentItemsSource = source;
@@ -371,7 +375,44 @@ internal class MessageLogger
 
     private void EnsureCollectionSubscription()
     {
-        if (_chatItemsControl == null) { Logger.Log(Tag, "[ensure] no chatItemsControl"); return; }
+        if (_chatItemsControl == null)
+        {
+            Logger.Log(Tag, "[ensure] no chatItemsControl — rediscovering");
+            TryRediscoverChat();
+            return;
+        }
+
+        // Every ~5 ticks (7.5s), verify we're still tracking the ACTIVE RootMessageItemsControl.
+        // Root creates new control instances on channel switch; the old one may linger alive
+        // in the tree but with stale data.
+        _freshnessCounter++;
+        if (_freshnessCounter >= 5)
+        {
+            _freshnessCounter = 0;
+            var activeControl = FindActiveMessageControl();
+            if (activeControl != null && !ReferenceEquals(activeControl, _chatItemsControl))
+            {
+                var activeSource = ReadItemsSource(activeControl);
+                int activeCount = 0;
+                try { activeCount = (int)(activeSource?.GetType().GetProperty("Count")?.GetValue(activeSource) ?? 0); }
+                catch { }
+                Logger.Log(Tag, $"[ensure] Active control changed — switching to {activeControl.GetType().Name} with {activeCount} items");
+                UnsubscribeCollection();
+                _chatItemsControl = activeControl;
+                _currentItemsSource = activeSource;
+                _contentSnapshot.Clear();
+                _previousIdSnapshot.Clear();
+                _idSnapshotInitialized = false;
+                ClearInjectedCards();
+                ReadCurrentChannelId();
+                if (activeSource != null)
+                {
+                    SubscribeToCollection(activeSource);
+                    SnapshotMessages(activeSource);
+                }
+                return;
+            }
+        }
 
         var currentSource = ReadItemsSource(_chatItemsControl);
         if (currentSource == null)
@@ -393,8 +434,9 @@ internal class MessageLogger
             Logger.Log(Tag, $"[ensure] ItemsSource ref changed — new count={newCount}, alive={controlAlive}");
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
-            _pendingRemoves.Clear();
             _contentSnapshot.Clear();
+            _previousIdSnapshot.Clear();
+            _idSnapshotInitialized = false;
             ClearInjectedCards();
             ReadCurrentChannelId();
             SubscribeToCollection(currentSource);
@@ -415,32 +457,118 @@ internal class MessageLogger
         }
     }
 
+    /// <summary>
+    /// Quick scan to find a RootMessageItemsControl that differs from the one we're
+    /// currently tracking. Returns null if the current control is still the only active one.
+    /// If multiple exist, returns the one with a different ItemsSource reference (new channel).
+    /// </summary>
+    private object? FindActiveMessageControl()
+    {
+        try
+        {
+            object? lastFound = null;
+            foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+            {
+                var tn = node.GetType().Name;
+                if (!tn.Contains("Message", StringComparison.OrdinalIgnoreCase) ||
+                    !tn.Contains("ItemsControl")) continue;
+
+                var source = ReadItemsSource(node);
+                if (source == null) continue;
+
+                int count = 0;
+                try { count = (int)(source.GetType().GetProperty("Count")?.GetValue(source) ?? 0); }
+                catch { }
+
+                if (count == 0) continue;
+
+                // If this is a DIFFERENT control or has a different ItemsSource, prefer it
+                if (!ReferenceEquals(node, _chatItemsControl) ||
+                    !ReferenceEquals(source, _currentItemsSource))
+                    return node;
+
+                lastFound = node;
+            }
+            return lastFound;
+        }
+        catch { }
+        return null;
+    }
+
     private void TryRediscoverChat()
     {
+        Logger.Log(Tag, "[rediscover] Scanning for chat control...");
+        object? bestControl = null;
+        object? bestSource = null;
+        int bestCount = 0;
+
         foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
         {
             var tn = node.GetType().Name;
-            if (!tn.Contains("ItemsControl") && tn != "ListBox" && tn != "ItemsRepeater") continue;
+            // Look for RootMessageItemsControl specifically, or any message-related ItemsControl
+            bool isMessageControl = tn.Contains("Message", StringComparison.OrdinalIgnoreCase);
+            if (!isMessageControl && !tn.Contains("ItemsControl") && tn != "ListBox") continue;
+
             var source = ReadItemsSource(node);
             if (source == null) continue;
-            try
-            {
-                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
-                if (en != null && en.MoveNext() && en.Current != null &&
-                    _typePropsCache.ContainsKey(en.Current.GetType()))
-                {
-                    Logger.Log(Tag, $"Re-discovered chat: {tn}");
-                    _chatItemsControl = node;
-                    _currentItemsSource = source;
-                    _contentSnapshot.Clear();
-                    ClearInjectedCards();
-                    ReadCurrentChannelId();
-                    SubscribeToCollection(source);
-                    SnapshotMessages(source);
-                    return;
-                }
-            }
+
+            var sourceType = source.GetType();
+            bool hasINCC = sourceType.GetInterfaces().Any(i => i.Name == "INotifyCollectionChanged");
+            if (!hasINCC) continue;
+
+            int count = 0;
+            try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
             catch { }
+
+            // Check if items are message-like
+            bool isChat = isMessageControl;
+            if (!isChat && count > 0)
+            {
+                try
+                {
+                    var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
+                    if (en != null && en.MoveNext() && en.Current != null)
+                    {
+                        // For generic controls, ONLY trust explicit MessageViewModel type name
+                        // (don't call TryResolvePropertyAccessors — emoji/reaction items can
+                        // have matching property names like Id/Content and produce false positives)
+                        isChat = en.Current.GetType().Name.Contains("MessageViewModel");
+                    }
+                }
+                catch { }
+            }
+
+            if (!isChat) continue;
+
+            // Prefer message-named controls (RootMessageItemsControl) over generic ones
+            bool bestIsMessageNamed = bestControl != null &&
+                bestControl.GetType().Name.Contains("Message", StringComparison.OrdinalIgnoreCase);
+            bool shouldReplace = bestControl == null
+                || (isMessageControl && !bestIsMessageNamed)    // message-named always beats generic
+                || (isMessageControl == bestIsMessageNamed && count > bestCount); // same tier: more items wins
+
+            if (shouldReplace)
+            {
+                bestControl = node;
+                bestSource = source;
+                bestCount = count;
+            }
+        }
+
+        if (bestControl != null && bestSource != null)
+        {
+            Logger.Log(Tag, $"[rediscover] Found: {bestControl.GetType().Name} with {bestCount} items");
+            _chatItemsControl = bestControl;
+            _currentItemsSource = bestSource;
+            _contentSnapshot.Clear();
+            ClearInjectedCards();
+            ReadCurrentChannelId();
+            SubscribeToCollection(bestSource);
+            SnapshotMessages(bestSource);
+        }
+        else
+        {
+            Logger.Log(Tag, "[rediscover] No chat control found");
         }
     }
 
@@ -515,47 +643,32 @@ internal class MessageLogger
         {
             var argsType = args.GetType();
             var action = (int)(argsType.GetProperty("Action")?.GetValue(args) ?? -1);
-            var newItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
-            var oldItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
-
-            Logger.Log(Tag, $"CC: action={action} new={newItems?.Count ?? 0} old={oldItems?.Count ?? 0}");
 
             switch (action)
             {
-                case 0: // Add
-                    // Flush pending removes — if adds are coming in, the removes were a channel switch
-                    if (_pendingRemoves.Count > 0)
-                    {
-                        Logger.Log(Tag, $"Discarding {_pendingRemoves.Count} pending removes (Add arrived = channel switch)");
-                        _pendingRemoves.Clear();
-                        _contentSnapshot.Clear();
-                    }
+                case 0: // Add — cache new messages for content preservation
+                    var newItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
                     if (newItems != null) HandleAdded(newItems);
                     break;
 
-                case 1: // Remove — queue for debounce
-                    if (oldItems != null)
-                    {
-                        var now = DateTime.UtcNow;
-                        foreach (var item in oldItems)
-                            if (item != null) _pendingRemoves.Add((item, now));
-                    }
+                case 2: // Replace — cache the new version
+                    var replaceItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
+                    if (replaceItems != null) HandleAdded(replaceItems);
                     break;
 
-                case 2: // Replace
-                    Logger.Log(Tag, "Collection Replace event");
-                    if (newItems != null) HandleAdded(newItems);
-                    break;
-
-                case 3: // Move
-                    break;
-
-                case 4: // Reset
-                    Logger.Log(Tag, "Collection Reset — channel switch");
-                    _pendingRemoves.Clear();
+                case 4: // Reset — Root rebuilt the collection, force re-discovery
+                    Logger.Log(Tag, "Collection Reset — forcing re-discovery");
                     _contentSnapshot.Clear();
+                    _previousIdSnapshot.Clear();
+                    _idSnapshotInitialized = false;
                     ClearInjectedCards();
+                    UnsubscribeCollection();
+                    _chatItemsControl = null;
+                    _currentItemsSource = null;
+                    _subscribed = false;
                     break;
+
+                // Remove (1) and Move (3) — ignored. Deletion detection is via ID-diff polling.
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"CollectionChanged error: {ex.Message}"); }
@@ -575,41 +688,78 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Process the pending Remove queue after the debounce window. If many items were
-    /// removed rapidly (channel switch), discard them. If few items trickled in
-    /// (real deletions), process them.
+    /// Detect deletions by comparing current collection IDs with previous snapshot.
+    /// IDs that disappeared (present before, absent now) are deletions — IF only
+    /// a few disappeared. Many disappearances = channel switch, trigger re-discovery.
     /// </summary>
-    private void FlushPendingRemoves(UprootedSettings settings)
+    private void PollDeletions(UprootedSettings settings)
     {
-        if (_pendingRemoves.Count == 0) return;
+        if (!settings.MessageLoggerLogDeletes || _currentItemsSource == null) return;
 
-        var now = DateTime.UtcNow;
-        var oldest = _pendingRemoves[0].time;
-        if ((now - oldest).TotalMilliseconds < DebounceWindowMs) return; // still within window
-
-        var count = _pendingRemoves.Count;
-
-        if (count >= ChannelSwitchThreshold)
+        // Build current ID set
+        var currentIds = new HashSet<string>();
+        try
         {
-            Logger.Log(Tag, $"Channel switch detected: {count} removes in {(now - oldest).TotalMilliseconds:F0}ms — discarding");
-            _pendingRemoves.Clear();
+            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
+            if (en == null) return;
+            while (en.MoveNext())
+            {
+                var item = en.Current;
+                if (item == null) continue;
+                var msgId = ReadMessageId(item);
+                if (msgId != null) currentIds.Add(msgId);
+            }
+        }
+        catch { return; }
+
+        if (!_idSnapshotInitialized)
+        {
+            _previousIdSnapshot = currentIds;
+            _idSnapshotInitialized = true;
+            Logger.Log(Tag, $"ID snapshot initialized: {currentIds.Count} IDs");
+            return;
+        }
+
+        // Find disappeared IDs (in previous but not in current)
+        var disappeared = new List<string>();
+        foreach (var id in _previousIdSnapshot)
+            if (!currentIds.Contains(id)) disappeared.Add(id);
+
+        // Find new IDs
+        int newCount = 0;
+        foreach (var id in currentIds)
+            if (!_previousIdSnapshot.Contains(id)) newCount++;
+
+        if (disappeared.Count > 0)
+            Logger.Log(Tag, $"ID diff: {disappeared.Count} gone, {newCount} new, prev={_previousIdSnapshot.Count} cur={currentIds.Count}");
+
+        _previousIdSnapshot = currentIds;
+
+        if (disappeared.Count == 0) return;
+
+        // Many disappearances OR many new IDs = channel switch or scroll-load, not deletions
+        // (navigating to a channel with overlapping messages can produce 1 gone + 50 new)
+        if (disappeared.Count >= 3 || newCount >= 5)
+        {
+            Logger.Log(Tag, $"Navigation detected ({disappeared.Count} gone, {newCount} new) — resetting snapshot");
             _contentSnapshot.Clear();
             ClearInjectedCards();
+            if (disappeared.Count >= 3)
+            {
+                // Full channel switch — force rediscovery
+                UnsubscribeCollection();
+                _chatItemsControl = null;
+                _currentItemsSource = null;
+                _subscribed = false;
+                _idSnapshotInitialized = false;
+                TryRediscoverChat();
+            }
             return;
         }
 
-        if (!_propertiesResolved || !settings.MessageLoggerLogDeletes)
+        // 1-2 disappearances with few new IDs = real deletions
+        foreach (var msgId in disappeared)
         {
-            _pendingRemoves.Clear();
-            return;
-        }
-
-        Logger.Log(Tag, $"Processing {count} pending remove(s) as deletion(s)");
-        foreach (var (item, _) in _pendingRemoves)
-        {
-            var msgId = ReadMessageId(item);
-            if (msgId == null) continue;
-
             _contentSnapshot.Remove(msgId);
 
             if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
@@ -619,22 +769,7 @@ internal class MessageLogger
                 _store.RecordDeletion(msgId, cached.ChannelId, DateTime.UtcNow);
                 Logger.Log(Tag, $"MSG DEL: {Truncate(cached.Content, 80)}");
             }
-            else if (!_messageCache.ContainsKey(msgId))
-            {
-                var cached2 = ExtractCachedMessage(item, msgId);
-                if (cached2 != null)
-                {
-                    cached2.IsDeleted = true;
-                    cached2.DeletedAt = DateTime.UtcNow;
-                    _messageCache[msgId] = cached2;
-                    _store.RecordMessage(cached2.MessageId, cached2.ChannelId,
-                        cached2.AuthorId, cached2.AuthorName, cached2.Timestamp, cached2.Content);
-                    _store.RecordDeletion(msgId, cached2.ChannelId, DateTime.UtcNow);
-                    Logger.Log(Tag, $"MSG DEL (new): {Truncate(cached2.Content, 80)}");
-                }
-            }
         }
-        _pendingRemoves.Clear();
     }
 
     // ===== Edit Detection via Polling =====
@@ -704,9 +839,8 @@ internal class MessageLogger
             _injectedCards[cardTag] = card;
         }
 
-        // Also apply edit indicators on visible messages
-        if (settings.MessageLoggerLogEdits)
-            ApplyEditIndicators();
+        // Edit indicators disabled — ApplyEditIndicators breaks message rendering
+        // by injecting children into the message visual tree.
     }
 
     /// <summary>

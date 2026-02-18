@@ -50,8 +50,8 @@ Two independent injection layers into one app:
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
-| `MessageLogger.cs` | ~630 | Message logger: discovery scan, collection subscription, edit/delete detection, visual indicators |
-| `MessageStore.cs` | ~200 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
+| `MessageLogger.cs` | 1185 | Message logger: discovery scan, collection subscription, edit/delete detection, visual indicators |
+| `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
@@ -123,6 +123,8 @@ Two independent injection layers into one app:
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
 - MessageLogger plugin: Phase 1 discovery scan, collection subscription via Expression.Lambda, edit/delete detection, visual indicators, flat-file persistence (MessageStore.cs), settings UI with toggle pills
+- TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
+- Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)
@@ -130,7 +132,7 @@ Two independent injection layers into one app:
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
-- MessageLogger property names TBD -- Phase 1 discovery scan needed to map Root's ViewModel
+- MessageLogger: Phase 1 discovery implemented; property mapping may need updates when Root changes ViewModels
 
 ## 7. Build Commands
 

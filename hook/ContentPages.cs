@@ -241,6 +241,180 @@ internal static class ContentPages
             r.AddChild(page, statusCard);
         }
 
+        // Card 2.5: Updates
+        var updatesCard = CreateCard(r);
+        if (updatesCard != null)
+        {
+            r.SetMargin(updatesCard, 0, 12, 0, 0);
+            var updatesContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            if (updatesContent == null) { r.AddChild(page, updatesCard); goto afterUpdates; }
+            r.SetMargin(updatesContent, 24, 24, 24, 24);
+
+            var updatesTitle = CreateSectionHeader(r, "UPDATES", font);
+            r.AddChild(updatesContent, updatesTitle);
+
+            // Auto-check toggle
+            BuildSettingsToggle(r, updatesContent, "Auto-check for updates",
+                "Check for new versions in the background",
+                settings.AutoUpdateEnabled, font, enabled =>
+                {
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateEnabled = enabled;
+                    s.Save();
+                });
+
+            // Notification toggle
+            BuildSettingsToggle(r, updatesContent, "Update notifications",
+                "Show a notification when Uprooted auto-updates",
+                settings.AutoUpdateNotify, font, enabled =>
+                {
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateNotify = enabled;
+                    s.Save();
+                });
+
+            // Separator line
+            var sep = r.CreateBorder(CardBorder, 0);
+            if (sep != null)
+            {
+                sep.GetType().GetProperty("Height")?.SetValue(sep, 1.0);
+                r.SetMargin(sep, 0, 18, 0, 0);
+                r.AddChild(updatesContent, sep);
+            }
+
+            // Status text (dynamic)
+            var updater = AutoUpdater.Instance;
+            var (statusText, statusColor) = updater?.GetStatus()
+                ?? ($"Up to date (v{settings.Version})", AccentGreen);
+
+            object? statusValueText = null;
+            var updateStatusRow = r.CreateStackPanel(vertical: false, spacing: 0);
+            if (updateStatusRow != null)
+            {
+                r.SetMargin(updateStatusRow, 0, 16, 0, 0);
+
+                var statusLabel = r.CreateTextBlock("Status: ", 13, TextMuted);
+                r.SetFontWeightNumeric(statusLabel, 450);
+                ApplyFont(r, statusLabel, font);
+                r.AddChild(updateStatusRow, statusLabel);
+
+                statusValueText = r.CreateTextBlock(statusText, 13, statusColor);
+                r.SetFontWeightNumeric(statusValueText, 450);
+                ApplyFont(r, statusValueText, font);
+                r.AddChild(updateStatusRow, statusValueText);
+
+                r.AddChild(updatesContent, updateStatusRow);
+            }
+
+            // Last checked timestamp
+            var lastCheckText = "Never";
+            if (!string.IsNullOrEmpty(settings.LastUpdateCheck))
+            {
+                try
+                {
+                    var lastCheck = DateTime.Parse(settings.LastUpdateCheck, null,
+                        System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime();
+                    lastCheckText = lastCheck.ToString("MMM d, yyyy h:mm tt");
+                }
+                catch { /* keep "Never" */ }
+            }
+            var lastCheckLabel = r.CreateTextBlock($"Last checked: {lastCheckText}", 12, TextDim);
+            if (lastCheckLabel != null)
+            {
+                ApplyFont(r, lastCheckLabel, font);
+                r.SetMargin(lastCheckLabel, 0, 8, 0, 0);
+                r.AddChild(updatesContent, lastCheckLabel);
+            }
+
+            // Check for Updates button
+            var isChecking = updater?.IsChecking ?? false;
+            var hasUpdate = updater?.HasUpdate ?? false;
+            var wasUpdated = updater?.UpdateApplied ?? false;
+
+            var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
+            var btnText = r.CreateTextBlock(btnLabel, 13, TextWhite);
+            r.SetFontWeightNumeric(btnText, 500);
+            ApplyFont(r, btnText, font);
+            r.SetHorizontalAlignment(btnText, "Center");
+
+            var btnColor = hasUpdate ? "#C0A820" : AccentGreen;
+            var btn = r.CreateBorder(btnColor, 8, btnText);
+            if (btn != null)
+            {
+                r.SetPadding(btn, 16, 8, 16, 8);
+                r.SetMargin(btn, 0, 14, 0, 0);
+                r.SetHorizontalAlignment(btn, "Left");
+                r.SetCursorHand(btn);
+
+                if (!isChecking && !wasUpdated)
+                {
+                    var btnRef = btn;
+                    var btnTextRef = btnText;
+                    var statusValueRef = statusValueText;
+                    var lastCheckRef = lastCheckLabel;
+                    r.SubscribeEvent(btn, "PointerPressed", () =>
+                    {
+                        var u = AutoUpdater.Instance;
+                        if (u == null || u.IsChecking) return;
+
+                        r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Checking...");
+                        r.SetBackground(btnRef, ColorUtils.Lighten(btnColor, 10));
+
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            u.CheckForUpdate();
+
+                            // Update UI on completion
+                            r.RunOnUIThread(() =>
+                            {
+                                var (newStatus, newColor) = u.GetStatus();
+                                var newBtnLabel = u.UpdateApplied ? "Updated!" : u.HasUpdate ? "Update Now" : "Check for Updates";
+                                var newBtnColor = u.HasUpdate ? "#C0A820" : AccentGreen;
+
+                                r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, newBtnLabel);
+                                r.SetBackground(btnRef, newBtnColor);
+
+                                if (statusValueRef != null)
+                                {
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(statusValueRef, newStatus);
+                                    var brush = r.CreateBrush(newColor);
+                                    statusValueRef.GetType().GetProperty("Foreground")?.SetValue(statusValueRef, brush);
+                                }
+
+                                if (lastCheckRef != null)
+                                {
+                                    var s = UprootedSettings.Load();
+                                    var lcText = "Never";
+                                    if (!string.IsNullOrEmpty(s.LastUpdateCheck))
+                                    {
+                                        try
+                                        {
+                                            var lc = DateTime.Parse(s.LastUpdateCheck, null,
+                                                System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime();
+                                            lcText = lc.ToString("MMM d, yyyy h:mm tt");
+                                        }
+                                        catch { }
+                                    }
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(lastCheckRef, $"Last checked: {lcText}");
+                                }
+                            });
+                        });
+                    });
+
+                    r.SubscribeEvent(btn, "PointerEntered", () =>
+                        r.SetBackground(btn, ColorUtils.Lighten(btnColor, 10)));
+                    r.SubscribeEvent(btn, "PointerExited", () =>
+                        r.SetBackground(btn, btnColor));
+                }
+
+                r.AddChild(updatesContent, btn);
+            }
+
+            r.SetBorderChild(updatesCard, updatesContent);
+            r.AddChild(page, updatesCard);
+        }
+        afterUpdates:
+
         // Card 3: Links
         var linksCard = CreateCard(r);
         if (linksCard != null)

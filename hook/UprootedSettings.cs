@@ -19,6 +19,12 @@ internal class UprootedSettings
     public bool MessageLoggerIgnoreSelf { get; set; } = false;
     public int MessageLoggerMaxMessages { get; set; } = 10000;
 
+    // Auto-update settings
+    public bool AutoUpdateEnabled { get; set; } = true;
+    public bool AutoUpdateNotify { get; set; } = true;
+    public string LastUpdateCheck { get; set; } = "";
+    public string PendingUpdateVersion { get; set; } = "";
+
     private static string? _settingsPath;
 
     // Time-based cache: avoid re-reading from disk on every 500ms timer tick
@@ -84,6 +90,10 @@ internal class UprootedSettings
                         if (int.TryParse(val, out var maxMsg) && maxMsg > 0)
                             settings.MessageLoggerMaxMessages = maxMsg;
                         break;
+                    case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
+                    case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
+                    case "AutoUpdate.LastCheck": settings.LastUpdateCheck = val; break;
+                    case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
                         settings.Plugins[pluginName] = val == "true";
@@ -129,7 +139,11 @@ internal class UprootedSettings
                 "MessageLogger.LogDeletes=" + (MessageLoggerLogDeletes ? "true" : "false"),
                 "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
                 "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
-                "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages
+                "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
+                "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
+                "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
+                "AutoUpdate.LastCheck=" + LastUpdateCheck,
+                "AutoUpdate.PendingVersion=" + PendingUpdateVersion
             };
             foreach (var (name, enabled) in Plugins)
             {

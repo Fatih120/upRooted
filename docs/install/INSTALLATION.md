@@ -67,8 +67,8 @@ with no external dependencies.
    The TUI will guide you through the installation process. It will:
    - Auto-detect Root's installation path
      - Windows: `%LOCALAPPDATA%\Root\current\Root.exe`
-     - Linux: checks `~/Applications/Root.AppImage`, `~/Downloads/Root.AppImage`,
-       `~/.local/bin/Root.AppImage`, `/opt/Root.AppImage`, and `PATH`
+     - Linux: 5-strategy search — well-known paths, glob for versioned filenames,
+       `.desktop` file parsing, running process detection via `/proc`, and PATH lookup
    - Deploy five files to the Uprooted install directory (see
      [File Locations Table](#file-locations-table)):
      - `uprooted_profiler.dll` (Windows) or `libuprooted_profiler.so` (Linux)
@@ -229,13 +229,15 @@ sudo apt install gcc nodejs
 
 ### What the Script Does (Step by Step)
 
-1. **Finds Root.AppImage.** Searches these locations in order:
-   - `~/Applications/Root.AppImage`
-   - `~/Downloads/Root.AppImage`
-   - `~/.local/bin/Root.AppImage`
-   - `/opt/Root.AppImage`
-   - `~/.local/bin/Root`
-   - `Root` in `$PATH`
+1. **Finds Root.AppImage.** Uses 7 strategies in order, returning the first match:
+   1. Exact well-known paths (`~/Applications/Root.AppImage`, `~/Downloads/Root.AppImage`,
+      `~/.local/bin/Root.AppImage`, `/opt/Root.AppImage`, `~/.local/bin/Root`)
+   2. Glob for variant filenames (`Root*.AppImage`) in common directories
+   3. `.desktop` file search in application directories (extracts `Exec=` path)
+   4. Running process detection via `/proc/*/exe` symlinks
+   5. PATH lookup via `command -v Root`
+   6. `locate` database search (fast indexed, case-insensitive)
+   7. Shallow `find` in `$HOME` (depth 4, last resort)
 
    Use `--root-path` to override auto-detection.
 

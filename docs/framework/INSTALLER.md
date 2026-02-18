@@ -194,12 +194,14 @@ The `main()` function parses CLI arguments via clap's derive API, then dispatche
 the appropriate handler:
 
 - `--diagnose` always calls `cli::run_diagnose()`.
-- `--uninstall` calls `tui::run_uninstall()` or `cli::run_uninstall_plain()`.
-- `--repair` calls `tui::run_repair()` or `cli::run_repair_plain()`.
-- Default (no flags) calls `tui::run_install()` or `cli::run_install_plain()`.
+- `--uninstall` / `--repair` set the `InstallerMode` directly (bypass mode selector).
+- `--plain` with no mode flag goes straight to install (bypass mode selector).
+- Default (no flags) calls `tui::run_mode_selector()` for interactive mode selection, then dispatches to the chosen TUI handler.
+- The final dispatch matches `(InstallerMode, plain)` to route to the correct TUI or plain handler.
 
 The `#[derive(Parser)]` struct defines four boolean flags: `uninstall`, `repair`,
-`diagnose`, and `plain`.
+`diagnose`, and `plain`. An `InstallerMode` enum (`Install`, `Uninstall`, `Repair`)
+is used for dispatch.
 
 ### Modules
 
@@ -246,15 +248,22 @@ current state of Uprooted deployment.
 The installer checks if this single path exists.
 
 **Linux** (`detection.rs`):
-Searches an ordered list of candidate paths for the AppImage or extracted binary:
-1. `~/Applications/Root.AppImage`
-2. `~/Downloads/Root.AppImage`
-3. `~/.local/bin/Root.AppImage`
-4. `/opt/Root.AppImage`
-5. `/usr/bin/Root.AppImage`
-6. `~/.local/bin/Root` (extracted AppImage fallback)
+Uses 5 strategies in order, returning the first match:
 
-Returns the first path that exists, or falls back to `~/Applications/Root.AppImage`.
+1. **Exact well-known paths** (fastest) -- checks `~/Applications/Root.AppImage`,
+   `~/Downloads/Root.AppImage`, `~/.local/bin/Root.AppImage`, `/opt/Root.AppImage`,
+   `/usr/bin/Root.AppImage`, `~/.local/bin/Root`
+2. **Glob patterns** -- scans common directories (`~/Applications`, `~/Downloads`,
+   `~/.local/bin`, `~/Desktop`, `~`, `/opt`, `/usr/bin`, `/usr/local/bin`) for any
+   file matching `root*.appimage` (case-insensitive), catching versioned filenames
+   like `Root-0.9.92.AppImage`
+3. **`.desktop` file search** -- scans `~/.local/share/applications`,
+   `/usr/share/applications`, `/usr/local/share/applications` for desktop entries
+   with "Root" in the `Name=` field, extracts the `Exec=` path
+4. **Running process check** -- reads `/proc/*/exe` symlinks for any active Root process
+5. **PATH lookup** -- runs `which Root` to check the system PATH
+
+Falls back to `~/Applications/Root.AppImage` if no strategy matches.
 
 ### Profile Directory
 

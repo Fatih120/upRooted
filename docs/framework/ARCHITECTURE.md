@@ -152,23 +152,23 @@ uprooted-private/
 |-- hook/                             # C# .NET hook (CLR profiler injection layer)
 |   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
 |   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs         (348)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
+|   |-- StartupHook.cs         (366)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
 |   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
 |   |-- AvaloniaReflection.cs (2030)  # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
 |   |-- SidebarInjector.cs    (1280)  # Timer-based sidebar monitor, injection, click events.
-|   |-- ContentPages.cs      (2454)  # Settings page builders (Uprooted, Plugins, Themes).
+|   |-- ContentPages.cs      (2628)  # Settings page builders (Uprooted, Plugins, Themes).
 |   |-- ThemeEngine.cs        (2360)  # Native Avalonia theme: ResourceDictionary overrides.
 |   |-- ColorPickerPopup.cs    (533)  # HSL color picker popup for custom theme colors.
 |   |-- ColorUtils.cs          (262)  # Color parsing, HSL conversion, contrast calculation.
-|   |-- UprootedSettings.cs    (147)  # INI-based settings (System.Text.Json workaround).
+|   |-- UprootedSettings.cs    (161)  # INI-based settings (System.Text.Json workaround).
 |   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
 |   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
 |   |-- BrowserDiscovery.cs    (496)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
 |   |-- LinkEmbedEngine.cs    (1763)  # Avalonia-native link embed engine (OG fetch + visual tree injection).
 |   |-- AnimatedImage.cs       (795)  # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection).
-|   |-- MessageLogger.cs     (1253)  # Message logger: edit/delete detection, visual indicators.
-|   |-- MessageStore.cs        (216)  # Flat-file message log persistence (pipe-delimited, append-only).
+|   |-- MessageLogger.cs     (1185)  # Message logger: edit/delete detection, visual indicators.
+|   |-- MessageStore.cs        (232)  # Flat-file message log persistence (pipe-delimited, append-only).
 |   |-- NsfwFilter.cs          (305)  # NSFW filter JS injection (needs redesign for Avalonia-native chat).
 |   |-- Logger.cs               (46)  # Thread-safe file logging to uprooted-hook.log.
 |   |-- UprootedHook.csproj          # .NET 10.0 project file, nullable enabled.

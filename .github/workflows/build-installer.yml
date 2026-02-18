@@ -150,3 +150,11 @@ jobs:
           gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" --draft 2>&1
           gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
           if ($LASTEXITCODE -ne 0) { Write-Host "Release upload failed or no release found, skipping" }
+          # Upload individual artifact files for auto-updater
+          foreach ($f in @("uprooted_profiler.dll","UprootedHook.dll","UprootedHook.deps.json","uprooted-preload.js","uprooted.css","nsfw-filter.js","link-embeds.js")) {
+            $p = "installer\src-tauri\artifacts\$f"
+            if (Test-Path $p) {
+              gh release upload "v$version" $p --repo watchthelight/uprooted --clobber 2>&1
+              Write-Host "  Uploaded $f"
+            }
+          }

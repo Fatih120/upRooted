@@ -228,6 +228,24 @@ internal class StartupHook
                 Logger.Log("Startup", "Phase 4.5c: Message logger disabled, skipping");
             }
 
+            // Phase 4.5d: Auto-updater (background update check)
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    Thread.Sleep(30_000); // Wait 30s for app to fully settle
+                    Logger.Log("Startup", "Phase 4.5d: Starting auto-updater...");
+                    var updater = new AutoUpdater();
+                    AutoUpdater.Instance = updater;
+                    updater.Initialize();
+                    Logger.Log("Startup", "Phase 4.5d OK: Auto-updater initialized");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Startup", $"Phase 4.5d error: {ex.Message}");
+                }
+            });
+
             // Phase 5: DotNetBrowser features (NSFW filter)
             var phase5Settings = UprootedSettings.Load();
             var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
