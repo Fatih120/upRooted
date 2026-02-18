@@ -49,8 +49,8 @@ with no external dependencies.
 
 1. **Download the installer** from the
    [latest release](https://github.com/watchthelight/uprooted/releases/latest).
-   - Windows: `Uprooted-0.3.6rc-Setup.exe`
-   - Linux: `Uprooted-0.3.6rc-linux-amd64`
+   - Windows: `Uprooted-0.3.6-rc-Setup.exe`
+   - Linux: `Uprooted-0.3.6-rc-linux-amd64`
 
 2. **Close Root** if it is currently running. The installer will warn you if Root is
    still open.
@@ -58,11 +58,11 @@ with no external dependencies.
 3. **Run the installer** from a terminal:
    ```bash
    # Windows (PowerShell or Command Prompt)
-   .\Uprooted-0.3.6rc-Setup.exe
+   .\Uprooted-0.3.6-rc-Setup.exe
 
    # Linux
-   chmod +x Uprooted-0.3.6rc-linux-amd64
-   ./Uprooted-0.3.6rc-linux-amd64
+   chmod +x Uprooted-0.3.6-rc-linux-amd64
+   ./Uprooted-0.3.6-rc-linux-amd64
    ```
    The TUI will guide you through the installation process. It will:
    - Auto-detect Root's installation path
@@ -314,7 +314,7 @@ makepkg -si
 
 A proper AUR submission (`uprooted-bin`) is planned for a future release. For now,
 use the standalone Linux install script or the console installer binary
-(`Uprooted-0.3.6rc-linux-amd64`).
+(`Uprooted-0.3.6-rc-linux-amd64`).
 
 ---
 
@@ -344,7 +344,7 @@ Open the log file after launching Root. A successful startup looks like this:
 
 ```
 [HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.3.6rc Loaded ===
+[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.3.6-rc Loaded ===
 [HH:MM:SS.fff] [Startup] ========================================
 [HH:MM:SS.fff] [Startup] Process: C:\Users\...\Root.exe
 [HH:MM:SS.fff] [Startup] PID: 12345
@@ -389,10 +389,10 @@ flag:
 
 ```bash
 # Windows
-.\Uprooted-0.3.6rc-Setup.exe --uninstall
+.\Uprooted-0.3.6-rc-Setup.exe --uninstall
 
 # Linux
-./Uprooted-0.3.6rc-linux-amd64 --uninstall
+./Uprooted-0.3.6-rc-linux-amd64 --uninstall
 ```
 
 The installer will:
@@ -559,10 +559,10 @@ these options:
 **Console installer:**
 ```bash
 # Windows
-.\Uprooted-0.3.6rc-Setup.exe --repair
+.\Uprooted-0.3.6-rc-Setup.exe --repair
 
 # Linux
-./Uprooted-0.3.6rc-linux-amd64 --repair
+./Uprooted-0.3.6-rc-linux-amd64 --repair
 ```
 This strips any old injection, re-deploys files, and re-patches HTML fresh.
 

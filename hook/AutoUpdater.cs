@@ -503,8 +503,8 @@ internal class AutoUpdater
 
     /// <summary>
     /// Compare two version strings. Returns positive if a > b, negative if a &lt; b, 0 if equal.
-    /// Handles: "0.3.6", "0.3.6rc", "0.3.7-beta", "0.4.0"
-    /// Pre-release suffixes sort below the bare version (0.3.6 > 0.3.6rc).
+    /// Handles: "0.3.6", "0.3.6-rc", "0.3.7-beta", "0.4.0"
+    /// Pre-release suffixes sort below the bare version (0.3.6 > 0.3.6-rc).
     /// </summary>
     internal static int CompareVersions(string a, string b)
     {

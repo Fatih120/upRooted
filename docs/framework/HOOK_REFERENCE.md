@@ -1830,7 +1830,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.3.6rc";
+public string Version { get; set; } = "0.3.6-rc";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -1880,7 +1880,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.3.6rc
+Version=0.3.6-rc
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
