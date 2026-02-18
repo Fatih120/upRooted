@@ -21,7 +21,7 @@ The default mode renders a btop-inspired TUI with a centered bordered box, step
 indicators, animated spinners, and color-coded checkmarks/crosses. A `--plain` flag
 falls back to simple sequential ANSI output for scripts and CI environments.
 
-**Version:** 0.3.5
+**Version:** 0.3.6rc
 
 **Stack:**
 
@@ -86,7 +86,7 @@ indicators, and a footer message on completion.
 
 - **Border:** Cyan-colored box centered in the terminal, 60 columns wide.
 - **Title:** Operation name ("Install", "Uninstall", "Repair") in the border.
-- **Version:** `Uprooted v0.3.5` displayed at the top of the box.
+- **Version:** `Uprooted v0.3.6rc` displayed at the top of the box.
 - **Step indicators:**
   - `○` (dark gray) -- pending
   - Braille spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` (yellow, animated) -- running

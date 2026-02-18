@@ -1,6 +1,6 @@
 # Maintainer: watchthelight
 pkgname=uprooted
-pkgver=0.3.5
+pkgver=0.3.6rc
 pkgrel=1
 pkgdesc="Client mod framework for Root Communications"
 arch=('x86_64')

@@ -38,12 +38,17 @@ internal class MessageLogger
     private Type? _messageItemType;
 
     // Property accessors discovered in Phase 1
+    // Properties may live on the ViewModel directly OR on a nested Message object.
+    // _propMessageObject is the bridge: ViewModel.Message -> nested object.
+    private PropertyInfo? _propMessageObject; // null if props are directly on ViewModel
     private PropertyInfo? _propMessageId;
     private PropertyInfo? _propContent;
     private PropertyInfo? _propAuthorName;
     private PropertyInfo? _propAuthorId;
     private PropertyInfo? _propTimestamp;
     private PropertyInfo? _propChannelId;
+    private PropertyInfo? _propHasBeenDeleted; // ViewModel-level bool
+    private PropertyInfo? _propHasBeenEdited;  // ViewModel-level bool
     private bool _propertiesResolved;
 
     // Collection subscription
@@ -411,56 +416,65 @@ internal class MessageLogger
         _messageItemType = type;
         var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        // Message ID: try Id, MessageId, Uuid, Nonce
-        _propMessageId = FindProp(props, "Id", "MessageId", "Uuid", "Nonce", "ID");
+        // ViewModel-level booleans (always on the ViewModel itself)
+        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted");
+        _propHasBeenEdited = FindProp(props, "HasBeenEdited");
 
-        // Content: try Content, Text, Body, Message, RawContent
-        _propContent = FindProp(props, "Content", "Text", "Body", "Message", "RawContent", "MessageContent");
+        // Try direct resolution first
+        if (TryResolveOnProps(props, type.Name, null))
+            return;
 
-        // Author name: try AuthorName, Author, SenderName, Sender, DisplayName, Username
-        _propAuthorName = FindProp(props, "AuthorName", "Author", "SenderName", "Sender",
-            "DisplayName", "Username", "UserName", "Name");
-
-        // Author ID: try AuthorId, SenderId, UserId
-        _propAuthorId = FindProp(props, "AuthorId", "SenderId", "UserId", "AuthorID", "SenderID", "UserID");
-
-        // Timestamp: try Timestamp, CreatedAt, SentAt, Date, Time
-        _propTimestamp = FindProp(props, "Timestamp", "CreatedAt", "SentAt", "Date", "Time", "Created");
-
-        // Channel ID: try ChannelId, RoomId, ConversationId
-        _propChannelId = FindProp(props, "ChannelId", "RoomId", "ConversationId",
-            "ChannelID", "RoomID", "ConversationID");
-
-        if (_propMessageId != null && _propContent != null)
+        // Direct resolution failed — try nested Message object pattern
+        // Root's ViewModel has a .Message property containing the data model
+        Logger.Log(Tag, $"Direct resolution failed on {type.Name}, trying nested objects...");
+        foreach (var prop in props)
         {
-            _propertiesResolved = true;
-            Logger.Log(Tag, $"Properties resolved on {type.Name}: " +
-                $"Id={_propMessageId.Name}, Content={_propContent.Name}, " +
-                $"Author={_propAuthorName?.Name ?? "?"}, " +
-                $"Timestamp={_propTimestamp?.Name ?? "?"}, " +
-                $"Channel={_propChannelId?.Name ?? "?"}");
-        }
-        else
-        {
-            Logger.Log(Tag, $"Partial resolution on {type.Name}: " +
-                $"Id={_propMessageId?.Name ?? "MISSING"}, Content={_propContent?.Name ?? "MISSING"}");
-
-            // If direct props failed, check if there's a nested ViewModel pattern
-            // (e.g., item.Message.Content or item.ViewModel.Text)
-            foreach (var prop in props)
+            if (prop.PropertyType.IsClass && prop.PropertyType != typeof(string) &&
+                !prop.PropertyType.IsArray && prop.PropertyType.Namespace != "System")
             {
-                if (prop.PropertyType.IsClass && prop.PropertyType != typeof(string) &&
-                    !prop.PropertyType.IsArray && prop.PropertyType.Namespace != "System")
+                var nestedProps = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                if (TryResolveOnProps(nestedProps, prop.PropertyType.Name, prop))
                 {
-                    Logger.Log(Tag, $"  Nested candidate: {prop.Name} ({prop.PropertyType.Name})");
-                    var nestedProps = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                    foreach (var np in nestedProps)
-                    {
-                        Logger.Log(Tag, $"    {np.Name} ({np.PropertyType.Name})");
-                    }
+                    Logger.Log(Tag, $"Resolved via nested property: {type.Name}.{prop.Name}");
+                    return;
                 }
             }
         }
+
+        Logger.Log(Tag, $"Property resolution FAILED on {type.Name}");
+    }
+
+    /// <summary>
+    /// Attempt to resolve message ID + content from a set of properties.
+    /// If bridge is non-null, properties live on a nested object (ViewModel.bridge -> nested).
+    /// </summary>
+    private bool TryResolveOnProps(PropertyInfo[] props, string typeName, PropertyInfo? bridge)
+    {
+        var id = FindProp(props, "MessageId", "Id", "Uuid", "Nonce", "ID");
+        var content = FindProp(props, "MessageContent", "Content", "Text", "Body", "RawContent");
+
+        if (id == null || content == null)
+            return false;
+
+        _propMessageObject = bridge;
+        _propMessageId = id;
+        _propContent = content;
+        _propAuthorName = FindProp(props, "AuthorName", "Author", "SenderName", "Sender",
+            "DisplayName", "Username", "UserName", "Name");
+        _propAuthorId = FindProp(props, "SenderUserId", "AuthorId", "SenderId", "UserId",
+            "AuthorID", "SenderID", "UserID");
+        _propTimestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt",
+            "Date", "Time", "Created");
+        _propChannelId = FindProp(props, "ChannelId", "RoomId", "ConversationId",
+            "ChannelID", "RoomID", "ConversationID");
+
+        _propertiesResolved = true;
+        Logger.Log(Tag, $"Properties resolved on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
+            $"Id={_propMessageId.Name}, Content={_propContent.Name}, " +
+            $"Author={_propAuthorName?.Name ?? "?"}, AuthorId={_propAuthorId?.Name ?? "?"}, " +
+            $"Timestamp={_propTimestamp?.Name ?? "?"}, " +
+            $"Channel={_propChannelId?.Name ?? "?"}");
+        return true;
     }
 
     private static PropertyInfo? FindProp(PropertyInfo[] props, params string[] candidates)
@@ -825,35 +839,63 @@ internal class MessageLogger
 
     // ===== Message Property Readers =====
 
+    /// <summary>
+    /// Resolve the target object for property reads. If _propMessageObject is set,
+    /// properties live on a nested object (ViewModel.Message); otherwise directly on item.
+    /// </summary>
+    private object? GetMessageTarget(object item)
+    {
+        if (_propMessageObject == null) return item;
+        try { return _propMessageObject.GetValue(item); }
+        catch { return null; }
+    }
+
     private string? ReadMessageId(object item)
     {
         if (_propMessageId == null) return null;
-        try { return _propMessageId.GetValue(item)?.ToString(); }
+        var target = GetMessageTarget(item);
+        if (target == null) return null;
+        try { return _propMessageId.GetValue(target)?.ToString(); }
         catch { return null; }
     }
 
     private string? ReadContent(object item)
     {
         if (_propContent == null) return null;
-        try { return _propContent.GetValue(item) as string; }
+        var target = GetMessageTarget(item);
+        if (target == null) return null;
+        try { return _propContent.GetValue(target) as string; }
         catch { return null; }
     }
 
     private CachedMessage? ExtractCachedMessage(object item, string msgId)
     {
+        var target = GetMessageTarget(item);
+        if (target == null) return null;
+
         try
         {
+            // Read timestamp — SentAtUtc is DateTimeOffset, convert to DateTime
+            DateTime timestamp = DateTime.UtcNow;
+            if (_propTimestamp != null)
+            {
+                var tsValue = _propTimestamp.GetValue(target);
+                if (tsValue is DateTimeOffset dto)
+                    timestamp = dto.UtcDateTime;
+                else if (tsValue is DateTime dt)
+                    timestamp = dt;
+            }
+
             return new CachedMessage
             {
                 MessageId = msgId,
                 ChannelId = _propChannelId != null
-                    ? (_propChannelId.GetValue(item)?.ToString() ?? "") : "",
+                    ? (_propChannelId.GetValue(target)?.ToString() ?? "") : "",
                 AuthorId = _propAuthorId != null
-                    ? (_propAuthorId.GetValue(item)?.ToString() ?? "") : "",
+                    ? (_propAuthorId.GetValue(target)?.ToString() ?? "") : "",
                 AuthorName = _propAuthorName != null
-                    ? (_propAuthorName.GetValue(item)?.ToString() ?? "") : "Unknown",
-                Timestamp = _propTimestamp != null
-                    ? (DateTime)(_propTimestamp.GetValue(item) ?? DateTime.UtcNow) : DateTime.UtcNow,
+                    ? (_propAuthorName.GetValue(target)?.ToString() ?? "") : "Unknown",
+                Timestamp = timestamp,
                 Content = ReadContent(item) ?? ""
             };
         }

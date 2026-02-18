@@ -40,7 +40,7 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 18 source files in the `hook/` directory:
+The hook layer consists of 21 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
@@ -58,6 +58,9 @@ The hook layer consists of 18 source files in the `hook/` directory:
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `LinkEmbedEngine.cs` | 1589 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `AnimatedImage.cs` | 796 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
+| `MessageLogger.cs` | 1198 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
+| `MessageStore.cs` | 217 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `UprootedSettings.cs` | 91 | INI-based settings persistence |
 | `Logger.cs` | 28 | Thread-safe file logging |
@@ -1680,7 +1683,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.3.5";
+public string Version { get; set; } = "0.3.6rc";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -1717,7 +1720,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.3.5
+Version=0.3.6rc
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521

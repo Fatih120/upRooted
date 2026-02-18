@@ -21,7 +21,7 @@ function Write-Warn($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
 
 Write-Host ""
 Write-Host "  +---------------------------------+" -ForegroundColor Yellow
-Write-Host "  |   Uprooted Uninstaller v0.3.5   |" -ForegroundColor Yellow
+Write-Host "  |   Uprooted Uninstaller v0.3.6rc   |" -ForegroundColor Yellow
 Write-Host "  +---------------------------------+" -ForegroundColor Yellow
 Write-Host ""
 
