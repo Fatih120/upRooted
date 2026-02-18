@@ -8,7 +8,8 @@ namespace Uprooted;
 /// Badge only appears on profiles of known developer usernames, not all users.
 ///
 /// Architecture:
-/// - 500ms timer polls all TopLevel windows for new popup/overlay controls
+/// - Event-driven: subscribes to OverlayLayer.Children CollectionChanged for instant detection
+/// - Fallback: 500ms timer polls TopLevel windows for popups outside the overlay
 /// - Profile popups identified by presence of username TextBlock + avatar Image pattern
 /// - Username TextBlock found by largest font size in popup
 /// - Badge only injected if the username matches a known developer
@@ -20,7 +21,7 @@ internal class ProfileBadgeInjector
 {
     private const string ScannedTag = "uprooted-profile-scanned";
     private const string BadgeTag = "uprooted-dev-badge";
-    private const int PollIntervalMs = 500;
+    private const int FallbackPollMs = 500;
     private const string BadgeColor = "#8B6914"; // Gold/amber matching dev channel
 
     /// <summary>
@@ -35,10 +36,9 @@ internal class ProfileBadgeInjector
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
     private readonly object _mainWindow;
-    private Timer? _timer;
+    private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
-
     public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow)
     {
         _r = resolver;
@@ -48,19 +48,88 @@ internal class ProfileBadgeInjector
 
     public void Initialize()
     {
-        Logger.Log("ProfileBadge", "Starting profile popup monitor (500ms poll)");
-        _timer = new Timer(OnTimerTick, null, PollIntervalMs, PollIntervalMs);
+        // Primary: event-driven detection via OverlayLayer children changes
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                SubscribeOverlayChildren();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ProfileBadge", $"Overlay subscription error: {ex.Message}");
+            }
+        });
+
+        // Fallback: poll TopLevel windows for popups outside the overlay
+        Logger.Log("ProfileBadge", $"Starting profile popup monitor (overlay events + {FallbackPollMs}ms fallback poll)");
+        _fallbackTimer = new Timer(OnFallbackTick, null, FallbackPollMs, FallbackPollMs);
     }
 
-    private void OnTimerTick(object? state)
+    /// <summary>
+    /// Subscribe to CollectionChanged on OverlayLayer.Children for instant popup detection.
+    /// OverlayLayer inherits from Panel; its Children is AvaloniaList which implements
+    /// INotifyCollectionChanged. This is a standard .NET event (not a RoutedEvent),
+    /// so EventInfo.AddEventHandler works correctly.
+    /// </summary>
+    private void SubscribeOverlayChildren()
+    {
+        var overlay = _r.GetOverlayLayer(_mainWindow);
+        if (overlay == null)
+        {
+            Logger.Log("ProfileBadge", "OverlayLayer not found — relying on fallback poll only");
+            return;
+        }
+
+        // Get the Children collection object
+        var childrenProp = overlay.GetType().GetProperty("Children");
+        var children = childrenProp?.GetValue(overlay);
+        if (children == null)
+        {
+            Logger.Log("ProfileBadge", "OverlayLayer.Children not accessible — relying on fallback poll only");
+            return;
+        }
+
+        // Subscribe to CollectionChanged (INotifyCollectionChanged — standard .NET event, not RoutedEvent)
+        try
+        {
+            _r.SubscribeEvent(children, "CollectionChanged", OnOverlayChildrenChanged);
+            Logger.Log("ProfileBadge", "Subscribed to OverlayLayer.Children CollectionChanged — instant popup detection active");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"CollectionChanged subscription failed: {ex.Message} — relying on fallback poll only");
+        }
+    }
+
+    /// <summary>
+    /// Fires immediately when a child is added/removed from the OverlayLayer.
+    /// Runs on the UI thread (Avalonia collection events fire on the UI thread).
+    /// </summary>
+    private void OnOverlayChildrenChanged()
+    {
+        try
+        {
+            ScanOverlayLayer();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"Overlay event scan error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Fallback timer: only scans TopLevel windows (not overlay, which is event-driven).
+    /// </summary>
+    private void OnFallbackTick(object? state)
     {
         if (Interlocked.CompareExchange(ref _scanning, 1, 0) != 0) return;
         try
         {
             _r.RunOnUIThread(() =>
             {
-                try { ScanForProfilePopup(); }
-                catch (Exception ex) { Logger.Log("ProfileBadge", $"Scan error: {ex.Message}"); }
+                try { ScanTopLevels(); }
+                catch (Exception ex) { Logger.Log("ProfileBadge", $"Fallback scan error: {ex.Message}"); }
                 finally { Interlocked.Exchange(ref _scanning, 0); }
             });
 
@@ -72,64 +141,56 @@ internal class ProfileBadgeInjector
         }
         catch (Exception ex)
         {
-            Logger.Log("ProfileBadge", $"OnTimerTick error: {ex.Message}");
+            Logger.Log("ProfileBadge", $"OnFallbackTick error: {ex.Message}");
             Interlocked.Exchange(ref _scanning, 0);
         }
     }
 
-    private void ScanForProfilePopup()
+    private void ScanTopLevels()
     {
-        // Check all TopLevel windows (MainWindow + PopupRoot instances)
         var topLevels = _r.GetAllTopLevels();
         foreach (var topLevel in topLevels)
         {
-            // Skip the main window itself — profile popups are separate TopLevels
             if (topLevel == _mainWindow) continue;
-
-            var typeName = topLevel.GetType().Name;
-
-            // Skip if already scanned this popup instance
             if (_r.GetTag(topLevel) == ScannedTag) continue;
 
-            // Check if this looks like a profile popup
             if (IsProfilePopup(topLevel))
             {
-                Logger.Log("ProfileBadge", $"Profile popup detected: {typeName}");
+                Logger.Log("ProfileBadge", $"Profile popup detected (TopLevel): {topLevel.GetType().Name}");
                 _r.SetTag(topLevel, ScannedTag);
 
-                // Dump tree structure for discovery (first time only)
                 if (!_firstDumpDone)
                 {
                     _firstDumpDone = true;
                     DumpPopupTree(topLevel);
                 }
 
-                // Inject badge below the username TextBlock
                 InjectBadgeUnderUsername(topLevel);
             }
         }
+    }
 
-        // Also check the OverlayLayer on the main window (popups may render there)
+    private void ScanOverlayLayer()
+    {
         var overlay = _r.GetOverlayLayer(_mainWindow);
-        if (overlay != null)
+        if (overlay == null) return;
+
+        foreach (var child in _r.GetVisualChildren(overlay))
         {
-            foreach (var child in _r.GetVisualChildren(overlay))
+            if (_r.GetTag(child) == ScannedTag) continue;
+
+            if (IsProfilePopup(child))
             {
-                if (_r.GetTag(child) == ScannedTag) continue;
+                Logger.Log("ProfileBadge", $"Profile popup detected (overlay event): {child.GetType().Name}");
+                _r.SetTag(child, ScannedTag);
 
-                if (IsProfilePopup(child))
+                if (!_firstDumpDone)
                 {
-                    Logger.Log("ProfileBadge", $"Profile popup in overlay: {child.GetType().Name}");
-                    _r.SetTag(child, ScannedTag);
-
-                    if (!_firstDumpDone)
-                    {
-                        _firstDumpDone = true;
-                        DumpPopupTree(child);
-                    }
-
-                    InjectBadgeUnderUsername(child);
+                    _firstDumpDone = true;
+                    DumpPopupTree(child);
                 }
+
+                InjectBadgeUnderUsername(child);
             }
         }
     }
