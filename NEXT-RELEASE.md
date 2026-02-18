@@ -57,8 +57,9 @@
 
 ### Changed
 
-- **Sentry Blocker**: testing status promoted Alpha → Beta
-- **Link Embeds**: testing status promoted Alpha → Beta
+- **Plugin names**: renamed to PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching Vencord-style naming; Themes and ClearURLs unchanged
+- **SentryBlocker**: testing status promoted Alpha → Beta
+- **LinkEmbeds**: testing status promoted Alpha → Beta
 - **ProfileBadgeInjector**: badge repositioned below the username (was appearing beside it in the horizontal name row); now walks up to the first vertical StackPanel before inserting; badge made smaller and centered (font 10, padding 7,2, `HorizontalAlignment=Center`)
 - **Sidebar: Uprooted section repositioned above App Settings** — the UPROOTED nav section (About, Plugins, Themes) now appears between the USER SETTINGS and APP SETTINGS sections instead of at the bottom of the sidebar, so users don't have to scroll to reach Uprooted settings. Uses `FindAppSettingsInsertionPoint` to walk up from the "APP SETTINGS" TextBlock and insert into the items panel at the correct index. Falls back to appending at the end if the insertion point can't be determined.
 - **Linux installer: smarter Root auto-detection** — `find_root()` now uses 7 search strategies instead of just hardcoded paths:
@@ -71,6 +72,11 @@
   7. Shallow `find` in `$HOME` (depth 4, case-insensitive, last resort)
 - **Rust installer: matching Root auto-detection** — `detection.rs` `get_root_exe_path()` updated with glob, `.desktop` file, `/proc`, and PATH strategies matching the bash installer
 - Version bump to 0.3.6-rc across all components (package.json, Cargo.toml, PKGBUILD, installer scripts, plugin versions)
+
+### Fixed
+
+- **Theme flash on settings open** — Root loads settings content with default theme colors, causing a visible flash before the tree walker recolors. Fixed by triggering walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) after injection completes, on every ListBox selection change, and on Uprooted tab switches
+- **MessageLogger build error** — restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations
 
 ### Documentation
 

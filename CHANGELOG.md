@@ -50,8 +50,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
 
 ### Changed
-- **Sentry Blocker**: testing status promoted from Alpha → Beta
-- **Link Embeds**: testing status promoted from Alpha → Beta
+- **Plugin names**: renamed to PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching similar services like Vencord; Themes and ClearURLs unchanged
+- **SentryBlocker**: testing status promoted from Alpha → Beta
+- **LinkEmbeds**: testing status promoted from Alpha → Beta
 - **SidebarInjector**: UPROOTED nav section repositioned above "APP SETTINGS" (was appended at bottom); uses `FindAppSettingsInsertionPoint` to locate insertion index, falls back to append
 - Rust installer `detection.rs`: `get_root_exe_path()` updated with 7-strategy Root detection to match bash installer (exact paths → glob patterns → `.desktop` file scan → `/proc/*/exe` → PATH lookup → `locate` database → shallow `find`)
 - Version bumped to `0.3.6-rc` across all components (Cargo.toml, PKGBUILD, installer scripts)
@@ -65,6 +66,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **ProfileBadgeInjector**: badge made smaller and centered (font 12→10, padding 10,4→7,2, dot 8×8→6×6, `HorizontalAlignment=Center`)
 - **Deploy script**: `deploy-hook.ps1` now relaunches Root via `UprootedLauncher.exe` (sets CLR profiler env vars) instead of bare `Root.exe`
 - **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
+- **ThemeEngine**: eliminated theme flash when opening settings or switching tabs — walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) triggered after injection completes, on ListBox selection changes, and on Uprooted tab switches; added 50ms rapid follow-up to catch async-loaded content faster
+- **MessageLogger**: restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix)
 
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins

@@ -114,7 +114,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
-| `hook/MessageLogger.cs` | Chat message logger (1393 lines) — per-type property cache, event-based deletion detection with diagnostic instrumentation (HasBeenDeleted probe, Add/Remove correlation, remove index tracking, one-time property dump), bulk threshold raised to 10, flush-before-clear on channel switch, Discord-style deleted message rows |
+| `hook/MessageLogger.cs` | Chat message logger (1322 lines) — per-type property cache, event-based deletion detection with diagnostic instrumentation (HasBeenDeleted probe, Add/Remove correlation, remove index tracking, one-time property dump), bulk threshold raised to 10, flush-before-clear on channel switch, Discord-style deleted message rows |
 | `hook/MessageStore.cs` | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only: MSG\|DEL\|EDIT\|CLR records) |
 | `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization (20s delay for chat population) |
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
@@ -125,6 +125,10 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
 | `hook/ContentPages.cs` | Added "HIGHLIGHT OVERRIDE" section to Themes page: `BuildPingColorSection()` with toggle indicator, color input row, swatch + color picker, reset button |
 | `hook/StartupHook.cs` | Added custom ping color apply in Phase 3.5 after theme init |
+| `hook/ContentPages.cs` | Plugin DisplayNames renamed to PascalCase: SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter |
+| `hook/SidebarInjector.cs` | Theme walk burst triggers: after injection, on ListBox SelectionChanged, on Uprooted tab switch (WalkVisualTreeNow synchronous) |
+| `hook/ThemeEngine.cs` | Added 50ms rapid follow-up to ScheduleRapidFollowUp walk sequence |
+| `hook/MessageLogger.cs` | Restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix) |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 

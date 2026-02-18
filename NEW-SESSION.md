@@ -41,9 +41,9 @@ Two independent injection layers into one app:
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1408 | LayoutUpdated event + timer poll, sidebar injection, header management, click events |
-| `ContentPages.cs` | ~3400 | Settings page builders (Uprooted, Plugins, Themes) |
-| `ThemeEngine.cs` | ~2510 | ResourceDictionary overrides, live theme preview, custom ping color override |
+| `SidebarInjector.cs` | 1421 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers |
+| `ContentPages.cs` | ~3410 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ThemeEngine.cs` | ~2513 | ResourceDictionary overrides, live theme preview, custom ping color override |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | ~170 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
@@ -51,7 +51,7 @@ Two independent injection layers into one app:
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
-| `MessageLogger.cs` | ~1230 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
+| `MessageLogger.cs` | ~1322 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `AutoUpdater.cs` | ~810 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare) |
@@ -135,6 +135,8 @@ Two independent injection layers into one app:
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle, color input, swatch + color picker, reset. ThemeEngine applies as Phase 6 after theme apply + live updates.
+- Theme flash fix: walk bursts after injection completes, on ListBox selection changes, and on Uprooted tab switches prevent flash of unthemed content when opening settings or switching tabs. 50ms rapid follow-up added to catch async-loaded controls.
+- Plugin names: PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching Vencord-style naming
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)
