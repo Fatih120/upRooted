@@ -125,9 +125,9 @@ jobs:
       - name: Rename installer exe
         run: |
           $src = "installer\src-tauri\target\release\uprooted.exe"
-          $dst = "installer\src-tauri\target\release\Uprooted-0.3.2-Setup.exe"
+          $dst = "installer\src-tauri\target\release\Uprooted-0.3.4-Setup.exe"
           Move-Item $src $dst
-          Write-Host "Renamed to Uprooted-0.3.2-Setup.exe"
+          Write-Host "Renamed to Uprooted-0.3.4-Setup.exe"
 
       - name: Upload installer exe
         uses: actions/upload-artifact@v4
@@ -144,7 +144,7 @@ jobs:
             Write-Host "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           }
-          $version = "0.3.2"
+          $version = "0.3.4"
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
           Write-Host "Uploading $($exe.Name) to watchthelight/uprooted v$version"
           gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" --draft 2>&1
