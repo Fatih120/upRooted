@@ -6,6 +6,47 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.3.6-rc] - 2026-02-18
+
+### Added
+- **MessageLogger plugin** — logs deleted and edited messages in Avalonia-native chat with visual indicators
+  - Deletion detection via `ObservableCollection.CollectionChanged` subscription (Remove events); channel-switch heuristic distinguishes real deletions from ItemsSource resets
+  - Edit detection via content snapshot comparison on each scan tick
+  - Deleted messages re-injected into chat as red-tinted inline `Border` panels with author, timestamp, and original content
+  - Edit history tracked per message (timestamped list of previous versions)
+  - Files: `hook/MessageLogger.cs`, `hook/MessageStore.cs`
+- **MessageStore** — flat-file persistence for message log data
+  - Pipe-delimited append-only format (`MSG|EDIT|DEL` record types) with URI-encoded fields
+  - Buffered flush every 5 seconds, automatic retention enforcement (configurable max messages)
+  - File: `hook/MessageStore.cs`; location: `{profileDir}/uprooted-message-log.dat`
+- **AutoUpdater** — in-process background updater
+  - Checks public GitHub releases API every 6 hours; downloads `UprootedHook.dll`, deps, `uprooted-preload.js`, `uprooted.css`, and JS plugin files
+  - Files overwritten in-place; changes take effect on next Root restart (no user action required)
+  - Developer channel (password-gated, pulls from private repo releases)
+  - SHA-256 hash verification planned; reflection-based `HttpClient` to avoid trimmed method exceptions
+  - File: `hook/AutoUpdater.cs`
+- **Updates settings page** in native Avalonia UI — "Auto-check for updates", "Update notifications", and "Update channel" (stable/dev) controls; wired to `AutoUpdate.*` INI keys
+- **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
+- **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
+- **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
+- **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
+- **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
+
+### Changed
+- Rust installer `detection.rs`: `get_root_exe_path()` updated with 7-strategy Root detection to match bash installer (exact paths → glob patterns → `.desktop` file scan → `/proc/*/exe` → PATH lookup → `locate` database → shallow `find`)
+- Version bumped to `0.3.6-rc` across all components (Cargo.toml, PKGBUILD, installer scripts)
+
+### Fixed
+- Cargo.toml version format: `0.3.6rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
+
+### Documentation
+- Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
+- Added `docs/plugins/builtin/message-logger.md` — MessageLogger design reference
+- Updated `ARCHITECTURE.md`, `HOOK_REFERENCE.md`, `INSTALLER.md`, `AVALONIA_PATTERNS.md`, `THEME_ENGINE_DEEP_DIVE.md` for v0.3.6-rc state
+- Updated `TASKS.md`, `NEW-SESSION.md`, `NEXT-RELEASE.md` with v0.3.6-rc tracking
+
+---
+
 ## [0.3.5] - 2026-02-18
 
 ### Added
@@ -119,6 +160,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.3.6-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.5...v0.3.6-rc
 [0.3.5]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.5
 [0.3.2]: https://github.com/watchthelight/uprooted-private/compare/v0.3.0...v0.3.2
 [0.3.0]: https://github.com/watchthelight/uprooted-private/compare/v0.2.3...v0.3.0

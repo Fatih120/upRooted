@@ -33,6 +33,14 @@ New C# chat plugins should follow this pattern.
 
 ---
 
+## Shipped Plugins
+
+### ~~MessageLogger~~ ✓ (shipped in v0.3.6-rc)
+
+See [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md) for the full design reference and [`hook/MessageLogger.cs`](../../hook/MessageLogger.cs) + [`hook/MessageStore.cs`](../../hook/MessageStore.cs) for the implementation.
+
+---
+
 ## Planned Plugins
 
 ### ClearURLs
