@@ -60,6 +60,9 @@ internal static class ContentPages
             TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
             TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
         }
+
+        // Keep any live embed cards in sync with the new palette
+        LinkEmbedEngine.Instance?.NotifyThemeChanged();
     }
 
     /// <summary>
@@ -77,36 +80,40 @@ internal static class ContentPages
             TextMuted = DefaultTextMuted;
             TextDim = DefaultTextDim;
             AccentGreen = DefaultAccentGreen;
-            return;
-        }
-
-        var bg = themeEngine.GetBgPrimary();
-        var accent = themeEngine.GetAccentColor();
-        AccentGreen = accent;
-
-        // Use palette-derived colors for consistency with resource/tree updates
-        var palette = themeEngine.GetPalette();
-        if (palette != null &&
-            palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
-            palette.TryGetValue("TextFillColorPrimary", out var palText))
-        {
-            CardBg = palBg;
-            CardBorder = ColorUtils.WithAlpha(palText, 0x19);
-            var (tr, tg, tb) = ColorUtils.ParseHex(palText);
-            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
-            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
         }
         else
         {
-            var textBase = ColorUtils.DeriveTextColor(bg);
-            var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
-            CardBg = ColorUtils.Lighten(bg, 6);
-            CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
-            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
-            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+            var bg = themeEngine.GetBgPrimary();
+            var accent = themeEngine.GetAccentColor();
+            AccentGreen = accent;
+
+            // Use palette-derived colors for consistency with resource/tree updates
+            var palette = themeEngine.GetPalette();
+            if (palette != null &&
+                palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
+                palette.TryGetValue("TextFillColorPrimary", out var palText))
+            {
+                CardBg = palBg;
+                CardBorder = ColorUtils.WithAlpha(palText, 0x19);
+                var (tr, tg, tb) = ColorUtils.ParseHex(palText);
+                TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+                TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+                TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+            }
+            else
+            {
+                var textBase = ColorUtils.DeriveTextColor(bg);
+                var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
+                CardBg = ColorUtils.Lighten(bg, 6);
+                CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
+                TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
+                TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
+                TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+            }
         }
+
+        // Keep any live embed cards in sync with the updated palette
+        LinkEmbedEngine.Instance?.NotifyThemeChanged();
     }
 
     // NSFW filter reference for live config updates from settings UI
@@ -1646,35 +1653,6 @@ internal static class ContentPages
         if (pingSection != null)
             r.AddChild(page, pingSection);
 
-        // About themes card
-        var aboutCard = CreateCard(r);
-        if (aboutCard != null)
-        {
-            r.SetMargin(aboutCard, 0, 16, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var aboutTitle = CreateSectionHeader(r, "ABOUT THEMES", font);
-            r.AddChild(cardContent, aboutTitle);
-
-            var aboutText = r.CreateTextBlock(
-                "Themes modify Avalonia's FluentTheme resource dictionary at runtime. " +
-                "They change accent colors, backgrounds, control fills, and text colors " +
-                "across the entire native UI. Custom themes derive all shades from your " +
-                "chosen accent and background colors. Your theme persists across restarts.",
-                13, TextMuted);
-            if (aboutText != null)
-            {
-                ApplyFont(r, aboutText, font);
-                r.SetTextWrapping(aboutText, "Wrap");
-                r.SetMargin(aboutText, 0, 16, 0, 0);
-            }
-            r.AddChild(cardContent, aboutText);
-
-            r.SetBorderChild(aboutCard, cardContent);
-            r.AddChild(page, aboutCard);
-        }
-
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
         {
@@ -1807,6 +1785,7 @@ internal static class ContentPages
 
         // Accent row: label + textbox + swatch
         var accentSwatch = r.CreateBorder(settings.CustomAccent, 6);
+        r.SetTag(accentSwatch, "uprooted-no-recolor");
         var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch,
             accentHex =>
             {
@@ -1828,6 +1807,7 @@ internal static class ContentPages
 
         // Background row: label + textbox + swatch
         var bgSwatch = r.CreateBorder(settings.CustomBackground, 6);
+        r.SetTag(bgSwatch, "uprooted-no-recolor");
         var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch,
             bgHex =>
             {
