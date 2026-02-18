@@ -6,10 +6,10 @@ namespace Uprooted;
 /// <summary>
 /// Message logger plugin — preserves deleted messages and tracks edits.
 ///
-/// Deletion detection: All ObservableCollection Remove events are treated as genuine
-/// deletions. Channel switches are detected separately (ItemsSource reference swap or
-/// Reset event), NOT via individual Remove events. Virtualization only affects visual
-/// containers, not the data source, so Remove events = real data removal.
+/// Deletion detection: Root's ObservableCollection is a WINDOWED/VIRTUALIZED data source.
+/// Remove events fire for BOTH genuine deletions AND buffer management (scroll-off,
+/// window shifts). We use diagnostic instrumentation to distinguish the two — probing
+/// HasBeenDeleted, tracking Add/Remove correlation, and logging remove indices.
 ///
 /// Display: Deleted messages are re-injected into the chat as red-tinted inline panels
 /// (since Root removes them entirely). Right-click shows "Clear message history" to
@@ -63,6 +63,11 @@ internal class MessageLogger
     // Deletion detection via CollectionChanged Remove events (buffered + debounced)
     private readonly List<BufferedRemove> _pendingRemoves = new();
 
+    // Diagnostic counters: track Add/Remove correlation per flush window
+    private int _addsSinceFlush;
+    private int _removesSinceFlush;
+    private bool _firstRemoveDumped; // one-time property dump on first Remove event
+
     // Post-subscription settling filter: messages in the initial snapshot may be removed
     // by Root's buffer management within ~30s of subscribing. Messages that arrive AFTER
     // subscription (via Add events) are always trusted immediately.
@@ -73,6 +78,8 @@ internal class MessageLogger
     {
         public string MessageId;
         public string Content;
+        public bool? HasBeenDeleted;  // null = property not available on this type
+        public int RemoveIndex;       // OldStartingIndex from the event args
     }
 
     // Message caches
@@ -415,6 +422,9 @@ internal class MessageLogger
                 try { activeCount = (int)(activeSource?.GetType().GetProperty("Count")?.GetValue(activeSource) ?? 0); }
                 catch { }
                 Logger.Log(Tag, $"[ensure] Active control changed — switching to {activeControl.GetType().Name} with {activeCount} items");
+                // Flush buffered removes before discarding — real deletions from old channel shouldn't be lost
+                var flushSettings = UprootedSettings.Load();
+                FlushPendingRemoves(flushSettings);
                 UnsubscribeCollection();
                 _chatItemsControl = activeControl;
                 _currentItemsSource = activeSource;
@@ -449,6 +459,9 @@ internal class MessageLogger
             try { newCount = (int)(currentSource.GetType().GetProperty("Count")?.GetValue(currentSource) ?? 0); }
             catch { }
             Logger.Log(Tag, $"[ensure] ItemsSource ref changed — new count={newCount}, alive={controlAlive}");
+            // Flush buffered removes before discarding — real deletions from old source shouldn't be lost
+            var flushSettings = UprootedSettings.Load();
+            FlushPendingRemoves(flushSettings);
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
             _contentSnapshot.Clear();
@@ -678,7 +691,10 @@ internal class MessageLogger
 
                 case 1: // Remove — buffer for debounced deletion detection
                     var oldItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
-                    if (oldItems != null) HandleRemoved(oldItems);
+                    int removeIndex = -1;
+                    try { removeIndex = (int)(argsType.GetProperty("OldStartingIndex")?.GetValue(args) ?? -1); }
+                    catch { }
+                    if (oldItems != null) HandleRemoved(oldItems, removeIndex);
                     break;
 
                 case 2: // Replace — cache the new version
@@ -711,15 +727,17 @@ internal class MessageLogger
             if (msgId == null) continue;
             _contentSnapshot[msgId] = ReadContent(item) ?? "";
             CacheMessage(item, msgId);
+            _addsSinceFlush++;
         }
+        Logger.Log(Tag, $"[add-event] +{items.Count} (total adds since flush: {_addsSinceFlush})");
     }
 
     /// <summary>
     /// Buffer removed items for debounced processing on next tick.
-    /// We capture the message ID and content NOW (while the item is still alive)
-    /// because after the event returns, Root may dispose it.
+    /// We capture the message ID, content, HasBeenDeleted flag, and remove index NOW
+    /// (while the item is still alive) because after the event returns, Root may dispose it.
     /// </summary>
-    private void HandleRemoved(System.Collections.IList items)
+    private void HandleRemoved(System.Collections.IList items, int removeIndex)
     {
         if (!_propertiesResolved) return;
         foreach (var item in items)
@@ -733,20 +751,114 @@ internal class MessageLogger
             if (string.IsNullOrEmpty(content) && _messageCache.TryGetValue(msgId, out var cached))
                 content = cached.Content;
 
-            _pendingRemoves.Add(new BufferedRemove { MessageId = msgId, Content = content });
-            Logger.Log(Tag, $"[remove-event] buffered: {msgId} ({Truncate(content, 40)})");
+            // Probe HasBeenDeleted property on the ViewModel
+            bool? hasBeenDeleted = null;
+            var tp = GetTypeProps(item);
+            if (tp?.HasBeenDeleted != null)
+            {
+                try
+                {
+                    var target = GetMessageTarget(item, tp);
+                    if (target != null)
+                    {
+                        var val = tp.HasBeenDeleted.GetValue(target);
+                        if (val is bool b) hasBeenDeleted = b;
+                    }
+                }
+                catch { }
+            }
+
+            // One-time property dump: log ALL boolean properties on first Remove
+            if (!_firstRemoveDumped)
+            {
+                _firstRemoveDumped = true;
+                DumpBooleanProperties(item);
+            }
+
+            _removesSinceFlush++;
+            _pendingRemoves.Add(new BufferedRemove
+            {
+                MessageId = msgId,
+                Content = content,
+                HasBeenDeleted = hasBeenDeleted,
+                RemoveIndex = removeIndex
+            });
+            Logger.Log(Tag, $"[remove-event] buffered: {msgId} idx={removeIndex} deleted={hasBeenDeleted?.ToString() ?? "null"} ({Truncate(content, 40)})");
         }
+    }
+
+    /// <summary>
+    /// One-time diagnostic: dump ALL boolean properties on a message ViewModel
+    /// to discover any deletion-related flags Root exposes.
+    /// </summary>
+    private void DumpBooleanProperties(object item)
+    {
+        try
+        {
+            var type = item.GetType();
+            Logger.Log(Tag, $"[DIAG] Property dump for {type.FullName}:");
+
+            // Dump direct properties
+            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                try
+                {
+                    if (prop.PropertyType == typeof(bool) || prop.PropertyType == typeof(bool?))
+                    {
+                        var val = prop.GetValue(item);
+                        Logger.Log(Tag, $"[DIAG]   {type.Name}.{prop.Name} = {val}");
+                    }
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"[DIAG]   {type.Name}.{prop.Name} = ERROR({ex.Message})"); }
+            }
+
+            // Also dump bridge target properties if available
+            var tp = GetTypeProps(item);
+            if (tp?.Bridge != null)
+            {
+                try
+                {
+                    var target = tp.Bridge.GetValue(item);
+                    if (target != null)
+                    {
+                        var targetType = target.GetType();
+                        Logger.Log(Tag, $"[DIAG] Bridge target {targetType.FullName}:");
+                        foreach (var prop in targetType.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+                        {
+                            try
+                            {
+                                if (prop.PropertyType == typeof(bool) || prop.PropertyType == typeof(bool?))
+                                {
+                                    var val = prop.GetValue(target);
+                                    Logger.Log(Tag, $"[DIAG]   {targetType.Name}.{prop.Name} = {val}");
+                                }
+                            }
+                            catch (Exception ex) { Logger.Log(Tag, $"[DIAG]   {targetType.Name}.{prop.Name} = ERROR({ex.Message})"); }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            // Also dump ALL properties (not just bool) with their types for complete picture
+            Logger.Log(Tag, $"[DIAG] All properties on {type.Name}:");
+            foreach (var prop in type.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                Logger.Log(Tag, $"[DIAG]   {prop.Name}: {prop.PropertyType.Name}");
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"[DIAG] Dump error: {ex.Message}"); }
     }
 
     /// <summary>
     /// Process buffered Remove events from CollectionChanged. Called each tick.
     ///
     /// Filtering strategy:
-    ///   3+ removes in one tick = channel switch (discard all).
-    ///   1-2 removes: check each against the initial snapshot. Messages that were
-    ///   present when we subscribed may be removed by Root's buffer settling (within
-    ///   30s of subscription). Messages that arrived AFTER subscription (via Add events)
-    ///   are always trusted as real deletions immediately — no delay.
+    ///   10+ removes in one tick = channel switch (discard all).
+    ///   Fewer removes: check each against the initial snapshot and diagnostic data.
+    ///   Messages that were present when we subscribed may be removed by Root's buffer
+    ///   settling (within 30s of subscription). Messages that arrived AFTER subscription
+    ///   (via Add events) are always trusted as real deletions immediately — no delay.
     /// </summary>
     private void FlushPendingRemoves(UprootedSettings settings)
     {
@@ -755,25 +867,51 @@ internal class MessageLogger
             (DateTime.UtcNow - _lastSubscriptionTime).TotalSeconds > 30)
             _initialSnapshotIds.Clear();
 
-        if (_pendingRemoves.Count == 0) return;
+        if (_pendingRemoves.Count == 0)
+        {
+            _addsSinceFlush = 0;
+            _removesSinceFlush = 0;
+            return;
+        }
         if (!settings.MessageLoggerLogDeletes)
         {
             _pendingRemoves.Clear();
+            _addsSinceFlush = 0;
+            _removesSinceFlush = 0;
             return;
         }
 
         int count = _pendingRemoves.Count;
 
-        if (count >= 3)
+        // Log diagnostic summary before processing
+        int collectionSize = 0;
+        try
+        {
+            if (_currentItemsSource != null)
+                collectionSize = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
+        }
+        catch { }
+        double snapshotAge = (DateTime.UtcNow - _lastSubscriptionTime).TotalSeconds;
+
+        Logger.Log(Tag, $"[flush] removes={count} adds={_addsSinceFlush} pending={_pendingRemoves.Count} collectionSize={collectionSize} snapshotAge={snapshotAge:F1}s");
+        foreach (var r in _pendingRemoves)
+        {
+            bool inSnapshot = _initialSnapshotIds.Contains(r.MessageId);
+            Logger.Log(Tag, $"[flush]   {r.MessageId}: HasBeenDeleted={r.HasBeenDeleted?.ToString() ?? "null"} idx={r.RemoveIndex} inSnapshot={inSnapshot} ({Truncate(r.Content, 40)})");
+        }
+
+        if (count >= 10)
         {
             Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding");
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
             ClearInjectedCards();
+            _addsSinceFlush = 0;
+            _removesSinceFlush = 0;
             return;
         }
 
-        // 1-2 removes — check each individually
+        // Process removes individually
         foreach (var removed in _pendingRemoves)
         {
             // Skip settling removes: messages from the initial subscription snapshot
@@ -794,7 +932,7 @@ internal class MessageLogger
                 cached.IsDeleted = true;
                 cached.DeletedAt = DateTime.UtcNow;
                 _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
-                Logger.Log(Tag, $"MSG DEL: {Truncate(cached.Content, 80)}");
+                Logger.Log(Tag, $"MSG DEL: HasBeenDeleted={removed.HasBeenDeleted?.ToString() ?? "null"} idx={removed.RemoveIndex} adds={_addsSinceFlush} {Truncate(cached.Content, 80)}");
             }
             else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
             {
@@ -813,11 +951,13 @@ internal class MessageLogger
                 _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
                     newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
                 _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
-                Logger.Log(Tag, $"MSG DEL (uncached): {Truncate(removed.Content, 80)}");
+                Logger.Log(Tag, $"MSG DEL (uncached): HasBeenDeleted={removed.HasBeenDeleted?.ToString() ?? "null"} idx={removed.RemoveIndex} adds={_addsSinceFlush} {Truncate(removed.Content, 80)}");
             }
         }
 
         _pendingRemoves.Clear();
+        _addsSinceFlush = 0;
+        _removesSinceFlush = 0;
     }
 
     // ===== Edit Detection via Polling =====
