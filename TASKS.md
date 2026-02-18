@@ -9,15 +9,6 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
-- [ ] **Fix link embeds for non-YouTube sites** — The Avalonia-native engine (`LinkEmbedEngine.cs`, Phase 4.5b) works for YouTube but fails on many other sites. Sub-tasks:
-  - [ ] **Better User-Agent** — Current UA is `Mozilla/5.0 (compatible; Uprooted/0.2)` which Twitter/X and others reject as a bot. Switch to a browser-like UA string (e.g. Chrome on Windows). Set in `EnsureHttpResolved()` where `TryAddWithoutValidation` is called.
-  - [ ] **Direct image URL embeds** — URLs ending in `.jpg`/`.png`/`.gif`/`.webp` or returning `image/*` Content-Type get fed through `FetchOgMetadata` which expects HTML. Add early detection: check URL extension or do a HEAD request, skip OG parsing, render an image-only embed card.
-  - [ ] **oEmbed for Twitter/Reddit** — YouTube works because it has a dedicated oEmbed path (`FetchYouTubeMetadata`). Add similar paths for Twitter (`publish.twitter.com/oembed`), Reddit (`www.reddit.com/oembed`), and other major providers. Could generalize into a provider registry pattern.
-  - [ ] **Content-Type gate on OG fetch** — `FetchOgMetadata` calls `HttpGetString(url)` blindly. Should check `Content-Type` header first (via HEAD or from the GET response) and bail early for non-HTML (PDFs, binaries, etc.) instead of trying to parse them as HTML.
-  - Files: `hook/LinkEmbedEngine.cs` — all changes are in this one file
-  - Why YouTube works: dedicated oEmbed API returns clean JSON, thumbnail URL is predictable (`img.youtube.com/vi/{id}/hqdefault.jpg`), no HTML parsing needed
-  - Why others fail: `HttpGetString` fetches raw HTML → regex parses OG tags → many sites serve no/empty OG to bot UAs, or need JS rendering, or aren't HTML at all
-
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
@@ -79,7 +70,7 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
-<!-- - [x] **Example task** (2026-02-17) — Brief note on what was done -->
+- [x] **Fix link embeds for non-YouTube sites** (2026-02-17) — Chrome-like default UA, direct image URL fast path, Content-Type gate on OG fetch, oEmbed discovery from HTML `<link>` tags, bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx), `twitter:image`/`twitter:title`/`twitter:description` fallbacks
 
 ---
 

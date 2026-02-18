@@ -102,5 +102,5 @@ The plugin walks up from the anchor to find the nearest block-level parent (`dis
 
 - **CORS failures** -- despite `--disable-web-security`, some servers may still reject cross-origin fetches. No embed is rendered on failure.
 - **50KB HTML limit** -- pages with OpenGraph tags deep in the HTML (after 50KB) won't have their metadata extracted
-- **Chat is Avalonia-native** -- this TypeScript plugin only works in the DotNetBrowser context (WebRTC, sub-apps). Chat link embeds are handled by the C# hook's `LinkEmbedEngine` (Avalonia-native, Phase 4.5b). YouTube embeds work; generic sites need improvement.
-- **No embed for title-less pages** -- if a page has no `og:title` and no `<title>`, no embed is created
+- **Chat is Avalonia-native** -- this TypeScript plugin only works in the DotNetBrowser context (WebRTC, sub-apps). Chat link embeds are handled by the C# hook's `LinkEmbedEngine` (Avalonia-native, Phase 4.5b). Supports YouTube, Twitter/X, direct images, embed-fixer domains (vxtwitter, fxtwitter, fixupx), and any site with OpenGraph or oEmbed tags.
+- **No embed for title-less pages** -- if a page has no `og:title`, `twitter:title`, and no `<title>`, no embed is created

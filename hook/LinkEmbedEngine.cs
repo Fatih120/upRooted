@@ -90,6 +90,11 @@ internal class LinkEmbedEngine
         @"(?:youtube\.com/watch\?.*?v=|youtu\.be/|youtube\.com/embed/|youtube\.com/shorts/)([a-zA-Z0-9_-]{11})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Direct image URL detection (fast path — zero network)
+    private static readonly Regex ImageUrlRegex = new(
+        @"\.(?:jpe?g|png|gif|webp|bmp|svg)(?:\?[^\s]*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // JSON "title":"value" for oEmbed parsing (no System.Text.Json)
     private static readonly Regex JsonTitleRegex = new(
         @"""title""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
@@ -99,6 +104,55 @@ internal class LinkEmbedEngine
     private static readonly Regex JsonAuthorRegex = new(
         @"""author_name""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
         RegexOptions.Compiled);
+
+    // Additional JSON regex patterns for oEmbed fields
+    private static readonly Regex JsonThumbnailUrlRegex = new(
+        @"""thumbnail_url""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex JsonProviderNameRegex = new(
+        @"""provider_name""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    private static readonly Regex JsonDescriptionRegex = new(
+        @"""description""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    // JSON "html":"value" — some oEmbed providers (Twitter) return content in html field
+    private static readonly Regex JsonHtmlRegex = new(
+        @"""html""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    // Extract text from <p> tags in oEmbed HTML (Twitter embeds tweet text in <p>)
+    private static readonly Regex HtmlParagraphRegex = new(
+        @"<p[^>]*>(.*?)</p>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase | RegexOptions.Singleline);
+
+    // Strip HTML tags for plain text extraction
+    private static readonly Regex HtmlTagRegex = new(
+        @"<[^>]+>",
+        RegexOptions.Compiled);
+
+    // oEmbed discovery: <link rel="alternate" type="application/json+oembed" href="...">
+    // Standard mechanism — any site that supports oEmbed advertises the endpoint in its HTML.
+    private static readonly Regex OEmbedDiscoveryRegex = new(
+        @"<link\s+[^>]*?type\s*=\s*[""']application/json\+oembed[""'][^>]*?href\s*=\s*[""']([^""']+)[""'][^>]*/?>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Reverse attribute order: href before type
+    private static readonly Regex OEmbedDiscoveryReverseRegex = new(
+        @"<link\s+[^>]*?href\s*=\s*[""']([^""']+)[""'][^>]*?type\s*=\s*[""']application/json\+oembed[""'][^>]*/?>",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Embed-fixer domains that serve OG only to bots
+    private static readonly Regex EmbedFixerDomainRegex = new(
+        @"^https?://(?:vxtwitter\.com|fixvx\.com|fxtwitter\.com|fixupx\.com|twittpr\.com)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    // Twitter/X domains — also serve OG only to bots
+    private static readonly Regex TwitterDomainRegex = new(
+        @"^https?://(?:twitter\.com|x\.com)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow)
     {
@@ -497,7 +551,7 @@ internal class LinkEmbedEngine
                     var tryAdd = defaultHeaders.GetType().GetMethod("TryAddWithoutValidation",
                         new[] { typeof(string), typeof(string) });
                     tryAdd?.Invoke(defaultHeaders, new object[] { "Accept-Encoding", "identity" });
-                    tryAdd?.Invoke(defaultHeaders, new object[] { "User-Agent", "Mozilla/5.0 (compatible; Uprooted/0.2)" });
+                    tryAdd?.Invoke(defaultHeaders, new object[] { "User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" });
                 }
             }
             catch (Exception ex)
@@ -691,6 +745,109 @@ internal class LinkEmbedEngine
         }
     }
 
+    /// <summary>
+    /// Fetch URL via GetAsync/SendAsync and return (contentType, body) tuple.
+    /// Returns null body on failure. Content-Type may be null if header is absent.
+    /// Reuses the same reflection pattern as HttpGetBytes.
+    /// </summary>
+    private static (string? contentType, string? body) HttpGetWithContentType(string url, string? userAgent = null)
+    {
+        EnsureHttpResolved();
+        if (s_httpClient == null) return (null, null);
+
+        try
+        {
+            object? response = null;
+
+            // When a custom UA is needed, skip GetAsync (uses default headers) and
+            // go straight to SendAsync with per-request User-Agent override.
+            if (userAgent == null && s_getAsync != null)
+            {
+                var paramType = s_getAsync.GetParameters()[0].ParameterType;
+                object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
+                var task = s_getAsync.Invoke(s_httpClient, new[] { arg });
+                response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            }
+
+            if (response == null && s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
+            {
+                var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
+
+                // Set per-request User-Agent if provided (overrides default header)
+                if (userAgent != null && request != null)
+                {
+                    try
+                    {
+                        var reqHeaders = request.GetType().GetProperty("Headers")?.GetValue(request);
+                        var tryAdd = reqHeaders?.GetType().GetMethod("TryAddWithoutValidation",
+                            new[] { typeof(string), typeof(string) });
+                        tryAdd?.Invoke(reqHeaders, new object[] { "User-Agent", userAgent });
+                    }
+                    catch { }
+                }
+
+                var sendParams = s_sendAsync.GetParameters();
+                object?[] args;
+                if (sendParams.Length == 1)
+                    args = new[] { request };
+                else if (sendParams.Length == 2)
+                    args = new object?[] { request, System.Threading.CancellationToken.None };
+                else
+                    args = new[] { request };
+
+                var task = s_sendAsync.Invoke(s_httpClient, args);
+                response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            }
+
+            if (response == null) return (null, null);
+
+            // Read Content-Type header
+            string? contentType = null;
+            try
+            {
+                var content = response.GetType().GetProperty("Content")?.GetValue(response);
+                if (content != null)
+                {
+                    var headers = content.GetType().GetProperty("Headers")?.GetValue(content);
+                    if (headers != null)
+                    {
+                        var ctProp = headers.GetType().GetProperty("ContentType");
+                        var ctValue = ctProp?.GetValue(headers);
+                        contentType = ctValue?.ToString();
+                    }
+                }
+            }
+            catch { }
+
+            // Read body as string
+            string? body = null;
+            try
+            {
+                var content = response.GetType().GetProperty("Content")?.GetValue(response);
+                if (content != null)
+                {
+                    var readTask = content.GetType().GetMethod("ReadAsStringAsync",
+                        BindingFlags.Public | BindingFlags.Instance,
+                        null, Type.EmptyTypes, null)?.Invoke(content, null);
+                    body = readTask?.GetType().GetProperty("Result")?.GetValue(readTask) as string;
+                }
+            }
+            catch { }
+
+            return (contentType, body);
+        }
+        catch (Exception ex)
+        {
+            var inner = ex;
+            if (inner is TargetInvocationException tie && tie.InnerException != null)
+                inner = tie.InnerException;
+            if (inner is AggregateException ae && ae.InnerException != null)
+                inner = ae.InnerException;
+            Logger.Log("LinkEmbed", $"HTTP GET with CT error for {url}: {inner.Message}");
+            return (null, null);
+        }
+    }
+
     // ===== Metadata fetching =====
 
     private EmbedData? FetchMetadata(string url)
@@ -700,6 +857,15 @@ internal class LinkEmbedEngine
 
         try
         {
+            // Direct image URL — zero network, instant
+            if (ImageUrlRegex.IsMatch(url))
+            {
+                var data = SynthesizeImageEmbed(url);
+                _metadataCache[url] = data;
+                return data;
+            }
+
+            // YouTube — dedicated oEmbed path
             var ytMatch = YoutubeIdRegex.Match(url);
             if (ytMatch.Success)
             {
@@ -708,6 +874,7 @@ internal class LinkEmbedEngine
                 return data;
             }
 
+            // Generic OG + oEmbed discovery (handles Twitter, Reddit, any oEmbed site)
             var data2 = FetchOgMetadata(url);
             _metadataCache[url] = data2;
             return data2;
@@ -720,14 +887,168 @@ internal class LinkEmbedEngine
         }
     }
 
+    /// <summary>
+    /// Synthesize embed data for a direct image URL — zero network cost.
+    /// The existing Phase B image download flow handles actual rendering.
+    /// </summary>
+    private static EmbedData SynthesizeImageEmbed(string url)
+    {
+        string title;
+        string? provider = null;
+        try
+        {
+            var uri = new Uri(url);
+            title = System.IO.Path.GetFileName(uri.AbsolutePath);
+            if (string.IsNullOrEmpty(title)) title = "Image";
+            provider = uri.Host;
+        }
+        catch
+        {
+            title = "Image";
+        }
+
+        Logger.Log("LinkEmbed", $"Image URL fast path: {url}");
+        return new EmbedData(url, provider, null, title, null, url, null, null);
+    }
+
+    /// <summary>
+    /// oEmbed discovery: look for &lt;link rel="alternate" type="application/json+oembed" href="..."&gt;
+    /// in already-fetched HTML, fetch the oEmbed endpoint, and parse the JSON response.
+    /// Works for any site that advertises oEmbed (Twitter/X, Reddit, Flickr, etc.).
+    /// Returns null if no oEmbed link found or fetch fails — caller falls back to OG tags.
+    /// </summary>
+    private EmbedData? TryOEmbedDiscovery(string html, string pageUrl)
+    {
+        // Find the oEmbed discovery link (try both attribute orderings)
+        string? oembedEndpoint = null;
+        var discoveryMatch = OEmbedDiscoveryRegex.Match(html);
+        if (discoveryMatch.Success)
+            oembedEndpoint = System.Net.WebUtility.HtmlDecode(discoveryMatch.Groups[1].Value);
+        if (oembedEndpoint == null)
+        {
+            var reverseMatch = OEmbedDiscoveryReverseRegex.Match(html);
+            if (reverseMatch.Success)
+                oembedEndpoint = System.Net.WebUtility.HtmlDecode(reverseMatch.Groups[1].Value);
+        }
+
+        if (oembedEndpoint == null) return null;
+
+        Logger.Log("LinkEmbed", $"oEmbed discovered for {pageUrl}: {oembedEndpoint}");
+
+        try
+        {
+            var (_, json) = HttpGetWithContentType(oembedEndpoint);
+            if (json == null) return null;
+
+            string? title = null;
+            string? author = null;
+            string? thumbnail = null;
+            string? providerName = null;
+            string? description = null;
+
+            var titleMatch = JsonTitleRegex.Match(json);
+            if (titleMatch.Success)
+                title = DecodeJsonString(titleMatch.Groups[1].Value);
+
+            var authorMatch = JsonAuthorRegex.Match(json);
+            if (authorMatch.Success)
+                author = DecodeJsonString(authorMatch.Groups[1].Value);
+
+            var thumbMatch = JsonThumbnailUrlRegex.Match(json);
+            if (thumbMatch.Success)
+                thumbnail = DecodeJsonString(thumbMatch.Groups[1].Value);
+
+            var provMatch = JsonProviderNameRegex.Match(json);
+            if (provMatch.Success)
+                providerName = DecodeJsonString(provMatch.Groups[1].Value);
+
+            var descMatch = JsonDescriptionRegex.Match(json);
+            if (descMatch.Success)
+                description = DecodeJsonString(descMatch.Groups[1].Value);
+
+            // Some providers (Twitter) put content in the html field instead of title/description.
+            // Extract text from <p> tags inside the html field as fallback.
+            if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(description))
+            {
+                var htmlFieldMatch = JsonHtmlRegex.Match(json);
+                if (htmlFieldMatch.Success)
+                {
+                    var htmlContent = DecodeJsonString(htmlFieldMatch.Groups[1].Value);
+                    var pMatch = HtmlParagraphRegex.Match(htmlContent);
+                    if (pMatch.Success)
+                    {
+                        var text = HtmlTagRegex.Replace(pMatch.Groups[1].Value, "");
+                        text = System.Net.WebUtility.HtmlDecode(text).Trim();
+                        if (!string.IsNullOrEmpty(text))
+                            description = text;
+                    }
+                }
+            }
+
+            if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(description))
+                return null;
+
+            if (string.IsNullOrEmpty(title))
+                title = description?.Length > 80 ? description[..77] + "..." : description;
+
+            if (description != null && description.Length > 200)
+                description = description[..197] + "...";
+
+            Logger.Log("LinkEmbed", $"oEmbed fetched via {providerName ?? "discovery"} for {pageUrl}: title=\"{title}\"");
+            return new EmbedData(pageUrl, providerName, author, title, description, thumbnail, null, null);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("LinkEmbed", $"oEmbed discovery fetch error for {pageUrl}: {ex.Message}");
+            return null;
+        }
+    }
+
     private EmbedData? FetchOgMetadata(string url)
     {
-        var html = HttpGetString(url);
+        // Twitter-related domains (x.com, twitter.com, vxtwitter, fxtwitter, fixupx, etc.)
+        // serve OG tags only to bot UAs. Use a bot-like UA for these via per-request override.
+        string? botUA = null;
+        if (EmbedFixerDomainRegex.IsMatch(url) || TwitterDomainRegex.IsMatch(url))
+        {
+            botUA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
+            Logger.Log("LinkEmbed", $"Using bot UA for: {url}");
+        }
+
+        var (contentType, html) = HttpGetWithContentType(url, botUA);
         if (html == null) return null;
 
-        // Limit to first 50KB for OG parsing
+        // Content-Type gate: only parse HTML-like responses
+        if (contentType != null)
+        {
+            var ct = contentType.ToLowerInvariant();
+            if (ct.Contains("text/html") || ct.Contains("text/xhtml") || ct.Contains("application/xhtml"))
+            {
+                // HTML — proceed to OG parsing
+            }
+            else if (ct.StartsWith("image/"))
+            {
+                // Extensionless image URL (e.g. pbs.twimg.com/media/abc) — synthesize image embed
+                Logger.Log("LinkEmbed", $"Content-Type image detected for {url}: {contentType}");
+                return SynthesizeImageEmbed(url);
+            }
+            else
+            {
+                // PDF, binary, JSON, etc. — bail
+                Logger.Log("LinkEmbed", $"Non-HTML Content-Type for {url}: {contentType}, skipping OG parse");
+                return null;
+            }
+        }
+        // Content-Type absent — allow through (safe default)
+
+        // Limit to first 50KB for parsing
         if (html.Length > MaxHtmlBytes)
             html = html[..MaxHtmlBytes];
+
+        // oEmbed discovery: check for <link rel="alternate" type="application/json+oembed">
+        // If found, use oEmbed data (richer than OG for Twitter, Reddit, etc.)
+        var oembedResult = TryOEmbedDiscovery(html, url);
+        if (oembedResult != null) return oembedResult;
 
         // Parse OG tags
         var ogTags = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -753,6 +1074,14 @@ internal class LinkEmbedEngine
         ogTags.TryGetValue("og:image", out var image);
         ogTags.TryGetValue("og:site_name", out var siteName);
         ogTags.TryGetValue("theme-color", out var themeColor);
+
+        // Fallback: twitter:* meta tags (vxtwitter, fxtwitter use these instead of og:*)
+        if (string.IsNullOrEmpty(image))
+            ogTags.TryGetValue("twitter:image", out image);
+        if (string.IsNullOrEmpty(title))
+            ogTags.TryGetValue("twitter:title", out title);
+        if (string.IsNullOrEmpty(description))
+            ogTags.TryGetValue("twitter:description", out description);
 
         if (string.IsNullOrEmpty(title))
         {

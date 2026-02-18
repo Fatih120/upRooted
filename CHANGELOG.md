@@ -6,6 +6,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.3.3] - 2026-02-17
+
+### Added
+- Link embeds: direct image URL fast path — `.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` URLs render instantly with zero network
+- Link embeds: oEmbed discovery — scans HTML for `<link rel="alternate" type="application/json+oembed">` to support any oEmbed-compatible site
+- Link embeds: Content-Type gate — skips OG parsing for PDFs, binaries; synthesizes image embed for `image/*` responses
+- Link embeds: `twitter:image`, `twitter:title`, `twitter:description` meta tag fallbacks
+
+### Changed
+- Link embeds: Chrome-like User-Agent replaces bot UA (`Uprooted/0.2`) for better site compatibility
+- Link embeds: per-request bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) that serve OG only to crawlers
+- Link embeds: oEmbed discovery fetch uses `HttpGetWithContentType` instead of trimmed `GetStringAsync`
+
 ## [0.3.2] - 2026-02-17
 
 ### Changed

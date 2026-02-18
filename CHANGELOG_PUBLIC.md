@@ -4,6 +4,21 @@ All notable changes to Uprooted are documented here. This file mirrors the [GitH
 
 ---
 
+## [v0.3.3](https://github.com/watchthelight/uprooted/releases/tag/v0.3.3) — 2026-02-17
+
+### New
+- **Link embeds for non-YouTube sites** — Twitter/X, Reddit, and any site with OpenGraph or oEmbed support now gets rich embed previews with images
+- **Direct image embeds** — Image URLs (`.jpg`, `.png`, `.gif`, `.webp`) render instantly with zero network overhead
+- **oEmbed discovery** — automatically detects oEmbed endpoints from any page's HTML, no hardcoded provider list needed
+
+### Improvements
+- Browser-like User-Agent for better site compatibility (replaces bot UA that was rejected by Twitter/X and others)
+- Content-Type gate prevents parsing PDFs, binaries, and other non-HTML as OpenGraph
+- Smart UA switching — embed-fixer domains (vxtwitter, fxtwitter, fixupx) and Twitter/X get a crawler UA to receive rich metadata
+- Falls back to `twitter:image`/`twitter:title` meta tags when `og:*` tags are missing
+
+---
+
 ## [v0.3.2](https://github.com/watchthelight/uprooted/releases/tag/v0.3.2) — 2026-02-17
 
 ### Improvements

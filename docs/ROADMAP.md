@@ -29,11 +29,9 @@ The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
-**Link embeds incomplete for non-YouTube sites**
-The Avalonia-native link embed engine (`LinkEmbedEngine.cs`, Phase 4.5b) works for YouTube (oEmbed + predictable thumbnails) but fails on many other sites: Twitter/X returns no OG tags to bot-like User-Agents, direct image URLs are rejected (no image-only embed path), and some sites require JS rendering for OG metadata. NSFW filter still uses the old DotNetBrowser JS injection approach and needs Avalonia-native redesign.
-- Files: `hook/LinkEmbedEngine.cs`, `hook/NsfwFilter.cs`
-- Link embed improvements needed: better User-Agent, direct image URL detection, fallback oEmbed providers
-- NSFW filter: needs full Avalonia-native redesign (visual tree image interception)
+**NSFW filter needs Avalonia-native redesign**
+The NSFW filter still uses the old DotNetBrowser JS injection approach and cannot affect Avalonia-native chat content. Needs full redesign with visual tree image interception.
+- Files: `hook/NsfwFilter.cs`
 
 **Settings page text-based detection fragile**
 The sidebar injector locates the settings page by searching the visual tree for the exact text "APP SETTINGS". If Root renames this label, native UI injection silently fails with no error visible to the user.
