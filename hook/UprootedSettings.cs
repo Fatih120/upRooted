@@ -15,6 +15,11 @@ internal class UprootedSettings
 
     private static string? _settingsPath;
 
+    // Time-based cache: avoid re-reading from disk on every 500ms timer tick
+    private static UprootedSettings? _cached;
+    private static DateTime _cachedAt;
+    private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
+
     private static string GetSettingsPath()
     {
         if (_settingsPath != null) return _settingsPath;
@@ -32,9 +37,18 @@ internal class UprootedSettings
 
     internal static UprootedSettings Load()
     {
+        // Return cached instance if still fresh (avoids disk I/O on every 500ms timer tick)
+        if (_cached != null && DateTime.UtcNow - _cachedAt < CacheTtl)
+            return _cached;
+
         var settings = new UprootedSettings();
         var path = GetSettingsPath();
-        if (!File.Exists(path)) return settings;
+        if (!File.Exists(path))
+        {
+            _cached = settings;
+            _cachedAt = DateTime.UtcNow;
+            return settings;
+        }
         try
         {
             foreach (var line in File.ReadAllLines(path))
@@ -69,7 +83,18 @@ internal class UprootedSettings
         {
             Logger.Log("Settings", $"Failed to load settings: {ex.Message}");
         }
+        _cached = settings;
+        _cachedAt = DateTime.UtcNow;
         return settings;
+    }
+
+    /// <summary>
+    /// Invalidate the settings cache so the next Load() re-reads from disk.
+    /// Call after Save() or when settings are known to have changed externally.
+    /// </summary>
+    internal static void InvalidateCache()
+    {
+        _cached = null;
     }
 
     internal void Save()
@@ -94,6 +119,7 @@ internal class UprootedSettings
                 lines.Add($"Plugin.{name}={( enabled ? "true" : "false" )}");
             }
             File.WriteAllText(path, string.Join("\n", lines));
+            InvalidateCache();
             Logger.Log("Settings", "Saved settings to " + path + ": ActiveTheme=" + ActiveTheme);
         }
         catch (Exception ex)

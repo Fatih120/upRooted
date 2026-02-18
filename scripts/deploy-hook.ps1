@@ -33,7 +33,7 @@ $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path $ScriptDir -Parent
 $HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
 $UprootedDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
-$LauncherExe = Join-Path $UprootedDir "UprootedLauncher.exe"
+$RootExe = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"
 
 # --- Preflight ---
 
@@ -97,14 +97,14 @@ foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
 
 # --- Relaunch ---
 
-if (-not $NoRelaunch -and (Test-Path $LauncherExe)) {
-    Write-Step "Launching Root with Uprooted..."
-    Start-Process $LauncherExe
+if (-not $NoRelaunch -and (Test-Path $RootExe)) {
+    Write-Step "Launching Root..."
+    Start-Process $RootExe
     Write-OK "Root launched"
 } elseif ($NoRelaunch) {
     Write-OK "Deploy complete (skipped relaunch)"
 } else {
-    Write-Warn "UprootedLauncher.exe not found -- run install-hook.ps1 first"
+    Write-Warn "Root.exe not found at $RootExe"
     Write-OK "Deploy complete (manual relaunch needed)"
 }
 

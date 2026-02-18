@@ -23,6 +23,7 @@ internal class LinkEmbedEngine
     private const double MaxImageHeight = 200.0;
     private const double MaxImageWidth = 380.0;
     private const string DefaultAccentColor = "#5865F2"; // Discord-like blue
+    private static readonly bool Verbose = Environment.GetEnvironmentVariable("UPROOTED_VERBOSE") == "1";
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -116,6 +117,16 @@ internal class LinkEmbedEngine
 
     private static readonly Regex JsonDescriptionRegex = new(
         @"""description""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    // oEmbed "type" field — "photo" type uses "url" for the image, others use "thumbnail_url"
+    private static readonly Regex JsonTypeRegex = new(
+        @"""type""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
+        RegexOptions.Compiled);
+
+    // oEmbed "url" field — the primary resource URL (image URL for "photo" type)
+    private static readonly Regex JsonUrlRegex = new(
+        @"""url""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
         RegexOptions.Compiled);
 
     // JSON "html":"value" — some oEmbed providers (Twitter) return content in html field
@@ -746,9 +757,11 @@ internal class LinkEmbedEngine
     }
 
     /// <summary>
-    /// Fetch URL via GetAsync/SendAsync and return (contentType, body) tuple.
+    /// Fetch URL via SendAsync and return (contentType, body) tuple.
     /// Returns null body on failure. Content-Type may be null if header is absent.
-    /// Reuses the same reflection pattern as HttpGetBytes.
+    /// Always uses SendAsync (not GetAsync) because GetAsync is often trimmed in Root's
+    /// single-file binary and fails with MissingMethodException on some response types.
+    /// Optionally sets a per-request User-Agent override on the HttpRequestMessage.
     /// </summary>
     private static (string? contentType, string? body) HttpGetWithContentType(string url, string? userAgent = null)
     {
@@ -759,18 +772,9 @@ internal class LinkEmbedEngine
         {
             object? response = null;
 
-            // When a custom UA is needed, skip GetAsync (uses default headers) and
-            // go straight to SendAsync with per-request User-Agent override.
-            if (userAgent == null && s_getAsync != null)
+            if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
-                var paramType = s_getAsync.GetParameters()[0].ParameterType;
-                object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
-                var task = s_getAsync.Invoke(s_httpClient, new[] { arg });
-                response = task?.GetType().GetProperty("Result")?.GetValue(task);
-            }
-
-            if (response == null && s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
-            {
+                if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[1] creating request for {url}");
                 var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
 
                 // Set per-request User-Agent if provided (overrides default header)
@@ -786,6 +790,7 @@ internal class LinkEmbedEngine
                     catch { }
                 }
 
+                if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[2] sending");
                 var sendParams = s_sendAsync.GetParameters();
                 object?[] args;
                 if (sendParams.Length == 1)
@@ -796,7 +801,9 @@ internal class LinkEmbedEngine
                     args = new[] { request };
 
                 var task = s_sendAsync.Invoke(s_httpClient, args);
+                if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[3] awaiting result");
                 response = task?.GetType().GetProperty("Result")?.GetValue(task);
+                if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[4] got response: {response != null}");
             }
 
             if (response == null) return (null, null);
@@ -818,21 +825,33 @@ internal class LinkEmbedEngine
                 }
             }
             catch { }
+            if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[5] content-type: {contentType}");
 
-            // Read body as string
+            // Read body as string via ReadAsStreamAsync + StreamReader
+            // (ReadAsStringAsync triggers trimmed charset/encoding methods on some responses)
             string? body = null;
             try
             {
                 var content = response.GetType().GetProperty("Content")?.GetValue(response);
                 if (content != null)
                 {
-                    var readTask = content.GetType().GetMethod("ReadAsStringAsync",
+                    if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[6] reading stream");
+                    var readTask = content.GetType().GetMethod("ReadAsStreamAsync",
                         BindingFlags.Public | BindingFlags.Instance,
                         null, Type.EmptyTypes, null)?.Invoke(content, null);
-                    body = readTask?.GetType().GetProperty("Result")?.GetValue(readTask) as string;
+                    var stream = readTask?.GetType().GetProperty("Result")?.GetValue(readTask) as System.IO.Stream;
+                    if (stream != null)
+                    {
+                        using var reader = new System.IO.StreamReader(stream);
+                        body = reader.ReadToEnd();
+                        if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[7] body length: {body?.Length}");
+                    }
                 }
             }
-            catch { }
+            catch (Exception bodyEx)
+            {
+                Logger.Log("LinkEmbed", $"HGWCT body read error: {bodyEx.GetType().Name}: {bodyEx.Message}");
+            }
 
             return (contentType, body);
         }
@@ -843,7 +862,7 @@ internal class LinkEmbedEngine
                 inner = tie.InnerException;
             if (inner is AggregateException ae && ae.InnerException != null)
                 inner = ae.InnerException;
-            Logger.Log("LinkEmbed", $"HTTP GET with CT error for {url}: {inner.Message}");
+            Logger.Log("LinkEmbed", $"HGWCT outer error [{inner.GetType().Name}]: {inner.Message}");
             return (null, null);
         }
     }
@@ -917,7 +936,7 @@ internal class LinkEmbedEngine
     /// Works for any site that advertises oEmbed (Twitter/X, Reddit, Flickr, etc.).
     /// Returns null if no oEmbed link found or fetch fails — caller falls back to OG tags.
     /// </summary>
-    private EmbedData? TryOEmbedDiscovery(string html, string pageUrl)
+    private EmbedData? TryOEmbedDiscovery(string html, string pageUrl, string? userAgent = null)
     {
         // Find the oEmbed discovery link (try both attribute orderings)
         string? oembedEndpoint = null;
@@ -937,8 +956,11 @@ internal class LinkEmbedEngine
 
         try
         {
-            var (_, json) = HttpGetWithContentType(oembedEndpoint);
+            // Pass through the same UA used for the page fetch (bot UA for embed-fixer domains)
+            var (_, json) = HttpGetWithContentType(oembedEndpoint, userAgent);
             if (json == null) return null;
+
+            if (Verbose) Logger.Log("LinkEmbed", $"oEmbed JSON ({json.Length}b): {(json.Length > 300 ? json[..300] : json)}");
 
             string? title = null;
             string? author = null;
@@ -957,6 +979,21 @@ internal class LinkEmbedEngine
             var thumbMatch = JsonThumbnailUrlRegex.Match(json);
             if (thumbMatch.Success)
                 thumbnail = DecodeJsonString(thumbMatch.Groups[1].Value);
+
+            // For "photo" type oEmbed, the image is in "url" not "thumbnail_url"
+            if (thumbnail == null)
+            {
+                var typeMatch = JsonTypeRegex.Match(json);
+                var urlMatch = JsonUrlRegex.Match(json);
+                if (urlMatch.Success)
+                {
+                    var oembedType = typeMatch.Success ? DecodeJsonString(typeMatch.Groups[1].Value) : null;
+                    var oembedUrl = DecodeJsonString(urlMatch.Groups[1].Value);
+                    // Use "url" as thumbnail for photo type, or if it looks like an image URL
+                    if (oembedType == "photo" || ImageUrlRegex.IsMatch(oembedUrl ?? ""))
+                        thumbnail = oembedUrl;
+                }
+            }
 
             var provMatch = JsonProviderNameRegex.Match(json);
             if (provMatch.Success)
@@ -985,6 +1022,8 @@ internal class LinkEmbedEngine
                 }
             }
 
+            if (Verbose) Logger.Log("LinkEmbed", $"oEmbed parsed: title={title != null}, author={author != null}, thumb={thumbnail != null}, prov={providerName}, desc={description != null}");
+
             if (string.IsNullOrEmpty(title) && string.IsNullOrEmpty(description))
                 return null;
 
@@ -994,18 +1033,35 @@ internal class LinkEmbedEngine
             if (description != null && description.Length > 200)
                 description = description[..197] + "...";
 
-            Logger.Log("LinkEmbed", $"oEmbed fetched via {providerName ?? "discovery"} for {pageUrl}: title=\"{title}\"");
+            Logger.Log("LinkEmbed", $"oEmbed fetched via {providerName ?? "discovery"} for {pageUrl}: title=\"{title}\", thumbnail={thumbnail != null}");
             return new EmbedData(pageUrl, providerName, author, title, description, thumbnail, null, null);
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"oEmbed discovery fetch error for {pageUrl}: {ex.Message}");
+            Logger.Log("LinkEmbed", $"oEmbed discovery fetch error [{ex.GetType().Name}] for {pageUrl}: {ex.Message}");
+            if (Verbose) Logger.Log("LinkEmbed", $"oEmbed stack: {ex.StackTrace}");
             return null;
         }
     }
 
+    // Non-vxtwitter embed-fixer domains to normalize to vxtwitter (best OG tags with images)
+    private static readonly Regex NonVxEmbedFixerRegex = new(
+        @"^(https?://)(?:fixvx\.com|fxtwitter\.com|fixupx\.com|twittpr\.com)/",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     private EmbedData? FetchOgMetadata(string url)
     {
+        var originalUrl = url;
+
+        // Normalize non-vxtwitter embed-fixer domains to vxtwitter.com
+        // vxtwitter has the richest OG tags (including twitter:image)
+        var fixerMatch = NonVxEmbedFixerRegex.Match(url);
+        if (fixerMatch.Success)
+        {
+            url = fixerMatch.Groups[1].Value + "vxtwitter.com/" + url[(fixerMatch.Length)..];
+            Logger.Log("LinkEmbed", $"Normalized {originalUrl} -> {url}");
+        }
+
         // Twitter-related domains (x.com, twitter.com, vxtwitter, fxtwitter, fixupx, etc.)
         // serve OG tags only to bot UAs. Use a bot-like UA for these via per-request override.
         string? botUA = null;
@@ -1029,8 +1085,8 @@ internal class LinkEmbedEngine
             else if (ct.StartsWith("image/"))
             {
                 // Extensionless image URL (e.g. pbs.twimg.com/media/abc) — synthesize image embed
-                Logger.Log("LinkEmbed", $"Content-Type image detected for {url}: {contentType}");
-                return SynthesizeImageEmbed(url);
+                Logger.Log("LinkEmbed", $"Content-Type image detected for {originalUrl}: {contentType}");
+                return SynthesizeImageEmbed(originalUrl);
             }
             else
             {
@@ -1047,7 +1103,7 @@ internal class LinkEmbedEngine
 
         // oEmbed discovery: check for <link rel="alternate" type="application/json+oembed">
         // If found, use oEmbed data (richer than OG for Twitter, Reddit, etc.)
-        var oembedResult = TryOEmbedDiscovery(html, url);
+        var oembedResult = TryOEmbedDiscovery(html, originalUrl, botUA);
         if (oembedResult != null) return oembedResult;
 
         // Parse OG tags
@@ -1101,8 +1157,8 @@ internal class LinkEmbedEngine
         if (description != null && description.Length > 200)
             description = description[..197] + "...";
 
-        Logger.Log("LinkEmbed", $"OG fetched for {url}: title=\"{title}\"");
-        return new EmbedData(url, siteName, null, title, description, image, themeColor, null);
+        Logger.Log("LinkEmbed", $"OG fetched for {originalUrl}: title=\"{title}\"");
+        return new EmbedData(originalUrl, siteName, null, title, description, image, themeColor, null);
     }
 
     private EmbedData? FetchYouTubeMetadata(string url, string videoId)
@@ -1175,10 +1231,24 @@ internal class LinkEmbedEngine
     {
         var decoded = raw
             .Replace("\\\"", "\"")
-            .Replace("\\\\", "\\")
             .Replace("\\/", "/");
-        return Regex.Replace(decoded, @"\\u([0-9a-fA-F]{4})",
-            m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
+
+        // Decode \uXXXX sequences without Regex.Replace + lambda (trimmed in Root)
+        int idx = 0;
+        while ((idx = decoded.IndexOf("\\u", idx)) >= 0 && idx + 5 < decoded.Length)
+        {
+            var hex = decoded.Substring(idx + 2, 4);
+            if (int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out int code))
+            {
+                decoded = string.Concat(decoded.AsSpan(0, idx), ((char)code).ToString(), decoded.AsSpan(idx + 6));
+            }
+            else
+            {
+                idx += 2; // Skip this \u, not valid hex
+            }
+        }
+
+        return decoded.Replace("\\\\", "\\");
     }
 
     // ===== Component 4: Embed Card Builder =====

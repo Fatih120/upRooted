@@ -16,6 +16,12 @@ All notable changes to Uprooted are documented here. This file mirrors the [GitH
 - Content-Type gate prevents parsing PDFs, binaries, and other non-HTML as OpenGraph
 - Smart UA switching — embed-fixer domains (vxtwitter, fxtwitter, fixupx) and Twitter/X get a crawler UA to receive rich metadata
 - Falls back to `twitter:image`/`twitter:title` meta tags when `og:*` tags are missing
+- Embed-fixer domain normalization — fixupx/fxtwitter links auto-resolve to vxtwitter for best image support
+- Settings cache reduces disk reads (10s TTL instead of every 500ms tick)
+
+### Fixes
+- Fixed oEmbed JSON parsing crash caused by trimmed regex delegate in Root's binary
+- Fixed oEmbed endpoint fetch failures caused by trimmed charset methods — switched to stream-based body reading
 
 ---
 

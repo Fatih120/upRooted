@@ -13,11 +13,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Link embeds: oEmbed discovery — scans HTML for `<link rel="alternate" type="application/json+oembed">` to support any oEmbed-compatible site
 - Link embeds: Content-Type gate — skips OG parsing for PDFs, binaries; synthesizes image embed for `image/*` responses
 - Link embeds: `twitter:image`, `twitter:title`, `twitter:description` meta tag fallbacks
+- Link embeds: oEmbed photo type support — extracts `url` field for photo-type oEmbed responses per spec
+- Settings cache: 10-second TTL cache on `UprootedSettings.Load()` to avoid disk I/O on every 500ms timer tick
 
 ### Changed
 - Link embeds: Chrome-like User-Agent replaces bot UA (`Uprooted/0.2`) for better site compatibility
 - Link embeds: per-request bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) that serve OG only to crawlers
-- Link embeds: oEmbed discovery fetch uses `HttpGetWithContentType` instead of trimmed `GetStringAsync`
+- Link embeds: embed-fixer domain normalization — fixupx/fxtwitter/fixvx URLs normalized to vxtwitter.com for richer OG metadata with images
+- Link embeds: `HttpGetWithContentType` uses `ReadAsStreamAsync` + `StreamReader` instead of trimmed `ReadAsStringAsync`
+- Link embeds: verbose diagnostic logging gated behind `UPROOTED_VERBOSE=1` env var
+- Deploy script: launch Root.exe directly instead of UprootedLauncher.exe
+
+### Fixed
+- Link embeds: `DecodeJsonString` crash — `Regex.Replace` with `MatchEvaluator` lambda triggers trimmed method in Root's binary; replaced with manual `\uXXXX` decoding loop
+- Link embeds: oEmbed endpoint fetch failures — `ReadAsStringAsync` triggers trimmed charset/encoding methods on JSON responses; switched to `ReadAsStreamAsync` + `StreamReader`
 
 ## [0.3.2] - 2026-02-17
 

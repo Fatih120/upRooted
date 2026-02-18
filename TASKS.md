@@ -9,6 +9,15 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
+- [ ] **Reddit link embeds** — Reddit post URLs should render rich embeds (title, subreddit, vote count, comment count). Reddit serves OG tags to crawlers; may need bot UA similar to Twitter/X handling.
+  - Files: `hook/LinkEmbedEngine.cs`
+
+- [ ] **Animated image embeds (.gif, .webp)** — Animated `.gif` and `.webp` URLs currently render as static thumbnails via the image fast path. Should render as animated inline previews (Avalonia `Image` with appropriate source, or consider `GifImage` control).
+  - Files: `hook/LinkEmbedEngine.cs`
+
+- [ ] **Video preview embeds (.mp4)** — Direct `.mp4` URLs should show a thumbnail preview frame with play button overlay (similar to YouTube embeds). Currently get Cloudflare challenge pages or no embed. Consider extracting a frame server-side or using a placeholder with click-to-open.
+  - Files: `hook/LinkEmbedEngine.cs`
+
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
@@ -71,6 +80,7 @@ Items not yet committed to but worth tracking.
 Move completed items here with the date.
 
 - [x] **Fix link embeds for non-YouTube sites** (2026-02-17) — Chrome-like default UA, direct image URL fast path, Content-Type gate on OG fetch, oEmbed discovery from HTML `<link>` tags, bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx), `twitter:image`/`twitter:title`/`twitter:description` fallbacks
+- [x] **Fix oEmbed parsing crash** (2026-02-17) — `DecodeJsonString` used `Regex.Replace` with lambda `MatchEvaluator` which was trimmed in Root's binary. Replaced with manual `\uXXXX` loop. Fixed `ReadAsStringAsync` → `ReadAsStreamAsync` for trimmed charset methods. Normalized fixupx/fxtwitter/fixvx URLs to vxtwitter.com for richer OG metadata with images.
 
 ---
 
