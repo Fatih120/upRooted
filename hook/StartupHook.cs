@@ -221,6 +221,7 @@ internal class StartupHook
                         Thread.Sleep(15_000); // Wait 15s for chat to populate
                         Logger.Log("Startup", "Phase 4.5b: Starting native link embed engine...");
                         var engine = new LinkEmbedEngine(embedResolver, embedWindow);
+                        LinkEmbedEngine.Instance = engine;
                         engine.Initialize();
                         Logger.Log("Startup", "Phase 4.5b OK: Native link embeds active");
                     }

@@ -2517,6 +2517,8 @@ internal static class ContentPages
             BuildContentFilterSettings(r, content, settings, font);
         else if (pluginId == "message-logger")
             BuildMessageLoggerSettings(r, content, settings, font);
+        else if (pluginId == "link-embeds")
+            BuildLinkEmbedSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -2919,6 +2921,24 @@ internal static class ContentPages
             r.SetMargin(retentionHelp, 0, 8, 0, 0);
         }
         r.AddChild(content, retentionHelp);
+    }
+
+    /// <summary>
+    /// Build the link embeds settings UI inside a lightbox container.
+    /// Toggle: Show file names on direct image link embeds.
+    /// </summary>
+    private static void BuildLinkEmbedSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        BuildSettingsToggle(r, content, "Show Embedded File Names",
+            "Display the file name as a title on direct image link embeds",
+            settings.LinkEmbedsShowFilenames, font, isEnabled =>
+            {
+                settings.LinkEmbedsShowFilenames = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("LinkEmbedSettings", $"Save error: {sx.Message}"); }
+                LinkEmbedEngine.Instance?.RefreshTitleVisibility();
+            });
     }
 
     /// <summary>

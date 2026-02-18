@@ -100,6 +100,11 @@ internal class LinkEmbedEngine
         @"\.(?:jpe?g|png|gif|webp|bmp|svg)(?:\?[^\s]*)?$",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // Direct video URL detection (play button placeholder + open in browser)
+    private static readonly Regex VideoUrlRegex = new(
+        @"\.(?:mp4|webm|mov)(?:\?[^\s]*)?$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
     // JSON "title":"value" for oEmbed parsing (no System.Text.Json)
     private static readonly Regex JsonTitleRegex = new(
         @"""title""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""",
@@ -185,6 +190,8 @@ internal class LinkEmbedEngine
     private static readonly Regex NativeEmbedDomainRegex = new(
         @"^https?://(?:(?:media\.)?tenor\.com|rootapp\.gg)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    internal static LinkEmbedEngine? Instance { get; set; }
 
     internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow)
     {
@@ -583,6 +590,37 @@ internal class LinkEmbedEngine
             catch (Exception ex)
             {
                 Logger.Log("LinkEmbed", $"AddImageToExistingCard error: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Toggle visibility of image-only embed titles on all live cards.
+    /// Called when the LinkEmbedsShowFilenames setting changes.
+    /// </summary>
+    internal void RefreshTitleVisibility()
+    {
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                bool show = UprootedSettings.Load().LinkEmbedsShowFilenames;
+                foreach (var card in _injectedCards)
+                {
+                    var content = _r.GetBorderChild(card);
+                    if (content == null) continue;
+                    var children = _r.GetChildren(content);
+                    if (children == null) continue;
+                    foreach (var child in children)
+                    {
+                        if (child != null && _r.GetTag(child) == "uprooted-embed-img-title")
+                            _r.SetIsVisible(child, show);
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("LinkEmbed", $"RefreshTitleVisibility error: {ex.Message}");
             }
         });
     }
@@ -1029,6 +1067,14 @@ internal class LinkEmbedEngine
                 return data;
             }
 
+            // Direct video URL — play button placeholder + open in browser
+            if (VideoUrlRegex.IsMatch(url))
+            {
+                var data = SynthesizeVideoEmbed(url);
+                _metadataCache[url] = data;
+                return data;
+            }
+
             // YouTube — dedicated oEmbed path
             var ytMatch = YoutubeIdRegex.Match(url);
             if (ytMatch.Success)
@@ -1085,6 +1131,31 @@ internal class LinkEmbedEngine
 
         Logger.Log("LinkEmbed", $"Image URL fast path: {url}");
         return new EmbedData(url, provider, null, title, null, url, null, null);
+    }
+
+    /// <summary>
+    /// Synthesize embed data for a direct video URL (.mp4, .webm, .mov).
+    /// No thumbnail to fetch — the embed card will show a dark placeholder with play button.
+    /// VideoId is set to "direct" to trigger play button behavior in BuildEmbedCard.
+    /// </summary>
+    private static EmbedData SynthesizeVideoEmbed(string url)
+    {
+        string title;
+        string? provider = null;
+        try
+        {
+            var uri = new Uri(url);
+            title = System.IO.Path.GetFileName(uri.AbsolutePath);
+            if (string.IsNullOrEmpty(title)) title = "Video";
+            provider = uri.Host;
+        }
+        catch
+        {
+            title = "Video";
+        }
+
+        Logger.Log("LinkEmbed", $"Video URL fast path: {url}");
+        return new EmbedData(url, provider, null, title, null, null, null, "direct");
     }
 
     /// <summary>
@@ -1244,6 +1315,12 @@ internal class LinkEmbedEngine
                 // Extensionless image URL (e.g. pbs.twimg.com/media/abc) — synthesize image embed
                 Logger.Log("LinkEmbed", $"Content-Type image detected for {originalUrl}: {contentType}");
                 return SynthesizeImageEmbed(originalUrl);
+            }
+            else if (ct.StartsWith("video/"))
+            {
+                // Direct video URL without extension — synthesize video embed
+                Logger.Log("LinkEmbed", $"Content-Type video detected for {originalUrl}: {contentType}");
+                return SynthesizeVideoEmbed(originalUrl);
             }
             else
             {
@@ -1549,11 +1626,17 @@ internal class LinkEmbedEngine
                     _r.AddChild(content, authorText);
             }
 
-            // Title (required)
+            // Title — hide for image-only embeds when filenames setting is off
+            bool isImageOnlyEmbed = data.Image == data.Url && data.VideoId == null;
             var titleText = _r.CreateTextBlock(data.Title!, 13, titleColorHex, "SemiBold");
             if (titleText != null)
             {
                 _r.SetTextWrapping(titleText, "Wrap");
+                if (isImageOnlyEmbed)
+                {
+                    _r.SetTag(titleText, "uprooted-embed-img-title");
+                    _r.SetIsVisible(titleText, UprootedSettings.Load().LinkEmbedsShowFilenames);
+                }
                 _r.AddChild(content, titleText);
             }
 
@@ -1658,6 +1741,16 @@ internal class LinkEmbedEngine
                     _r.AddChild(content, imageElement);
             }
 
+            // Video placeholder: dark rectangle with centered play button (direct .mp4/.webm/.mov URLs)
+            // Only shown when VideoId is set but no thumbnail image is available.
+            // YouTube embeds have data.Image set (thumbnail URL), so this won't trigger for them.
+            if (data.VideoId != null && string.IsNullOrEmpty(data.Image) && bitmap == null && imageBytes == null)
+            {
+                var placeholder = BuildVideoPlaceholder(data.Url);
+                if (placeholder != null)
+                    _r.AddChild(content, placeholder);
+            }
+
             // Outer border: background + left accent strip via BorderThickness
             var card = _r.CreateBorder(ContentPages.CardBg, cornerRadius: 8, child: content);
             if (card == null) return null;
@@ -1747,6 +1840,79 @@ internal class LinkEmbedEngine
                     }
                 });
             }
+
+            return container;
+        }
+
+        return grid;
+    }
+
+    /// <summary>
+    /// Build a dark video placeholder with centered play button for direct video URLs (.mp4, .webm, .mov).
+    /// Used when no thumbnail image is available (SkiaSharp cannot decode video formats).
+    /// Clicking opens the video URL in the default browser (same behavior as YouTube embeds).
+    /// Structure: Border (corner radius 6, clip) → Grid → [Border (dark bg), Play Button Circle]
+    /// </summary>
+    private object? BuildVideoPlaceholder(string url)
+    {
+        // Dark background rectangle (16:9 aspect ratio)
+        var bgBorder = _r.CreateBorder("#1a1a2e", cornerRadius: 0);
+        if (bgBorder == null) return null;
+        _r.SetWidth(bgBorder, MaxImageWidth);
+        _r.SetHeight(bgBorder, Math.Round(MaxImageWidth * 9.0 / 16.0)); // 16:9
+
+        // Play button: semi-transparent circle with triangle
+        var playIcon = _r.CreateTextBlock("\u25B6", 24, "#FFFFFF"); // ▶
+        if (playIcon != null)
+        {
+            _r.SetHorizontalAlignment(playIcon, "Center");
+            _r.SetVerticalAlignment(playIcon, "Center");
+        }
+
+        var playCircle = _r.CreateBorder("#CC000000", cornerRadius: 28, child: playIcon);
+        if (playCircle != null)
+        {
+            _r.SetWidth(playCircle, 56);
+            _r.SetHeight(playCircle, 56);
+            _r.SetHorizontalAlignment(playCircle, "Center");
+            _r.SetVerticalAlignment(playCircle, "Center");
+        }
+
+        // Overlay grid: dark bg + play button stacked
+        var grid = _r.CreateGrid();
+        if (grid == null) return null;
+        _r.AddChild(grid, bgBorder);
+        if (playCircle != null)
+            _r.AddChild(grid, playCircle);
+
+        // Clip container
+        var container = _r.CreateBorder(null, cornerRadius: 6);
+        if (container != null)
+        {
+            _r.SetClipToBounds(container, true);
+            _r.SetBorderChild(container, grid);
+            _r.SetMaxHeight(container, MaxImageHeight);
+            _r.SetMaxWidth(container, MaxImageWidth);
+            _r.SetHorizontalAlignment(container, "Left");
+            _r.SetCursorHand(container);
+
+            // Click to open video URL in default browser
+            var capturedUrl = url;
+            _r.SubscribeEvent(container, "PointerPressed", () =>
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = capturedUrl,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("LinkEmbed", $"Open video URL error: {ex.Message}");
+                }
+            });
 
             return container;
         }

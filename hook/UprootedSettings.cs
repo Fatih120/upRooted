@@ -19,6 +19,9 @@ internal class UprootedSettings
     public bool MessageLoggerIgnoreSelf { get; set; } = false;
     public int MessageLoggerMaxMessages { get; set; } = 10000;
 
+    // LinkEmbeds settings
+    public bool LinkEmbedsShowFilenames { get; set; } = false;
+
     // Custom ping/reply highlight color (empty = use theme default)
     public string CustomPingColor { get; set; } = "";
 
@@ -94,6 +97,7 @@ internal class UprootedSettings
                         if (int.TryParse(val, out var maxMsg) && maxMsg > 0)
                             settings.MessageLoggerMaxMessages = maxMsg;
                         break;
+                    case "LinkEmbeds.ShowFilenames": settings.LinkEmbedsShowFilenames = val == "true"; break;
                     case "CustomPingColor": settings.CustomPingColor = val; break;
                     case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
                     case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
@@ -146,6 +150,7 @@ internal class UprootedSettings
                 "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
                 "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
                 "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
+                "LinkEmbeds.ShowFilenames=" + (LinkEmbedsShowFilenames ? "true" : "false"),
                 "CustomPingColor=" + CustomPingColor,
                 "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
                 "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
