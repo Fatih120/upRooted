@@ -100,10 +100,11 @@ internal class AutoUpdater
     }
 
     // HTTP via reflection (own copy — project convention of self-contained files)
-    private static object? s_httpClient;
+    // Internal so ContentPages can reuse for API key validation
+    internal static object? s_httpClient;
     private static MethodInfo? s_getStringAsync;
     private static MethodInfo? s_getByteArrayAsync;
-    private static MethodInfo? s_getAsync;
+    internal static MethodInfo? s_getAsync;
     private static MethodInfo? s_sendAsync;
     private static Type? s_httpRequestMessageType;
     private static object? s_httpMethodGet;
@@ -424,7 +425,7 @@ internal class AutoUpdater
 
     // ===== HTTP via reflection =====
 
-    private static void EnsureHttpResolved()
+    internal static void EnsureHttpResolved()
     {
         if (s_httpResolved) return;
         s_httpResolved = true;

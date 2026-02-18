@@ -40,6 +40,9 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Deep merge for settings** — Replace shallow spread merge with recursive merge that correctly combines nested objects (especially `plugins` map).
   - Files: `src/core/settings.ts`
 
+- [ ] **Custom ping/reply highlight color** — Let users pick a custom color for the ping/reply message highlight independently from the rest of the theme. This should be a standalone setting that persists even when switching preset themes, so users can apply e.g. "Cosmic Smoothie" but keep their preferred ping color. Needs a new `CustomPingColor` setting in UprootedSettings, a color picker in the Themes page UI, and ThemeEngine logic to apply it as a separate override on top of whatever theme is active.
+  - Files: `hook/UprootedSettings.cs`, `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
+
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
 
