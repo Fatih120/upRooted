@@ -9,7 +9,7 @@ function isTypingIndicatorUrl(url: string | URL | Request): boolean {
 }
 
 const silentTypingPlugin: UprootedPlugin = {
-  name: "Silent-typing",
+  name: "silent-typing",
   description: "Hide that you are typing",
   version: "0.1.0",
   authors: [{ name: "Kurumi Nanase" }],

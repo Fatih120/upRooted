@@ -12,7 +12,7 @@ import { PluginLoader } from "./pluginLoader.js";
 import { installBridgeProxy, setPluginLoader } from "../api/bridge.js";
 import { injectCss, removeCss } from "../api/css.js";
 import sentryBlockerPlugin from "../plugins/sentry-blocker/index.js";
-import silentTypingPlugin from "../plugins/silent-typing/index.js"
+import silentTypingPlugin from "../plugins/silent-typing/index.js";
 import themesPlugin from "../plugins/themes/index.js";
 import settingsPanelPlugin from "../plugins/settings-panel/index.js";
 import linkEmbedsPlugin from "../plugins/link-embeds/index.js";

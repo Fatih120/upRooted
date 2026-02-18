@@ -19,6 +19,9 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **MessageLogger: Discord-style edit indicators** — Show original content faded above the new content with an "(edited)" label, matching Discord's MessageLogger style. Requires working edit detection first.
   - Files: `hook/MessageLogger.cs`
 
+- [ ] **Silent Typing: verify or reimplement** — Contributed by Kurumi-Nanase (PR #3). Current implementation intercepts `window.fetch` in the browser to block `SetTypingIndicator` gRPC calls. Concern: Root's gRPC calls likely go through .NET's HTTP client, not DotNetBrowser's fetch — the intercept may never fire. Need to: (1) test with a second account to verify typing indicators are actually suppressed, (2) if not working, reimplement as a C# hook feature intercepting at the .NET/gRPC level. Also fix: plugin name casing already corrected to kebab-case.
+  - Files: `src/plugins/silent-typing/index.ts`, potentially `hook/` if C# reimplementation needed
+
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
