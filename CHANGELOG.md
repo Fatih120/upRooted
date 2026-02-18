@@ -29,10 +29,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
 - **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
+- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay; active only when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popup controls
+  - File: `hook/ProfileBadgeInjector.cs`
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
 
 ### Changed
+- **Sentry Blocker**: testing status promoted from Alpha → Beta
+- **Link Embeds**: testing status promoted from Alpha → Beta
+- **SidebarInjector**: UPROOTED nav section repositioned above "APP SETTINGS" (was appended at bottom); uses `FindAppSettingsInsertionPoint` to locate insertion index, falls back to append
 - Rust installer `detection.rs`: `get_root_exe_path()` updated with 7-strategy Root detection to match bash installer (exact paths → glob patterns → `.desktop` file scan → `/proc/*/exe` → PATH lookup → `locate` database → shallow `find`)
 - Version bumped to `0.3.6-rc` across all components (Cargo.toml, PKGBUILD, installer scripts)
 

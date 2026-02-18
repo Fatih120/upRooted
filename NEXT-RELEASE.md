@@ -32,9 +32,13 @@
   - Channel preference persisted in settings (`AutoUpdate.Channel`)
 - **Reusable settings toggle component** — `BuildSettingsToggle` in ContentPages for any boolean plugin setting (pill toggle with label + description)
 - **TUI installer mode selector** — running the installer without `--uninstall`/`--repair`/`--plain` flags now shows an interactive menu with arrow key navigation (Install / Uninstall / Repair)
+- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popups
+  - New file: `hook/ProfileBadgeInjector.cs`
 
 ### Changed
 
+- **Sentry Blocker**: testing status promoted Alpha → Beta
+- **Link Embeds**: testing status promoted Alpha → Beta
 - **Sidebar: Uprooted section repositioned above App Settings** — the UPROOTED nav section (About, Plugins, Themes) now appears between the USER SETTINGS and APP SETTINGS sections instead of at the bottom of the sidebar, so users don't have to scroll to reach Uprooted settings. Uses `FindAppSettingsInsertionPoint` to walk up from the "APP SETTINGS" TextBlock and insert into the items panel at the correct index. Falls back to appending at the end if the insertion point can't be determined.
 - **Linux installer: smarter Root auto-detection** — `find_root()` now uses 7 search strategies instead of just hardcoded paths:
   1. Exact well-known paths (fastest, same as before)
