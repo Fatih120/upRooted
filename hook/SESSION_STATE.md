@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-17)
 
-## Release: v0.3.2
+## Release: v0.3.4
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
@@ -72,28 +72,51 @@ Key details:
 | 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
 | 4 | SidebarInjector | Start settings page monitor (200ms poll) |
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
+| 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
-## Files Modified in This Session
+## Link Embed Engine (v0.3.3–0.3.4)
+
+The Avalonia-native link embed engine is broadly functional:
+
+**Working:**
+- YouTube embeds (oEmbed + thumbnail)
+- Direct image URL fast path (`.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` — zero network)
+- Animated GIF/WebP playback via SkiaSharp `SKCodec` reflection (`AnimatedImage.cs`)
+- oEmbed discovery from HTML `<link>` tags (any oEmbed-compatible site)
+- Content-Type gate (skips PDFs/binaries, synthesizes image embed for `image/*`)
+- Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) with per-request bot UA
+- Embed-fixer normalization (fixupx/fxtwitter/fixvx → vxtwitter.com)
+- `twitter:image`/`twitter:title`/`twitter:description` meta tag fallbacks
+- Tenor URL skip (Root embeds natively)
+- Settings cache: 10s TTL on `UprootedSettings.Load()`
+
+**Known limitations:**
+- Reddit embeds not yet implemented (OG tags available but no dedicated handler)
+- Video preview embeds (.mp4) not yet implemented
+- JS-rendered OG fallback not available (some sites serve no OG in static HTML)
+
+## Files Modified Recently
 
 | File | Changes |
 |------|---------|
-| `hook/DotNetBrowserReflection.cs` | Fixed assembly gate (removed AvaloniaUi), added `FindBrowserDirect()` with 5 strategies, `GetAllFrames()`, profile→browser navigation via private ConcurrentDictionary, broadened ExecJS search, enhanced diagnostics |
-| `hook/StartupHook.cs` | Event-based assembly detection (ManualResetEventSlim + AssemblyLoad), 90s timeout |
-| `hook/LinkEmbedEngine.cs` | Avalonia-native link embed engine (1260 lines): visual tree scan, OG metadata fetch via reflection-based HttpClient, native embed card injection. Replaces dead-end LinkEmbedInjector.cs |
-| `hook/NsfwFilter.cs` | FindBrowserDirect fallback in TryInject() |
+| `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging |
+| `hook/AnimatedImage.cs` | New file: animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
+| `hook/UprootedSettings.cs` | 10s TTL settings cache to reduce disk I/O |
+| `hook/SidebarInjector.cs` | Back arrow management: hide left-side RootSvgButton by position, set header title TextBlock, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper |
+| `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings" |
 
 ## Next Steps
 
-Link embed engine is live (Phase 4.5b) but needs improvement for non-YouTube sites:
-1. **Better User-Agent** — Twitter/X and others reject `Uprooted/0.2` bot UA; needs browser-like UA string
-2. **Direct image URL detection** — Check Content-Type before parsing HTML; render image-only embeds for `.jpg`, `.png`, `.gif` URLs
-3. **Fallback oEmbed providers** — Twitter, Reddit, etc. have oEmbed endpoints like YouTube does
-4. **JS-rendered OG fallback** — Some sites serve no OG tags in static HTML; may need DotNetBrowser fetch as fallback
+1. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
+2. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
+3. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+4. **Plugin toggle functionality** — Wire up Plugins page toggles for runtime enable/disable
 
 ## Deployment
 
 ```powershell
+# Use deploy-hook.ps1 or manually:
 Stop-Process -Name Root,chromium -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 5
 Copy-Item -Force 'hook\bin\Release\net10.0\UprootedHook.dll' "$env:LOCALAPPDATA\Root\uprooted\UprootedHook.dll"

@@ -11,7 +11,7 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 ├── hooks.json                  # PreToolUse guard + Stop auto-review
 ├── commands/                   # Slash commands
 │   ├── hi.md                   # /hi — onboard into the codebase
-│   ├── ok.md                   # /ok — preflight: sync + build + test + review
+│   ├── ok.md                   # /ok — post-work documentation sweep
 │   ├── build-hook.md           # /build-hook — dotnet build hook/ -c Release
 │   ├── build-installer.md      # /build-installer — full pipeline build
 │   ├── deploy.md               # /deploy — build hook + deploy to local Root
@@ -63,14 +63,14 @@ Responds `APPROVE` or `BLOCK: [rule] [explanation]`. 15s timeout.
 
 **2. Stop — Auto-Review Reminder**
 
-A prompt hook on `*` that fires when Claude is about to stop. If source files in `hook/` or `src/` were edited during the session and no code review was run (via `uprooted-reviewer` or `/ok`), it blocks and reminds to review before finishing. Skips if the user explicitly opted out. 20s timeout.
+A prompt hook on `*` that fires when Claude is about to stop. If source files in `hook/` or `src/` were edited during the session and no code review was run (via `uprooted-reviewer`), it blocks and reminds to review before finishing. Skips if the user explicitly opted out. 20s timeout.
 
 ### Commands
 
 | Command | Purpose | When to use |
 |---------|---------|-------------|
 | `/hi` | Read `NEW-SESSION.md`, `docs/INDEX.md`, and this file; orient in the codebase | Start of a new session (first time) |
-| `/ok` | **Preflight:** git sync + build hook + build TS + run tests + invoke reviewer | Before committing, or start of session |
+| `/ok` | **Doc sweep:** update session state, changelog, tasks, NEW-SESSION, CLAUDE.md to match committed code | After committing and pushing work |
 | `/build-hook` | `dotnet build hook/ -c Release` | Quick build check after C# changes |
 | `/build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |
 | `/deploy` | Build C# hook + deploy to local Root installation | Core dev loop: edit → build → deploy → test |
@@ -81,15 +81,15 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 
 **Typical workflows:**
 
-- **Session start:** `/ok` (sync + verify), then `/hi` if new context needed
+- **Session start:** `/hi` to orient in the codebase
 - **Dev loop:** edit code → `/deploy` → launch Root → `/watch-log`
 - **Debug:** `/diagnose` → fix → `/deploy` → retest
-- **Pre-commit:** `/ok` (runs full preflight with review)
-- **End of session:** `/session-state` to capture what changed
+- **After work:** commit + push → `/ok` (sync all docs with committed code)
+- **End of session:** `/ok` covers session state, or `/session-state` for a lighter update
 
 ### Agent: uprooted-reviewer
 
-**Model:** Sonnet | **Color:** Red | **Trigger:** explicit request ("review my changes", "check for violations"), or auto-triggered by `/ok` preflight, or reminded by Stop hook
+**Model:** Sonnet | **Color:** Red | **Trigger:** explicit request ("review my changes", "check for violations"), or reminded by Stop hook
 
 Runs a structured code review against staged/modified files:
 

@@ -1,59 +1,80 @@
 ---
 name: ok
-description: Pull latest, verify builds, run tests, review changes — the full preflight check before committing
+description: Post-work documentation sweep — update session state, changelog, tasks, NEW-SESSION, and all stale docs to match committed code
 allowed-tools:
   - Bash
   - Read
+  - Write
+  - Edit
   - Grep
   - Glob
   - Task
 ---
 
-# OK — Preflight
+# OK — Documentation Sweep
 
-Session sync + build verification + test + code review in one command. Run this before doing any work, and again before committing.
+After work has been committed and pushed, run this command to bring all documentation into sync with the codebase. Scoped to what actually changed — only update docs that are stale relative to recent commits.
+
+**Multi-instance awareness:** Other Claude instances may be working in this environment concurrently. Only touch documentation related to changes YOU made or that are visibly stale relative to committed code. Do not rewrite docs wholesale. Do not touch files that are already accurate. If you see uncommitted changes in files you didn't modify, leave them alone — another instance may be mid-work.
 
 ## Instructions
 
-### Phase 1: Git sync
+### Phase 1: Scope your changes
 
-1. Run `git pull` to fetch and merge any changes from the other contributor.
+1. Run `git log --oneline -20` to see recent commit history.
 
-2. Run `git status` to show the current working tree state (modified files, untracked files, ahead/behind).
+2. Identify which commits are from your current work session (you'll recognize them from the conversation context). If unclear, ask the user which commits to cover.
 
-3. Run `git log --oneline -10` to show recent commit history.
+3. Run `git diff <base>..HEAD --stat` scoped to your session's commits to see exactly what source files changed.
 
-4. Report a brief sync summary:
-   - Whether pull brought in new changes (and how many commits)
-   - Any uncommitted local changes
-   - The last few commit messages for context
-   - Any warnings (e.g., merge conflicts, diverged branches)
+4. For any hook `.cs` files that changed in your commits, run `wc -l` to get current line counts.
 
-### Phase 2: Build verification
+### Phase 2: Read only affected docs
 
-Only run this phase if there are uncommitted changes to source files (`hook/`, `src/`, `installer/`). If the tree is clean, skip to the summary.
+Read the docs that could be stale based on your changes. Skip docs unrelated to your work.
 
-5. **C# hook build** — Run `dotnet build hook/ -c Release`. Report pass/fail. If it fails, show the first error and stop (no point continuing with a broken build).
+- **Always read:** `CHANGELOG.md`, `TASKS.md`
+- **If hook/ files changed:** `hook/SESSION_STATE.md`, the file map in `NEW-SESSION.md` (section 4), `CLAUDE.md` (Repository Structure tree)
+- **If features were added/completed:** `NEW-SESSION.md` section 6 (Current State)
+- **If version was bumped:** check version references across all docs
+- **If files were added/removed/renamed:** `CLAUDE.md` tree, `NEW-SESSION.md` file map, `docs/framework/HOOK_REFERENCE.md`
 
-6. **TypeScript build** — Run `pnpm build` from the repo root. Report pass/fail. If it fails, show the error.
+### Phase 3: Identify stale content
 
-7. **C# tests** — Run `dotnet test tests/UprootedTests/ --no-restore --verbosity quiet`. Report pass/fail and test count.
+Compare what the docs say against what actually happened. Only flag items that are genuinely wrong or missing — not "could be slightly better" rewording.
 
-### Phase 3: Code review
+Check for:
+- **Line counts** — are file map tables accurate for files that changed?
+- **Feature descriptions** — do file/feature descriptions match current functionality?
+- **Changelog** — are all committed changes reflected? Are compare links present?
+- **Tasks** — should any "Up Next" items move to "Done"?
+- **Session state** — does it reflect the latest work, correct "Files Modified", correct "Next Steps"?
+- **Known issues** — have any been resolved? Are there new ones?
 
-Only run this phase if there are uncommitted changes to `hook/` or `src/` files.
+Build a concise list of stale items.
 
-8. Invoke the `uprooted-reviewer` agent on the current changes. This checks critical rule violations, coding conventions, and architectural constraints.
+### Phase 4: Apply targeted updates
 
-9. Surface any CRITICAL or WARNING findings from the reviewer. INFO findings can be mentioned briefly.
+Work through the stale items. For each update:
 
-### Phase 4: Summary
+- Edit in place — surgical changes only
+- Preserve existing formatting and style
+- Do not rewrite sections that are already accurate
+- Do not touch files you have no reason to update
 
-10. Report a consolidated summary:
-    - **Sync**: clean / incoming changes / conflicts
-    - **Build**: hook pass/fail, TS pass/fail (or skipped if no changes)
-    - **Tests**: pass/fail with count (or skipped)
-    - **Review**: clean / N findings by severity (or skipped)
-    - **Verdict**: "Ready to commit" or "Issues to resolve" with the blocking items listed
+**Priority order:**
+1. `CHANGELOG.md` — must accurately reflect commits, include compare links
+2. `TASKS.md` — move completed items to Done
+3. `hook/SESSION_STATE.md` — version, recent work, files modified, next steps
+4. `NEW-SESSION.md` — file map line counts, section 6 state
+5. `CLAUDE.md` — repository structure tree (only if files added/removed/renamed)
+6. Other docs only if they reference something your changes made stale
 
-If everything passes, end with: "You're OK."
+### Phase 5: Summary
+
+Report what was updated:
+
+- List each file edited and what changed (1 line per file)
+- List files checked but found accurate (brief)
+- Flag anything you couldn't verify (e.g., "unknown if X feature is working — needs user confirmation")
+- If everything is already in sync, say so: "Docs are up to date."

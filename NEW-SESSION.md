@@ -37,22 +37,23 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 315 | Multi-phase startup orchestrator (Phase 0-5) |
-| `HtmlPatchVerifier.cs` | 344 | Phase 0: self-healing HTML patches + FileSystemWatcher |
-| `AvaloniaReflection.cs` | 1943 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
+| `StartupHook.cs` | 319 | Multi-phase startup orchestrator (Phase 0-5) |
+| `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
+| `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1088 | 200ms timer poll, sidebar injection, click events |
-| `ContentPages.cs` | 1753 | Settings page builders (Uprooted, Plugins, Themes) |
+| `SidebarInjector.cs` | 1280 | 200ms timer poll, sidebar injection, header management, click events |
+| `ContentPages.cs` | 2270 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | 2218 | ResourceDictionary overrides, live theme preview (2nd largest) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
-| `UprootedSettings.cs` | 91 | INI-based settings (System.Text.Json workaround) |
+| `UprootedSettings.cs` | 130 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
-| `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `LinkEmbedEngine.cs` | 1260 | Avalonia-native link embed engine (OG fetch + visual tree injection) |
+| `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
+| `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
-| `Logger.cs` | 28 | Thread-safe file logging, swallows own exceptions |
+| `Logger.cs` | 46 | Thread-safe file logging, swallows own exceptions |
 
 ### TypeScript Layer (`src/`)
 
@@ -97,7 +98,7 @@ Two independent injection layers into one app:
 
 **Source:** `hook/SESSION_STATE.md` (2026-02-17)
 
-**Versions:** 0.3.2 | Target Root 0.9.92
+**Versions:** 0.3.4 | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -105,17 +106,22 @@ Two independent injection layers into one app:
 - `DotNetBrowser.AvaloniaUi` NOT loaded -- Root accesses browser engine programmatically via ViewModel chain
 
 **Recent work (all working):**
+- Settings header: back arrow hidden on Uprooted tabs, page title set in header, X close button preserved
+- Settings tabs renamed: sidebar "Uprooted" → "About", content headers "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"
+- Settings crash fix: back arrow click no longer freezes Root (DetachedFromVisualTree safety net + Click event for Buttons)
+- LinkEmbedEngine broadly functional: YouTube, Twitter/X, generic OG sites, direct image URLs, oEmbed discovery
+- Animated GIF/WebP embeds playing inline via SkiaSharp `SKCodec` reflection (`AnimatedImage.cs`)
+- Direct image URL fast path (`.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` -- zero network)
+- Content-Type gate on OG fetch (skips PDFs/binaries, synthesizes image embed for `image/*`)
+- Bot UA for Twitter/X and embed-fixer domains; embed-fixer normalization (fixupx/fxtwitter/fixvx → vxtwitter.com)
+- Tenor URL skip (Root embeds natively, avoids double-embedding)
+- Settings cache: 10s TTL on `UprootedSettings.Load()` to reduce disk I/O
 - Console TUI installer replaces Tauri GUI (~600KB vs ~100MB)
-- Anti-RE hardening: stripped symbols, LTO, no PDBs
-- Dual-prefix env vars: DOTNET_ (primary) + CORECLR_ (legacy)
-- Phase 4.5 (BrowserDiscovery) and Phase 5 (DotNetBrowser features) implemented
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
-- Event-driven DotNetBrowser assembly detection (ManualResetEventSlim, 90s timeout)
-- LinkEmbedEngine: Avalonia-native link embeds live at Phase 4.5b (YouTube working, generic sites need improvement)
-- C# settings persistence fully working via INI format (UprootedSettings)
 
 **Known issues:**
-- Link embeds: YouTube works; generic sites (Twitter, images) fail due to OG fetch limitations (bot UA, no image-only path)
+- Reddit embeds not yet implemented (OG tags available but no dedicated handler)
+- Video preview embeds (.mp4) not yet implemented
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
@@ -249,4 +255,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-*Quick-start reference for Uprooted v0.3.2. Last updated 2026-02-17.*
+*Quick-start reference for Uprooted v0.3.4. Last updated 2026-02-17.*

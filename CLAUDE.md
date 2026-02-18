@@ -52,10 +52,10 @@ uprooted-private/
 │   ├── VisualTreeWalker.cs            # Visual tree DFS traversal
 │   ├── NativeEntry.cs                 # Native method proxies
 │   ├── PlatformPaths.cs               # Platform-specific path resolution
-│   ├── UprootedSettings.cs            # INI-based settings (no System.Text.Json)
+│   ├── UprootedSettings.cs            # INI-based settings (no System.Text.Json) + 10s TTL cache
 │   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
 │   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
-│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG fetch + visual tree injection)
+│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed fetch + animated images + visual tree injection)
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
