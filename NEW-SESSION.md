@@ -182,6 +182,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 - **Check `git log` before committing** to match recent style
 - **Private/public repos are strictly separate** -- never cross content between them
 - **Two contributors:** `watchthelight` (owner) + `agomusio` (admin)
+- **Document discovered quirks** -- when you discover important new quirks or unexpected behaviors in Root or Uprooted's code (runtime gotchas, API surprises, silent failures, platform-specific edge cases), always document them in the relevant docs. Update `NEW-SESSION.md` (Critical Rules or Common Pitfalls), `docs/framework/HOOK_REFERENCE.md`, `docs/framework/ARCHITECTURE.md`, or the appropriate reference file. Knowledge that stays only in code comments or session context gets lost.
 
 ## 10. Common Pitfalls
 
