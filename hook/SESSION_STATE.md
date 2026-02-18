@@ -100,10 +100,14 @@ The Avalonia-native link embed engine is broadly functional:
 - OG fallback for image-extension URLs that serve HTML (Zipline `/view/`, `/u/`)
 - Image embed borders round all 4 corners (imgBorder `HorizontalAlignment("Left")`)
 - Robust OG regex: explicit attribute bridge handles `itemProp`, `data-next-head`, etc.
+- Video embeds (.mp4, .webm, .mov): dark 16:9 placeholder with centered play button, click opens in browser
+- `video/*` Content-Type detection for extensionless video URLs
+- Image-only embed filename hiding: off by default, `LinkEmbedsShowFilenames` toggle, live `RefreshTitleVisibility()`
+- `LinkEmbedEngine.Instance` static property for external access from ContentPages
 
 **Known limitations:**
-- Video preview embeds (.mp4) not yet implemented
 - JS-rendered OG fallback not available (some sites serve no OG in static HTML)
+- Video embeds show placeholder (no first-frame extraction — SkiaSharp cannot decode MP4/WebM video codecs)
 
 ## Files Modified Recently
 
@@ -135,6 +139,10 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/SidebarInjector.cs` | Theme walk burst triggers: after injection, on ListBox SelectionChanged, on Uprooted tab switch (WalkVisualTreeNow synchronous) |
 | `hook/ThemeEngine.cs` | Added 50ms rapid follow-up to ScheduleRapidFollowUp walk sequence |
 | `hook/MessageLogger.cs` | Restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix) |
+| `hook/LinkEmbedEngine.cs` | Video embeds: `VideoUrlRegex`, `SynthesizeVideoEmbed()`, `BuildVideoPlaceholder()`, `video/*` Content-Type gate, video placeholder in `BuildEmbedCard`. Also: `Instance` static property, `RefreshTitleVisibility()`, image-only title hiding with tag-based visibility toggle |
+| `hook/ContentPages.cs` | `BuildLinkEmbedSettings()` — "Show Embedded File Names" toggle in LinkEmbeds settings lightbox, calls `LinkEmbedEngine.Instance?.RefreshTitleVisibility()` |
+| `hook/StartupHook.cs` | Sets `LinkEmbedEngine.Instance = engine` in Phase 4.5b for external access |
+| `hook/UprootedSettings.cs` | `LinkEmbedsShowFilenames` property (bool, default false), INI load/save for `LinkEmbeds.ShowFilenames` |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
@@ -174,7 +182,6 @@ The Avalonia-native link embed engine is broadly functional:
 2. **MessageLogger Phase 3** — Fix injection position (insert deleted cards near original message position, not at bottom)
 3. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
 4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
-3. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
 6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
 

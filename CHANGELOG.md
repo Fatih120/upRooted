@@ -49,6 +49,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
+- **Video preview embeds** (.mp4, .webm, .mov) — direct video URLs show a dark 16:9 placeholder with centered play button overlay; clicking opens the URL in the default browser (same UX as YouTube embeds). Detected by file extension (`VideoUrlRegex`) or `video/*` Content-Type for extensionless URLs. No HTTP fetch needed for extension-matched URLs.
+- **LinkEmbeds "Show file names" toggle** — image-only embeds now hide the filename title by default; new `LinkEmbedsShowFilenames` setting with live toggle in LinkEmbeds plugin settings lightbox; `RefreshTitleVisibility()` updates all live cards instantly without re-fetching
+- **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change
 
 ### Changed
 - **Plugin names**: renamed to PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching similar services like Vencord; Themes and ClearURLs unchanged

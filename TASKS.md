@@ -19,12 +19,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **MessageLogger: Discord-style edit indicators** — Show original content faded above the new content with an "(edited)" label, matching Discord's MessageLogger style. Requires working edit detection first.
   - Files: `hook/MessageLogger.cs`
 
-- [ ] **Hide file names on image/video embeds** — Direct image/video link embeds show the file name as the title, but it's redundant since the URL is already visible. Hide file names by default, keep the domain label. Add a "Show embedded file names" toggle in the Link Embeds plugin settings.
-  - Files: `hook/LinkEmbedEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
-
-- [ ] **Video preview embeds (.mp4)** — Direct `.mp4` URLs should show a thumbnail preview frame with play button overlay (similar to YouTube embeds). Currently get Cloudflare challenge pages or no embed. Consider extracting a frame server-side or using a placeholder with click-to-open.
-  - Files: `hook/LinkEmbedEngine.cs`
-
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
@@ -100,6 +94,8 @@ Move completed items here with the date.
 - [x] **Restart banners + Diagnostics Open button** (2026-02-18) — Plugins page: state-aware amber restart banner. Updates section: green restart banner after update applied. Both with Restart button. DIAGNOSTICS card: "Open" button opens log file in Explorer.
 - [x] **Reddit link embeds** (2026-02-18) — Dedicated handler in LinkEmbedEngine with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (#FF4500) accent color. Falls through to generic OG if no title found. Also fixed: image embed borders (all 4 corners rounded), HTTP status/Content-Type validation in `HttpGetBytes`, OG fallback for image-extension URLs that serve HTML (Zipline `/view/`, `/u/`), robust OG regex for meta tags with extra attributes.
 - [x] **Custom ping/reply highlight color** (2026-02-18) — Standalone `CustomPingColor` setting in UprootedSettings that persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle indicator, color input row, swatch with color picker popup, reset button. ThemeEngine overrides `HighlightForegroundColor`, `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (0x60 alpha) in both Styles[0].Resources and injected MergedDictionary. Applied as Phase 6 after theme apply + after live preview updates. Restored to theme defaults on clear.
+- [x] **Video preview embeds (.mp4, .webm, .mov)** (2026-02-18) — Direct video URLs show a dark 16:9 placeholder with centered play button overlay; clicking opens in default browser (same UX as YouTube embeds). Detected by extension (`VideoUrlRegex`) or `video/*` Content-Type for extensionless URLs. Zero HTTP fetch for extension-matched URLs. `SynthesizeVideoEmbed()` sets `VideoId="direct"` to trigger play button behavior; `BuildVideoPlaceholder()` creates dark background (#1a1a2e) with 56px semi-transparent play circle.
+- [x] **Hide file names on image/video embeds** (2026-02-18) — Image-only embeds hide filename title by default. New `LinkEmbedsShowFilenames` setting (INI: `LinkEmbeds.ShowFilenames`, default false). Settings lightbox toggle in LinkEmbeds plugin settings. `RefreshTitleVisibility()` updates all live cards instantly. `LinkEmbedEngine.Instance` static property enables ContentPages to trigger refresh.
 
 ---
 

@@ -42,15 +42,15 @@ Two independent injection layers into one app:
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1421 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers |
-| `ContentPages.cs` | ~3410 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | ~3429 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | ~2513 | ResourceDictionary overrides, live theme preview, custom ping color override |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
-| `UprootedSettings.cs` | ~170 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
+| `UprootedSettings.cs` | 174 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
-| `LinkEmbedEngine.cs` | 1946 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + Reddit + visual tree injection) |
+| `LinkEmbedEngine.cs` | 2112 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
 | `MessageLogger.cs` | ~1322 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
@@ -139,9 +139,10 @@ Two independent injection layers into one app:
 - Plugin names: PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching Vencord-style naming
 - Reddit link embeds: dedicated handler with old.reddit.com OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange accent
 - LinkEmbedEngine: HTTP status code + Content-Type validation in HttpGetBytes (rejects Cloudflare challenge pages), OG fallback for image-extension URLs that serve HTML (Zipline /view/, /u/), image border corners fix, robust OG regex for meta tags with extra attributes, timeout increased to 10s
+- Video embeds (.mp4, .webm, .mov): dark 16:9 placeholder with centered play button overlay, click opens in browser. Detected by extension or `video/*` Content-Type. No HTTP fetch for extension-matched URLs.
+- LinkEmbeds "Show file names" toggle: image-only embeds hide filename by default, live toggle via `RefreshTitleVisibility()` in settings lightbox
 
 **Known issues:**
-- Video preview embeds (.mp4) not yet implemented
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
 - MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); deletion detection relies on Remove events which may need tuning for new Root behaviors

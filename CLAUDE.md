@@ -56,7 +56,7 @@ uprooted-private/
 │   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
 │   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
 │   ├── ClearUrlsEngine.cs             # ClearURLs: strip tracking params from compose editor URLs on send
-│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed fetch + animated images + visual tree injection)
+│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed fetch + animated images + video embeds + visual tree injection)
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── MessageLogger.cs              # Message logger: edit/delete detection, visual indicators, collection subscription
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
