@@ -320,6 +320,108 @@ On detection:
 
 ---
 
+## LinkEmbedEngine: Trimming Quirks and Provider Behavior
+
+**File:** `hook/LinkEmbedEngine.cs`
+
+Root's single-file trimming removes methods unpredictably. The link embed engine hits trimming issues that other hook code does not, because it performs HTTP requests and JSON-like parsing against external servers. This section documents every workaround and the rationale behind each.
+
+### HTTP Method Survival
+
+Methods resolved via reflection in `EnsureHttpResolved()`. Trimming status observed at runtime:
+
+| Method | Status | Notes |
+|--------|--------|-------|
+| `GetStringAsync(string)` | Survives | Works for HTML pages. Fails on some JSON responses (YouTube oEmbed) — likely trimmed charset/decompression in response pipeline |
+| `GetByteArrayAsync(string)` | Trimmed | Never available. `HttpGetBytes` falls back to `GetAsync` + stream |
+| `GetAsync(string)` | Survives | Works for binary downloads. Response body read via `ReadAsStreamAsync` |
+| `SendAsync(HttpRequestMessage, CancellationToken)` | Survives | Most reliable. Supports per-request UA override via `HttpRequestMessage.Headers` |
+| `ReadAsStringAsync()` | Survives (partial) | Works for HTML responses. Throws `MissingMethodException` on some JSON responses — trimmed charset/encoding detection |
+| `ReadAsStreamAsync()` | Survives | Always works. Use `StreamReader.ReadToEnd()` to convert to string |
+
+**Rule:** Always prefer `SendAsync` + `ReadAsStreamAsync` + `StreamReader` for string responses. `ReadAsStringAsync` is unreliable.
+
+### JSON Parsing Without System.Text.Json
+
+`System.Text.Json` is forbidden in the hook (Critical Rule #3 — causes `MissingMethodException`). All JSON field extraction uses compiled `Regex` patterns:
+
+```csharp
+// Pattern: "field_name" : "value" (handles escaped quotes)
+private static readonly Regex JsonTitleRegex = new(
+    @"""title""\s*:\s*""([^""\\]*(?:\\.[^""\\]*)*)""", RegexOptions.Compiled);
+```
+
+**Trimming trap:** `Regex.Replace(string, string, MatchEvaluator)` with a lambda delegate is trimmed. The `MatchEvaluator` delegate type or its invocation path references a trimmed method. Use manual string loops instead:
+
+```csharp
+// BAD — trimmed in Root's binary:
+Regex.Replace(s, @"\\u([0-9a-fA-F]{4})", m => ((char)Convert.ToInt32(...)).ToString());
+
+// GOOD — manual loop:
+while ((idx = s.IndexOf("\\u", idx)) >= 0 && idx + 5 < s.Length)
+{
+    var hex = s.Substring(idx + 2, 4);
+    if (int.TryParse(hex, NumberStyles.HexNumber, null, out int code))
+        s = string.Concat(s.AsSpan(0, idx), ((char)code).ToString(), s.AsSpan(idx + 6));
+}
+```
+
+**Escape ordering:** Process `\\` → `\` replacement LAST. If done first, `\\u0041` becomes `\u0041` and gets decoded to `A`. The correct sequence: unescape `\"`, `\/` first, decode `\uXXXX`, then `\\` last.
+
+### Embed-Fixer Domain Behavior
+
+These third-party services rewrite Twitter/X URLs for better embeds. Each behaves differently:
+
+| Domain | OG Tags | oEmbed | Image Source | Bot UA Required |
+|--------|---------|--------|-------------|-----------------|
+| `vxtwitter.com` | `twitter:title`, `twitter:image` | type="photo", empty title, no `url` field | OG `twitter:image` | Yes (Discordbot) |
+| `fixupx.com` | Title only, no image tag | type="rich", title="Embed", engagement stats in `author_name` | None — must normalize to vxtwitter | Yes (Discordbot) |
+| `fxtwitter.com` | Similar to fixupx | Similar to fixupx | Normalize to vxtwitter | Yes (Discordbot) |
+| `fixvx.com` | Similar to fixupx | Similar to fixupx | Normalize to vxtwitter | Yes (Discordbot) |
+| `x.com` / `twitter.com` | Full OG tags with bot UA | N/A (no oEmbed discovery link) | OG `og:image` with bot UA | Yes (Discordbot) |
+
+**Key insight:** Chrome-like UA gets redirect stubs or React SPA shells from all these domains. Only bot/crawler UAs (e.g., `Discordbot/2.0`) receive OG metadata.
+
+**Normalization:** All non-vxtwitter embed-fixer domains are rewritten to `vxtwitter.com` before metadata fetch, because vxtwitter consistently provides `twitter:image` in its OG tags. The embed card still links to the original URL.
+
+### oEmbed Response Formats
+
+oEmbed spec defines four types. Image location varies by type:
+
+| Type | Image Field | Notes |
+|------|------------|-------|
+| `photo` | `url` (required) | The photo itself. `thumbnail_url` is optional preview |
+| `video` | `thumbnail_url` | Preview image. `html` contains embed iframe |
+| `rich` | `thumbnail_url` | Preview image. `html` contains rich content |
+| `link` | `thumbnail_url` | Optional preview |
+
+**YouTube oEmbed:** Returns `title`, `author_name`, `thumbnail_url`. Fetched via `GetStringAsync` which fails (trimmed response pipeline). Falls back to page scraping — fetch watch page HTML, extract `<title>` tag, strip " - YouTube" suffix.
+
+**Twitter oEmbed (via embed-fixers):** Returns `author_name` and `html` (blockquote with tweet text in `<p>` tags) but often no `title` or `description`. The engine extracts text from `<p>` tags in the `html` field as description fallback.
+
+### Metadata Routing
+
+`FetchMetadata()` routes URLs through a priority chain:
+
+```
+1. Cache hit?              → return cached
+2. Image URL regex?        → SynthesizeImageEmbed (zero network)
+3. YouTube regex?          → FetchYouTubeMetadata (oEmbed + page scrape fallback)
+4. All other URLs          → FetchOgMetadata:
+   a. Normalize embed-fixer domains → vxtwitter.com
+   b. Detect Twitter/embed-fixer → set bot UA
+   c. HttpGetWithContentType (SendAsync + ReadAsStreamAsync)
+   d. Content-Type gate (HTML → proceed, image/* → synthesize, other → bail)
+   e. oEmbed discovery (<link> tags in HTML) → TryOEmbedDiscovery
+   f. OG tag parsing (og:*, twitter:* fallbacks)
+```
+
+### Verbose Logging
+
+Set `UPROOTED_VERBOSE=1` environment variable to enable step-by-step HTTP diagnostic logs (`HGWCT[1]` through `HGWCT[7]`), oEmbed JSON body dumps, and parsed field summaries. Error logs are always enabled regardless of this flag.
+
+---
+
 ## AvaloniaReflection Deep Dive
 
 **File:** `hook/AvaloniaReflection.cs` (1943 lines)
