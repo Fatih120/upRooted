@@ -8,8 +8,8 @@ namespace Uprooted;
 ///
 /// Deletion detection: Root's ObservableCollection is a WINDOWED/VIRTUALIZED data source.
 /// Remove events fire for BOTH genuine deletions AND buffer management (scroll-off,
-/// window shifts). We use diagnostic instrumentation to distinguish the two — probing
-/// HasBeenDeleted, tracking Add/Remove correlation, and logging remove indices.
+/// window shifts). We use the HasBeenDeleted property on the bridge target (Message model)
+/// as the primary signal — true means genuine deletion, false means buffer management.
 ///
 /// Display: Deleted messages are re-injected into the chat as red-tinted inline panels
 /// (since Root removes them entirely). Right-click shows "Clear message history" to
@@ -62,11 +62,8 @@ internal class MessageLogger
 
     // Deletion detection via CollectionChanged Remove events (buffered + debounced)
     private readonly List<BufferedRemove> _pendingRemoves = new();
-
-    // Settling filter: messages present at subscription time are protected from false-positive
-    // Remove events for 30s, since Root's buffer management fires Remove for scroll-off.
-    private readonly HashSet<string> _initialSnapshotIds = new();
-    private DateTime _lastSubscriptionTime = DateTime.UtcNow;
+    private int _deletionEpoch;       // incremented on channel switch / bulk remove — cancels running pollers
+    private int _boolDumpCount;       // limits diagnostic property dumps to first 3 removes
 
     // Diagnostic counters: track Add/Remove correlation per flush window
     private int _addsSinceFlush;
@@ -76,8 +73,10 @@ internal class MessageLogger
     {
         public string MessageId;
         public string Content;
-        public bool? HasBeenDeleted;  // null = property not available on this type
-        public int RemoveIndex;       // OldStartingIndex from the event args
+        public object? ViewModel;       // the ViewModel item (for re-reading bridge target)
+        public object? BridgeTarget;    // captured bridge target (may become stale)
+        public TypeProps? Props;        // property accessor for HasBeenDeleted read
+        public int RemoveIndex;         // OldStartingIndex from the event args
     }
 
     // Message caches
@@ -86,6 +85,9 @@ internal class MessageLogger
 
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
+
+    // One-time diagnostic tree dump (1E)
+    private bool _firstTreeDumpDone;
 
     // Avalonia types for context menu (resolved lazily)
     private Type? _contextMenuType;
@@ -432,9 +434,10 @@ internal class MessageLogger
                 UnsubscribeCollection();
                 _chatItemsControl = activeControl;
                 _currentItemsSource = activeSource;
+                _deletionEpoch++;
                 _contentSnapshot.Clear();
                 _pendingRemoves.Clear();
-                ClearInjectedCards();
+                ClearInjectedCards("active control changed");
                 ReadCurrentChannelId();
                 if (activeSource != null)
                 {
@@ -468,9 +471,10 @@ internal class MessageLogger
             FlushPendingRemoves(flushSettings);
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
+            _deletionEpoch++;
             _contentSnapshot.Clear();
             _pendingRemoves.Clear();
-            ClearInjectedCards();
+            ClearInjectedCards("ItemsSource ref changed");
             ReadCurrentChannelId();
             SubscribeToCollection(currentSource);
             SnapshotMessages(currentSource);
@@ -592,9 +596,10 @@ internal class MessageLogger
         {
             Logger.Log(Tag, $"[rediscover] Found: {bestControl.GetType().Name} with {bestCount} items");
             _chatItemsControl = bestControl;
+            _deletionEpoch++;
             _currentItemsSource = bestSource;
             _contentSnapshot.Clear();
-            ClearInjectedCards();
+            ClearInjectedCards("rediscover: new control found");
             ReadCurrentChannelId();
             SubscribeToCollection(bestSource);
             SnapshotMessages(bestSource);
@@ -703,9 +708,10 @@ internal class MessageLogger
 
                 case 4: // Reset — Root rebuilt the collection, force re-discovery
                     Logger.Log(Tag, "Collection Reset — forcing re-discovery");
+                    _deletionEpoch++;
                     _contentSnapshot.Clear();
                     _pendingRemoves.Clear();
-                    ClearInjectedCards();
+                    ClearInjectedCards("CollectionChanged Reset (action=4)");
                     UnsubscribeCollection();
                     _chatItemsControl = null;
                     _currentItemsSource = null;
@@ -732,9 +738,14 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Buffer removed items for debounced processing on next tick.
-    /// We capture the message ID, content, HasBeenDeleted flag, and remove index NOW
-    /// (while the item is still alive) because after the event returns, Root may dispose it.
+    /// Buffer removed items and spawn a fast async poller per item.
+    ///
+    /// Captures the ViewModel and bridge target references NOW (while alive).
+    /// Root sets HasBeenDeleted asynchronously after the Remove event, so we
+    /// poll the stored references every 300ms for up to 3s.
+    /// The poller also re-reads the bridge from the ViewModel on each tick
+    /// (in case Root replaces the bridge target object).
+    /// An epoch counter cancels pollers after channel switches.
     /// </summary>
     private void HandleRemoved(System.Collections.IList items, int removeIndex)
     {
@@ -750,61 +761,149 @@ internal class MessageLogger
             if (string.IsNullOrEmpty(content) && _messageCache.TryGetValue(msgId, out var cached))
                 content = cached.Content;
 
-            // Probe HasBeenDeleted property on the ViewModel
-            bool? hasBeenDeleted = null;
+            // Capture ViewModel + bridge target references
             var tp = GetTypeProps(item);
-            if (tp?.HasBeenDeleted != null)
+            object? bridgeTarget = null;
+            if (tp != null)
             {
-                try
-                {
-                    var target = GetMessageTarget(item, tp);
-                    if (target != null)
-                    {
-                        var val = tp.HasBeenDeleted.GetValue(target);
-                        if (val is bool b) hasBeenDeleted = b;
-                    }
-                }
+                try { bridgeTarget = GetMessageTarget(item, tp); }
                 catch { }
             }
 
             _removesSinceFlush++;
-            _pendingRemoves.Add(new BufferedRemove
+            var buffered = new BufferedRemove
             {
                 MessageId = msgId,
                 Content = content,
-                HasBeenDeleted = hasBeenDeleted,
-                RemoveIndex = removeIndex
-            });
-            Logger.Log(Tag, $"[remove-event] buffered: {msgId} idx={removeIndex} deleted={hasBeenDeleted?.ToString() ?? "null"} ({Truncate(content, 40)})");
+                ViewModel = item,
+                BridgeTarget = bridgeTarget,
+                Props = tp,
+                RemoveIndex = removeIndex,
+            };
+            _pendingRemoves.Add(buffered);
+            Logger.Log(Tag, $"[remove-event] buffered: {msgId} idx={removeIndex} bridgeTarget={bridgeTarget != null} ({Truncate(content, 40)})");
+
+            // Spawn async poller
+            if (tp != null)
+            {
+                var epoch = _deletionEpoch;
+                var doDump = _boolDumpCount < 3;
+                if (doDump) _boolDumpCount++;
+                StartDeletionPoller(buffered, epoch, doDump);
+            }
         }
     }
 
     /// <summary>
-    /// Process buffered Remove events from CollectionChanged. Called each tick.
+    /// Async poller: checks HasBeenDeleted every 300ms for up to 3s.
     ///
-    /// Filtering strategy:
-    ///   10+ removes in one tick = channel switch (discard all).
-    ///   Fewer removes: check each against the initial snapshot and diagnostic data.
-    ///   Messages that were present when we subscribed may be removed by Root's buffer
-    ///   settling (within 30s of subscription). Messages that arrived AFTER subscription
-    ///   (via Add events) are always trusted as real deletions immediately — no delay.
+    /// On each tick:
+    ///   1. Check epoch — abort if channel switched
+    ///   2. Re-read bridge target from ViewModel (catches bridge replacement)
+    ///   3. Read HasBeenDeleted from both captured and fresh bridge targets
+    ///   4. If True → mark as deleted + inject card on UI thread
+    ///
+    /// On first and last attempt for the first few removes, dumps ALL boolean
+    /// properties on the bridge target to discover the correct deletion signal.
+    /// </summary>
+    private void StartDeletionPoller(BufferedRemove remove, int epochAtRemoval, bool dumpBoolProps)
+    {
+        Task.Run(async () =>
+        {
+            for (int attempt = 0; attempt < 10; attempt++)
+            {
+                await Task.Delay(300);
+
+                // Epoch check: abort if channel switched
+                if (_deletionEpoch != epochAtRemoval)
+                {
+                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: epoch changed ({epochAtRemoval}->{_deletionEpoch}), aborting");
+                    return;
+                }
+
+                // Try BOTH the captured bridge target AND a fresh re-read from the ViewModel
+                bool? valCaptured = ReadDeferredHasBeenDeleted(remove.BridgeTarget, remove.Props);
+                bool? valFresh = ReadFreshHasBeenDeleted(remove.ViewModel, remove.Props);
+
+                if (valCaptured == true || valFresh == true)
+                {
+                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: HasBeenDeleted=True at attempt {attempt} ({(attempt + 1) * 300}ms) captured={valCaptured} fresh={valFresh}");
+                    _r.RunOnUIThread(() =>
+                    {
+                        if (_deletionEpoch != epochAtRemoval) return;
+                        MarkAsDeleted(remove);
+                        var settings = UprootedSettings.Load();
+                        InjectDeletedMessageCards(settings);
+                    });
+                    return;
+                }
+
+                // Diagnostic: dump all boolean properties on first and last attempt
+                if (dumpBoolProps && (attempt == 0 || attempt == 9))
+                    DumpBooleanProperties(remove, attempt);
+            }
+
+            // After 3s, still False — buffer management
+            Logger.Log(Tag, $"[async-poll] {remove.MessageId}: still False after 3s, discarding (buffer management)");
+        });
+    }
+
+    /// <summary>
+    /// Re-read HasBeenDeleted from ViewModel by re-traversing the bridge.
+    /// Catches cases where Root replaces the bridge target object after removal.
+    /// </summary>
+    private static bool? ReadFreshHasBeenDeleted(object? viewModel, TypeProps? props)
+    {
+        if (viewModel == null || props == null) return null;
+        try
+        {
+            object? target = viewModel;
+            if (props.Bridge != null)
+                target = props.Bridge.GetValue(viewModel);
+            if (target == null || props.HasBeenDeleted == null) return null;
+            var val = props.HasBeenDeleted.GetValue(target);
+            if (val is bool b) return b;
+            return null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Diagnostic: log all boolean properties on the bridge target.
+    /// Reveals which property Root uses for current-session deletion signaling.
+    /// </summary>
+    private static void DumpBooleanProperties(BufferedRemove remove, int attempt)
+    {
+        try
+        {
+            var target = remove.BridgeTarget;
+            if (target == null) return;
+            var tag = attempt == 0 ? "bool-dump-t0" : "bool-dump-t3s";
+            var props = target.GetType().GetProperties(
+                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+            foreach (var p in props)
+            {
+                if (p.PropertyType != typeof(bool) || !p.CanRead) continue;
+                try
+                {
+                    var v = p.GetValue(target);
+                    Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
+                }
+                catch { }
+            }
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Flush buffered removes: cleanup content snapshots and detect bulk channel switches.
+    /// Actual deletion detection is handled by async pollers (StartDeletionPoller).
+    /// This just manages housekeeping and the bulk safety net.
     /// </summary>
     private void FlushPendingRemoves(UprootedSettings settings)
     {
-        // Expire the settling filter after 30 seconds
-        if (_initialSnapshotIds.Count > 0 &&
-            (DateTime.UtcNow - _lastSubscriptionTime).TotalSeconds > 30)
-            _initialSnapshotIds.Clear();
-
         if (_pendingRemoves.Count == 0)
         {
-            _addsSinceFlush = 0;
-            _removesSinceFlush = 0;
-            return;
-        }
-        if (!settings.MessageLoggerLogDeletes)
-        {
-            _pendingRemoves.Clear();
             _addsSinceFlush = 0;
             _removesSinceFlush = 0;
             return;
@@ -812,7 +911,6 @@ internal class MessageLogger
 
         int count = _pendingRemoves.Count;
 
-        // Log diagnostic summary before processing
         int collectionSize = 0;
         try
         {
@@ -820,73 +918,63 @@ internal class MessageLogger
                 collectionSize = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
         }
         catch { }
-        double snapshotAge = (DateTime.UtcNow - _lastSubscriptionTime).TotalSeconds;
 
-        Logger.Log(Tag, $"[flush] removes={count} adds={_addsSinceFlush} pending={_pendingRemoves.Count} collectionSize={collectionSize} snapshotAge={snapshotAge:F1}s");
-        foreach (var r in _pendingRemoves)
-        {
-            bool inSnapshot = _initialSnapshotIds.Contains(r.MessageId);
-            Logger.Log(Tag, $"[flush]   {r.MessageId}: HasBeenDeleted={r.HasBeenDeleted?.ToString() ?? "null"} idx={r.RemoveIndex} inSnapshot={inSnapshot} ({Truncate(r.Content, 40)})");
-        }
+        Logger.Log(Tag, $"[flush] removes={count} adds={_addsSinceFlush} collectionSize={collectionSize}");
 
+        // Bulk safety net: 10+ removes is a channel switch
         if (count >= 10)
         {
-            Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding");
+            _deletionEpoch++;
+            Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding (epoch={_deletionEpoch})");
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
-            ClearInjectedCards();
+            ClearInjectedCards("bulk removes (channel switch)");
             _addsSinceFlush = 0;
             _removesSinceFlush = 0;
             return;
         }
 
-        // Process removes individually
+        // Clean up content snapshots for removed messages
         foreach (var removed in _pendingRemoves)
-        {
-            // Skip settling removes: messages from the initial subscription snapshot
-            // that Root is trimming as it settles the buffer after loading a channel.
-            // Messages that arrived AFTER subscription (via Add events) are NOT in
-            // _initialSnapshotIds and are always processed immediately.
-            if (_initialSnapshotIds.Contains(removed.MessageId))
-            {
-                Logger.Log(Tag, $"Settling: skip snapshot msg ({Truncate(removed.Content, 40)})");
-                _contentSnapshot.Remove(removed.MessageId);
-                continue;
-            }
-
             _contentSnapshot.Remove(removed.MessageId);
-
-            if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
-            {
-                cached.IsDeleted = true;
-                cached.DeletedAt = DateTime.UtcNow;
-                _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
-                Logger.Log(Tag, $"MSG DEL: HasBeenDeleted={removed.HasBeenDeleted?.ToString() ?? "null"} idx={removed.RemoveIndex} adds={_addsSinceFlush} {Truncate(cached.Content, 80)}");
-            }
-            else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
-            {
-                var newCached = new CachedMessage
-                {
-                    MessageId = removed.MessageId,
-                    ChannelId = _currentChannelId,
-                    AuthorId = "",
-                    AuthorName = "Unknown",
-                    Timestamp = DateTime.UtcNow,
-                    Content = removed.Content,
-                    IsDeleted = true,
-                    DeletedAt = DateTime.UtcNow
-                };
-                _messageCache[removed.MessageId] = newCached;
-                _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
-                    newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
-                _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
-                Logger.Log(Tag, $"MSG DEL (uncached): HasBeenDeleted={removed.HasBeenDeleted?.ToString() ?? "null"} idx={removed.RemoveIndex} adds={_addsSinceFlush} {Truncate(removed.Content, 80)}");
-            }
-        }
 
         _pendingRemoves.Clear();
         _addsSinceFlush = 0;
         _removesSinceFlush = 0;
+    }
+
+    /// <summary>
+    /// Mark a buffered remove as a genuine deletion — persist to cache and store.
+    /// </summary>
+    private void MarkAsDeleted(BufferedRemove removed)
+    {
+        Logger.Log(Tag, $"[DIAG-FLUSH] About to mark MSG DEL: {removed.MessageId}, cache has={_messageCache.ContainsKey(removed.MessageId)}, IsDeleted already={(_messageCache.TryGetValue(removed.MessageId, out var peekCached) ? peekCached.IsDeleted.ToString() : "N/A")}");
+        if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
+        {
+            cached.IsDeleted = true;
+            cached.DeletedAt = DateTime.UtcNow;
+            _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
+            Logger.Log(Tag, $"MSG DEL: {removed.MessageId} ({Truncate(cached.Content, 80)})");
+        }
+        else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
+        {
+            var newCached = new CachedMessage
+            {
+                MessageId = removed.MessageId,
+                ChannelId = _currentChannelId,
+                AuthorId = "",
+                AuthorName = "Unknown",
+                Timestamp = DateTime.UtcNow,
+                Content = removed.Content,
+                IsDeleted = true,
+                DeletedAt = DateTime.UtcNow
+            };
+            _messageCache[removed.MessageId] = newCached;
+            _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
+                newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
+            _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
+            Logger.Log(Tag, $"MSG DEL (uncached): {removed.MessageId} ({Truncate(removed.Content, 80)})");
+        }
     }
 
     // ===== Edit Detection via Polling =====
@@ -927,42 +1015,220 @@ internal class MessageLogger
 
     /// <summary>
     /// For each deleted message in the current channel, inject a red-tinted inline card
-    /// into the chat showing the preserved content. Cards are placed after the nearest
-    /// visible message by timestamp.
+    /// into the nearest visible message's layout Grid as a new row. This follows the
+    /// LinkEmbedEngine pattern — injecting into message Grids rather than the
+    /// VirtualizingStackPanel (which doesn't arrange non-data-bound children).
+    ///
+    /// When the VSP recycles a message container (scroll), the card is lost. The next
+    /// scan tick detects the missing tag and re-injects.
     /// </summary>
     private void InjectDeletedMessageCards(UprootedSettings settings)
     {
         if (!settings.MessageLoggerLogDeletes || _chatItemsControl == null) return;
 
-        // Find the VirtualizingStackPanel or Panel that holds message containers
-        object? messagePanel = FindMessagePanel();
-        if (messagePanel == null) return;
+        Logger.Log(Tag, "[DIAG-INJ] === InjectDeletedMessageCards start ===");
 
-        // Get deleted messages for current channel
+        object? vsp = FindMessagePanel();
+        Logger.Log(Tag, $"[DIAG-INJ] FindMessagePanel: {(vsp != null ? "found" : "null")}, type={vsp?.GetType().Name ?? "N/A"}");
+        if (vsp == null) return;
+
+        // Build list of visible messages with their containers (VSP realized items)
+        var visibleMessages = new List<(string msgId, DateTime timestamp, object container)>();
+        int childCount = _r.GetChildCount(vsp);
+        Logger.Log(Tag, $"[DIAG-INJ] VSP childCount={childCount}");
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = _r.GetChild(vsp, i);
+            if (child == null) continue;
+            var dc = ReadDC(child);
+            var msgId = dc != null ? ReadMessageId(dc) : null;
+            if (i < 5 || (i == childCount - 1)) // Log first 5 + last for brevity
+                Logger.Log(Tag, $"[DIAG-INJ]   child[{i}]: type={child.GetType().Name}, DC={dc?.GetType().Name ?? "null"}, msgId={msgId ?? "null"}");
+            if (dc == null || msgId == null) continue;
+            if (!_messageCache.TryGetValue(msgId, out var cm)) continue;
+            visibleMessages.Add((msgId, cm.Timestamp, child));
+        }
+
+        Logger.Log(Tag, $"[DIAG-INJ] visibleMessages: {visibleMessages.Count} found");
+        if (visibleMessages.Count == 0) return;
+
+        // Count deleted messages for this channel
+        int deletedInChannel = 0, totalDeleted = 0;
+        foreach (var c in _messageCache.Values)
+        {
+            if (c.IsDeleted) totalDeleted++;
+            if (c.IsDeleted && c.ChannelId == _currentChannelId) deletedInChannel++;
+        }
+        Logger.Log(Tag, $"[DIAG-INJ] deletedInChannel: {deletedInChannel} (of {totalDeleted} total)");
+
+        // One-time tree dump (1E): on first call with both deleted + visible messages
+        if (!_firstTreeDumpDone && deletedInChannel > 0 && visibleMessages.Count > 0)
+        {
+            _firstTreeDumpDone = true;
+            Logger.Log(Tag, "[DIAG-TREE] === One-time visual tree dump ===");
+            Logger.Log(Tag, $"[DIAG-TREE] VSP type: {vsp.GetType().Name}");
+            var firstContainer = visibleMessages[0].container;
+            DumpContainerTree(firstContainer, 1, 4);
+            Logger.Log(Tag, "[DIAG-TREE] === End tree dump ===");
+        }
+
+        int injected = 0, skipped = 0;
+
+        // For each deleted message in current channel
         foreach (var cached in _messageCache.Values)
         {
             if (!cached.IsDeleted || cached.ChannelId != _currentChannelId) continue;
             if (cached.DeletedAt == null) continue;
             if ((DateTime.UtcNow - cached.DeletedAt.Value).TotalHours > 24) continue;
 
+            Logger.Log(Tag, $"[DIAG-INJ]   trying: {cached.MessageId} ts={cached.Timestamp:HH:mm:ss}");
+
             var cardTag = $"uprooted-del:{cached.MessageId}";
-            if (_injectedCards.ContainsKey(cardTag)) continue;
+
+            // Find the best visible message to attach to (chronologically just before)
+            object? targetContainer = null;
+            string? targetMsgId = null;
+            for (int i = visibleMessages.Count - 1; i >= 0; i--)
+            {
+                if (visibleMessages[i].timestamp <= cached.Timestamp)
+                { targetContainer = visibleMessages[i].container; targetMsgId = visibleMessages[i].msgId; break; }
+            }
+            // Fallback: attach to the first visible message
+            if (targetContainer == null)
+            {
+                targetContainer = visibleMessages[0].container;
+                targetMsgId = visibleMessages[0].msgId;
+            }
+            Logger.Log(Tag, $"[DIAG-INJ]     targetContainer: {(targetContainer != null ? "found" : "null")}, targetMsgId={targetMsgId ?? "null"}");
+            if (targetContainer == null) { skipped++; continue; }
+
+            // Find the message layout Grid inside the container
+            var (grid, col) = FindMessageGridInContainer(targetContainer);
+            Logger.Log(Tag, $"[DIAG-INJ]     FindMessageGridInContainer: grid={grid != null}, col={col}");
+            if (grid == null)
+            {
+                // Dump first 10 descendants for debugging
+                var descTypes = new List<string>();
+                foreach (var desc in _walker.DescendantsDepthFirst(targetContainer))
+                {
+                    descTypes.Add(desc.GetType().Name);
+                    if (descTypes.Count >= 10) break;
+                }
+                Logger.Log(Tag, $"[DIAG-INJ]     (grid null) DFS descendants: {string.Join(", ", descTypes)}");
+                skipped++;
+                continue;
+            }
+
+            // Dedup: check if card already exists in this Grid (tag-based)
+            bool exists = false;
+            var gridChildren = _r.GetChildren(grid);
+            if (gridChildren != null)
+            {
+                foreach (var c in gridChildren)
+                    if (c != null && _r.GetTag(c) == cardTag) { exists = true; break; }
+            }
+            Logger.Log(Tag, $"[DIAG-INJ]     dedup check: exists={exists}");
+            if (exists) { skipped++; continue; }
 
             var card = BuildDeletedMessageCard(cached, cardTag);
-            if (card == null) continue;
+            Logger.Log(Tag, $"[DIAG-INJ]     BuildDeletedMessageCard: {(card != null ? "success" : "null")}");
+            if (card == null) { skipped++; continue; }
 
-            // Add to the message panel
-            _r.AddChild(messagePanel, card);
+            // Add a new Auto-height row to the Grid and place the card there
+            int newRow = AddAutoRowToGrid(grid);
+            Logger.Log(Tag, $"[DIAG-INJ]     AddAutoRowToGrid: row={newRow}");
+            _r.SetGridRow(card, newRow);
+            _r.SetGridColumn(card, col);
+            SetGridColumnSpan(card, 99);
+
+            _r.AddChild(grid, card);
             _injectedCards[cardTag] = card;
+            int gridChildCount = 0;
+            try { gridChildCount = _r.GetChildCount(grid); } catch { }
+            Logger.Log(Tag, $"[DIAG-INJ]     AddChild result: card added, Grid now has {gridChildCount} children");
+            injected++;
         }
 
-        // Edit indicators disabled — ApplyEditIndicators breaks message rendering
-        // by injecting children into the message visual tree.
+        Logger.Log(Tag, $"[DIAG-INJ] === InjectDeletedMessageCards done: {injected} injected, {skipped} skipped ===");
     }
 
     /// <summary>
-    /// Build a Discord-style deleted message row: full-width red-tinted background stripe
-    /// with the message content shown inline. Matches Discord's MessageLogger style.
+    /// Walk into a message container to find the message layout Grid.
+    /// Follows the same tree path as LinkEmbedEngine: find RootMarkdownTextBlock,
+    /// then its parent Grid is the injection target.
+    /// Returns (grid, column) where column matches the message text position.
+    /// </summary>
+    private (object? grid, int column) FindMessageGridInContainer(object container)
+    {
+        foreach (var node in _walker.DescendantsDepthFirst(container))
+        {
+            if (node.GetType().Name != "RootMarkdownTextBlock") continue;
+
+            int col = _r.GetGridColumn(node);
+            var grid = _r.GetParent(node);
+            if (grid != null && _r.IsGrid(grid))
+                return (grid, col);
+
+            // One more level up (Grid may be wrapped)
+            if (grid != null)
+            {
+                var above = _r.GetParent(grid);
+                if (above != null && _r.IsGrid(above))
+                    return (above, col);
+            }
+        }
+        return (null, 0);
+    }
+
+    /// <summary>
+    /// Add a new Auto-height RowDefinition to a Grid and return its row index.
+    /// Pattern from LinkEmbedEngine.
+    /// </summary>
+    private int AddAutoRowToGrid(object grid)
+    {
+        try
+        {
+            var rowDefsProp = grid.GetType().GetProperty("RowDefinitions");
+            var rowDefs = rowDefsProp?.GetValue(grid);
+            if (rowDefs == null) return 99;
+
+            int count = 0;
+            var countProp = rowDefs.GetType().GetProperty("Count");
+            if (countProp != null)
+                count = (int)countProp.GetValue(rowDefs)!;
+
+            if (_r.GridLengthType != null && _r.GridUnitTypeEnum != null)
+            {
+                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                var autoLength = Activator.CreateInstance(_r.GridLengthType, 1.0, autoUnit);
+
+                var rowDefType = _r.GridType?.Assembly.GetType("Avalonia.Controls.RowDefinition");
+                if (rowDefType != null)
+                {
+                    var rowDef = Activator.CreateInstance(rowDefType);
+                    rowDefType.GetProperty("Height")?.SetValue(rowDef, autoLength);
+
+                    var addMethod = rowDefs.GetType().GetMethod("Add");
+                    addMethod?.Invoke(rowDefs, new[] { rowDef });
+
+                    return count;
+                }
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"AddAutoRowToGrid error: {ex.Message}"); }
+        return 99;
+    }
+
+    private void SetGridColumnSpan(object control, int span)
+    {
+        if (_r.GridType == null) return;
+        var setColumnSpan = _r.GridType.GetMethod("SetColumnSpan",
+            BindingFlags.Public | BindingFlags.Static);
+        setColumnSpan?.Invoke(null, new object[] { control, span });
+    }
+
+    /// <summary>
+    /// Build a deleted message card: red-tinted background stripe with preserved content.
     /// Right-click context menu has "Clear message history".
     /// </summary>
     private object? BuildDeletedMessageCard(CachedMessage cached, string tag)
@@ -974,7 +1240,7 @@ internal class MessageLogger
             if (body == null) return null;
             _r.SetTextWrapping(body, "Wrap");
 
-            // Full-width red-tinted background stripe (no rounded corners — matches Discord)
+            // Full-width red-tinted background stripe
             var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: body);
             if (card == null) return null;
 
@@ -993,14 +1259,14 @@ internal class MessageLogger
                 _r.AddChild(wrapper, card);
                 if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
                 _r.SetTag(wrapper, tag);
-                _r.SetPadding(card, 56, 4, 16, 4); // Left padding past avatars
+                _r.SetPadding(card, 8, 4, 8, 4);
                 AttachContextMenu(wrapper, cached);
                 return wrapper;
             }
 
             // Fallback if panel creation fails
             _r.SetTag(card, tag);
-            _r.SetPadding(card, 56, 4, 16, 4);
+            _r.SetPadding(card, 8, 4, 8, 4);
             AttachContextMenu(card, cached);
             return card;
         }
@@ -1179,8 +1445,26 @@ internal class MessageLogger
         return null;
     }
 
-    private void ClearInjectedCards()
+    /// <summary>
+    /// Diagnostic: dump the visual tree of a container for debugging grid injection.
+    /// </summary>
+    private void DumpContainerTree(object node, int depth, int maxDepth)
     {
+        if (depth > maxDepth) return;
+        var indent = new string(' ', depth * 2);
+        var typeName = node.GetType().Name;
+        var childCount = _r.GetChildCount(node);
+        Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} (children={childCount})");
+        for (int i = 0; i < childCount && i < 8; i++)
+        {
+            var child = _r.GetChild(node, i);
+            if (child != null) DumpContainerTree(child, depth + 1, maxDepth);
+        }
+    }
+
+    private void ClearInjectedCards(string reason = "unknown")
+    {
+        Logger.Log(Tag, $"[DIAG] ClearInjectedCards: {reason}, clearing {_injectedCards.Count} cards");
         foreach (var (tag, card) in _injectedCards)
         {
             try
@@ -1205,6 +1489,23 @@ internal class MessageLogger
             _store.RecordMessage(cached.MessageId, cached.ChannelId,
                 cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
         }
+    }
+
+    /// <summary>
+    /// Read HasBeenDeleted from a stored bridge target reference (deferred read).
+    /// Called at flush time, 1.5–3s after the Remove event, giving Root time to set the flag.
+    /// Returns true/false/null. Handles disposed objects gracefully.
+    /// </summary>
+    private static bool? ReadDeferredHasBeenDeleted(object? bridgeTarget, TypeProps? props)
+    {
+        if (bridgeTarget == null || props?.HasBeenDeleted == null) return null;
+        try
+        {
+            var val = props.HasBeenDeleted.GetValue(bridgeTarget);
+            if (val is bool b) return b;
+            return null;
+        }
+        catch { return null; }
     }
 
     private object? GetMessageTarget(object item, TypeProps tp)

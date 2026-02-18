@@ -5,11 +5,13 @@ namespace Uprooted;
 /// <summary>
 /// Detects profile popups in Root's visual tree and injects a small "Uprooted Dev"
 /// badge directly below the username. Only active when AutoUpdateChannel == "developer".
+/// Badge only appears on profiles of known developer usernames, not all users.
 ///
 /// Architecture:
 /// - 500ms timer polls all TopLevel windows for new popup/overlay controls
 /// - Profile popups identified by presence of username TextBlock + avatar Image pattern
 /// - Username TextBlock found by largest font size in popup
+/// - Badge only injected if the username matches a known developer
 /// - Badge inserted at username's index+1 in its parent panel (centered, compact)
 /// - Badge injected once per popup instance (tagged to prevent duplicates)
 /// - Full tree dump logged on first popup detection for discovery/refinement
@@ -20,6 +22,15 @@ internal class ProfileBadgeInjector
     private const string BadgeTag = "uprooted-dev-badge";
     private const int PollIntervalMs = 500;
     private const string BadgeColor = "#8B6914"; // Gold/amber matching dev channel
+
+    /// <summary>
+    /// Known developer usernames who should display the "Uprooted Dev" badge.
+    /// </summary>
+    private static readonly HashSet<string> DeveloperUsernames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "watchthelight",
+        "agomusio",
+    };
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -236,6 +247,7 @@ internal class ProfileBadgeInjector
     /// <summary>
     /// Find the username TextBlock (largest font size in the popup, excluding known labels),
     /// then insert a compact badge immediately after it in its parent panel.
+    /// Only injects if the username matches a known developer.
     /// </summary>
     private void InjectBadgeUnderUsername(object popup)
     {
@@ -280,7 +292,17 @@ internal class ProfileBadgeInjector
             return;
         }
 
-        Logger.Log("ProfileBadge", $"Found username: \"{_r.GetText(usernameBlock)}\" (fontSize={maxFontSize})");
+        var username = _r.GetText(usernameBlock) ?? "";
+        Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize})");
+
+        // Gate: only inject badge for known developer usernames
+        if (!DeveloperUsernames.Contains(username))
+        {
+            Logger.Log("ProfileBadge", $"User \"{username}\" is not a developer — badge not injected");
+            return;
+        }
+
+        Logger.Log("ProfileBadge", $"User \"{username}\" is a developer — injecting badge");
 
         // Walk up from the username looking for a VERTICAL panel to insert into.
         // The username sits in a horizontal row; we need the outer vertical container
