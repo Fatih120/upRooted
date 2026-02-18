@@ -49,6 +49,15 @@ internal class AutoUpdater
         0x47, 0x7E, 0x4E, 0x6B, 0xDD, 0xC9, 0xAD, 0xC2, 0x98, 0x8F, 0xD9, 0x6E, 0xB5
     };
 
+    // 64-byte master key for .uprpkg encryption (shared with scripts/pack-update.py)
+    private static readonly byte[] PackageMasterKey =
+    {
+        0x76, 0xC3, 0x47, 0x44, 0xE3, 0xD1, 0x44, 0xA2, 0x4C, 0xCA, 0xA3, 0x95, 0x5C, 0x02, 0x62, 0xF4,
+        0x26, 0x1D, 0x46, 0x30, 0x4F, 0xB3, 0x5D, 0x5A, 0x53, 0x5D, 0x71, 0x7B, 0x67, 0x71, 0x13, 0x71,
+        0xD0, 0x92, 0x47, 0x07, 0x32, 0x06, 0x84, 0xA8, 0x9C, 0xF4, 0x06, 0x56, 0x9D, 0x1D, 0xC8, 0x0B,
+        0xED, 0x62, 0x59, 0x79, 0xC8, 0x72, 0x20, 0xD5, 0x8C, 0x1B, 0xA0, 0xE1, 0xA4, 0xE5, 0x84, 0x0B
+    };
+
     // Files to download per update (profiler DLL excluded — locked on Windows, rarely changes)
     private static readonly string[] UpdateFiles =
     {
@@ -298,40 +307,51 @@ internal class AutoUpdater
                 Directory.Delete(stagingDir, true);
             Directory.CreateDirectory(stagingDir);
 
-            Logger.Log("AutoUpdate", $"Downloading {UpdateFiles.Length} files to staging: {stagingDir}");
+            // Download single encrypted package
+            var pkgUrl = $"{downloadBase}/{_latestTag}/auto-update.uprpkg";
+            Logger.Log("AutoUpdate", $"Downloading auto-update.uprpkg...");
 
-            // Download all files to staging
-            foreach (var filename in UpdateFiles)
+            var pkgBytes = HttpGetBytes(pkgUrl, authToken);
+            if (pkgBytes == null || pkgBytes.Length == 0)
             {
-                var url = $"{downloadBase}/{_latestTag}/{filename}";
-                Logger.Log("AutoUpdate", $"Downloading {filename}...");
-
-                var bytes = HttpGetBytes(url, authToken);
-                if (bytes == null || bytes.Length == 0)
-                {
-                    _lastError = $"Failed to download {filename}";
-                    Logger.Log("AutoUpdate", $"Download failed for {filename}");
-                    return; // Abort — don't overwrite any production files
-                }
-
-                File.WriteAllBytes(Path.Combine(stagingDir, filename), bytes);
-                Logger.Log("AutoUpdate", $"  {filename}: {bytes.Length} bytes");
+                _lastError = "Failed to download auto-update.uprpkg";
+                Logger.Log("AutoUpdate", "Package download failed");
+                return;
             }
 
-            // Verify all files present and non-empty
+            Logger.Log("AutoUpdate", $"Package downloaded: {pkgBytes.Length} bytes");
+
+            // Decrypt and unpack
+            var files = UnpackPackage(pkgBytes);
+            if (files == null)
+            {
+                // _lastError already set by UnpackPackage
+                return;
+            }
+
+            Logger.Log("AutoUpdate", $"Unpacked {files.Count} files from package");
+
+            // Write extracted files to staging
+            foreach (var (filename, data) in files)
+            {
+                File.WriteAllBytes(Path.Combine(stagingDir, filename), data);
+                Logger.Log("AutoUpdate", $"  {filename}: {data.Length} bytes");
+            }
+
+            // Verify expected files present
             foreach (var filename in UpdateFiles)
             {
                 var path = Path.Combine(stagingDir, filename);
                 if (!File.Exists(path))
                 {
-                    _lastError = $"Missing staged file: {filename}";
+                    _lastError = $"Missing file in package: {filename}";
                     Logger.Log("AutoUpdate", _lastError);
                     return;
                 }
                 var info = new FileInfo(path);
                 if (info.Length == 0)
                 {
-                    _lastError = $"Empty staged file: {filename}";
+                    _lastError = $"Empty file in package: {filename}";
                     Logger.Log("AutoUpdate", _lastError);
                     return;
                 }
@@ -365,6 +385,117 @@ internal class AutoUpdater
             _lastError = $"Apply failed: {ex.Message}";
             Logger.Log("AutoUpdate", $"Download/apply error: {ex.Message}");
             // Leave staging dir for debugging, don't overwrite production files
+        }
+    }
+
+    /// <summary>
+    /// Decrypt and unpack a .uprpkg binary package.
+    /// Returns filename→decrypted bytes map, or null on error (sets _lastError).
+    /// </summary>
+    private Dictionary<string, byte[]>? UnpackPackage(byte[] data)
+    {
+        try
+        {
+            // Minimum size: 4 magic + 1 version + 2 count + 32 nonce = 39 bytes
+            if (data.Length < 39)
+            {
+                _lastError = "Package too small";
+                Logger.Log("AutoUpdate", _lastError);
+                return null;
+            }
+
+            // Validate magic "UPRK"
+            if (data[0] != (byte)'U' || data[1] != (byte)'P' || data[2] != (byte)'R' || data[3] != (byte)'K')
+            {
+                _lastError = "Invalid package (bad magic)";
+                Logger.Log("AutoUpdate", _lastError);
+                return null;
+            }
+
+            // Version check
+            if (data[4] != 0x01)
+            {
+                _lastError = $"Unsupported package version: {data[4]}";
+                Logger.Log("AutoUpdate", _lastError);
+                return null;
+            }
+
+            // File count (uint16 LE)
+            int fileCount = data[5] | (data[6] << 8);
+            if (fileCount == 0 || fileCount > 100)
+            {
+                _lastError = $"Invalid file count: {fileCount}";
+                Logger.Log("AutoUpdate", _lastError);
+                return null;
+            }
+
+            // Nonce (32 bytes at offset 7)
+            var nonce = new byte[32];
+            Array.Copy(data, 7, nonce, 0, 32);
+
+            var result = new Dictionary<string, byte[]>(fileCount);
+            int offset = 39; // past header
+
+            for (int i = 0; i < fileCount; i++)
+            {
+                // Filename length (uint16 LE)
+                if (offset + 2 > data.Length)
+                {
+                    _lastError = $"Package truncated at file {i} name length";
+                    Logger.Log("AutoUpdate", _lastError);
+                    return null;
+                }
+                int nameLen = data[offset] | (data[offset + 1] << 8);
+                offset += 2;
+
+                // Filename (UTF-8)
+                if (offset + nameLen > data.Length)
+                {
+                    _lastError = $"Package truncated at file {i} name";
+                    Logger.Log("AutoUpdate", _lastError);
+                    return null;
+                }
+                var filename = Encoding.UTF8.GetString(data, offset, nameLen);
+                offset += nameLen;
+
+                // Data length (uint32 LE)
+                if (offset + 4 > data.Length)
+                {
+                    _lastError = $"Package truncated at file {i} data length";
+                    Logger.Log("AutoUpdate", _lastError);
+                    return null;
+                }
+                uint dataLen = (uint)(data[offset] | (data[offset + 1] << 8) |
+                                      (data[offset + 2] << 16) | (data[offset + 3] << 24));
+                offset += 4;
+
+                // Encrypted data
+                if (offset + dataLen > data.Length)
+                {
+                    _lastError = $"Package truncated at file {i} data";
+                    Logger.Log("AutoUpdate", _lastError);
+                    return null;
+                }
+
+                // Decrypt
+                var decrypted = new byte[dataLen];
+                for (uint pos = 0; pos < dataLen; pos++)
+                {
+                    byte key = (byte)(PackageMasterKey[pos % 64] ^ nonce[pos % 32] ^ ((pos >> 8) & 0xFF));
+                    decrypted[pos] = (byte)(data[offset + pos] ^ key);
+                }
+                offset += (int)dataLen;
+
+                result[filename] = decrypted;
+            }
+
+            return result;
+        }
+        catch (Exception ex)
+        {
+            _lastError = $"Package unpack error: {ex.Message}";
+            Logger.Log("AutoUpdate", _lastError);
+            return null;
         }
     }
 

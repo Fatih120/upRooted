@@ -34,6 +34,7 @@ $RepoRoot   = Split-Path $ScriptDir -Parent
 $HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
 $UprootedDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
 $RootExe = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"
+$Launcher = Join-Path $UprootedDir "UprootedLauncher.exe"
 
 # --- Preflight ---
 
@@ -97,15 +98,28 @@ foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
 
 # --- Relaunch ---
 
-if (-not $NoRelaunch -and (Test-Path $RootExe)) {
-    Write-Step "Launching Root..."
-    Start-Process $RootExe
-    Write-OK "Root launched"
-} elseif ($NoRelaunch) {
-    Write-OK "Deploy complete (skipped relaunch)"
+if (-not $NoRelaunch) {
+    # Prefer launcher (sets up CLR profiler env vars) over bare Root.exe
+    if (Test-Path $Launcher) {
+        Write-Step "Launching Root via UprootedLauncher..."
+        Start-Process $Launcher
+        Start-Sleep -Seconds 2
+        $launched = Get-Process -Name Root -ErrorAction SilentlyContinue
+        if ($launched) {
+            Write-OK "Root launched (PID: $($launched.Id -join ', '))"
+        } else {
+            Write-OK "Launcher started (Root may still be loading)"
+        }
+    } elseif (Test-Path $RootExe) {
+        Write-Warn "UprootedLauncher.exe not found — launching Root.exe directly (no hook injection)"
+        Start-Process $RootExe
+        Write-OK "Root launched (without Uprooted)"
+    } else {
+        Write-Warn "Neither launcher nor Root.exe found"
+        Write-OK "Deploy complete (manual relaunch needed)"
+    }
 } else {
-    Write-Warn "Root.exe not found at $RootExe"
-    Write-OK "Deploy complete (manual relaunch needed)"
+    Write-OK "Deploy complete (skipped relaunch)"
 }
 
 } catch {
