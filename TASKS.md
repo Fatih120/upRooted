@@ -22,9 +22,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Hide file names on image/video embeds** — Direct image/video link embeds show the file name as the title, but it's redundant since the URL is already visible. Hide file names by default, keep the domain label. Add a "Show embedded file names" toggle in the Link Embeds plugin settings.
   - Files: `hook/LinkEmbedEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
 
-- [ ] **Reddit link embeds** — Reddit post URLs should render rich embeds (title, subreddit, vote count, comment count). Reddit serves OG tags to crawlers; may need bot UA similar to Twitter/X handling.
-  - Files: `hook/LinkEmbedEngine.cs`
-
 - [ ] **Video preview embeds (.mp4)** — Direct `.mp4` URLs should show a thumbnail preview frame with play button overlay (similar to YouTube embeds). Currently get Cloudflare challenge pages or no embed. Consider extracting a frame server-side or using a placeholder with click-to-open.
   - Files: `hook/LinkEmbedEngine.cs`
 
@@ -101,6 +98,7 @@ Move completed items here with the date.
 - [x] **Plugin toggle functionality** (2026-02-18) — Plugin toggles save state to settings, show restart banner when state diverges from initial (hides on revert). Themes apply live (no restart needed). Restart button launches new Root.exe and exits.
 - [x] **ProfileBadgeInjector** (2026-02-18) — "Uprooted Dev" badge on profile popups for developer channel users. Timer polls TopLevels + OverlayLayer, heuristic detection, diagnostic tree dump, tagged duplicate prevention. Phase 4.5e in StartupHook (25s delay).
 - [x] **Restart banners + Diagnostics Open button** (2026-02-18) — Plugins page: state-aware amber restart banner. Updates section: green restart banner after update applied. Both with Restart button. DIAGNOSTICS card: "Open" button opens log file in Explorer.
+- [x] **Reddit link embeds** (2026-02-18) — Dedicated handler in LinkEmbedEngine with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (#FF4500) accent color. Falls through to generic OG if no title found. Also fixed: image embed borders (all 4 corners rounded), HTTP status/Content-Type validation in `HttpGetBytes`, OG fallback for image-extension URLs that serve HTML (Zipline `/view/`, `/u/`), robust OG regex for meta tags with extra attributes.
 - [x] **Custom ping/reply highlight color** (2026-02-18) — Standalone `CustomPingColor` setting in UprootedSettings that persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle indicator, color input row, swatch with color picker popup, reset button. ThemeEngine overrides `HighlightForegroundColor`, `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (0x60 alpha) in both Styles[0].Resources and injected MergedDictionary. Applied as Phase 6 after theme apply + after live preview updates. Restored to theme defaults on clear.
 
 ---

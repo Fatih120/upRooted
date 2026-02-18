@@ -40,6 +40,7 @@
   - Heuristic popup detection: avatar Image/Ellipse + username TextBlock + "Roles" header
   - Diagnostic tree dump on first popup detection (logged to uprooted-hook.log) for iterative refinement
   - New file: `hook/ProfileBadgeInjector.cs`, Phase 4.5e in `StartupHook.cs` (25s delay)
+- **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
 - **ClearURLs engine** — strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor when the user presses Enter to send
   - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` with `AddHandler(RoutedEvent, …, handledEventsToo: true)` and all routing strategies — required because AvaloniaEdit marks Enter `Handled=true`
   - 33-param HashSet (O(1) lookup), fragment-preserving, idempotent
@@ -77,6 +78,11 @@
 
 - **Theme flash on settings open** — Root loads settings content with default theme colors, causing a visible flash before the tree walker recolors. Fixed by triggering walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) after injection completes, on every ListBox selection change, and on Uprooted tab switches
 - **MessageLogger build error** — restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations
+- **LinkEmbedEngine: image border corners** — all 4 corners now round correctly (set `HorizontalAlignment("Left")` on imgBorder so it shrink-wraps instead of stretching to full StackPanel width)
+- **LinkEmbedEngine: Cloudflare/non-image rejection** — `HttpGetBytes` now validates HTTP status code (rejects non-2xx) and Content-Type (rejects non-`image/*`) to catch Cloudflare challenge pages and other non-image responses
+- **LinkEmbedEngine: image fast-path OG fallback** — URLs ending in `.png`/`.jpg`/etc. that serve HTML (e.g. Zipline `/view/`, `/u/` pages) now fall back to OG metadata fetch to find the real `og:image` URL
+- **LinkEmbedEngine: OG regex robustness** — bridge pattern in both C# and TypeScript parsers now explicitly matches complete HTML attributes, fixing failures on `<meta>` tags with extra attributes like `itemProp="image"` or `data-next-head=""`
+- **LinkEmbedEngine: HTTP timeout** — increased from 5s to 10s for CDN-hosted images
 
 ### Documentation
 

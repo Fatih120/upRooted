@@ -95,8 +95,13 @@ The Avalonia-native link embed engine is broadly functional:
 - Tenor URL skip (Root embeds natively)
 - Settings cache: 10s TTL on `UprootedSettings.Load()`
 
+- Reddit embeds: dedicated handler with old.reddit.com OG fetch, subreddit provider label, orange accent
+- HTTP status code + Content-Type validation in `HttpGetBytes` (rejects Cloudflare challenge pages)
+- OG fallback for image-extension URLs that serve HTML (Zipline `/view/`, `/u/`)
+- Image embed borders round all 4 corners (imgBorder `HorizontalAlignment("Left")`)
+- Robust OG regex: explicit attribute bridge handles `itemProp`, `data-next-head`, etc.
+
 **Known limitations:**
-- Reddit embeds not yet implemented (OG tags available but no dedicated handler)
 - Video preview embeds (.mp4) not yet implemented
 - JS-rendered OG fallback not available (some sites serve no OG in static HTML)
 
@@ -107,7 +112,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ClearUrlsEngine.cs` | New file: strips tracking params from compose editor URLs on Enter key via AvaloniaEdit.TextArea routed event interception |
 | `hook/StartupHook.cs` | Added Phase 4.5a: ClearURLs engine registration (14s delay) |
 | `hook/ContentPages.cs` | Added ClearURLs PluginInfo entry (clear-urls, default enabled, TestingStatus=1) |
-| `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging |
+| `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging, Reddit embeds (old.reddit.com OG, subreddit label, orange accent), HTTP status/Content-Type validation in HttpGetBytes, OG fallback for image-extension HTML pages, robust OG regex, image border corner fix |
+| `src/plugins/link-embeds/providers.ts` | Robust OG regex: explicit attribute bridge handles meta tags with extra attributes between property and content |
 | `hook/AnimatedImage.cs` | Animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
 | `hook/UprootedSettings.cs` | 10s TTL settings cache to reduce disk I/O |
 | `hook/SidebarInjector.cs` | Back arrow management, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper, UPROOTED section spacing, instant Uprooted→Root tab transitions via ListBox.SelectionChanged, LayoutUpdated event-based detection for same-frame settings injection (diagnostics deferred after injection) |
@@ -168,8 +174,7 @@ The Avalonia-native link embed engine is broadly functional:
 2. **MessageLogger Phase 3** — Fix injection position (insert deleted cards near original message position, not at bottom)
 3. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
 4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
-3. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
-4. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
+3. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
 6. **Refine ProfileBadgeInjector** — Check tree dump logs for actual popup structure, refine heuristics in `IsProfilePopup` and `InjectBadgeUnderUsername`
 

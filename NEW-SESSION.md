@@ -50,7 +50,7 @@ Two independent injection layers into one app:
 | `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
-| `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
+| `LinkEmbedEngine.cs` | 1946 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + Reddit + visual tree injection) |
 | `MessageLogger.cs` | ~1322 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
@@ -137,9 +137,10 @@ Two independent injection layers into one app:
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle, color input, swatch + color picker, reset. ThemeEngine applies as Phase 6 after theme apply + live updates.
 - Theme flash fix: walk bursts after injection completes, on ListBox selection changes, and on Uprooted tab switches prevent flash of unthemed content when opening settings or switching tabs. 50ms rapid follow-up added to catch async-loaded controls.
 - Plugin names: PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching Vencord-style naming
+- Reddit link embeds: dedicated handler with old.reddit.com OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange accent
+- LinkEmbedEngine: HTTP status code + Content-Type validation in HttpGetBytes (rejects Cloudflare challenge pages), OG fallback for image-extension URLs that serve HTML (Zipline /view/, /u/), image border corners fix, robust OG regex for meta tags with extra attributes, timeout increased to 10s
 
 **Known issues:**
-- Reddit embeds not yet implemented (OG tags available but no dedicated handler)
 - Video preview embeds (.mp4) not yet implemented
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader

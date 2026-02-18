@@ -46,6 +46,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - ThemeEngine: `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()` override `HighlightForegroundColor/Brush` and `TextSelectionHighlightColor` (0x60 alpha) in Styles[0].Resources + MergedDictionary
   - Applied as Phase 6 after theme apply and live preview updates; restored to theme defaults on clear
   - New setting: `CustomPingColor` in UprootedSettings (INI), applied at startup in Phase 3.5
+- **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
 
@@ -68,6 +69,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
 - **ThemeEngine**: eliminated theme flash when opening settings or switching tabs — walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) triggered after injection completes, on ListBox selection changes, and on Uprooted tab switches; added 50ms rapid follow-up to catch async-loaded content faster
 - **MessageLogger**: restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix)
+- **LinkEmbedEngine**: image embed borders now round all 4 corners (set `HorizontalAlignment("Left")` on imgBorder so it shrink-wraps the image instead of stretching to fill the StackPanel)
+- **LinkEmbedEngine**: `HttpGetBytes` now validates HTTP status code (rejects non-2xx) and Content-Type (rejects non-`image/*`) — catches Cloudflare challenge pages and other non-image responses that previously failed silently
+- **LinkEmbedEngine**: `HttpGetWithContentType` now validates HTTP status code (rejects non-2xx) for OG metadata fetches
+- **LinkEmbedEngine**: image fast-path URLs that serve HTML (e.g. Zipline `/view/`, `/u/` pages with `.png` extension) now fall back to OG metadata fetch to find the real `og:image` URL
+- **LinkEmbedEngine**: OG regex bridge pattern fixed to explicitly match complete HTML attributes — handles `<meta>` tags with extra attributes (e.g. `itemProp="image"`, `data-next-head=""`) between `property` and `content`
+- **providers.ts**: same OG regex bridge fix applied to TypeScript `parseOpenGraph()` function
+- **LinkEmbedEngine**: HTTP timeout increased from 5s to 10s for CDN-hosted images
 
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
