@@ -396,7 +396,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Plugins", 20, TextWhite);
+        var pageTitle = r.CreateTextBlock("Plugin Settings", 20, TextWhite);
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -1215,7 +1215,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Themes", 20, TextWhite);
+        var pageTitle = r.CreateTextBlock("Theme Settings", 20, TextWhite);
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);

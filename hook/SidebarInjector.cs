@@ -7,8 +7,9 @@ namespace Uprooted;
 /// Architecture:
 /// - Sidebar items injected into NavContainer StackPanel (below the ListBox)
 /// - Content pages placed directly into Root's content Panel
-/// - Back button PointerPressed intercepted to clean up BEFORE teardown
-///   (prevents the freeze caused by OnDetachedFromVisualTreeCore walking modified tree)
+/// - Back button in Row=0 is hidden when Uprooted pages are active (prevents freeze)
+/// - DetachedFromVisualTree on LayoutContainer cleans up BEFORE recursive detach
+///   (prevents the freeze caused by OnDetachedFromVisualTreeCore walking our ScrollViewer wrapper)
 /// </summary>
 internal class SidebarInjector
 {
@@ -48,6 +49,14 @@ internal class SidebarInjector
     private object? _saveBar;                            // Root's save bar container (hide when Uprooted pages active)
     private object? _revertButton;                       // Revert button inside save bar (PointerPressed interception)
     private bool _saveBarWasVisible = true;              // Original save bar visibility before we hid it
+
+    // Header state (back arrow hidden + title set when Uprooted pages active)
+    private object? _backButton;                         // The back arrow RootSvgButton in header (left side)
+    private bool _backButtonWasVisible = true;           // Original visibility to restore
+    private object? _headerTitleText;                    // TextBlock in header Grid showing page title
+    private string? _headerTitleOriginal;                // Original title text to restore
+    private object? _closeCommand;                       // ICommand from back button (for X button behavior)
+    private object? _closeCommandParam;                  // CommandParameter for _closeCommand
 
     // Native font for content pages
     private object? _nativeFontFamily;                   // CircularXX TT font from native controls
@@ -202,17 +211,66 @@ internal class SidebarInjector
                 _revertButton = _walker.FindRevertButton(_saveBar);
                 if (_revertButton != null)
                 {
-                    _r.SubscribeEvent(_revertButton, "PointerPressed", () =>
+                    // Use Click instead of PointerPressed -- Avalonia Button class handler
+                    // sets Handled=true on PointerPressed, silently suppressing instance handlers.
+                    _r.SubscribeEvent(_revertButton, "Click", () =>
                     {
-                        Logger.Log("Injector", "Revert button pressed -- cleaning up injection BEFORE teardown");
+                        Logger.Log("Injector", "Revert button Click -- cleaning up injection BEFORE teardown");
                         CleanupInjection();
                     });
-                    Logger.Log("Injector", $"Revert button PointerPressed subscribed: {_revertButton.GetType().Name}");
+                    Logger.Log("Injector", $"Revert button Click subscribed: {_revertButton.GetType().Name}");
                 }
                 else
                 {
                     Logger.Log("Injector", "Save bar found but Revert button not located (may appear later)");
                 }
+            }
+
+            // Step 1b: Subscribe DetachedFromVisualTree on LayoutContainer.
+            // This fires BEFORE children are recursively detached (Avalonia pre-order),
+            // giving us a chance to clean up our tree modifications before the walk
+            // reaches our ScrollViewer wrapper (which causes the freeze).
+            _r.SubscribeEvent(layout.LayoutContainer, "DetachedFromVisualTree", () =>
+            {
+                Logger.Log("Injector", "LayoutContainer detaching -- cleaning up before tree teardown");
+                // Clear ScrollViewer content to prevent freeze during recursive detach.
+                // Without this, the detach walk enters our ScrollViewer → NavContainer →
+                // injected controls chain and freezes in OnDetachedFromVisualTreeCore.
+                if (_scrollViewerWrapper != null)
+                    _r.SetScrollViewerContent(_scrollViewerWrapper, null);
+                // Remove our content page from content panel (different subtree branch,
+                // hasn't been detached yet at this point)
+                if (_activeContentPage != null && _contentPanel != null)
+                {
+                    try { _r.RemoveChild(_contentPanel, _activeContentPage); }
+                    catch { }
+                }
+                // Restore hidden content children
+                foreach (var child in _hiddenContentChildren)
+                {
+                    try { _r.SetIsVisible(child, true); }
+                    catch { }
+                }
+                NullState();
+            });
+            Logger.Log("Injector", "DetachedFromVisualTree subscribed on LayoutContainer");
+
+            // Step 1c: Store back button reference if found (may be null -- back button
+            // only appears AFTER we deselect the ListBox in OnNavItemClicked).
+            // We'll re-search for it after deselection.
+            if (layout.BackButton != null)
+            {
+                try
+                {
+                    _closeCommand = layout.BackButton.GetType().GetProperty("Command")?.GetValue(layout.BackButton);
+                    _closeCommandParam = layout.BackButton.GetType().GetProperty("CommandParameter")?.GetValue(layout.BackButton);
+                }
+                catch { }
+                Logger.Log("Injector", $"Back button found during layout: {layout.BackButton.GetType().Name}, closeCommand={_closeCommand != null}");
+            }
+            else
+            {
+                Logger.Log("Injector", "Back button not found during layout (expected -- appears after deselection)");
             }
 
             // Step 2: Save and remove version Border and sign-out from NavContainer
@@ -279,7 +337,8 @@ internal class SidebarInjector
             // Step 4: Remove version text from grey version box
             RemoveVersionText();
 
-            // Step 5: Restore save bar to its original visibility
+            // Step 5: Restore back button and save bar visibility
+            RestoreBackButton();
             if (_saveBar != null)
                 _r.SetIsVisible(_saveBar, _saveBarWasVisible);
 
@@ -305,6 +364,12 @@ internal class SidebarInjector
         _layoutContainer = null;
         _saveBar = null;
         _revertButton = null;
+        _backButton = null;
+        _backButtonWasVisible = true;
+        _headerTitleText = null;
+        _headerTitleOriginal = null;
+        _closeCommand = null;
+        _closeCommandParam = null;
         _nativeFontFamily = null;
         _originalVersionBorder = null;
         _originalSignOutControl = null;
@@ -365,7 +430,7 @@ internal class SidebarInjector
             _r.AddChild(container, sectionHeader);
 
         // 2. Nav items: Uprooted, Plugins, Themes
-        foreach (var (label, page) in new[] { ("Uprooted", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
+        foreach (var (label, page) in new[] { ("About", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
         {
             var item = BuildNavItem(label, page, nativeFontFamily, nativeNavForeground, nativeNavFontWeight);
             if (item != null)
@@ -393,11 +458,18 @@ internal class SidebarInjector
 
     private object? BuildSectionHeader(string text, double fontSize, object? fontWeight, object? foreground, object? fontFamily)
     {
-        // Match Root's "APP SETTINGS" header: StackPanel M=12,12,12,0 inside a 40px-tall ListBoxItem
+        // Match Root's native section header structure:
+        //   ListBoxItem (H=40) → Panel (M=0,2,0,2) → ... → StackPanel (M=12,12,12,0)
+        // We replicate: Panel (H=40) → StackPanel (M=12,14,12,0)
+        //   14 = 12 (native StackPanel margin) + 2 (native Panel margin-top)
+        var wrapper = _r.CreatePanel();
+        if (wrapper == null) return null;
+        _r.SetHeight(wrapper, 40);
+        _r.SetTag(wrapper, InjectedTag);
+
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);
-        if (container == null) return null;
-        _r.SetMargin(container, 12, 12, 12, 0);
-        _r.SetTag(container, InjectedTag);
+        if (container == null) return wrapper;
+        _r.SetMargin(container, 12, 14, 12, 0);
 
         var header = _r.CreateTextBlock(text, fontSize);
         if (header != null)
@@ -411,7 +483,8 @@ internal class SidebarInjector
             _r.AddChild(container, header);
         }
 
-        return container;
+        _r.AddChild(wrapper, container);
+        return wrapper;
     }
 
     private object? BuildNavItem(string label, string pageName, object? fontFamily,
@@ -561,12 +634,16 @@ internal class SidebarInjector
                 _activeContentPage = page;
             }
 
-            // Deselect Root's ListBox items
+            // Deselect Root's ListBox items (triggers Root's "no tab" state with back arrow)
             if (_listBox != null)
             {
                 _r.SetSelectedIndex(_listBox, -1);
                 _lastListBoxIdx = -1;
             }
+
+            // Find and hide the back arrow that appears after deselection.
+            // Also set header title to our page name.
+            FindAndHideBackButton(pageName);
 
             // Hide save bar on Uprooted pages (prevents Revert freeze)
             // Search dynamically since save bar may appear after injection
@@ -608,6 +685,9 @@ internal class SidebarInjector
             catch { }
         }
         _hiddenContentChildren.Clear();
+
+        // Restore back button visibility
+        RestoreBackButton();
 
         // Restore save bar to its original visibility state
         if (_saveBar != null)
@@ -800,6 +880,116 @@ internal class SidebarInjector
         _versionContainer = null;
     }
 
+    // ===== Back button management =====
+
+    /// <summary>
+    /// After deselecting Root's ListBox, a back arrow appears in Row=0 of the header.
+    /// The header Grid (content side, ~900px wide) contains two RootSvgButtons:
+    ///   - Left side (@~24px): back arrow — HIDE this
+    ///   - Right side (@~836px): X close button — KEEP this
+    /// Also sets the title TextBlock to our page display name.
+    /// Called on every nav click (including switching between our tabs).
+    /// </summary>
+    private void FindAndHideBackButton(string pageName)
+    {
+        if (_layoutContainer == null) return;
+
+        // Map internal page name to display title
+        var displayName = pageName == "uprooted" ? "About"
+            : char.ToUpper(pageName[0]) + pageName[1..];
+
+        // If we already found the title TextBlock, just update the text
+        if (_headerTitleText != null)
+        {
+            try { _headerTitleText.GetType().GetProperty("Text")?.SetValue(_headerTitleText, displayName); }
+            catch { }
+            Logger.Log("Injector", $"Title updated: \"{displayName}\"");
+        }
+
+        // Already found and hidden back button + title? Nothing more to search.
+        if (_backButton != null && _headerTitleText != null) return;
+
+        // Find the content header Grid in Row=0.
+        // Multiple children sit at Row=0; the header is a Grid (not Panel/Border/Rectangle).
+        object? headerGrid = null;
+        foreach (var child in _r.GetVisualChildren(_layoutContainer))
+        {
+            if (_r.GetGridRow(child) != 0) continue;
+            if (!_r.IsGrid(child)) continue;
+            headerGrid = child;
+            break;
+        }
+
+        if (headerGrid == null)
+        {
+            Logger.Log("Injector", "Content header Grid not found in Row=0");
+            return;
+        }
+
+        var gridBounds = _r.GetBounds(headerGrid);
+        double gridWidth = gridBounds?.W ?? 900;
+
+        // Walk header Grid descendants to find back arrow and title
+        foreach (var node in _walker.DescendantsDepthFirst(headerGrid))
+        {
+            var typeName = node.GetType().Name;
+
+            // Identify buttons by position: left side = back arrow, right side = X close
+            if (typeName.Contains("Button") && _backButton == null)
+            {
+                var b = _r.GetBounds(node);
+                if (b != null && b.Value.X < gridWidth / 2)
+                {
+                    _backButton = node;
+                    _backButtonWasVisible = _r.GetIsVisible(node);
+                    _r.SetIsVisible(node, false);
+                    Logger.Log("Injector", $"Back arrow hidden: {typeName} @{b.Value.X:F0},{b.Value.Y:F0}");
+
+                    // Extract close command if we didn't get it during layout
+                    if (_closeCommand == null)
+                    {
+                        try
+                        {
+                            _closeCommand = node.GetType().GetProperty("Command")?.GetValue(node);
+                            _closeCommandParam = node.GetType().GetProperty("CommandParameter")?.GetValue(node);
+                        }
+                        catch { }
+                    }
+                }
+            }
+
+            // Find the title TextBlock (direct child of header Grid)
+            if (_r.IsTextBlock(node) && _headerTitleText == null)
+            {
+                var parent = _r.GetParent(node);
+                if (parent == headerGrid)
+                {
+                    _headerTitleText = node;
+                    _headerTitleOriginal = _r.GetText(node);
+                    try { node.GetType().GetProperty("Text")?.SetValue(node, displayName); }
+                    catch { }
+                    Logger.Log("Injector", $"Title set: \"{_headerTitleOriginal}\" -> \"{displayName}\"");
+                }
+            }
+        }
+
+        if (_backButton == null)
+            Logger.Log("Injector", "Back arrow not found in header Grid (no left-side button)");
+    }
+
+    private void RestoreBackButton()
+    {
+        // Don't restore back arrow visibility — Root manages its own header state
+        // when a tab is selected. Our local IsVisible=false will be discarded when
+        // Root tears down and recreates the settings page.
+        _backButton = null;
+
+        // Don't restore title text — Root's ViewModel binding will overwrite it
+        // when its own tab is selected. Setting it to "" first causes a visible flash.
+        _headerTitleText = null;
+        _headerTitleOriginal = null;
+    }
+
     // ===== Helpers =====
 
     private object? FindAncestorOfType(object node, string typeName)
@@ -827,12 +1017,12 @@ internal class SidebarInjector
                 _revertButton = _walker.FindRevertButton(_saveBar);
                 if (_revertButton != null)
                 {
-                    _r.SubscribeEvent(_revertButton, "PointerPressed", () =>
+                    _r.SubscribeEvent(_revertButton, "Click", () =>
                     {
-                        Logger.Log("Injector", "Revert button pressed -- cleaning up injection BEFORE teardown");
+                        Logger.Log("Injector", "Revert button Click -- cleaning up injection BEFORE teardown (late)");
                         CleanupInjection();
                     });
-                    Logger.Log("Injector", $"Revert button PointerPressed subscribed (late): {_revertButton.GetType().Name}");
+                    Logger.Log("Injector", $"Revert button Click subscribed (late): {_revertButton.GetType().Name}");
                 }
             }
         }
