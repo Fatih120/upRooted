@@ -39,7 +39,8 @@ function Format-LogLine {
 
     # Color coding by category
     $color = "White"
-    if ($line -match '\[Startup\]') { $color = "Cyan" }
+    if ($line -match '\[Entry\]') { $color = "Green" }
+    elseif ($line -match '\[Startup\]') { $color = "Cyan" }
     elseif ($line -match '\[Reflection\]') { $color = "DarkCyan" }
     elseif ($line -match '\[Injector\]') { $color = "Green" }
     elseif ($line -match '\[TreeWalker\]') { $color = "Yellow" }
@@ -47,8 +48,11 @@ function Format-LogLine {
     elseif ($line -match '\[Style\]') { $color = "DarkMagenta" }
     elseif ($line -match '\[Recon\]') { $color = "Blue" }
 
-    # Highlight errors/warnings
-    if ($line -match '(?i)error|fail|crash|fatal') { $color = "Red" }
+    # Highlight errors/warnings (fallback = non-fatal, stays yellow)
+    if ($line -match '(?i)error|fail|crash|fatal') {
+        if ($line -match '(?i)fallback') { $color = "DarkYellow" }
+        else { $color = "Red" }
+    }
     elseif ($line -match '(?i)warn|MISSING') { $color = "DarkYellow" }
 
     # Highlight key events

@@ -5,9 +5,9 @@ namespace Uprooted;
 /// All controls created via reflection through AvaloniaReflection.
 /// Styling matches Root's native settings pages:
 ///   - Cards: BG=#0f1923, CornerRadius=12, BorderThickness=0.5, inner padding 24px
-///   - Section headers: FontSize=12, Medium(500), #66f2f2f2 (matches Root's "APP SETTINGS")
-///   - Field labels: FontSize=13, Weight=450, #a3f2f2f2
-///   - Body text: FontSize=13, Normal, #a3f2f2f2
+///   - Section headers: FontSize=18, Medium(500), #66f2f2f2
+///   - Field labels: FontSize=19, Weight=450, #a3f2f2f2
+///   - Body text: FontSize=16, Normal, #a3f2f2f2
 ///   - Page title: FontSize=20, SemiBold(600), #fff2f2f2
 ///   - Font: CircularXX TT (passed from native controls)
 ///   - Page container: StackPanel(Margin=24,24,24,0)
@@ -1354,7 +1354,7 @@ internal static class ContentPages
         }
 
         // Lightbox card
-        double cardW = 480;
+        double cardW = 560;
         _infoPanel = r.CreateBorder(CardBg, 12);
         if (_infoPanel == null) return;
         r.SetTag(_infoPanel, "uprooted-no-recolor");
@@ -1374,7 +1374,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName, 18, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName, 26, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -1386,13 +1386,13 @@ internal static class ContentPages
             var closeBtn = r.CreateBorder(closeBtnBg, 10);
             if (closeBtn != null)
             {
-                r.SetWidth(closeBtn, 28);
-                r.SetHeight(closeBtn, 28);
+                r.SetWidth(closeBtn, 36);
+                r.SetHeight(closeBtn, 36);
                 r.SetCursorHand(closeBtn);
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 14, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 22, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -1412,7 +1412,7 @@ internal static class ContentPages
         }
 
         // Description
-        var descText = r.CreateTextBlock(description, 13, TextMuted);
+        var descText = r.CreateTextBlock(description, 17, TextMuted);
         if (descText != null)
         {
             ApplyFont(r, descText, font);
@@ -1482,7 +1482,7 @@ internal static class ContentPages
 
         var headerText = r.CreateTextBlock(
             "Without this plugin, Root sends the following to Sentry's servers (not Root's servers):",
-            12, TextMuted);
+            16, TextMuted);
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 450);
@@ -1500,7 +1500,7 @@ internal static class ContentPages
         };
         foreach (var item in items)
         {
-            var itemText = r.CreateTextBlock(item, 12, TextDim);
+            var itemText = r.CreateTextBlock(item, 16, TextDim);
             if (itemText != null)
             {
                 ApplyFont(r, itemText, font);
@@ -1744,7 +1744,7 @@ internal static class ContentPages
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock("Pick your own accent and background", 12, TextMuted);
+                var descText = r.CreateTextBlock("Pick your own accent and background", 16, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -1986,7 +1986,7 @@ internal static class ContentPages
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
+                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 16, TextMuted);
                 ApplyFont(r, descText, font);
                 r.SetTextWrapping(descText, "Wrap");
                 r.AddChild(textStack, descText);
@@ -2145,18 +2145,18 @@ internal static class ContentPages
         r.SetVerticalAlignment(row, "Center");
 
         // Label
-        var labelText = r.CreateTextBlock(label, 13, TextMuted);
+        var labelText = r.CreateTextBlock(label, 19, TextMuted);
         r.SetFontWeightNumeric(labelText, 450);
         ApplyFont(r, labelText, font);
-        r.SetWidth(labelText, 90);
+        r.SetWidth(labelText, 110);
         r.AddChild(row, labelText);
 
         // TextBox
         var textBox = r.CreateTextBox("#RRGGBB", initialValue, 7);
         if (textBox != null)
         {
-            r.SetWidth(textBox, 100);
-            textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
+            r.SetWidth(textBox, 120);
+            textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 17.0);
             r.SetBackground(textBox, ColorUtils.Lighten(CardBg, 5));
             r.SetForeground(textBox, TextWhite);
             ApplyFont(r, textBox, font);
@@ -2455,7 +2455,7 @@ internal static class ContentPages
         }
 
         // Lightbox card
-        double cardW = 480;
+        double cardW = 560;
         _settingsPanel = r.CreateBorder(CardBg, 12);
         if (_settingsPanel == null) return;
         r.SetTag(_settingsPanel, "uprooted-no-recolor");
@@ -2475,7 +2475,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName + " Settings", 18, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName + " Settings", 26, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -2487,13 +2487,13 @@ internal static class ContentPages
             var closeBtn = r.CreateBorder(closeBtnBg, 10);
             if (closeBtn != null)
             {
-                r.SetWidth(closeBtn, 28);
-                r.SetHeight(closeBtn, 28);
+                r.SetWidth(closeBtn, 36);
+                r.SetHeight(closeBtn, 36);
                 r.SetCursorHand(closeBtn);
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 14, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 22, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -2560,8 +2560,14 @@ internal static class ContentPages
         var apiTextBox = r.CreateTextBox("Enter your API key", settings.NsfwApiKey, 100);
         if (apiTextBox != null)
         {
-            apiTextBox.GetType().GetProperty("FontSize")?.SetValue(apiTextBox, 13.0);
-            r.SetHeight(apiTextBox, 36);
+            apiTextBox.GetType().GetProperty("FontSize")?.SetValue(apiTextBox, 17.0);
+            r.SetHeight(apiTextBox, 40);
+            r.SetPadding(apiTextBox, 10, 0, 10, 0);
+            if (r.VerticalAlignmentType != null)
+            {
+                var center = Enum.Parse(r.VerticalAlignmentType, "Center");
+                apiTextBox.GetType().GetProperty("VerticalContentAlignment")?.SetValue(apiTextBox, center);
+            }
             r.SetBackground(apiTextBox, ColorUtils.Lighten(CardBg, 5));
             r.SetForeground(apiTextBox, TextWhite);
             ApplyFont(r, apiTextBox, font);
@@ -2576,7 +2582,7 @@ internal static class ContentPages
 
         var helperText = r.CreateTextBlock(
             "Get a key from console.cloud.google.com -- SafeSearch costs ~$1.50/1,000 images",
-            12, TextDim);
+            16, TextDim);
         if (helperText != null)
         {
             ApplyFont(r, helperText, font);
@@ -2595,7 +2601,7 @@ internal static class ContentPages
             if (saveBtn != null)
             {
                 r.SetCursorHand(saveBtn);
-                var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
+                var saveBtnText = r.CreateTextBlock("Save API Key", 17, TextWhite);
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -2722,12 +2728,12 @@ internal static class ContentPages
             if (textStack != null)
             {
                 r.SetVerticalAlignment(textStack, "Center");
-                var nameText = r.CreateTextBlock(label, 13, TextWhite);
+                var nameText = r.CreateTextBlock(label, 19, TextWhite);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(desc, 12, TextMuted);
+                var descText = r.CreateTextBlock(desc, 16, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -2872,7 +2878,7 @@ internal static class ContentPages
             r.SetMargin(maxRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(maxRow, "Center");
 
-            var maxLabel = r.CreateTextBlock("Max logged messages:", 13, TextMuted);
+            var maxLabel = r.CreateTextBlock("Max logged messages:", 19, TextMuted);
             r.SetFontWeightNumeric(maxLabel, 450);
             ApplyFont(r, maxLabel, font);
             r.SetVerticalAlignment(maxLabel, "Center");
@@ -2881,7 +2887,7 @@ internal static class ContentPages
             var maxBox = r.CreateTextBox("10000", settings.MessageLoggerMaxMessages.ToString(), 20);
             if (maxBox != null)
             {
-                maxBox.GetType().GetProperty("FontSize")?.SetValue(maxBox, 13.0);
+                maxBox.GetType().GetProperty("FontSize")?.SetValue(maxBox, 17.0);
                 r.SetWidth(maxBox, 80);
                 r.SetHeight(maxBox, 32);
                 r.SetBackground(maxBox, ColorUtils.Lighten(CardBg, 5));
@@ -2913,7 +2919,7 @@ internal static class ContentPages
 
         var retentionHelp = r.CreateTextBlock(
             "Oldest messages are automatically removed when this limit is exceeded.",
-            12, TextDim);
+            16, TextDim);
         if (retentionHelp != null)
         {
             ApplyFont(r, retentionHelp, font);
@@ -2960,12 +2966,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 60, 0);
 
-            var nameText = r.CreateTextBlock(label, 13, TextWhite);
+            var nameText = r.CreateTextBlock(label, 19, TextWhite);
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock(description, 12, TextMuted);
+            var descText = r.CreateTextBlock(description, 16, TextMuted);
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -2976,20 +2982,20 @@ internal static class ContentPages
         // Right side: toggle pill
         bool[] state = { currentValue };
         var toggleBg = currentValue ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
-        var pill = r.CreateBorder(toggleBg, 10);
+        var pill = r.CreateBorder(toggleBg, 13);
         if (pill != null)
         {
-            r.SetWidth(pill, 40);
-            r.SetHeight(pill, 20);
+            r.SetWidth(pill, 52);
+            r.SetHeight(pill, 26);
             r.SetHorizontalAlignment(pill, "Right");
             r.SetVerticalAlignment(pill, "Center");
             r.SetCursorHand(pill);
 
-            var dot = r.CreateBorder("#FFFFFF", 7);
+            var dot = r.CreateBorder("#FFFFFF", 9);
             if (dot != null)
             {
-                r.SetWidth(dot, 14);
-                r.SetHeight(dot, 14);
+                r.SetWidth(dot, 20);
+                r.SetHeight(dot, 20);
                 r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
                 r.SetMargin(dot, 3, 3, 3, 3);
                 r.SetBorderChild(pill, dot);
@@ -3031,12 +3037,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 140, 0);
 
-            var nameText = r.CreateTextBlock("Update channel", 13, TextWhite);
+            var nameText = r.CreateTextBlock("Update channel", 19, TextWhite);
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 12, TextMuted);
+            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 16, TextMuted);
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3120,7 +3126,7 @@ internal static class ContentPages
         // Password text box
         var passBox = r.CreateTextBox("Enter password...", "", 30);
         if (passBox == null) return;
-        passBox.GetType().GetProperty("FontSize")?.SetValue(passBox, 13.0);
+        passBox.GetType().GetProperty("FontSize")?.SetValue(passBox, 17.0);
         r.SetWidth(passBox, 180);
         r.SetHeight(passBox, 32);
         r.SetBackground(passBox, ColorUtils.Lighten(CardBg, 5));
@@ -3135,7 +3141,7 @@ internal static class ContentPages
         r.AddChild(promptRow, passBox);
 
         // Submit button
-        var submitText = r.CreateTextBlock("Go", 12, TextWhite);
+        var submitText = r.CreateTextBlock("Go", 17, TextWhite);
         r.SetFontWeightNumeric(submitText, 500);
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");
@@ -3151,7 +3157,7 @@ internal static class ContentPages
         }
 
         // Result text (for success/error feedback)
-        var resultText = r.CreateTextBlock("", 12, "#E04040");
+        var resultText = r.CreateTextBlock("", 16, "#E04040");
         ApplyFont(r, resultText, font);
         r.SetVerticalAlignment(resultText, "Center");
         r.AddChild(promptRow, resultText);
@@ -3249,7 +3255,7 @@ internal static class ContentPages
         if (boxContent == null) return box;
         r.SetMargin(boxContent, 16, 14, 16, 14);
 
-        var headerText = r.CreateTextBlock("HOW IT WORKS", 12, TextDim);
+        var headerText = r.CreateTextBlock("HOW IT WORKS", 18, TextDim);
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 500);
@@ -3264,7 +3270,7 @@ internal static class ContentPages
             "to avoid redundant API calls. The filter fails open -- if the API is unreachable " +
             "or returns an error, images are shown normally. No images are stored or sent anywhere " +
             "except to Google's Vision API for classification.",
-            12, TextMuted);
+            16, TextMuted);
         if (howText != null)
         {
             ApplyFont(r, howText, font);
@@ -3281,11 +3287,11 @@ internal static class ContentPages
 
     /// <summary>
     /// Create a section header matching Root's "APP SETTINGS" style:
-    /// FontSize=12, FontWeight=Medium(500), Fg=#66f2f2f2
+    /// FontSize=18, FontWeight=Medium(500), Fg=#66f2f2f2
     /// </summary>
     private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font)
     {
-        var header = r.CreateTextBlock(text, 12, TextDim);
+        var header = r.CreateTextBlock(text, 18, TextDim);
         r.SetFontWeightNumeric(header, 500);
         ApplyFont(r, header, font);
         return header;

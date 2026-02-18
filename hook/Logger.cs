@@ -29,6 +29,19 @@ internal static class Logger
 
     internal static void Log(string category, string message) => Log($"[{category}] {message}");
 
+    /// <summary>Writes blank lines to the log as a visual separator (e.g. on startup).</summary>
+    internal static void LogSeparator(int newlines = 3)
+    {
+        try
+        {
+            lock (Lock)
+            {
+                File.AppendAllText(LogPath, new string('\n', newlines));
+            }
+        }
+        catch { }
+    }
+
     /// <summary>Log exception with full inner exception chain for debugging.</summary>
     internal static void LogException(string category, string context, Exception ex)
     {

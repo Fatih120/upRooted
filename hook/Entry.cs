@@ -19,6 +19,7 @@ public class Entry
     {
         if (Interlocked.CompareExchange(ref _initialized, 1, 0) == 0)
         {
+            Logger.LogSeparator();
             Logger.Log("Entry", "=== ModuleInitializer triggered ===");
             StartupHook.Initialize();
         }
@@ -28,6 +29,7 @@ public class Entry
     {
         if (Interlocked.CompareExchange(ref _initialized, 1, 0) == 0)
         {
+            Logger.LogSeparator();
             Logger.Log("Entry", "=== Constructor triggered ===");
             StartupHook.Initialize();
         }
