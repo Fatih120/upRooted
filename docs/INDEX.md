@@ -21,6 +21,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Build Guide               | [`docs/install/BUILD.md`](install/BUILD.md)                                       | Build pipeline for all layers (C# hook, TypeScript bundle, Rust installer)            | Contributors                           |
 | Tasks                     | [`TASKS.md`](../TASKS.md)                                                         | Active task board — pick up work, track progress                                      | Contributors                           |
 | Roadmap                   | [`docs/ROADMAP.md`](ROADMAP.md)                                                   | Known issues, planned features, and future direction                                  | Developers, insiders                   |
+| Plugin Roadmap            | [`docs/PLUGIN_ROADMAP.md`](PLUGIN_ROADMAP.md)                                     | Planned plugins with architecture notes and implementation strategies                 | Developers, plugin authors             |
 | Changelog (public)        | [`CHANGELOG_PUBLIC.md`](../CHANGELOG_PUBLIC.md)                                   | GitHub release notes mirror (v0.1.6 — present)                                        | Everyone                               |
 | Changelog (internal)      | [`CHANGELOG.md`](../CHANGELOG.md)                                                 | Detailed Keep a Changelog format                                                      | Contributors                           |
 | Contributing              | [`CONTRIBUTING.md`](../CONTRIBUTING.md)                                           | Branch rules, PR process, code style, and contribution guidelines                     | Contributors                           |
@@ -73,6 +74,7 @@ For developers who want to build plugins for Uprooted.
 5. [Plugin Examples](plugins/EXAMPLES.md) -- annotated real-world patterns
 6. [Built-in Plugins](plugins/builtin/INDEX.md) -- study the four shipped plugins as reference implementations
 7. [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) -- fork-to-PR workflow for submitting your plugin
+8. [Plugin Roadmap](PLUGIN_ROADMAP.md) -- planned plugins and their implementation strategies
 
 ### Contribute to the Framework
 
@@ -96,6 +98,7 @@ For those who want the complete technical picture.
 5. [CLR Profiler](framework/CLR_PROFILER.md) -- native profiler internals
 6. [Installer Reference](framework/INSTALLER.md) -- Tauri installer internals
 7. [Roadmap](ROADMAP.md) -- where the project is headed
+8. [Plugin Roadmap](PLUGIN_ROADMAP.md) -- planned plugin designs and implementation strategies
 
 ### Security Research
 
@@ -162,6 +165,7 @@ For setting up a development environment.
 | Live theme preview           | [Theme Engine Deep Dive](framework/THEME_ENGINE_DEEP_DIVE.md) | Live Preview System         |
 | Logging                      | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Logging                     |
 | Platform paths               | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Platform paths              |
+| Planned plugins                | [Plugin Roadmap](PLUGIN_ROADMAP.md)                            | --                          |
 | Plugin advanced patterns     | [Advanced Plugin Dev](plugins/ADVANCED_DEVELOPMENT.md)        | --                          |
 | Plugin contribution workflow | [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md)  | --                          |
 | Plugin examples              | [Plugin Examples](plugins/EXAMPLES.md)                        | --                          |

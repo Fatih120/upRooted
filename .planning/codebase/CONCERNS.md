@@ -212,7 +212,7 @@
 - Why fragile: The reflection cache assumes specific Avalonia type names, property names, and method signatures. Avalonia version updates could rename or remove any of these
 - Safe modification: Add Avalonia version detection and per-feature graceful degradation (tracked in ROADMAP.md)
 - Impact: Any Avalonia API change breaks all UI injection — entire C# layer becomes non-functional
-- Workaround: Currently tested against Avalonia 11.3.12 (from SESSION_STATE.md v0.3.42)
+- Workaround: Currently tested against Avalonia 11.3.12 (from SESSION_STATE.md v0.3.43)
 - Priority: High
 
 **Settings Page Text-Based Detection (Native):**

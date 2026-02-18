@@ -6,9 +6,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.3.42] - 2026-02-18
+## [0.3.43] - 2026-02-18
 
 ### Fixed
+- Linux installer: standalone script (`install-uprooted-linux.sh`) now auto-detects when run outside the repo and uses pre-built artifacts instead of failing with `ERR_PNPM_NO_PKG_MANIFEST`
 - Link embeds: skip rootapp.gg invite links (Root renders these natively, avoids double-embedding)
 - Link embeds: fallback to domain-only card when URL returns no OG metadata or title (e.g. Google Docs login redirects, JS-only SPAs)
 

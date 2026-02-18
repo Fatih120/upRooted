@@ -30,7 +30,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.3.42 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.3.43 Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
