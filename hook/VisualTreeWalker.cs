@@ -165,7 +165,7 @@ internal class VisualTreeWalker
         {
             NavContainer = navContainer,
             ContentArea = contentArea,
-            LayoutContainer = layoutContainer,
+            LayoutContainer = layoutContainer!,
             AppSettingsText = appSettingsText,
             ListBox = listBox,
             IsGridLayout = isGrid,

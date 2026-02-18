@@ -43,6 +43,7 @@ This command has two phases: **orient** (read core context, summarize, ask what'
      | `/build-hook` | Build C# hook (`dotnet build hook/ -c Release`) |
      | `/build-installer` | Build console TUI installer (Rust) |
      | `/deploy` | Build hook + remind user to deploy from Windows |
+     | `/inject` | Build + close Root + deploy + relaunch (Windows only) |
      | `/watch-log` | Tail the hook log file |
      | `/diagnose` | Check installation health |
      | `/session-state` | Update SESSION_STATE.md + NEW-SESSION.md |

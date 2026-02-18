@@ -472,7 +472,7 @@ internal static class ContentPages
             r.SetBorderChild(updatesCard, updatesContent);
             r.AddChild(page, updatesCard);
         }
-        afterUpdates:
+    afterUpdates:
 
         // Card 3: Links
         var linksCard = CreateCard(r);
@@ -835,7 +835,7 @@ internal static class ContentPages
         }
 
         // Plugin count label
-        var countLabel = r.CreateTextBlock($"{KnownPlugins.Length} plugins", 13, TextDim);
+        var countLabel = r.CreateTextBlock($"{KnownPlugins?.Length ?? 0} plugins", 13, TextDim);
         if (countLabel != null)
         {
             ApplyFont(r, countLabel, font);
@@ -854,7 +854,7 @@ internal static class ContentPages
         var cardNames = new List<string>();
         var cardDescs = new List<string>();
         var cardObjects = new List<object>();
-        foreach (var plugin in KnownPlugins)
+        foreach (var plugin in KnownPlugins ?? Array.Empty<PluginInfo>())
         {
             // Content filter uses NsfwFilterEnabled as its canonical toggle
             bool isEnabled = plugin.Id == "content-filter"

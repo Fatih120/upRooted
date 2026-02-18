@@ -15,6 +15,7 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 │   ├── build-hook.md           # /build-hook — dotnet build hook/ -c Release
 │   ├── build-installer.md      # /build-installer — full pipeline build
 │   ├── deploy.md               # /deploy — build hook + deploy to local Root
+│   ├── inject.md               # /inject — build + close Root + deploy + relaunch (Windows only)
 │   ├── watch-log.md            # /watch-log — tail the hook log file
 │   ├── diagnose.md             # /diagnose — check installation health
 │   ├── session-state.md        # /session-state — update SESSION_STATE.md + NEW-SESSION.md
@@ -74,6 +75,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 | `/build-hook` | `dotnet build hook/ -c Release` | Quick build check after C# changes |
 | `/build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |
 | `/deploy` | Build C# hook + deploy to local Root installation | Core dev loop: edit → build → deploy → test |
+| `/inject` | Build + close Root + deploy + relaunch (Windows only) | Native Windows: full automatic cycle |
 | `/watch-log` | Tail `uprooted-hook.log` | Debugging hook behavior at runtime |
 | `/diagnose` | Check installation health: files, env vars, HTML patches, settings, log | When something isn't working after deployment |
 | `/session-state` | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history | After a work cycle, before ending session |

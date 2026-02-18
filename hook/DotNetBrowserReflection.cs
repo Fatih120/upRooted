@@ -1535,7 +1535,6 @@ internal class DotNetBrowserReflection
                 Logger.Log("DotNetBrowser", $"  Browsers.{p.Name} : {p.PropertyType.Name}");
 
             // Try multiple enumeration strategies
-            object? foundBrowser = null;
 
             // Strategy A: non-generic IEnumerable
             if (browsers is System.Collections.IEnumerable browserEnum)

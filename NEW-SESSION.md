@@ -35,7 +35,7 @@ Two independent injection layers into one app:
 
 | File | Lines | Purpose |
 |------|------:|---------|
-| `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
+| `Entry.cs` | 35 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
 | `StartupHook.cs` | ~430 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
@@ -47,7 +47,7 @@ Two independent injection layers into one app:
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | ~170 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
-| `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |

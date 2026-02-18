@@ -12,7 +12,9 @@ public class Entry
 {
     private static int _initialized = 0;
 
+    #pragma warning disable CA2255
     [ModuleInitializer]
+    #pragma warning restore CA2255
     internal static void ModuleInit()
     {
         if (Interlocked.CompareExchange(ref _initialized, 1, 0) == 0)
