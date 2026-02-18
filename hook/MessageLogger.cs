@@ -4,18 +4,18 @@ using System.Reflection;
 namespace Uprooted;
 
 /// <summary>
-/// Message logger plugin — logs deleted and edited messages, shows visual indicators.
+/// Message logger plugin — preserves deleted messages and tracks edits.
 ///
-/// Architecture: Root's chat is Avalonia-native MVVM. Messages live in an ObservableCollection
-/// bound to RootMessageItemsControl. Each item is a MessageViewModel with a nested .Message
-/// object containing MessageId, MessageContent, SenderUserId, SentAtUtc, etc.
+/// Deletion detection: All ObservableCollection Remove events are treated as genuine
+/// deletions. Channel switches are detected separately (ItemsSource reference swap or
+/// Reset event), NOT via individual Remove events. Virtualization only affects visual
+/// containers, not the data source, so Remove events = real data removal.
 ///
-/// Deletion detection uses the ViewModel's HasBeenDeleted bool (set by Root when a message
-/// is actually deleted) rather than collection Remove events, which also fire on channel
-/// switches and virtualization recycling.
+/// Display: Deleted messages are re-injected into the chat as red-tinted inline panels
+/// (since Root removes them entirely). Right-click shows "Clear message history" to
+/// actually remove the persisted message.
 ///
-/// Visual indicators use in-place background tinting on the message's visual tree element
-/// (like Vencord's CSS class approach), not injected card/embed controls.
+/// Edit detection: Content snapshot comparison on each poll tick.
 /// </summary>
 internal class MessageLogger
 {
@@ -29,22 +29,22 @@ internal class MessageLogger
     private readonly MessageStore _store;
 
     private Timer? _scanTimer;
-    private int _scanning; // Interlocked reentrancy guard
+    private int _scanning;
 
     // Discovery results
     private object? _chatItemsControl;
     private object? _currentItemsSource;
     private Type? _messageItemType;
 
-    // Property accessors on the nested Message object (via _propMessageObject bridge)
-    private PropertyInfo? _propMessageObject; // ViewModel.Message -> nested Message
+    // Property accessors on nested Message object
+    private PropertyInfo? _propMessageObject; // ViewModel.Message bridge
     private PropertyInfo? _propMessageId;
     private PropertyInfo? _propContent;
     private PropertyInfo? _propAuthorId;
     private PropertyInfo? _propTimestamp;
     private bool _propertiesResolved;
 
-    // ViewModel-level properties (directly on the MessageViewModel)
+    // ViewModel-level properties
     private PropertyInfo? _propHasBeenDeleted;
     private PropertyInfo? _propHasBeenEdited;
 
@@ -53,18 +53,20 @@ internal class MessageLogger
     private EventInfo? _collectionChangedEvent;
     private bool _subscribed;
 
-    // Current channel tracking — read from TextChannelContentViewModel DataContext
+    // Channel tracking
     private string _currentChannelId = "";
 
-    // In-memory message cache keyed by message ID
+    // Message caches
     private readonly Dictionary<string, CachedMessage> _messageCache = new();
-
-    // Track which message IDs we've already tinted (to avoid re-applying per tick)
-    private readonly HashSet<string> _tintedDeletedIds = new();
-    private readonly HashSet<string> _tintedEditedIds = new();
-
-    // Track content per message ID for edit detection via polling
     private readonly Dictionary<string, string> _contentSnapshot = new();
+
+    // Visual indicator tracking — tag → injected control
+    private readonly Dictionary<string, object> _injectedCards = new();
+
+    // Avalonia types for context menu (resolved lazily)
+    private Type? _contextMenuType;
+    private Type? _menuItemType;
+    private bool _contextMenuTypesResolved;
 
     internal MessageLogger(AvaloniaReflection resolver, object mainWindow)
     {
@@ -82,25 +84,23 @@ internal class MessageLogger
         Logger.Log(Tag, $"Loaded {_messageCache.Count} cached messages from store");
 
         var settings = UprootedSettings.Load();
-        int maxMessages = settings.MessageLoggerMaxMessages;
-        if (_messageCache.Count > maxMessages)
+        if (_messageCache.Count > settings.MessageLoggerMaxMessages)
         {
-            _store.Truncate(maxMessages);
-            Logger.Log(Tag, $"Truncated store to {maxMessages}");
+            _store.Truncate(settings.MessageLoggerMaxMessages);
+            Logger.Log(Tag, $"Truncated store to {settings.MessageLoggerMaxMessages}");
         }
 
-        // Run Phase 1 discovery on UI thread
         _r.RunOnUIThread(() =>
         {
             try { RunDiscoveryScan(); }
-            catch (Exception ex) { Logger.LogException(Tag, "Discovery scan error", ex); }
+            catch (Exception ex) { Logger.LogException(Tag, "Discovery error", ex); }
         });
 
         _scanTimer = new Timer(OnScanTick, null, InitialDelayMs, ScanIntervalMs);
-        Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms interval)");
+        Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms)");
     }
 
-    // ===== Timer callback =====
+    // ===== Timer =====
 
     private void OnScanTick(object? state)
     {
@@ -119,45 +119,31 @@ internal class MessageLogger
                 try
                 {
                     EnsureCollectionSubscription();
-
                     if (_propertiesResolved)
                     {
-                        // Poll messages for HasBeenDeleted / edit changes
-                        PollMessageStates(settings);
-
-                        // Apply in-place visual indicators
-                        ApplyVisualIndicators(settings);
+                        PollEdits(settings);
+                        InjectDeletedMessageCards(settings);
                     }
                 }
-                catch (Exception ex)
-                {
-                    Logger.Log(Tag, $"Scan error: {ex.Message}");
-                }
-                finally
-                {
-                    Interlocked.Exchange(ref _scanning, 0);
-                }
+                catch (Exception ex) { Logger.Log(Tag, $"Scan error: {ex.Message}"); }
+                finally { Interlocked.Exchange(ref _scanning, 0); }
             });
 
             Task.Delay(ScanIntervalMs * 2).ContinueWith(_ =>
-            {
-                Interlocked.CompareExchange(ref _scanning, 0, 1);
-            });
+                Interlocked.CompareExchange(ref _scanning, 0, 1));
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"OnScanTick error: {ex.Message}");
+            Logger.Log(Tag, $"Tick error: {ex.Message}");
             Interlocked.Exchange(ref _scanning, 0);
         }
     }
 
-    // ===== Phase 1: Discovery Scan =====
+    // ===== Phase 1: Discovery =====
 
     private void RunDiscoveryScan()
     {
-        Logger.Log(Tag, "========================================");
-        Logger.Log(Tag, "=== Phase 1: Data Model Discovery ===");
-        Logger.Log(Tag, "========================================");
+        Logger.Log(Tag, "=== Phase 1: Discovery ===");
 
         var settingsText = _walker.FindFirstTextBlock(_mainWindow, "APP SETTINGS");
         object? settingsSubtree = null;
@@ -167,205 +153,107 @@ internal class MessageLogger
             for (int i = 0; i < 20 && current != null; i++)
             {
                 if (_r.IsGrid(current) && _r.GetChildCount(current) >= 3)
-                {
-                    settingsSubtree = current;
-                    break;
-                }
+                { settingsSubtree = current; break; }
                 current = _r.GetParent(current);
             }
         }
 
-        // Find all ItemsControl-like containers
-        var itemsControls = new List<object>();
         foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
         {
             if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
             var typeName = node.GetType().Name;
             if (typeName.Contains("ItemsControl") || typeName == "ListBox" || typeName == "ItemsRepeater")
-                itemsControls.Add(node);
+                InspectItemsControl(node);
         }
 
-        Logger.Log(Tag, $"Found {itemsControls.Count} ItemsControl-like containers");
+        // Walk up from CTextBlock for ViewModel property resolution
+        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+        {
+            if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
+            if (node.GetType().Name != "CTextBlock") continue;
 
-        foreach (var ic in itemsControls)
-            InspectItemsControl(ic);
+            var current = node;
+            for (int i = 0; i < 15 && current != null; i++)
+            {
+                object? dc = ReadDC(current);
+                if (dc != null && !_propertiesResolved &&
+                    dc.GetType().Name.Contains("Message", StringComparison.OrdinalIgnoreCase))
+                    TryResolvePropertyAccessors(dc.GetType());
+                current = _r.GetParent(current);
+            }
+            if (_propertiesResolved) break;
+        }
 
-        // Walk up from CTextBlock for ViewModel discovery
-        InspectFromCTextBlock(settingsSubtree);
-
-        // Read channel ID from the chat control's DataContext
         ReadCurrentChannelId();
-
-        Logger.Log(Tag, $"Discovery complete: resolved={_propertiesResolved}, " +
-            $"control={_chatItemsControl != null}, channel={_currentChannelId}");
-        Logger.Log(Tag, "=== Phase 1 Discovery Complete ===");
+        Logger.Log(Tag, $"Discovery: resolved={_propertiesResolved}, control={_chatItemsControl != null}, ch={_currentChannelId}");
     }
 
-    private void InspectItemsControl(object itemsControl)
+    private void InspectItemsControl(object ic)
     {
-        var typeName = itemsControl.GetType().Name;
+        var typeName = ic.GetType().Name;
+        object? source = ReadItemsSource(ic);
+        if (source == null) return;
 
-        object? itemsSource = null;
-        try
-        {
-            itemsSource = itemsControl.GetType()
-                .GetProperty("ItemsSource", BindingFlags.Public | BindingFlags.Instance)
-                ?.GetValue(itemsControl);
-        }
+        var sourceType = source.GetType();
+        bool hasINCC = sourceType.GetInterfaces().Any(i => i.Name == "INotifyCollectionChanged");
+        int count = 0;
+        try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
         catch { }
 
-        if (itemsSource == null)
+        // Resolve properties from first item
+        if (count > 0 && !_propertiesResolved)
         {
             try
             {
-                itemsSource = itemsControl.GetType()
-                    .GetProperty("Items", BindingFlags.Public | BindingFlags.Instance)
-                    ?.GetValue(itemsControl);
-            }
-            catch { }
-        }
-
-        if (itemsSource == null) return;
-
-        var sourceType = itemsSource.GetType();
-        bool implementsINCC = false;
-        foreach (var iface in sourceType.GetInterfaces())
-        {
-            if (iface.Name == "INotifyCollectionChanged") { implementsINCC = true; break; }
-        }
-
-        int itemCount = 0;
-        try
-        {
-            var countProp = sourceType.GetProperty("Count");
-            if (countProp != null) itemCount = (int)countProp.GetValue(itemsSource)!;
-        }
-        catch { }
-
-        // Inspect items for property resolution
-        if (itemCount > 0 && !_propertiesResolved)
-        {
-            try
-            {
-                var enumerator = (itemsSource as System.Collections.IEnumerable)?.GetEnumerator();
-                if (enumerator != null)
-                {
-                    int inspected = 0;
-                    while (enumerator.MoveNext() && inspected < 2)
-                    {
-                        var item = enumerator.Current;
-                        if (item != null && !_propertiesResolved)
-                            TryResolvePropertyAccessors(item.GetType());
-                        inspected++;
-                    }
-                }
+                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
+                if (en != null && en.MoveNext() && en.Current != null)
+                    TryResolvePropertyAccessors(en.Current.GetType());
             }
             catch { }
         }
 
         // Only adopt the actual chat message collection
-        bool isChatControl = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
-        if (!isChatControl && itemCount > 0)
+        bool isChat = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
+        if (!isChat && count > 0)
         {
             try
             {
-                var en = (itemsSource as System.Collections.IEnumerable)?.GetEnumerator();
+                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
                 if (en != null && en.MoveNext() && en.Current != null)
-                    isChatControl = en.Current.GetType().Name.Contains("MessageViewModel");
+                    isChat = en.Current.GetType().Name.Contains("MessageViewModel");
             }
             catch { }
         }
 
-        if (isChatControl && implementsINCC && _chatItemsControl == null)
+        if (isChat && hasINCC && _chatItemsControl == null)
         {
-            Logger.Log(Tag, $"Chat collection found: {typeName}, {itemCount} items");
-            _chatItemsControl = itemsControl;
-            _currentItemsSource = itemsSource;
+            Logger.Log(Tag, $"Chat collection: {typeName}, {count} items");
+            _chatItemsControl = ic;
+            _currentItemsSource = source;
         }
     }
 
-    private void InspectFromCTextBlock(object? settingsSubtree)
-    {
-        object? ctextBlock = null;
-        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
-        {
-            if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
-            if (node.GetType().Name == "CTextBlock") { ctextBlock = node; break; }
-        }
-        if (ctextBlock == null) return;
-
-        var current = ctextBlock;
-        for (int i = 0; i < 15 && current != null; i++)
-        {
-            object? dc = null;
-            try
-            {
-                dc = current.GetType()
-                    .GetProperty("DataContext", BindingFlags.Public | BindingFlags.Instance)
-                    ?.GetValue(current);
-            }
-            catch { }
-
-            if (dc != null && !_propertiesResolved)
-            {
-                var dcTypeName = dc.GetType().Name;
-                if (dcTypeName.Contains("Message", StringComparison.OrdinalIgnoreCase))
-                    TryResolvePropertyAccessors(dc.GetType());
-            }
-            current = _r.GetParent(current);
-        }
-    }
-
-    // ===== Channel ID tracking =====
-
-    /// <summary>
-    /// Read the current channel ID from the DataContext hierarchy above the chat control.
-    /// The TextChannelContentViewModel or its parent should have a channel/container identifier.
-    /// </summary>
     private void ReadCurrentChannelId()
     {
         if (_chatItemsControl == null) return;
-
-        // Walk up from chat control to find TextChannelContentViewModel
         var current = _chatItemsControl;
         for (int i = 0; i < 10 && current != null; i++)
         {
-            object? dc = null;
-            try
-            {
-                dc = current.GetType()
-                    .GetProperty("DataContext", BindingFlags.Public | BindingFlags.Instance)
-                    ?.GetValue(current);
-            }
-            catch { }
-
+            object? dc = ReadDC(current);
             if (dc != null)
             {
-                // Try to read a channel/container ID from the ViewModel
-                var dcType = dc.GetType();
-                var channelProp = dcType.GetProperty("ChannelId", BindingFlags.Public | BindingFlags.Instance)
-                    ?? dcType.GetProperty("MessageContainerId", BindingFlags.Public | BindingFlags.Instance)
-                    ?? dcType.GetProperty("ContainerId", BindingFlags.Public | BindingFlags.Instance);
-
-                if (channelProp != null)
+                var t = dc.GetType();
+                var prop = t.GetProperty("ChannelId", BindingFlags.Public | BindingFlags.Instance)
+                    ?? t.GetProperty("MessageContainerId", BindingFlags.Public | BindingFlags.Instance)
+                    ?? t.GetProperty("ContainerId", BindingFlags.Public | BindingFlags.Instance);
+                if (prop != null)
                 {
-                    var val = channelProp.GetValue(dc)?.ToString();
+                    var val = prop.GetValue(dc)?.ToString();
                     if (!string.IsNullOrEmpty(val))
-                    {
-                        _currentChannelId = val!;
-                        Logger.Log(Tag, $"Channel ID: {_currentChannelId} (from {dcType.Name}.{channelProp.Name})");
-                        return;
-                    }
+                    { _currentChannelId = val!; return; }
                 }
-
-                // Fallback: use the DataContext's hash as a pseudo channel ID
-                // This changes when switching channels even if we can't read the actual ID
-                if (dcType.Name.Contains("TextChannel") || dcType.Name.Contains("Content"))
-                {
-                    _currentChannelId = $"dc:{dc.GetHashCode()}";
-                    Logger.Log(Tag, $"Channel pseudo-ID: {_currentChannelId} (from {dcType.Name} hash)");
-                    return;
-                }
+                if (t.Name.Contains("TextChannel") || t.Name.Contains("Content"))
+                { _currentChannelId = $"dc:{dc.GetHashCode()}"; return; }
             }
             current = _r.GetParent(current);
         }
@@ -378,33 +266,43 @@ internal class MessageLogger
         _messageItemType = type;
         var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
 
-        // ViewModel-level booleans
-        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted");
-        _propHasBeenEdited = FindProp(props, "HasBeenEdited");
+        // ViewModel-level booleans (HasBeenDeleted, HasBeenEdited) live on the outer type
+        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted");
+        _propHasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited");
 
-        if (TryResolveOnProps(props, type.Name, null))
-            return;
+        if (TryResolveOnProps(props, type.Name, null)) return;
 
-        // Try nested Message object
-        Logger.Log(Tag, $"Direct resolution failed on {type.Name}, trying nested...");
         foreach (var prop in props)
         {
             if (prop.PropertyType.IsClass && prop.PropertyType != typeof(string) &&
                 !prop.PropertyType.IsArray && prop.PropertyType.Namespace != "System")
             {
-                var nestedProps = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                if (TryResolveOnProps(nestedProps, prop.PropertyType.Name, prop))
-                {
-                    Logger.Log(Tag, $"Resolved via nested: {type.Name}.{prop.Name}");
-                    return;
-                }
+                var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+                if (TryResolveOnProps(nested, prop.PropertyType.Name, prop))
+                { Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name}"); return; }
             }
         }
     }
 
+    /// <summary>
+    /// Late-resolve ViewModel-level properties (HasBeenDeleted, etc.) from a known
+    /// collection item. Called when the initial discovery resolved content props via
+    /// nested path but may have missed ViewModel-level booleans.
+    /// </summary>
+    private void TryResolveLateViewModelProps(object item)
+    {
+        if (_propHasBeenDeleted != null) return; // already resolved
+        var type = item.GetType();
+        var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        _propHasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted");
+        _propHasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited");
+        if (_propHasBeenDeleted != null)
+            Logger.Log(Tag, $"Late-resolved HasBeenDeleted on {type.Name}");
+    }
+
     private bool TryResolveOnProps(PropertyInfo[] props, string typeName, PropertyInfo? bridge)
     {
-        var id = FindProp(props, "MessageId", "Id", "Uuid", "Nonce", "ID");
+        var id = FindProp(props, "MessageId", "Id", "Uuid", "Nonce");
         var content = FindProp(props, "MessageContent", "Content", "Text", "Body", "RawContent");
         if (id == null || content == null) return false;
 
@@ -415,42 +313,28 @@ internal class MessageLogger
         _propTimestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt");
 
         _propertiesResolved = true;
-        Logger.Log(Tag, $"Properties resolved on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
-            $"Id={_propMessageId.Name}, Content={_propContent.Name}, " +
-            $"HasBeenDeleted={_propHasBeenDeleted?.Name ?? "?"}, " +
-            $"HasBeenEdited={_propHasBeenEdited?.Name ?? "?"}");
+        Logger.Log(Tag, $"Props on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
+            $"Id={id.Name}, Content={content.Name}, " +
+            $"HasBeenDeleted={_propHasBeenDeleted?.Name ?? "?"}");
         return true;
     }
 
-    private static PropertyInfo? FindProp(PropertyInfo[] props, params string[] candidates)
+    private static PropertyInfo? FindProp(PropertyInfo[] props, params string[] names)
     {
-        foreach (var name in candidates)
+        foreach (var n in names)
             foreach (var p in props)
-                if (p.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-                    return p;
+                if (p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) return p;
         return null;
     }
 
-    // ===== Phase 2: Collection Subscription =====
+    // ===== Collection Subscription =====
 
     private void EnsureCollectionSubscription()
     {
         if (_chatItemsControl == null) return;
 
-        object? currentSource = null;
-        try
-        {
-            currentSource = _chatItemsControl.GetType()
-                .GetProperty("ItemsSource", BindingFlags.Public | BindingFlags.Instance)
-                ?.GetValue(_chatItemsControl);
-        }
-        catch { }
-
-        if (currentSource == null)
-        {
-            TryRediscoverChatControl();
-            return;
-        }
+        var currentSource = ReadItemsSource(_chatItemsControl);
+        if (currentSource == null) { TryRediscoverChat(); return; }
 
         if (!ReferenceEquals(currentSource, _currentItemsSource))
         {
@@ -458,59 +342,44 @@ internal class MessageLogger
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
             _contentSnapshot.Clear();
-            _tintedDeletedIds.Clear();
-            _tintedEditedIds.Clear();
+            ClearInjectedCards();
             ReadCurrentChannelId();
             SubscribeToCollection(currentSource);
-            SnapshotCurrentMessages(currentSource);
+            SnapshotMessages(currentSource);
         }
         else if (!_subscribed)
         {
             SubscribeToCollection(currentSource);
-            SnapshotCurrentMessages(currentSource);
+            SnapshotMessages(currentSource);
         }
     }
 
-    private void TryRediscoverChatControl()
+    private void TryRediscoverChat()
     {
         foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
         {
-            var typeName = node.GetType().Name;
-            if (!typeName.Contains("ItemsControl") && typeName != "ListBox" && typeName != "ItemsRepeater")
-                continue;
-
-            object? source = null;
+            var tn = node.GetType().Name;
+            if (!tn.Contains("ItemsControl") && tn != "ListBox" && tn != "ItemsRepeater") continue;
+            var source = ReadItemsSource(node);
+            if (source == null || _messageItemType == null) continue;
             try
             {
-                source = node.GetType()
-                    .GetProperty("ItemsSource", BindingFlags.Public | BindingFlags.Instance)
-                    ?.GetValue(node);
+                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
+                if (en != null && en.MoveNext() && en.Current != null &&
+                    _messageItemType.IsAssignableFrom(en.Current.GetType()))
+                {
+                    Logger.Log(Tag, $"Re-discovered chat: {tn}");
+                    _chatItemsControl = node;
+                    _currentItemsSource = source;
+                    _contentSnapshot.Clear();
+                    ClearInjectedCards();
+                    ReadCurrentChannelId();
+                    SubscribeToCollection(source);
+                    SnapshotMessages(source);
+                    return;
+                }
             }
             catch { }
-            if (source == null) continue;
-
-            if (_messageItemType != null)
-            {
-                try
-                {
-                    var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
-                    if (en != null && en.MoveNext() && en.Current != null &&
-                        _messageItemType.IsAssignableFrom(en.Current.GetType()))
-                    {
-                        Logger.Log(Tag, $"Re-discovered chat: {typeName}");
-                        _chatItemsControl = node;
-                        _currentItemsSource = source;
-                        _contentSnapshot.Clear();
-                        _tintedDeletedIds.Clear();
-                        _tintedEditedIds.Clear();
-                        ReadCurrentChannelId();
-                        SubscribeToCollection(source);
-                        SnapshotCurrentMessages(source);
-                        return;
-                    }
-                }
-                catch { }
-            }
         }
     }
 
@@ -518,42 +387,26 @@ internal class MessageLogger
     {
         try
         {
-            EventInfo? eventInfo = collection.GetType().GetEvent("CollectionChanged");
-            if (eventInfo == null)
+            EventInfo? ev = collection.GetType().GetEvent("CollectionChanged");
+            if (ev == null)
             {
                 foreach (var iface in collection.GetType().GetInterfaces())
-                {
                     if (iface.Name == "INotifyCollectionChanged")
-                    {
-                        eventInfo = iface.GetEvent("CollectionChanged");
-                        break;
-                    }
-                }
+                    { ev = iface.GetEvent("CollectionChanged"); break; }
             }
+            if (ev == null) { _subscribed = false; return; }
 
-            if (eventInfo == null)
-            {
-                Logger.Log(Tag, "CollectionChanged event not found");
-                _subscribed = false;
-                return;
-            }
+            var ht = ev.EventHandlerType!;
+            var pts = ht.GetMethod("Invoke")!.GetParameters().Select(p => p.ParameterType).ToArray();
+            var cb = new Action<object>(OnCollectionChanged);
+            var s = Expression.Parameter(pts[0], "s");
+            var e = Expression.Parameter(pts[1], "e");
+            var body = Expression.Invoke(Expression.Constant(cb), Expression.Convert(e, typeof(object)));
+            var handler = Expression.Lambda(ht, body, s, e).Compile();
 
-            var handlerType = eventInfo.EventHandlerType!;
-            var invokeMethod = handlerType.GetMethod("Invoke")!;
-            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
-
-            var callbackTarget = new Action<object>(OnCollectionChanged);
-            var senderParam = Expression.Parameter(paramTypes[0], "sender");
-            var argsParam = Expression.Parameter(paramTypes[1], "e");
-            var callbackExpr = Expression.Constant(callbackTarget);
-            var castArgs = Expression.Convert(argsParam, typeof(object));
-            var invokeExpr = Expression.Invoke(callbackExpr, castArgs);
-            var lambda = Expression.Lambda(handlerType, invokeExpr, senderParam, argsParam);
-            var handler = lambda.Compile();
-
-            eventInfo.AddEventHandler(collection, handler);
+            ev.AddEventHandler(collection, handler);
             _collectionChangedHandler = handler;
-            _collectionChangedEvent = eventInfo;
+            _collectionChangedEvent = ev;
             _subscribed = true;
             Logger.Log(Tag, "Subscribed to CollectionChanged");
         }
@@ -567,341 +420,443 @@ internal class MessageLogger
     private void UnsubscribeCollection()
     {
         if (_collectionChangedHandler != null && _currentItemsSource != null && _collectionChangedEvent != null)
-        {
-            try { _collectionChangedEvent.RemoveEventHandler(_currentItemsSource, _collectionChangedHandler); }
-            catch { }
-        }
+        { try { _collectionChangedEvent.RemoveEventHandler(_currentItemsSource, _collectionChangedHandler); } catch { } }
         _collectionChangedHandler = null;
         _collectionChangedEvent = null;
         _subscribed = false;
     }
 
-    /// <summary>
-    /// Snapshot all current message IDs and content for edit tracking.
-    /// Also cache message data for later deletion/edit display.
-    /// </summary>
-    private void SnapshotCurrentMessages(object collection)
+    private void SnapshotMessages(object collection)
     {
         if (!_propertiesResolved) return;
         try
         {
-            var enumerator = (collection as System.Collections.IEnumerable)?.GetEnumerator();
-            if (enumerator == null) return;
-
-            while (enumerator.MoveNext())
+            var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
+            if (en == null) return;
+            while (en.MoveNext())
             {
-                var item = enumerator.Current;
+                var item = en.Current;
                 if (item == null) continue;
-
                 var msgId = ReadMessageId(item);
                 if (msgId == null) continue;
-
-                var content = ReadContent(item) ?? "";
-                _contentSnapshot[msgId] = content;
-
-                if (!_messageCache.ContainsKey(msgId))
-                {
-                    var cached = ExtractCachedMessage(item, msgId);
-                    if (cached != null)
-                    {
-                        cached.ChannelId = _currentChannelId;
-                        _messageCache[msgId] = cached;
-                        _store.RecordMessage(cached.MessageId, cached.ChannelId,
-                            cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
-                    }
-                }
+                _contentSnapshot[msgId] = ReadContent(item) ?? "";
+                CacheMessage(item, msgId);
             }
         }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"Snapshot error: {ex.Message}");
-        }
+        catch (Exception ex) { Logger.Log(Tag, $"Snapshot error: {ex.Message}"); }
     }
 
-    // ===== CollectionChanged — only for Add events (new messages) =====
+    // ===== CollectionChanged =====
 
     private void OnCollectionChanged(object args)
     {
         try
         {
-            var actionProp = args.GetType().GetProperty("Action");
-            int action = actionProp != null ? (int)actionProp.GetValue(args)! : -1;
+            var action = (int)(args.GetType().GetProperty("Action")?.GetValue(args) ?? -1);
 
-            // Only handle Add — new messages entering the collection
-            if (action == 0) // Add
+            switch (action)
             {
-                var newItems = args.GetType().GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
-                if (newItems != null) HandleItemsAdded(newItems);
-            }
-            else if (action == 4) // Reset — channel switch
-            {
-                Logger.Log(Tag, "Collection Reset — channel switch");
-                _contentSnapshot.Clear();
-                _tintedDeletedIds.Clear();
-                _tintedEditedIds.Clear();
+                case 0: // Add
+                    var newItems = args.GetType().GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
+                    if (newItems != null) HandleAdded(newItems);
+                    break;
+
+                case 1: // Remove
+                    var oldItems = args.GetType().GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+                    if (oldItems != null) HandleRemoved(oldItems);
+                    break;
+
+                case 4: // Reset
+                    Logger.Log(Tag, "Collection Reset — channel switch");
+                    _contentSnapshot.Clear();
+                    ClearInjectedCards();
+                    break;
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) { Logger.Log(Tag, $"CollectionChanged error: {ex.Message}"); }
+    }
+
+    private void HandleAdded(System.Collections.IList items)
+    {
+        if (!_propertiesResolved) return;
+        foreach (var item in items)
         {
-            Logger.Log(Tag, $"OnCollectionChanged error: {ex.Message}");
+            if (item == null) continue;
+            TryResolveLateViewModelProps(item);
+            var msgId = ReadMessageId(item);
+            if (msgId == null) continue;
+            _contentSnapshot[msgId] = ReadContent(item) ?? "";
+            CacheMessage(item, msgId);
         }
     }
 
-    private void HandleItemsAdded(System.Collections.IList items)
+    private void HandleRemoved(System.Collections.IList items)
     {
         if (!_propertiesResolved) return;
+
+        var settings = UprootedSettings.Load();
+        if (!settings.MessageLoggerLogDeletes) return;
+
+        // ObservableCollection Remove events = genuine data removal.
+        // Channel switches use ItemsSource reference swap (detected in EnsureCollectionSubscription)
+        // or Reset events — they do NOT fire individual Remove events.
+        // Virtualization only affects visual containers, not the data source.
+        // So all Remove events here are real deletions.
+
+        if (items.Count > 10)
+            Logger.Log(Tag, $"Bulk remove: {items.Count} items");
 
         foreach (var item in items)
         {
             if (item == null) continue;
+
             var msgId = ReadMessageId(item);
             if (msgId == null) continue;
 
-            var content = ReadContent(item) ?? "";
-            _contentSnapshot[msgId] = content;
+            _contentSnapshot.Remove(msgId);
 
-            if (!_messageCache.ContainsKey(msgId))
+            // Check if we should ignore this user
+            if (settings.MessageLoggerIgnoreSelf)
             {
-                var cached = ExtractCachedMessage(item, msgId);
-                if (cached != null)
+                // TODO: compare author ID with self user ID
+            }
+
+            if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
+            {
+                cached.IsDeleted = true;
+                cached.DeletedAt = DateTime.UtcNow;
+                _store.RecordDeletion(msgId, cached.ChannelId, DateTime.UtcNow);
+                Logger.Log(Tag, $"MSG DEL: {Truncate(cached.Content, 80)}");
+            }
+            else if (!_messageCache.ContainsKey(msgId))
+            {
+                // Message wasn't in cache yet — extract what we can from the still-available ViewModel
+                var cached2 = ExtractCachedMessage(item, msgId);
+                if (cached2 != null)
                 {
-                    cached.ChannelId = _currentChannelId;
-                    _messageCache[msgId] = cached;
-                    _store.RecordMessage(cached.MessageId, cached.ChannelId,
-                        cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
+                    cached2.IsDeleted = true;
+                    cached2.DeletedAt = DateTime.UtcNow;
+                    _messageCache[msgId] = cached2;
+                    _store.RecordMessage(cached2.MessageId, cached2.ChannelId,
+                        cached2.AuthorId, cached2.AuthorName, cached2.Timestamp, cached2.Content);
+                    _store.RecordDeletion(msgId, cached2.ChannelId, DateTime.UtcNow);
+                    Logger.Log(Tag, $"MSG DEL (new): {Truncate(cached2.Content, 80)}");
                 }
             }
         }
     }
 
-    // ===== Polling: check HasBeenDeleted + content changes =====
+    // ===== Edit Detection via Polling =====
 
-    /// <summary>
-    /// Poll all visible messages in the collection. Check HasBeenDeleted for genuine
-    /// deletions, and compare content for edit detection. This avoids false positives
-    /// from collection Remove events (which also fire on channel switch/virtualization).
-    /// </summary>
-    private void PollMessageStates(UprootedSettings settings)
+    private void PollEdits(UprootedSettings settings)
     {
-        if (_currentItemsSource == null) return;
-
+        if (!settings.MessageLoggerLogEdits || _currentItemsSource == null) return;
         try
         {
-            var enumerator = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
-            if (enumerator == null) return;
-
-            while (enumerator.MoveNext())
+            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
+            if (en == null) return;
+            while (en.MoveNext())
             {
-                var item = enumerator.Current;
+                var item = en.Current;
                 if (item == null) continue;
-
                 var msgId = ReadMessageId(item);
                 if (msgId == null) continue;
 
-                // --- Deletion detection via HasBeenDeleted ---
-                if (settings.MessageLoggerLogDeletes && _propHasBeenDeleted != null)
+                var content = ReadContent(item) ?? "";
+                if (_contentSnapshot.TryGetValue(msgId, out var prev) &&
+                    prev != content && prev.Length > 0)
                 {
-                    try
+                    if (_messageCache.TryGetValue(msgId, out var cached))
                     {
-                        var isDeleted = (bool)(_propHasBeenDeleted.GetValue(item) ?? false);
-                        if (isDeleted && _messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
-                        {
-                            cached.IsDeleted = true;
-                            cached.DeletedAt = DateTime.UtcNow;
-                            _store.RecordDeletion(msgId, cached.ChannelId, DateTime.UtcNow);
-                            Logger.Log(Tag, $"MSG DEL: [{cached.AuthorName}] {Truncate(cached.Content, 60)}");
-                        }
+                        cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prev });
+                        cached.Content = content;
+                        _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, prev);
+                        Logger.Log(Tag, $"MSG EDIT: {Truncate(prev, 30)} -> {Truncate(content, 30)}");
                     }
-                    catch { }
                 }
-
-                // --- Edit detection via content comparison ---
-                if (settings.MessageLoggerLogEdits)
-                {
-                    var currentContent = ReadContent(item) ?? "";
-                    if (_contentSnapshot.TryGetValue(msgId, out var previousContent) &&
-                        previousContent != currentContent && previousContent.Length > 0)
-                    {
-                        if (_messageCache.TryGetValue(msgId, out var cached))
-                        {
-                            cached.Edits.Add(new MessageEdit
-                            {
-                                EditTime = DateTime.UtcNow,
-                                PreviousContent = previousContent
-                            });
-                            cached.Content = currentContent;
-                            _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, previousContent);
-                            Logger.Log(Tag, $"MSG EDIT: [{cached.AuthorName}] {Truncate(previousContent, 40)} -> {Truncate(currentContent, 40)}");
-                        }
-                    }
-                    _contentSnapshot[msgId] = currentContent;
-                }
+                _contentSnapshot[msgId] = content;
             }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"PollEdits error: {ex.Message}"); }
+    }
+
+    // ===== Phase 3: Visual — inject deleted message cards inline =====
+
+    /// <summary>
+    /// For each deleted message in the current channel, inject a red-tinted inline card
+    /// into the chat showing the preserved content. Cards are placed after the nearest
+    /// visible message by timestamp.
+    /// </summary>
+    private void InjectDeletedMessageCards(UprootedSettings settings)
+    {
+        if (!settings.MessageLoggerLogDeletes || _chatItemsControl == null) return;
+
+        // Find the VirtualizingStackPanel or Panel that holds message containers
+        object? messagePanel = FindMessagePanel();
+        if (messagePanel == null) return;
+
+        // Get deleted messages for current channel
+        foreach (var cached in _messageCache.Values)
+        {
+            if (!cached.IsDeleted || cached.ChannelId != _currentChannelId) continue;
+            if (cached.DeletedAt == null) continue;
+            if ((DateTime.UtcNow - cached.DeletedAt.Value).TotalHours > 24) continue;
+
+            var cardTag = $"uprooted-del:{cached.MessageId}";
+            if (_injectedCards.ContainsKey(cardTag)) continue;
+
+            var card = BuildDeletedMessageCard(cached, cardTag);
+            if (card == null) continue;
+
+            // Add to the message panel
+            _r.AddChild(messagePanel, card);
+            _injectedCards[cardTag] = card;
+        }
+
+        // Also apply edit indicators on visible messages
+        if (settings.MessageLoggerLogEdits)
+            ApplyEditIndicators();
+    }
+
+    /// <summary>
+    /// Build a red-tinted card that shows the deleted message content inline.
+    /// Content is immediately visible (no click-to-reveal).
+    /// Right-click context menu has "Clear message history".
+    /// </summary>
+    private object? BuildDeletedMessageCard(CachedMessage cached, string tag)
+    {
+        try
+        {
+            // Content stack: header + body
+            var stack = _r.CreateStackPanel(vertical: true, spacing: 2);
+            if (stack == null) return null;
+
+            // Author + timestamp header
+            var timeStr = cached.DeletedAt?.ToLocalTime().ToString("HH:mm") ?? "??:??";
+            var header = _r.CreateTextBlock($"[deleted] — {timeStr}", 11, "#FFCC4444", "SemiBold");
+            if (header != null) _r.AddChild(stack, header);
+
+            // Message content — immediately visible, red-tinted text
+            var body = _r.CreateTextBlock(cached.Content, 13, "#DDDDDD");
+            if (body != null)
+            {
+                _r.SetTextWrapping(body, "Wrap");
+                _r.AddChild(stack, body);
+            }
+
+            // Red semi-transparent border wrapping everything
+            var card = _r.CreateBorder("#30FF3333", cornerRadius: 4, child: stack);
+            if (card == null) return null;
+
+            _r.SetTag(card, tag);
+            _r.SetPadding(card, 12, 8, 12, 8);
+            _r.SetMargin(card, 56, 2, 16, 2); // Left margin to align with message content (past avatars)
+
+            // Right-click context menu: "Clear message history"
+            AttachContextMenu(card, cached);
+
+            return card;
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"PollMessageStates error: {ex.Message}");
+            Logger.Log(Tag, $"BuildCard error: {ex.Message}");
+            return null;
         }
     }
 
-    // ===== Phase 3: In-place Visual Indicators =====
+    /// <summary>
+    /// Attach a ContextMenu with "Clear message history" to a control.
+    /// When clicked, removes the persisted deleted message from cache and store,
+    /// and removes the visual card.
+    /// </summary>
+    private void AttachContextMenu(object card, CachedMessage cached)
+    {
+        try
+        {
+            ResolveContextMenuTypes();
+            if (_contextMenuType == null || _menuItemType == null) return;
+
+            // Create MenuItem
+            var menuItem = Activator.CreateInstance(_menuItemType);
+            if (menuItem == null) return;
+
+            // Set Header text
+            _menuItemType.GetProperty("Header")?.SetValue(menuItem, "Clear message history");
+
+            // Subscribe to Click event
+            var clickEvent = _menuItemType.GetEvent("Click");
+            if (clickEvent != null)
+            {
+                var capturedId = cached.MessageId;
+                var capturedCard = card;
+                var callback = new Action(() =>
+                {
+                    try
+                    {
+                        // Remove from cache
+                        _messageCache.Remove(capturedId);
+                        _store.RecordClear(capturedId);
+
+                        // Remove the visual card
+                        var parent = _r.GetParent(capturedCard);
+                        if (parent != null)
+                            RemoveChild(parent, capturedCard);
+
+                        var cardTag = $"uprooted-del:{capturedId}";
+                        _injectedCards.Remove(cardTag);
+
+                        Logger.Log(Tag, $"Cleared history: {capturedId}");
+                    }
+                    catch (Exception ex) { Logger.Log(Tag, $"Clear error: {ex.Message}"); }
+                });
+
+                // Build lambda: (sender, e) => callback()
+                var handlerType = clickEvent.EventHandlerType!;
+                var invokeMethod = handlerType.GetMethod("Invoke")!;
+                var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+                var sParam = Expression.Parameter(paramTypes[0], "s");
+                var eParam = Expression.Parameter(paramTypes[1], "e");
+                var invokeBody = Expression.Invoke(Expression.Constant(callback));
+                var lambda = Expression.Lambda(handlerType, invokeBody, sParam, eParam);
+                clickEvent.AddEventHandler(menuItem, lambda.Compile());
+            }
+
+            // Create ContextMenu and add the MenuItem
+            var contextMenu = Activator.CreateInstance(_contextMenuType);
+            if (contextMenu == null) return;
+
+            // ContextMenu.Items is an ItemCollection — use Add method
+            var itemsProp = _contextMenuType.GetProperty("Items");
+            var itemsObj = itemsProp?.GetValue(contextMenu);
+            if (itemsObj != null)
+            {
+                var addMethod = itemsObj.GetType().GetMethod("Add", new[] { typeof(object) });
+                addMethod?.Invoke(itemsObj, new[] { menuItem });
+            }
+
+            // Set ContextMenu on the card
+            card.GetType().GetProperty("ContextMenu")?.SetValue(card, contextMenu);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"ContextMenu error: {ex.Message}");
+        }
+    }
+
+    private void ResolveContextMenuTypes()
+    {
+        if (_contextMenuTypesResolved) return;
+        _contextMenuTypesResolved = true;
+
+        // Find types from Avalonia.Controls assembly
+        var controlsAsm = _r.ControlType?.Assembly;
+        if (controlsAsm == null) return;
+
+        _contextMenuType = controlsAsm.GetType("Avalonia.Controls.ContextMenu");
+        _menuItemType = controlsAsm.GetType("Avalonia.Controls.MenuItem");
+
+        Logger.Log(Tag, $"ContextMenu types: menu={_contextMenuType != null}, item={_menuItemType != null}");
+    }
 
     /// <summary>
-    /// Walk visible message containers and apply in-place background tinting.
-    /// Deleted messages get a semi-transparent red background.
-    /// Edited messages get a subtle "(edited)" indicator.
-    /// Unlike Vencord's CSS class, we set the Background brush via reflection.
+    /// Apply "(edited)" text indicators on visible messages that have edit history.
     /// </summary>
-    private void ApplyVisualIndicators(UprootedSettings settings)
+    private void ApplyEditIndicators()
     {
-        if (_chatItemsControl == null || _currentItemsSource == null) return;
+        if (_chatItemsControl == null) return;
 
-        // Walk the visual children of the chat items control to find message containers
         foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
         {
-            // Look for the per-message container (typically a ContentPresenter or Panel with DC=MessageViewModel)
-            object? dc = null;
-            try
-            {
-                dc = node.GetType()
-                    .GetProperty("DataContext", BindingFlags.Public | BindingFlags.Instance)
-                    ?.GetValue(node);
-            }
-            catch { }
-
+            object? dc = ReadDC(node);
             if (dc == null || _messageItemType == null || !_messageItemType.IsAssignableFrom(dc.GetType()))
                 continue;
 
             var msgId = ReadMessageId(dc);
             if (msgId == null) continue;
             if (!_messageCache.TryGetValue(msgId, out var cached)) continue;
+            if (cached.Edits.Count == 0) continue;
 
-            // --- Deleted: red background tint ---
-            if (settings.MessageLoggerLogDeletes && cached.IsDeleted)
+            // Find RootMarkdownTextBlock to inject sibling
+            object? mdBlock = null;
+            foreach (var child in _walker.DescendantsDepthFirst(node))
             {
-                if (!_tintedDeletedIds.Contains(msgId))
-                {
-                    ApplyDeletedTint(node, cached);
-                    _tintedDeletedIds.Add(msgId);
-                }
+                if (child.GetType().Name == "RootMarkdownTextBlock")
+                { mdBlock = child; break; }
             }
+            if (mdBlock == null) continue;
 
-            // --- Edited: inject small "(edited)" text ---
-            if (settings.MessageLoggerLogEdits && cached.Edits.Count > 0)
-            {
-                if (!_tintedEditedIds.Contains(msgId))
-                {
-                    ApplyEditedIndicator(node, cached);
-                    _tintedEditedIds.Add(msgId);
-                }
-            }
-        }
-    }
+            var parent = _r.GetParent(mdBlock);
+            if (parent == null) continue;
 
-    /// <summary>
-    /// Apply a red semi-transparent background to the message's container element.
-    /// Works by finding the nearest Border or Panel ancestor and setting its Background.
-    /// </summary>
-    private void ApplyDeletedTint(object messageElement, CachedMessage cached)
-    {
-        try
-        {
-            // Walk up to find a Border or the message root element we can tint
-            var target = messageElement;
-            for (int i = 0; i < 5; i++)
-            {
-                var parent = _r.GetParent(target);
-                if (parent == null) break;
-
-                var parentName = parent.GetType().Name;
-                // Stop at the message-level container (Border, Grid, or ContentPresenter)
-                if (parentName == "Border" || parentName == "ContentPresenter" ||
-                    (parentName == "Grid" && _r.IsGrid(parent)))
-                {
-                    target = parent;
-                    break;
-                }
-                target = parent;
-            }
-
-            // Set Background to semi-transparent red
-            _r.SetBackground(target, "#20FF4444");
-
-            Logger.Log(Tag, $"Tinted deleted: {Truncate(cached.Content, 40)}");
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"ApplyDeletedTint error: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Add a small "(edited Nx)" text after the message content.
-    /// Finds the CTextBlock/RootMarkdownTextBlock and adds a sibling.
-    /// </summary>
-    private void ApplyEditedIndicator(object messageElement, CachedMessage cached)
-    {
-        try
-        {
-            // Find the RootMarkdownTextBlock or CTextBlock within this message element
-            object? textBlock = null;
-            foreach (var child in _walker.DescendantsDepthFirst(messageElement))
-            {
-                var childName = child.GetType().Name;
-                if (childName == "RootMarkdownTextBlock" || childName == "CTextBlock")
-                {
-                    textBlock = child;
-                    break;
-                }
-            }
-
-            if (textBlock == null) return;
-
-            // Find the parent container to add the indicator as a sibling
-            var parent = _r.GetParent(textBlock);
-            if (parent == null) return;
-
-            var editTag = $"uprooted-edited:{cached.MessageId}";
-
-            // Check if already injected
+            var editTag = $"uprooted-edit:{cached.MessageId}";
             var children = _r.GetChildren(parent);
             if (children != null)
             {
+                bool exists = false;
                 foreach (var c in children)
-                    if (c != null && _r.GetTag(c) == editTag) return;
+                    if (c != null && _r.GetTag(c) == editTag) { exists = true; break; }
+                if (exists) continue;
             }
 
             var editCount = cached.Edits.Count;
-            var editLabel = _r.CreateTextBlock(
+            var label = _r.CreateTextBlock(
                 $"(edited{(editCount > 1 ? $" {editCount}x" : "")})",
                 10, "#88FF9999");
-            if (editLabel == null) return;
-
-            _r.SetTag(editLabel, editTag);
-            _r.SetMargin(editLabel, 4, 0, 0, 0);
-
-            // Try to add as sibling in the parent
-            if (_r.IsGrid(parent))
-            {
-                // Add in same row/column as the text block
-                int row = _r.GetGridRow(textBlock);
-                int col = _r.GetGridColumn(textBlock);
-                _r.SetGridRow(editLabel, row);
-                _r.SetGridColumn(editLabel, col);
-                _r.AddChild(parent, editLabel);
-            }
-            else
-            {
-                _r.AddChild(parent, editLabel);
-            }
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"ApplyEditedIndicator error: {ex.Message}");
+            if (label == null) continue;
+            _r.SetTag(label, editTag);
+            _r.SetMargin(label, 4, 2, 0, 0);
+            _r.AddChild(parent, label);
         }
     }
 
-    // ===== Message Property Readers =====
+    /// <summary>
+    /// Find the panel that holds message containers (VirtualizingStackPanel or similar).
+    /// </summary>
+    private object? FindMessagePanel()
+    {
+        if (_chatItemsControl == null) return null;
+
+        // Walk children of the ItemsControl to find the items host panel
+        foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
+        {
+            var name = node.GetType().Name;
+            if (name.Contains("VirtualizingStackPanel") || name.Contains("StackPanel"))
+            {
+                // Make sure it has message items as children
+                int childCount = _r.GetChildCount(node);
+                if (childCount >= 1) return node;
+            }
+        }
+        return null;
+    }
+
+    private void ClearInjectedCards()
+    {
+        foreach (var (tag, card) in _injectedCards)
+        {
+            try
+            {
+                var parent = _r.GetParent(card);
+                if (parent != null) RemoveChild(parent, card);
+            }
+            catch { }
+        }
+        _injectedCards.Clear();
+    }
+
+    // ===== Message helpers =====
+
+    private void CacheMessage(object item, string msgId)
+    {
+        if (_messageCache.ContainsKey(msgId)) return;
+        var cached = ExtractCachedMessage(item, msgId);
+        if (cached != null)
+        {
+            _messageCache[msgId] = cached;
+            _store.RecordMessage(cached.MessageId, cached.ChannelId,
+                cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
+        }
+    }
 
     private object? GetMessageTarget(object item)
     {
@@ -913,55 +868,87 @@ internal class MessageLogger
     private string? ReadMessageId(object item)
     {
         if (_propMessageId == null) return null;
-        var target = GetMessageTarget(item);
-        if (target == null) return null;
-        try { return _propMessageId.GetValue(target)?.ToString(); }
+        var t = GetMessageTarget(item);
+        if (t == null) return null;
+        try { return _propMessageId.GetValue(t)?.ToString(); }
         catch { return null; }
     }
 
     private string? ReadContent(object item)
     {
         if (_propContent == null) return null;
-        var target = GetMessageTarget(item);
-        if (target == null) return null;
-        try { return _propContent.GetValue(target) as string; }
+        var t = GetMessageTarget(item);
+        if (t == null) return null;
+        try { return _propContent.GetValue(t) as string; }
         catch { return null; }
     }
 
     private CachedMessage? ExtractCachedMessage(object item, string msgId)
     {
-        var target = GetMessageTarget(item);
-        if (target == null) return null;
-
+        var t = GetMessageTarget(item);
+        if (t == null) return null;
         try
         {
-            DateTime timestamp = DateTime.UtcNow;
+            DateTime ts = DateTime.UtcNow;
             if (_propTimestamp != null)
             {
-                var tsValue = _propTimestamp.GetValue(target);
-                if (tsValue is DateTimeOffset dto) timestamp = dto.UtcDateTime;
-                else if (tsValue is DateTime dt) timestamp = dt;
+                var v = _propTimestamp.GetValue(t);
+                if (v is DateTimeOffset dto) ts = dto.UtcDateTime;
+                else if (v is DateTime dt) ts = dt;
             }
-
             return new CachedMessage
             {
                 MessageId = msgId,
                 ChannelId = _currentChannelId,
-                AuthorId = _propAuthorId != null
-                    ? (_propAuthorId.GetValue(target)?.ToString() ?? "") : "",
-                AuthorName = "Unknown", // Will be resolved from visual tree later
-                Timestamp = timestamp,
+                AuthorId = _propAuthorId != null ? (_propAuthorId.GetValue(t)?.ToString() ?? "") : "",
+                AuthorName = "Unknown",
+                Timestamp = ts,
                 Content = ReadContent(item) ?? ""
             };
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"ExtractCachedMessage error: {ex.Message}");
+            Logger.Log(Tag, $"Extract error: {ex.Message}");
             return null;
         }
     }
 
     // ===== Utility =====
+
+    private static object? ReadDC(object control)
+    {
+        try
+        {
+            return control.GetType()
+                .GetProperty("DataContext", BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(control);
+        }
+        catch { return null; }
+    }
+
+    private static object? ReadItemsSource(object control)
+    {
+        try
+        {
+            return control.GetType()
+                .GetProperty("ItemsSource", BindingFlags.Public | BindingFlags.Instance)
+                ?.GetValue(control)
+                ?? control.GetType()
+                    .GetProperty("Items", BindingFlags.Public | BindingFlags.Instance)
+                    ?.GetValue(control);
+        }
+        catch { return null; }
+    }
+
+    private void RemoveChild(object parent, object child)
+    {
+        try
+        {
+            var children = parent.GetType().GetProperty("Children")?.GetValue(parent);
+            children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { child });
+        }
+        catch { }
+    }
 
     private bool IsDescendantOf(object node, object ancestor)
     {

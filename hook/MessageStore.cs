@@ -81,6 +81,15 @@ internal class MessageStore
         }
     }
 
+    internal void RecordClear(string msgId)
+    {
+        var line = $"CLR|{Enc(msgId)}";
+        lock (WriteLock)
+        {
+            _writeBuffer.Add(line);
+        }
+    }
+
     /// <summary>
     /// Load all records from disk into the in-memory cache.
     /// </summary>
@@ -137,6 +146,13 @@ internal class MessageStore
                             delMsg.DeletedAt = DateTime.TryParse(parts[3], null,
                                 System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : DateTime.UtcNow;
                         }
+                        break;
+                    }
+
+                    case "CLR" when parts.Length >= 2:
+                    {
+                        var clrMsgId = Dec(parts[1]);
+                        cache.Remove(clrMsgId);
                         break;
                     }
                 }

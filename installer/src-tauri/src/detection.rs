@@ -44,13 +44,15 @@ pub fn get_root_exe_path() -> PathBuf {
 #[cfg(target_os = "linux")]
 pub fn get_root_exe_path() -> PathBuf {
     let home = std::env::var("HOME").unwrap_or_default();
-    // Search common locations for Root.AppImage
+
+    // 1. Exact well-known paths (fastest)
     let candidates = [
         format!("{}/Applications/Root.AppImage", home),
         format!("{}/Downloads/Root.AppImage", home),
         format!("{}/.local/bin/Root.AppImage", home),
         "/opt/Root.AppImage".to_string(),
         "/usr/bin/Root.AppImage".to_string(),
+        format!("{}/.local/bin/Root", home),
     ];
     for c in &candidates {
         let p = PathBuf::from(c);
@@ -58,11 +60,109 @@ pub fn get_root_exe_path() -> PathBuf {
             return p;
         }
     }
-    // Also check if a plain "Root" binary exists (extracted AppImage)
-    let local_root = PathBuf::from(&home).join(".local/bin/Root");
-    if local_root.exists() {
-        return local_root;
+
+    // 2. Glob for variant filenames (versioned, renamed) in common dirs
+    let search_dirs = [
+        format!("{}/Applications", home),
+        format!("{}/Downloads", home),
+        format!("{}/.local/bin", home),
+        format!("{}/Desktop", home),
+        home.clone(),
+        "/opt".to_string(),
+        "/usr/bin".to_string(),
+        "/usr/local/bin".to_string(),
+    ];
+    for dir in &search_dirs {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let name = entry.file_name().to_string_lossy().to_lowercase();
+                if name.starts_with("root") && name.ends_with(".appimage") {
+                    let p = entry.path();
+                    if p.is_file() {
+                        return p;
+                    }
+                }
+            }
+        }
     }
+
+    // 3. Search .desktop files for Root's Exec= path
+    let desktop_dirs = [
+        format!("{}/.local/share/applications", home),
+        "/usr/share/applications".to_string(),
+        "/usr/local/share/applications".to_string(),
+    ];
+    for dir in &desktop_dirs {
+        if let Ok(entries) = fs::read_dir(dir) {
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) != Some("desktop") {
+                    continue;
+                }
+                let fname = entry.file_name().to_string_lossy().to_lowercase();
+                if let Ok(content) = fs::read_to_string(&path) {
+                    let has_root_name = content.lines().any(|l| {
+                        l.starts_with("Name=")
+                            && l.to_lowercase().contains("root")
+                    });
+                    if !has_root_name && !fname.contains("root") {
+                        continue;
+                    }
+                    for line in content.lines() {
+                        if let Some(exec) = line.strip_prefix("Exec=") {
+                            // Strip field codes like %f, %u, etc.
+                            let exec_path = exec
+                                .split_whitespace()
+                                .next()
+                                .unwrap_or("")
+                                .to_string();
+                            let p = PathBuf::from(&exec_path);
+                            if p.is_file() {
+                                return p;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // 4. Check running Root processes via /proc
+    if let Ok(entries) = fs::read_dir("/proc") {
+        for entry in entries.flatten() {
+            let fname = entry.file_name();
+            let fname_str = fname.to_string_lossy();
+            if !fname_str.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
+            let exe_link = entry.path().join("exe");
+            if let Ok(exe) = fs::read_link(&exe_link) {
+                let exe_str = exe.to_string_lossy().to_lowercase();
+                if (exe_str.contains("root") && exe_str.contains("appimage"))
+                    || exe_str.ends_with("/root")
+                {
+                    if exe.is_file() {
+                        return exe;
+                    }
+                }
+            }
+        }
+    }
+
+    // 5. PATH lookup
+    if let Ok(output) = std::process::Command::new("which")
+        .arg("Root")
+        .output()
+    {
+        if output.status.success() {
+            let path_str = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let p = PathBuf::from(&path_str);
+            if p.is_file() {
+                return p;
+            }
+        }
+    }
+
     // Default fallback
     PathBuf::from(format!("{}/Applications/Root.AppImage", home))
 }
