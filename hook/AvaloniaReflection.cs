@@ -1064,7 +1064,8 @@ internal class AvaloniaReflection
     public IList? GetChildren(object? panel)
     {
         if (panel == null) return null;
-        return _panelChildren?.GetValue(panel) as IList;
+        try { return _panelChildren?.GetValue(panel) as IList; }
+        catch { return null; } // non-Panel types (ItemsControl, etc.) don't have Panel.Children
     }
 
     public void AddChild(object? panel, object? child)

@@ -73,53 +73,41 @@ internal class HtmlPatchVerifier : IDisposable
     }
 
     /// <summary>
-    /// Start FileSystemWatchers on WebRtcBundle/ and RootApps/ to detect overwrites.
+    /// Start FileSystemWatchers on directories containing patched HTML files.
     /// Falls back to periodic polling if FileSystemWatcher is unavailable
-    /// (e.g. .NET trimming removes it in single-file deployments).
+    /// (e.g. MissingMethodException in .NET profiler/single-file context).
     /// </summary>
     internal void StartWatching()
     {
-        var dirsToWatch = new List<string>();
+        // Only watch directories that actually contain target HTML files
+        var dirsToWatch = FindTargetHtmlFiles()
+            .Select(Path.GetDirectoryName)
+            .Where(d => d != null)
+            .Distinct()
+            .ToList();
 
-        var webRtcDir = Path.Combine(_profileDir, "WebRtcBundle");
-        if (Directory.Exists(webRtcDir))
-            dirsToWatch.Add(webRtcDir);
-
-        var rootAppsDir = Path.Combine(_profileDir, "RootApps");
-        if (Directory.Exists(rootAppsDir))
+        if (dirsToWatch.Count == 0)
         {
-            foreach (var appDir in Directory.GetDirectories(rootAppsDir))
-                dirsToWatch.Add(appDir);
+            Logger.Log("HtmlPatch", "No HTML directories to watch");
+            return;
         }
 
-        var hostBundleDir = Path.Combine(_profileDir, "HostBundle");
-        if (Directory.Exists(hostBundleDir))
-            dirsToWatch.Add(hostBundleDir);
-
-        // Try FileSystemWatcher for each directory individually
-        var fswFailed = false;
+        // Try FSW on first directory; if it fails, skip the rest (same MissingMethodException)
         foreach (var dir in dirsToWatch)
         {
             try
             {
-                AddWatcher(dir);
+                AddWatcher(dir!);
             }
             catch (Exception ex)
             {
-                Logger.Log("HtmlPatch", $"FileSystemWatcher failed for {Path.GetFileName(dir)}: {ex.Message}");
-                fswFailed = true;
+                Logger.Log("HtmlPatch", $"FileSystemWatcher unavailable ({ex.GetType().Name}), using poll fallback (30s)");
+                _pollTimer = new Timer(PollPatchCheck, null, 10_000, 30_000);
+                return;
             }
         }
 
-        if (_watchers.Count > 0)
-            Logger.Log("HtmlPatch", $"FileSystemWatcher active on {_watchers.Count} director(ies)");
-
-        // Fall back to periodic polling if FSW failed for any directory
-        if (fswFailed || _watchers.Count == 0)
-        {
-            _pollTimer = new Timer(PollPatchCheck, null, 10_000, 30_000);
-            Logger.Log("HtmlPatch", "Using poll fallback (30s interval) for directories without FSW");
-        }
+        Logger.Log("HtmlPatch", $"FileSystemWatcher active on {_watchers.Count} director(ies)");
     }
 
     public void Dispose()

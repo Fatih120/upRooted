@@ -35,11 +35,11 @@ internal class BrowserDiscovery
         Logger.Log(Tag, "=== Browser Discovery Scan Start ===");
         Logger.Log(Tag, "========================================");
 
-        try { DumpBrowserAssemblies(); } catch (Exception ex) { Logger.Log(Tag, $"Assembly scan error: {ex.Message}"); }
-        try { DumpAllAssemblySummary(); } catch (Exception ex) { Logger.Log(Tag, $"Assembly summary error: {ex.Message}"); }
-        try { DumpVisualTreeBrowserControls(); } catch (Exception ex) { Logger.Log(Tag, $"Visual tree scan error: {ex.Message}"); }
-        try { DumpChatAreaStructure(); } catch (Exception ex) { Logger.Log(Tag, $"Chat area scan error: {ex.Message}"); }
-        try { CheckPreloadBeacon(); } catch (Exception ex) { Logger.Log(Tag, $"Preload beacon error: {ex.Message}"); }
+        try { DumpBrowserAssemblies(); } catch (Exception ex) { Logger.Log(Tag, $"Assembly scan error [{ex.GetType().Name}]: {ex.Message}"); }
+        try { DumpAllAssemblySummary(); } catch (Exception ex) { Logger.Log(Tag, $"Assembly summary error [{ex.GetType().Name}]: {ex.Message}"); }
+        try { DumpVisualTreeBrowserControls(); } catch (Exception ex) { Logger.Log(Tag, $"Visual tree scan error [{ex.GetType().Name}]: {ex.Message}"); }
+        try { DumpChatAreaStructure(); } catch (Exception ex) { Logger.Log(Tag, $"Chat area scan error [{ex.GetType().Name}]: {ex.Message}"); }
+        try { CheckPreloadBeacon(); } catch (Exception ex) { Logger.Log(Tag, $"Preload beacon error [{ex.GetType().Name}]: {ex.Message}"); }
 
         Logger.Log(Tag, "========================================");
         Logger.Log(Tag, "=== Browser Discovery Scan Complete ===");
@@ -90,16 +90,9 @@ internal class BrowserDiscovery
                         Logger.Log(Tag, $"      {type.FullName} (interface={type.IsInterface}, abstract={type.IsAbstract})");
                     }
                 }
-                catch (ReflectionTypeLoadException rtle)
+                catch (Exception typeEx)
                 {
-                    Logger.Log(Tag, $"    TypeLoadException: {rtle.LoaderExceptions.Length} loader errors");
-                    var loaded = rtle.Types.Where(t => t != null).ToList();
-                    Logger.Log(Tag, $"    Partially loaded {loaded.Count} types");
-                    foreach (var type in loaded)
-                    {
-                        if (type != null && (type.IsPublic || type.IsNestedPublic))
-                            Logger.Log(Tag, $"      {type.FullName}");
-                    }
+                    Logger.Log(Tag, $"    {typeEx.GetType().Name}: {typeEx.Message}");
                 }
             }
             catch { }
@@ -294,25 +287,30 @@ internal class BrowserDiscovery
 
         foreach (var (container, typeName, path) in interestingContainers)
         {
-            var childCount = _r.GetChildCount(container);
-            Logger.Log(Tag, $"  Container: {typeName} ({childCount} children)");
-            Logger.Log(Tag, $"    Path: {path}");
-
-            // Log the first few children's types
-            var children = _r.GetVisualChildren(container).Take(5).ToList();
-            foreach (var child in children)
+            try
             {
-                var childTypeName = child.GetType().Name;
-                var text = _r.IsTextBlock(child) ? $" Text=\"{Truncate(_r.GetText(child), 60)}\"" : "";
-                Logger.Log(Tag, $"    Child: {childTypeName}{text}");
+                var children = _r.GetVisualChildren(container).Take(5).ToList();
+                Logger.Log(Tag, $"  Container: {typeName} ({children.Count}+ children)");
+                Logger.Log(Tag, $"    Path: {path}");
 
-                // One level deeper
-                foreach (var grandchild in _r.GetVisualChildren(child).Take(3))
+                foreach (var child in children)
                 {
-                    var gcType = grandchild.GetType().Name;
-                    var gcText = _r.IsTextBlock(grandchild) ? $" Text=\"{Truncate(_r.GetText(grandchild), 60)}\"" : "";
-                    Logger.Log(Tag, $"      {gcType}{gcText}");
+                    var childTypeName = child.GetType().Name;
+                    var text = _r.IsTextBlock(child) ? $" Text=\"{Truncate(_r.GetText(child), 60)}\"" : "";
+                    Logger.Log(Tag, $"    Child: {childTypeName}{text}");
+
+                    // One level deeper
+                    foreach (var grandchild in _r.GetVisualChildren(child).Take(3))
+                    {
+                        var gcType = grandchild.GetType().Name;
+                        var gcText = _r.IsTextBlock(grandchild) ? $" Text=\"{Truncate(_r.GetText(grandchild), 60)}\"" : "";
+                        Logger.Log(Tag, $"      {gcType}{gcText}");
+                    }
                 }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"  Container: {typeName} (scan failed: {ex.Message})");
             }
         }
 
