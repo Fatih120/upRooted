@@ -10,13 +10,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 - **MessageLogger plugin** (WIP) — logs deleted messages in Avalonia-native chat with visual indicators
-  - Deletion detection via `ObservableCollection.CollectionChanged` Remove events (event-based, not polling); buffered per-tick with debounce (10+ removes = channel switch → discard)
-  - Diagnostic instrumentation: probes `HasBeenDeleted` property on removed items, tracks Add/Remove correlation per flush window, logs remove indices, one-time boolean property dump on first Remove event
-  - Post-subscription settling filter: messages present at subscription time (`_initialSnapshotIds`) protected from false-positive removes for 30s; messages arriving via Add events trusted immediately with zero delay
+  - Per-item async deletion pollers: each removed item is polled for `HasBeenDeleted` every 300ms for 3s; true = genuine deletion, false = buffer management (discard)
+  - Epoch-based channel switch cancellation: pollers check birth epoch against current and self-cancel when stale
   - Per-type property cache (`Dictionary<Type, TypeProps>`) handles multiple ViewModel types with nested `.Message` bridge property resolution
+  - Diagnostic instrumentation: DIAG-INJ/DIAG-FLUSH logging, boolean property dump, collection size tracking
   - Deleted messages re-injected as Discord-style full-width red-tinted background stripes with 3px red left accent border, right-click "Clear message history" context menu
-  - Channel switch handling: bulk remove detection, control freshness check every ~7.5s for `RootMessageItemsControl` instance swaps
   - Edit detection: disabled (false positives from content changes during send/render — needs redesign)
+  - Analysis tool: `scripts/analyze-msglogger.ps1` parses hook log for MsgLogger/DIAG entries
   - Files: `hook/MessageLogger.cs`, `hook/MessageStore.cs`
 - **MessageStore** — flat-file persistence for message log data
   - Pipe-delimited append-only format (`MSG|EDIT|DEL` record types) with URI-encoded fields
@@ -66,7 +66,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Version bumped to `0.3.6-rc` across all components (Cargo.toml, PKGBUILD, installer scripts)
 
 ### Fixed
-- Cargo.toml version format: `0.3.6rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
+- Cargo.toml version format: `0.3.6-rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
 - **SidebarInjector**: UPROOTED section header spacing now matches Root's native section categories (16px top margin on container, -4px bottom margin on header wrapper)
 - **SidebarInjector**: switching from Uprooted tabs back to Root tabs is now instant (subscribed `ListBox.SelectionChanged` instead of waiting for 200ms timer poll)
 - **ProfileBadgeInjector**: fixed `double?` to `double` implicit conversion error in username font size comparison

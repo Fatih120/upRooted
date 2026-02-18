@@ -20,7 +20,7 @@
 - **Auto-updater** — in-process update checker that polls GitHub releases, downloads a single encrypted package, decrypts and unpacks to a staging directory, verifies integrity, then overwrites in-place. Changes take effect on next Root restart.
   - Periodic background checks (every 6 hours, throttled by last-check timestamp)
   - Manual "Check for Updates" button in About → UPDATES card
-  - Version comparison supporting pre-release suffixes (e.g. `0.3.6rc` < `0.3.6`)
+  - Version comparison supporting pre-release suffixes (e.g. `0.3.6-rc` < `0.3.6`)
   - HTTP via reflection (same trimming-safe pattern as LinkEmbedEngine)
   - Settings: auto-check toggle, notification toggle, persisted last-check timestamp
   - Encrypted `.uprpkg` package format — all 6 update files bundled into a single binary with multi-layer XOR encryption (64-byte master key + per-build 32-byte nonce + position-dependent derivation)
@@ -36,10 +36,10 @@
   - Channel preference persisted in settings (`AutoUpdate.Channel`)
 - **Reusable settings toggle component** — `BuildSettingsToggle` in ContentPages for any boolean plugin setting (pill toggle with label + description)
 - **TUI installer mode selector** — running the installer without `--uninstall`/`--repair`/`--plain` flags now shows an interactive menu with arrow key navigation (Install / Uninstall / Repair)
-- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popups
+- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay when update channel is set to Developer; event-driven detection via OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups; badge gated to hardcoded developer usernames
   - Heuristic popup detection: avatar Image/Ellipse + username TextBlock + "Roles" header
   - Diagnostic tree dump on first popup detection (logged to uprooted-hook.log) for iterative refinement
-  - New file: `hook/ProfileBadgeInjector.cs`, Phase 4.5e in `StartupHook.cs` (25s delay)
+  - New file: `hook/ProfileBadgeInjector.cs`, Phase 4.5e in `StartupHook.cs` (5s delay)
 - **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
 - **ClearURLs engine** — strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor when the user presses Enter to send
   - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` with `AddHandler(RoutedEvent, …, handledEventsToo: true)` and all routing strategies — required because AvaloniaEdit marks Enter `Handled=true`

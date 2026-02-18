@@ -51,7 +51,7 @@ Two independent injection layers into one app:
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 2112 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
-| `MessageLogger.cs` | ~1322 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
+| `MessageLogger.cs` | ~1624 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, Discord-style deleted message rows, diagnostic instrumentation |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `AutoUpdater.cs` | ~810 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare) |
@@ -127,7 +127,7 @@ Two independent injection layers into one app:
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
 - ClearURLs plugin: strips tracking params (utm_source, fbclid, gclid, si, etc.) from URLs on send via AvaloniaEdit TextArea routed event interception
-- MessageLogger plugin (WIP): event-based deletion detection via CollectionChanged Remove events, per-type ViewModel property cache, post-subscription settling filter, Discord-style deleted message rows (red-tinted stripe + left accent), channel switch handling, flat-file persistence (MessageStore.cs), settings UI with toggle pills. Edit detection disabled pending reliability fix.
+- MessageLogger plugin (WIP): per-item async deletion pollers (HasBeenDeleted probe every 300ms for 3s), epoch-based channel switch cancellation, per-type ViewModel property cache, Discord-style deleted message rows (red-tinted stripe + left accent), flat-file persistence (MessageStore.cs), settings UI with toggle pills, diagnostic analysis script (`scripts/analyze-msglogger.ps1`). Edit detection disabled pending reliability fix.
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
 - AutoUpdater: encrypted `.uprpkg` package download (single file replaces 6 individual artifacts), multi-layer XOR decryption, developer channel with encrypted PAT, staging + verify + overwrite
@@ -147,7 +147,7 @@ Two independent injection layers into one app:
 **Known issues:**
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
-- MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); deletion detection relies on Remove events which may need tuning for new Root behaviors
+- MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); async deletion pollers (HasBeenDeleted) need real-world validation
 - ProfileBadgeInjector: `IsProfilePopup` heuristic may false-positive on non-profile popups — needs tree dump log analysis to refine
 
 ## 7. Build Commands
