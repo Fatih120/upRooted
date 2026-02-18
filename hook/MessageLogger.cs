@@ -62,7 +62,12 @@ internal class MessageLogger
 
     // Deletion detection via CollectionChanged Remove events (buffered + debounced)
     private readonly List<BufferedRemove> _pendingRemoves = new();
-    private int _cooldownTicksRemaining; // suppress removes after channel switch / subscription
+
+    // Post-subscription settling filter: messages in the initial snapshot may be removed
+    // by Root's buffer management within ~30s of subscribing. Messages that arrive AFTER
+    // subscription (via Add events) are always trusted immediately.
+    private HashSet<string> _initialSnapshotIds = new();
+    private DateTime _lastSubscriptionTime = DateTime.MinValue;
 
     private struct BufferedRemove
     {
@@ -608,11 +613,8 @@ internal class MessageLogger
             _collectionChangedHandler = handler;
             _collectionChangedEvent = ev;
             _subscribed = true;
-            // Suppress removes for ~15s after subscription — Root adjusts its buffer
-            // after loading a channel (backfill removes are NOT real deletions).
-            _cooldownTicksRemaining = 10;
             _pendingRemoves.Clear();
-            Logger.Log(Tag, "Subscribed to CollectionChanged (cooldown=10 ticks)");
+            Logger.Log(Tag, "Subscribed to CollectionChanged");
         }
         catch (Exception ex)
         {
@@ -635,7 +637,7 @@ internal class MessageLogger
         if (!_propertiesResolved) return;
         try
         {
-            int count = 0;
+            var snapshotIds = new HashSet<string>();
             var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
             if (en == null) return;
             while (en.MoveNext())
@@ -646,9 +648,14 @@ internal class MessageLogger
                 if (msgId == null) continue;
                 _contentSnapshot[msgId] = ReadContent(item) ?? "";
                 CacheMessage(item, msgId);
-                count++;
+                snapshotIds.Add(msgId);
             }
-            Logger.Log(Tag, $"Snapshot: {count} messages cached");
+            // Record which messages were present at subscription time.
+            // Root may settle its buffer by removing these shortly after subscription.
+            // Messages arriving AFTER this point (via Add events) are always trusted.
+            _initialSnapshotIds = snapshotIds;
+            _lastSubscriptionTime = DateTime.UtcNow;
+            Logger.Log(Tag, $"Snapshot: {snapshotIds.Count} messages cached");
         }
         catch (Exception ex) { Logger.Log(Tag, $"Snapshot error: {ex.Message}"); }
     }
@@ -734,18 +741,19 @@ internal class MessageLogger
     /// <summary>
     /// Process buffered Remove events from CollectionChanged. Called each tick.
     ///
-    /// Debounce logic based on log analysis of real Root behavior:
-    ///   - Real deletion: 1 Remove event, followed ~1ms later by 1 Add (history backfill)
-    ///   - Channel switch: Many Remove events burst within &lt;1ms (or a Reset event)
-    ///   - Buffer trim: NOT observed during normal use
-    ///
-    /// Rule: 3+ buffered removes since last tick = channel switch (discard).
-    ///        1-2 removes = real deletions.
+    /// Filtering strategy:
+    ///   3+ removes in one tick = channel switch (discard all).
+    ///   1-2 removes: check each against the initial snapshot. Messages that were
+    ///   present when we subscribed may be removed by Root's buffer settling (within
+    ///   30s of subscription). Messages that arrived AFTER subscription (via Add events)
+    ///   are always trusted as real deletions immediately — no delay.
     /// </summary>
     private void FlushPendingRemoves(UprootedSettings settings)
     {
-        // Decrement cooldown (counts down even with no removes)
-        if (_cooldownTicksRemaining > 0) _cooldownTicksRemaining--;
+        // Expire the settling filter after 30 seconds
+        if (_initialSnapshotIds.Count > 0 &&
+            (DateTime.UtcNow - _lastSubscriptionTime).TotalSeconds > 30)
+            _initialSnapshotIds.Clear();
 
         if (_pendingRemoves.Count == 0) return;
         if (!settings.MessageLoggerLogDeletes)
@@ -756,18 +764,8 @@ internal class MessageLogger
 
         int count = _pendingRemoves.Count;
 
-        // During cooldown after subscription, suppress all removes (Root is still loading/settling)
-        if (_cooldownTicksRemaining > 0)
-        {
-            Logger.Log(Tag, $"Cooldown: discarding {count} remove(s) ({_cooldownTicksRemaining} ticks left)");
-            _pendingRemoves.Clear();
-            return;
-        }
-
         if (count >= 3)
         {
-            // Bulk removes = channel switch or collection rebuild.
-            // The Reset handler or freshness check will handle re-discovery.
             Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding");
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
@@ -775,9 +773,20 @@ internal class MessageLogger
             return;
         }
 
-        // 1-2 removes = real deletions
+        // 1-2 removes — check each individually
         foreach (var removed in _pendingRemoves)
         {
+            // Skip settling removes: messages from the initial subscription snapshot
+            // that Root is trimming as it settles the buffer after loading a channel.
+            // Messages that arrived AFTER subscription (via Add events) are NOT in
+            // _initialSnapshotIds and are always processed immediately.
+            if (_initialSnapshotIds.Contains(removed.MessageId))
+            {
+                Logger.Log(Tag, $"Settling: skip snapshot msg ({Truncate(removed.Content, 40)})");
+                _contentSnapshot.Remove(removed.MessageId);
+                continue;
+            }
+
             _contentSnapshot.Remove(removed.MessageId);
 
             if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
@@ -789,7 +798,6 @@ internal class MessageLogger
             }
             else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
             {
-                // Message wasn't in cache yet (e.g. sent and immediately deleted before cache)
                 var newCached = new CachedMessage
                 {
                     MessageId = removed.MessageId,

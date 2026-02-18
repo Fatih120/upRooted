@@ -73,6 +73,12 @@ Next release. Focused on completing core functionality that is currently stubbed
 ### ~~Fix C# settings persistence~~ (DONE)
 INI-based `UprootedSettings` is fully implemented. The hook layer reads and writes `uprooted-settings.ini` with key=value pairs for theme, plugins, custom colors, etc.
 
+### Complete MessageLogger plugin
+The MessageLogger plugin (Phase 4.5c) has working deletion detection via `CollectionChanged` Remove events with a snapshot-based settling filter to eliminate false positives. Still needed:
+- **Edit detection**: Currently disabled due to false positives. Need a reliable approach that doesn't trigger on content changes during message send/render.
+- **Discord-style edit indicators**: Show original content faded above new content with "(edited)" label.
+- Files: `hook/MessageLogger.cs`
+
 ### Implement theme click handlers in native UI
 The native Avalonia Themes page shows themes with "ACTIVE" badges but has no click handlers. Add theme selection behavior so users can switch themes from the native settings UI.
 - Files: `hook/ContentPages.cs`, `hook/ThemeEngine.cs`

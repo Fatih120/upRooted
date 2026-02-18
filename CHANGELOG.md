@@ -9,11 +9,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.3.6-rc] - 2026-02-18
 
 ### Added
-- **MessageLogger plugin** — logs deleted and edited messages in Avalonia-native chat with visual indicators
-  - Deletion detection via `ObservableCollection.CollectionChanged` subscription (Remove events); channel-switch heuristic distinguishes real deletions from ItemsSource resets
-  - Edit detection via content snapshot comparison on each scan tick
-  - Deleted messages re-injected into chat as red-tinted inline `Border` panels with author, timestamp, and original content
-  - Edit history tracked per message (timestamped list of previous versions)
+- **MessageLogger plugin** (WIP) — logs deleted messages in Avalonia-native chat with visual indicators
+  - Deletion detection via `ObservableCollection.CollectionChanged` Remove events (event-based, not polling); buffered per-tick with debounce (3+ removes = channel switch → discard, 1-2 = real deletions)
+  - Post-subscription settling filter: messages present at subscription time (`_initialSnapshotIds`) protected from false-positive removes for 30s; messages arriving via Add events trusted immediately with zero delay
+  - Per-type property cache (`Dictionary<Type, TypeProps>`) handles multiple ViewModel types with nested `.Message` bridge property resolution
+  - Deleted messages re-injected as Discord-style full-width red-tinted background stripes with 3px red left accent border, right-click "Clear message history" context menu
+  - Channel switch handling: bulk remove detection, control freshness check every ~7.5s for `RootMessageItemsControl` instance swaps
+  - Edit detection: disabled (false positives from content changes during send/render — needs redesign)
   - Files: `hook/MessageLogger.cs`, `hook/MessageStore.cs`
 - **MessageStore** — flat-file persistence for message log data
   - Pipe-delimited append-only format (`MSG|EDIT|DEL` record types) with URI-encoded fields

@@ -50,9 +50,11 @@ Two independent injection layers into one app:
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
-| `MessageLogger.cs` | 1185 | Message logger: discovery scan, collection subscription, edit/delete detection, visual indicators |
+| `MessageLogger.cs` | ~1230 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
+| `AutoUpdater.cs` | ~695 | In-process auto-updater (GitHub releases, HTTP via reflection, version compare) |
+| `ProfileBadgeInjector.cs` | ~340 | "Uprooted Dev" profile badge injector (dev channel only, popup tree scan) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 46 | Thread-safe file logging, swallows own exceptions |
@@ -122,17 +124,21 @@ Two independent injection layers into one app:
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
-- MessageLogger plugin: Phase 1 discovery scan, collection subscription via Expression.Lambda, edit/delete detection, visual indicators, flat-file persistence (MessageStore.cs), settings UI with toggle pills
+- MessageLogger plugin (WIP): event-based deletion detection via CollectionChanged Remove events, per-type ViewModel property cache, post-subscription settling filter, Discord-style deleted message rows (red-tinted stripe + left accent), channel switch handling, flat-file persistence (MessageStore.cs), settings UI with toggle pills. Edit detection disabled pending reliability fix.
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
+- AutoUpdater: background update check, developer channel with encrypted PAT, staging + verify + overwrite
+- ProfileBadgeInjector: "Uprooted Dev" badge on profile popups (dev channel only), diagnostic tree dump on first detection
+- Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
+- DIAGNOSTICS card: "Open" button opens log file in Explorer
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)
 - Video preview embeds (.mp4) not yet implemented
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
-- Plugin toggles on Plugins page are display-only (cannot enable/disable at runtime)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
-- MessageLogger: Phase 1 discovery implemented; property mapping may need updates when Root changes ViewModels
+- MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); deletion detection relies on Remove events which may need tuning for new Root behaviors
+- ProfileBadgeInjector: needs real-world popup structure from tree dump logs to refine heuristics
 
 ## 7. Build Commands
 
@@ -169,7 +175,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 |----------|--------|
 | Where is the C# entry point? | `hook/Entry.cs` (profiler) or `hook/NativeEntry.cs` (hostfxr) |
 | Where is the TypeScript entry point? | `src/core/preload.ts` |
-| Where is the startup sequence? | `hook/StartupHook.cs` -- Phase 0-5 |
+| Where is the startup sequence? | `hook/StartupHook.cs` -- Phase 0-5 (4.5a-e for deferred features) |
 | Where is Avalonia reflection? | `hook/AvaloniaReflection.cs` (1943 lines) |
 | Where is the sidebar injection? | `hook/SidebarInjector.cs` |
 | Where are settings pages built? | `hook/ContentPages.cs` |

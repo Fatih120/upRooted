@@ -416,26 +416,56 @@ internal static class ContentPages
             // Restart notice after update applied
             if (wasUpdated)
             {
-                var restartRow = r.CreateStackPanel(vertical: false, spacing: 8);
-                if (restartRow != null)
+                var updateBannerOuter = r.CreatePanel();
+                if (updateBannerOuter != null)
                 {
-                    r.SetVerticalAlignment(restartRow, "Center");
-                    var restartIcon = r.CreateTextBlock("\u26A0", 14, AccentGreen);
-                    ApplyFont(r, restartIcon, font);
-                    r.AddChild(restartRow, restartIcon);
+                    var restartRow = r.CreateStackPanel(vertical: false, spacing: 8);
+                    if (restartRow != null)
+                    {
+                        r.SetVerticalAlignment(restartRow, "Center");
+                        var restartIcon = r.CreateTextBlock("\u26A0", 14, AccentGreen);
+                        ApplyFont(r, restartIcon, font);
+                        r.AddChild(restartRow, restartIcon);
 
-                    var restartText = r.CreateTextBlock("Restart Root to use the new version", 13, AccentGreen);
-                    r.SetFontWeightNumeric(restartText, 500);
-                    ApplyFont(r, restartText, font);
-                    r.AddChild(restartRow, restartText);
-                }
-                var restartBanner = r.CreateBorder(AccentGreen + "15", 8, restartRow);
-                if (restartBanner != null)
-                {
-                    r.SetPadding(restartBanner, 14, 10, 14, 10);
-                    r.SetMargin(restartBanner, 0, 14, 0, 0);
-                    SetBorderStroke(r, restartBanner, AccentGreen + "40", 1);
-                    r.AddChild(updatesContent, restartBanner);
+                        var restartText = r.CreateTextBlock("Restart Root to use the new version", 13, AccentGreen);
+                        r.SetFontWeightNumeric(restartText, 500);
+                        ApplyFont(r, restartText, font);
+                        r.AddChild(restartRow, restartText);
+                    }
+
+                    var innerBorder = r.CreateBorder(AccentGreen + "15", 8, restartRow);
+                    if (innerBorder != null)
+                    {
+                        r.SetPadding(innerBorder, 14, 10, 14, 10);
+                        SetBorderStroke(r, innerBorder, AccentGreen + "40", 1);
+                    }
+
+                    // Restart button
+                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                    r.SetFontWeightNumeric(updateRestartBtnText, 500);
+                    ApplyFont(r, updateRestartBtnText, font);
+                    r.SetHorizontalAlignment(updateRestartBtnText, "Center");
+                    var updateRestartBtn = r.CreateBorder(AccentGreen, 6, updateRestartBtnText);
+                    if (updateRestartBtn != null)
+                    {
+                        r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
+                        r.SetHorizontalAlignment(updateRestartBtn, "Right");
+                        r.SetVerticalAlignment(updateRestartBtn, "Center");
+                        r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
+                        r.SetCursorHand(updateRestartBtn);
+                        r.SubscribeEvent(updateRestartBtn, "PointerPressed", RestartRoot);
+                        var urBtnRef = updateRestartBtn;
+                        r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
+                            r.SetBackground(urBtnRef, ColorUtils.Lighten(AccentGreen, 10)));
+                        r.SubscribeEvent(updateRestartBtn, "PointerExited", () =>
+                            r.SetBackground(urBtnRef, AccentGreen));
+                    }
+
+                    if (innerBorder != null) r.AddChild(updateBannerOuter, innerBorder);
+                    if (updateRestartBtn != null) r.AddChild(updateBannerOuter, updateRestartBtn);
+
+                    r.SetMargin(updateBannerOuter, 0, 14, 0, 0);
+                    r.AddChild(updatesContent, updateBannerOuter);
                 }
             }
 
@@ -501,16 +531,49 @@ internal static class ContentPages
             var logTitle = CreateSectionHeader(r, "DIAGNOSTICS", font);
             r.AddChild(cardContent, logTitle);
 
-            var logPathText = r.CreateTextBlock(
-                "Log file: " + Logger.GetLogPath(),
-                12, TextDim);
-            if (logPathText != null)
+            // Log file row: path text + Open button
+            var logRow = r.CreatePanel();
+            if (logRow != null)
             {
-                ApplyFont(r, logPathText, font);
-                r.SetTextWrapping(logPathText, "Wrap");
-                r.SetMargin(logPathText, 0, 12, 0, 0);
+                r.SetMargin(logRow, 0, 12, 0, 0);
+
+                var logPathText = r.CreateTextBlock(
+                    "Log file: " + Logger.GetLogPath(),
+                    12, TextDim);
+                if (logPathText != null)
+                {
+                    ApplyFont(r, logPathText, font);
+                    r.SetTextWrapping(logPathText, "Wrap");
+                    r.SetVerticalAlignment(logPathText, "Center");
+                    r.SetMargin(logPathText, 0, 0, 70, 0); // leave room for button
+                }
+                r.AddChild(logRow, logPathText);
+
+                // "Open" button
+                var openBtnText = r.CreateTextBlock("Open", 12, TextWhite);
+                r.SetFontWeightNumeric(openBtnText, 500);
+                ApplyFont(r, openBtnText, font);
+                r.SetHorizontalAlignment(openBtnText, "Center");
+                var openBtnBg = ColorUtils.Lighten(CardBg, 8);
+                var openBtn = r.CreateBorder(openBtnBg, 6, openBtnText);
+                if (openBtn != null)
+                {
+                    r.SetPadding(openBtn, 12, 5, 12, 5);
+                    r.SetHorizontalAlignment(openBtn, "Right");
+                    r.SetVerticalAlignment(openBtn, "Center");
+                    r.SetCursorHand(openBtn);
+                    SetBorderStroke(r, openBtn, CardBorder, 0.5);
+                    var logPath = Logger.GetLogPath();
+                    r.SubscribeEvent(openBtn, "PointerPressed", () => OpenInExplorer(logPath));
+                    r.SubscribeEvent(openBtn, "PointerEntered", () =>
+                        r.SetBackground(openBtn, ColorUtils.Lighten(openBtnBg, 8)));
+                    r.SubscribeEvent(openBtn, "PointerExited", () =>
+                        r.SetBackground(openBtn, openBtnBg));
+                }
+                r.AddChild(logRow, openBtn);
+
+                r.AddChild(cardContent, logRow);
             }
-            r.AddChild(cardContent, logPathText);
 
             r.SetBorderChild(logCard, cardContent);
             r.AddChild(page, logCard);
@@ -797,7 +860,8 @@ internal static class ContentPages
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
-                restartBannerRef, plugin.HasSettings, plugin.TestingStatus);
+                restartBannerRef, initialStatesRef,
+                plugin.HasSettings, plugin.TestingStatus);
             if (card != null)
             {
                 cardIds.Add(plugin.Id);
@@ -1053,9 +1117,21 @@ internal static class ContentPages
                     catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
                     Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
 
-                    // Show restart banner for plugins that need it (themes apply live)
-                    if (pluginId != "themes" && restartBanner != null)
-                        r.SetIsVisible(restartBanner, true);
+                    // Show/hide restart banner based on whether any plugin diverged from initial state
+                    // (themes apply live, so they don't count)
+                    if (restartBanner != null && initialStates != null)
+                    {
+                        bool anyDiverged = false;
+                        foreach (var kv in initialStates)
+                        {
+                            if (kv.Key == "themes") continue;
+                            bool currentVal = kv.Key == "content-filter"
+                                ? settings.NsfwFilterEnabled
+                                : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
+                            if (currentVal != kv.Value) { anyDiverged = true; break; }
+                        }
+                        r.SetIsVisible(restartBanner, anyDiverged);
+                    }
 
                     // Rebuild grid if filter is active so toggled plugins appear/disappear
                     if (filterMode[0] != 0)
@@ -2957,6 +3033,66 @@ internal static class ContentPages
         {
             var thickness = Activator.CreateInstance(r.ThicknessType, width, width, width, width);
             border.GetType().GetProperty("BorderThickness")?.SetValue(border, thickness);
+        }
+    }
+
+    /// <summary>
+    /// Restart Root: launch a new instance and exit the current process.
+    /// </summary>
+    private static void RestartRoot()
+    {
+        try
+        {
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                Logger.Log("ContentPages", "RestartRoot: ProcessPath is null, cannot restart");
+                return;
+            }
+            Logger.Log("ContentPages", $"RestartRoot: launching {exePath} and exiting...");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = true
+            });
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ContentPages", $"RestartRoot error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Open a file path in the system file explorer, selecting the file.
+    /// </summary>
+    private static void OpenInExplorer(string path)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = false
+                });
+            }
+            else
+            {
+                // Linux/macOS: open the containing directory
+                var dir = Path.GetDirectoryName(path) ?? path;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ContentPages", $"OpenInExplorer error: {ex.Message}");
         }
     }
 }

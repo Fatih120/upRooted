@@ -10,6 +10,12 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
+- [ ] **MessageLogger: fix edit detection** — Edit detection (`PollEdits`) is currently disabled due to false positives from content changes during message send/render. Need a reliable approach — likely snapshot-on-Add (only compare content of messages that arrived via Add events, not initial snapshot) or property-change subscription if Root exposes one.
+  - Files: `hook/MessageLogger.cs`
+
+- [ ] **MessageLogger: Discord-style edit indicators** — Show original content faded above the new content with an "(edited)" label, matching Discord's MessageLogger style. Requires working edit detection first.
+  - Files: `hook/MessageLogger.cs`
+
 - [ ] **Hide file names on image/video embeds** — Direct image/video link embeds show the file name as the title, but it's redundant since the URL is already visible. Hide file names by default, keep the domain label. Add a "Show embedded file names" toggle in the Link Embeds plugin settings.
   - Files: `hook/LinkEmbedEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
 
@@ -22,8 +28,8 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
-- [ ] **Plugin toggle functionality** — Wire up toggle controls on the native Plugins page so users can enable/disable plugins at runtime. Currently display-only.
-  - Files: `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
+- [ ] **Refine ProfileBadgeInjector heuristics** — Check tree dump logs from first real popup detection, refine `IsProfilePopup` and `FindRolesContainer` to match actual Root popup structure.
+  - Files: `hook/ProfileBadgeInjector.cs`
 
 - [ ] **Theme click handlers** — Add click handlers to the native Themes page so users can switch themes from the Avalonia settings UI.
   - Files: `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
@@ -88,6 +94,9 @@ Move completed items here with the date.
 - [x] **Animated image embeds (.gif, .webp)** (2026-02-17) — Animated GIF/WebP URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`AnimatedImage.cs`). Graceful fallback to static first frame if SkiaSharp frame APIs are unavailable. Tenor URLs skipped (Root embeds natively).
 - [x] **Fix link embeds for non-YouTube sites** (2026-02-17) — Chrome-like default UA, direct image URL fast path, Content-Type gate on OG fetch, oEmbed discovery from HTML `<link>` tags, bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx), `twitter:image`/`twitter:title`/`twitter:description` fallbacks
 - [x] **Fix oEmbed parsing crash** (2026-02-17) — `DecodeJsonString` used `Regex.Replace` with lambda `MatchEvaluator` which was trimmed in Root's binary. Replaced with manual `\uXXXX` loop. Fixed `ReadAsStringAsync` → `ReadAsStreamAsync` for trimmed charset methods. Normalized fixupx/fxtwitter/fixvx URLs to vxtwitter.com for richer OG metadata with images.
+- [x] **Plugin toggle functionality** (2026-02-18) — Plugin toggles save state to settings, show restart banner when state diverges from initial (hides on revert). Themes apply live (no restart needed). Restart button launches new Root.exe and exits.
+- [x] **ProfileBadgeInjector** (2026-02-18) — "Uprooted Dev" badge on profile popups for developer channel users. Timer polls TopLevels + OverlayLayer, heuristic detection, diagnostic tree dump, tagged duplicate prevention. Phase 4.5e in StartupHook (25s delay).
+- [x] **Restart banners + Diagnostics Open button** (2026-02-18) — Plugins page: state-aware amber restart banner. Updates section: green restart banner after update applied. Both with Restart button. DIAGNOSTICS card: "Open" button opens log file in Explorer.
 
 ---
 

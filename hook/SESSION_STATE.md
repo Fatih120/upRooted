@@ -74,6 +74,8 @@ Key details:
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
+| 4.5d | AutoUpdater | Background update check (every 6 hours), download + apply |
+| 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (developer channel only, 25s delay) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
 ## Link Embed Engine (v0.3.3–0.3.6rc)
@@ -108,21 +110,49 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
-| `hook/MessageLogger.cs` | New file: chat message logger with Phase 1 discovery, collection subscription, edit/delete detection, visual indicators |
-| `hook/MessageStore.cs` | New file: flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
-| `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization |
+| `hook/MessageLogger.cs` | Chat message logger — per-type property cache, event-based deletion detection (Remove events + debounce), post-subscription settling filter, Discord-style deleted message rows, channel switch handling, freshness checks |
+| `hook/MessageStore.cs` | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only: MSG\|DEL\|EDIT\|CLR records) |
+| `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization (20s delay for chat population) |
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
-| `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI |
+| `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI, BuildChannelRow for update channel switching, restart banners (plugins + updates), state-aware plugin banner (hides on revert), Restart button (Process.Start + Environment.Exit), DIAGNOSTICS "Open" button (explorer /select) |
+| `hook/ProfileBadgeInjector.cs` | New file: profile popup detection via TopLevel/OverlayLayer scan, heuristic matching (avatar + username + roles), tree dump diagnostics, role pill container discovery, "Uprooted Dev" badge injection (gold #8B6914 pill) |
+| `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (25s delay, developer channel only) |
+
+## MessageLogger Plugin (WIP — 2026-02-18)
+
+**Status:** Core architecture working, deletion detection functional but undergoing refinement.
+
+### Working
+- **Phase 1 discovery**: Finds `RootMessageItemsControl` in visual tree, resolves ViewModel property accessors (MessageId, Content, AuthorId, Timestamp) via per-type cache
+- **Collection subscription**: `ObservableCollection.CollectionChanged` via `Expression.Lambda` — handles Add, Remove, Replace, Reset events
+- **Per-type property cache**: `Dictionary<Type, TypeProps>` handles multiple ViewModel types (MessageViewModel, ChannelStartMessageViewModel, ReplyUserTagViewModel) with nested `.Message` bridge property resolution
+- **Deletion detection**: Event-based via Remove events (not polling). Buffered per-tick with debounce:
+  - 3+ removes in one tick = channel switch → discard
+  - 1-2 removes = real deletions → persist + display
+- **Post-subscription settling filter**: Messages present at subscription time (`_initialSnapshotIds`) are protected from false-positive removes for 30s after channel switch. Messages arriving AFTER subscription (via Add events) are trusted immediately — zero delay
+- **Channel switch handling**: Bulk removes detected, control freshness check every ~7.5s detects when Root swaps `RootMessageItemsControl` instances
+- **Flat-file persistence**: `MessageStore.cs` — pipe-delimited, URI-encoded, append-only (MSG|DEL|EDIT|CLR record types)
+- **Visual indicators**: Discord-style deleted message rows — full-width red-tinted background stripe with red left accent border, right-click "Clear message history" context menu
+
+### Not Yet Working / Disabled
+- **Edit detection**: Disabled — `PollEdits` produces false positives from content changes during message send/render. `ApplyEditIndicators` injects TextBlocks that break Avalonia's message layout (greyed out messages, "(edited 12x)" on every message)
+- **Discord-style edit indicators**: Planned — show original content faded above new content with "(edited)" label, matching Discord's MessageLogger style
+
+### Key Learnings
+- Root's `ObservableCollection` is a dynamic windowed view — ID-diff polling is fundamentally unreliable for deletion detection
+- `CollectionChanged` Remove events are the only reliable signal for actual message deletion
+- Root fires straggler Remove events 8-12s after channel switch (buffer settling) — must be filtered
+- Different ViewModel types have different `PropertyInfo` objects that throw `TargetException` on wrong types — per-type cache is essential
+- Root creates new `RootMessageItemsControl` instances on channel switch; old ones linger in the visual tree with stale data
 
 ## Next Steps
 
-1. **MessageLogger Phase 1 discovery** — Deploy and run Phase 1 discovery scan, read hook log for ViewModel property names
-2. **MessageLogger property constants** — Update MessageLogger property name constants based on discovery results
-3. **MessageLogger collection subscription** — Test collection subscription for add/remove/replace events
-4. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
-5. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
-6. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
-7. **Plugin toggle functionality** — Wire up Plugins page toggles for runtime enable/disable
+1. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
+2. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
+3. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
+4. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
+5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+6. **Refine ProfileBadgeInjector** — Check tree dump logs for actual popup structure, refine heuristics in `IsProfilePopup` and `FindRolesContainer`
 
 ## Deployment
 

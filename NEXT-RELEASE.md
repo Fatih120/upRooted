@@ -33,7 +33,14 @@
 - **Reusable settings toggle component** — `BuildSettingsToggle` in ContentPages for any boolean plugin setting (pill toggle with label + description)
 - **TUI installer mode selector** — running the installer without `--uninstall`/`--repair`/`--plain` flags now shows an interactive menu with arrow key navigation (Install / Uninstall / Repair)
 - **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popups
-  - New file: `hook/ProfileBadgeInjector.cs`
+  - Heuristic popup detection: avatar Image/Ellipse + username TextBlock + "Roles" header
+  - Diagnostic tree dump on first popup detection (logged to uprooted-hook.log) for iterative refinement
+  - New file: `hook/ProfileBadgeInjector.cs`, Phase 4.5e in `StartupHook.cs` (25s delay)
+- **Restart banners** — prominent "Restart Root to apply changes" notices with a **Restart** button that relaunches Root
+  - Plugins page: amber banner appears when any plugin state diverges from initial; disappears if user reverts all changes back to original state (themes excluded — they apply live)
+  - Updates section: green banner appears after auto-updater applies an update
+  - Restart button launches new Root.exe via `Process.Start` and calls `Environment.Exit(0)`
+- **Diagnostics "Open" button** — the DIAGNOSTICS card on the About page now shows an "Open" button next to the log file path that opens the file in Explorer (Windows) or the containing directory (Linux)
 
 ### Changed
 
