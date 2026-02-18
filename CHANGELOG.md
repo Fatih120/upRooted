@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [Unreleased] - 2026-02-18
+
+### Infrastructure
+
+- **Unit testing expanded to 170 tests** — 113 new xUnit tests covering three pure-logic C# modules:
+  - `ClearUrlsEngineTests.cs` (58 tests) — all 33 tracking params, fragments, case insensitivity, idempotency, prefix-safety edge cases
+  - `UprootedSettingsTests.cs` (22 tests) — INI parse, type coercion, cache/invalidation, save/load roundtrip, migration
+  - `MessageStoreTests.cs` (18 tests) — MSG/EDIT/DEL/CLR records, URI encoding roundtrip, malformed line tolerance, Truncate semantics
+  - Test stubs for `Logger`, `PlatformPaths`, `AvaloniaReflection`, `VisualTreeWalker` eliminate all disk I/O in tests; sequential collection fixture prevents static-state cross-contamination
+  - All 170 tests pass; zero bugs discovered in the three new modules
+- **Docker unit test sandbox** — `tests/Dockerfile.unittest` + `tests/run-docker-tests.sh`: builds a clean `mcr.microsoft.com/dotnet/sdk:10.0` container, runs all tests with XPlat code coverage, extracts results to `tests/coverage/`
+- **Linux installer Docker sandbox** — `tests/docker-installer/Dockerfile`: Ubuntu 24.04 container runs `install-uprooted-linux.sh` end-to-end (curl shim bypasses GitHub download, fake Root + profile dir provided), `verify.sh` checks 14 post-install conditions (env vars, wrapper script, HTML patch, artifact presence)
+
+---
+
 ## [0.3.6-rc] - 2026-02-18
 
 ### Added

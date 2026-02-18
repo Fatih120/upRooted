@@ -484,6 +484,25 @@ The diagnostic script inspects the current state of a Root installation:
 - Reports whether Root is currently running
 - Shows CLR profiler environment variables (both process and registry)
 
+### Unit Tests
+
+Run the C# unit test suite (170 tests, all should pass):
+
+```bash
+dotnet test tests/UprootedTests/
+```
+
+Covers: `ColorUtils`, `GradientBrush`, `ClearUrlsEngine`, `UprootedSettings`, `MessageStore`.
+
+To run in a clean Linux Docker container with coverage:
+
+```bash
+bash tests/run-docker-tests.sh
+# Coverage XML extracted to tests/coverage/
+```
+
+See [`docs/dev/TESTING.md`](../dev/TESTING.md) for full details on adding tests, stubs, and Docker sandboxes.
+
 ### Testing with Root
 
 The typical develop-test loop:

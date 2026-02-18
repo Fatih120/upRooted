@@ -220,7 +220,7 @@ Verify that these files exist:
 dotnet test tests/UprootedTests/
 ```
 
-All tests should pass. Currently covers `ColorUtils` and `GradientBrush` logic.
+All 170 tests should pass. Covers `ColorUtils`, `GradientBrush`, `ClearUrlsEngine`, `UprootedSettings`, and `MessageStore`.
 
 ### Full Pipeline (Windows)
 
@@ -238,12 +238,15 @@ required artifacts are present before starting the Rust build.
 
 ### Automated Tests
 
-**C# unit tests** in `tests/UprootedTests/`:
+**C# unit tests** in `tests/UprootedTests/` — 170 tests, all passing:
 
-| Test File               | Covers                              |
-| ----------------------- | ----------------------------------- |
-| `ColorUtilsTests.cs`   | HSL/HSV/RGB color conversion math   |
-| `GradientBrushTests.cs` | Gradient brush creation and parsing |
+| Test File                     | Covers                                                                    |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `ColorUtilsTests.cs`         | HSL/HSV/RGB color conversion math                                         |
+| `GradientBrushTests.cs`      | Gradient brush creation and parsing (Avalonia types via reflection)        |
+| `ClearUrlsEngineTests.cs`    | `CleanUrl` static method: all 33 tracking params, fragments, case, edge cases |
+| `UprootedSettingsTests.cs`   | INI parsing, type coercion, cache invalidation, save/load roundtrip, migration |
+| `MessageStoreTests.cs`       | Flat-file persistence: records, URI encoding, malformed tolerance, Truncate |
 
 Run with:
 
@@ -251,10 +254,42 @@ Run with:
 dotnet test tests/UprootedTests/
 ```
 
+The test project links source files directly from `hook/` (no separate build) and
+provides stubs for `Logger`, `PlatformPaths`, `AvaloniaReflection`, and `VisualTreeWalker`
+in `tests/UprootedTests/TestStubs/` to eliminate all disk I/O and Avalonia runtime
+dependencies during testing. `UprootedSettingsTests` and `MessageStoreTests` run in a
+sequential xunit collection (`[Collection("SequentialTests")]`) to prevent interference
+through shared static state.
+
+For detailed coverage analysis and design notes, see [`docs/dev/TESTING.md`](TESTING.md).
+
+#### Docker test sandbox
+
+Run all tests in an isolated Linux container (matches CI environment):
+
+```bash
+bash tests/run-docker-tests.sh
+```
+
+This builds `tests/Dockerfile.unittest` (SDK 10.0 base), runs all tests with
+XPlat code coverage, and extracts the coverage XML to `tests/coverage/`.
+
+#### Linux installer sandbox
+
+Test the full `install-uprooted-linux.sh` flow in an Ubuntu 24.04 container:
+
+```bash
+# Build and run the installer Docker test (requires Docker):
+docker build -f tests/docker-installer/Dockerfile -t uprooted-installer-test .
+```
+
+The container creates a fake Root.AppImage + profile HTML, intercepts the GitHub
+artifact download via a curl shim, runs the installer, then runs `verify.sh` which
+checks 14 post-install conditions. Build fails if any verification step fails.
+
 **TypeScript tests:** No automated test suite exists for the TypeScript layer.
 The recommended framework for future tests is Vitest (native ESM support, fast
-execution, minimal configuration). See `.planning/codebase/TESTING.md` for a
-detailed analysis of testing gaps and recommended coverage priorities.
+execution, minimal configuration).
 
 ### Manual Test Harness
 

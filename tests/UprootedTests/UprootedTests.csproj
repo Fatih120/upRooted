@@ -16,8 +16,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Link source files directly from the hook project -->
+    <!-- Existing: ColorUtils for GradientBrush tests -->
     <Compile Include="..\..\hook\ColorUtils.cs" Link="ColorUtils.cs" />
+
+    <!-- New: pure-logic modules under test -->
+    <Compile Include="..\..\hook\UprootedSettings.cs" Link="UprootedSettings.cs" />
+    <Compile Include="..\..\hook\MessageStore.cs" Link="MessageStore.cs" />
+    <Compile Include="..\..\hook\ClearUrlsEngine.cs" Link="ClearUrlsEngine.cs" />
+
+    <!-- Stubs (TestStubs/*.cs) are picked up automatically by the SDK default glob.
+         They replace hook's Logger, PlatformPaths, AvaloniaReflection, VisualTreeWalker
+         so the linked source files compile without disk I/O or Avalonia runtime. -->
   </ItemGroup>
 
   <ItemGroup>

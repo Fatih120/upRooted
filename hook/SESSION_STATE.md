@@ -179,6 +179,21 @@ The Avalonia-native link embed engine is broadly functional:
 - Different ViewModel types have different `PropertyInfo` objects that throw `TargetException` on wrong types — per-type cache is essential
 - Root creates new `RootMessageItemsControl` instances on channel switch; old ones linger in the visual tree with stale data
 
+## Test Suite (2026-02-18)
+
+170 xUnit tests, all passing, zero bugs found. Three modules now have full coverage:
+
+| Module | Tests | Notes |
+|--------|-------|-------|
+| `ColorUtils` | 57 | HSL/HSV/RGB math |
+| `GradientBrush` | 15 | Avalonia gradient via reflection |
+| `ClearUrlsEngine.CleanUrl` | 58 | All 33 params, edge cases |
+| `UprootedSettings` | 22 | INI parse, coercion, cache, migration |
+| `MessageStore` | 18 | Records, URI encode, Truncate |
+
+**Infra:** `tests/Dockerfile.unittest` (SDK 10.0 container), `tests/run-docker-tests.sh`, `tests/docker-installer/` (Ubuntu 24.04 installer sandbox).
+See `docs/dev/TESTING.md` for full reference.
+
 ## Next Steps
 
 1. **MessageLogger: validate async pollers** — Async deletion pollers (HasBeenDeleted, 300ms/3s) are deployed. Need real-world validation: test with actual message deletions to confirm HasBeenDeleted is set within the 3s window. Run `scripts/analyze-msglogger.ps1` to analyze diagnostic output.

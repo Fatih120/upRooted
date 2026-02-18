@@ -145,6 +145,14 @@ Two independent injection layers into one app:
 - Lightbox font sizes scaled up (section headers 18, labels 19, descriptions 16, titles 26, inputs 17, pills 52×26, card width 560)
 - Log startup separator: 3 blank lines before first [Entry] log on Root launch; watch-log colors [Entry] green, fallback messages yellow
 
+**Testing (new 2026-02-18):**
+- 170 xUnit tests in `tests/UprootedTests/` — 113 new tests added this session
+- New: `ClearUrlsEngineTests` (58), `UprootedSettingsTests` (22), `MessageStoreTests` (18)
+- Test stubs in `TestStubs/` eliminate disk I/O; sequential xunit collection prevents static-state interference
+- Docker unit sandbox: `tests/Dockerfile.unittest` + `tests/run-docker-tests.sh` (SDK 10.0 + XPlat coverage)
+- Linux installer sandbox: `tests/docker-installer/Dockerfile` (Ubuntu 24.04 end-to-end + 14-point verify.sh)
+- All 170 pass. Zero bugs found. See `tests/BUG_REPORT.md`.
+
 **Known issues:**
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
@@ -202,6 +210,8 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Where is the profiler log? | `%LOCALAPPDATA%/Root/uprooted/profiler.log` |
 | Where is session state? | `hook/SESSION_STATE.md` |
 | Where are the docs? | `docs/INDEX.md` is the navigation hub |
+| Where is the testing guide? | `docs/dev/TESTING.md` — stubs, Docker sandboxes, how to add tests |
+| Where are the tests? | `tests/UprootedTests/` — 170 xUnit tests (net10.0, all passing) |
 
 ## 9. Collaboration Rules
 

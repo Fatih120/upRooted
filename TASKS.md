@@ -69,7 +69,7 @@ Smaller fixes and cleanup that improve reliability.
 - [ ] **Settings unit tests** — JSON parsing, merge with defaults, deep merge, corrupted file recovery.
   - Files: `src/core/settings.ts`
 
-- [ ] **UprootedSettings INI parsing tests** — Valid files, missing keys, malformed lines, empty files.
+- [x] **UprootedSettings INI parsing tests** (2026-02-18) — See `tests/UprootedTests/UprootedSettingsTests.cs`.
   - Files: `hook/UprootedSettings.cs`, `tests/UprootedTests/`
 
 ## Ideas / Backlog
@@ -87,6 +87,14 @@ Items not yet committed to but worth tracking.
 ## Done
 
 Move completed items here with the date.
+
+- [x] **Vigorous unit testing + Docker sandbox** (2026-02-18) — 170 tests total (113 new); zero bugs found in the three pure-logic modules. Docker test infrastructure for both unit tests and Linux installer.
+  - New test files: `ClearUrlsEngineTests.cs` (58), `UprootedSettingsTests.cs` (22), `MessageStoreTests.cs` (18)
+  - New stubs: `TestStubs/Logger.cs`, `PlatformPaths.cs`, `AvaloniaReflection.cs`, `VisualTreeWalker.cs`
+  - Docker: `tests/Dockerfile.unittest`, `tests/run-docker-tests.sh`
+  - Installer sandbox: `tests/docker-installer/Dockerfile` (curl shim + Ubuntu 24.04 end-to-end install test)
+  - Bug report: `tests/BUG_REPORT.md`
+  - Files: `tests/UprootedTests/`
 
 - [x] **ClearURLs plugin** (2026-02-18) — Strips tracking parameters (utm_source, fbclid, gclid, si, etc.) from URLs when the user sends a message. Hooks AvaloniaEdit.TextEditor's TextArea via Avalonia routed events with `AddHandler(handledEventsToo=true)` using all routing strategies (Bubble|Tunnel|Direct). 33 tracking params, idempotent, fragment-preserving. Plugin ID: `clear-urls`, default enabled.
 - [x] **Animated image embeds (.gif, .webp)** (2026-02-17) — Animated GIF/WebP URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`AnimatedImage.cs`). Graceful fallback to static first frame if SkiaSharp frame APIs are unavailable. Tenor URLs skipped (Root embeds natively).
