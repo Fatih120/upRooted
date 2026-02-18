@@ -64,13 +64,30 @@ Options:
 
 | Invocation                  | Behavior                                              |
 |-----------------------------|-------------------------------------------------------|
-| `uprooted`                  | Install with TUI (default)                            |
-| `uprooted --plain`          | Install with plain ANSI output                        |
-| `uprooted --uninstall`      | Uninstall with TUI                                    |
+| `uprooted`                  | Interactive mode selector (Install / Uninstall / Repair) |
+| `uprooted --plain`          | Install with plain ANSI output (skips mode selector)  |
+| `uprooted --uninstall`      | Uninstall with TUI (skips mode selector)              |
 | `uprooted --uninstall --plain` | Uninstall with plain ANSI output                   |
-| `uprooted --repair`         | Repair with TUI                                       |
+| `uprooted --repair`         | Repair with TUI (skips mode selector)                 |
 | `uprooted --repair --plain` | Repair with plain ANSI output                         |
 | `uprooted --diagnose`       | Verbose 7-step diagnostics (always plain output)      |
+
+---
+
+## Mode Selector
+
+### Source: `installer/src-tauri/src/main.rs` (`tui::run_mode_selector()`)
+
+When launched with no CLI flags and not in `--plain` mode, the installer displays an
+interactive mode selector screen before proceeding. This allows users who double-click
+the binary to access Install, Uninstall, and Repair without needing CLI flags.
+
+The mode selector renders a centered 50-column box with the Uprooted version, three
+selectable options (Install, Uninstall, Repair), and navigation hints. Arrow keys
+move the `▶` cursor, Enter confirms the selection, and Q/Esc quits.
+
+CLI flags (`--uninstall`, `--repair`, `--plain`) bypass the mode selector entirely
+for backward compatibility with scripts and automation.
 
 ---
 
@@ -105,24 +122,27 @@ a keypress or timeout before restoring the terminal.
 
 ### Install Steps (TUI)
 
-1. **Detect Root installation** -- locate Root executable and profile directory.
-2. **Deploy hook files** -- extract all embedded artifacts to disk.
-3. **Set environment variables** -- write CLR profiler env vars (dual-prefix).
-4. **Patch HTML files** -- inject `<script>` and `<link>` tags into Root's HTML.
-5. **Verify installation** -- re-run detection to confirm everything is in place.
+1. **Check for running Root process** -- auto-close Root if running.
+2. **Detect Root installation** -- locate Root executable and profile directory.
+3. **Deploy hook files** -- extract all embedded artifacts to disk.
+4. **Set environment variables** -- write CLR profiler env vars (dual-prefix).
+5. **Patch HTML files** -- inject `<script>` and `<link>` tags into Root's HTML.
+6. **Verify installation** -- re-run detection to confirm everything is in place.
 
 ### Uninstall Steps (TUI)
 
-1. **Remove environment variables** -- delete CLR profiler env vars.
-2. **Restore HTML files** -- strip injected tags from Root's HTML.
-3. **Remove deployed files** -- delete the entire uprooted directory.
+1. **Check for running Root process** -- auto-close Root if running.
+2. **Remove environment variables** -- delete CLR profiler env vars.
+3. **Restore HTML files** -- strip injected tags from Root's HTML.
+4. **Remove deployed files** -- delete the entire uprooted directory.
 
 ### Repair Steps (TUI)
 
-1. **Re-deploy hook files** -- overwrite all artifacts.
-2. **Set environment variables** -- rewrite all env vars.
-3. **Re-patch HTML files** -- strip existing patches, re-inject fresh ones.
-4. **Verify installation** -- re-run detection to confirm.
+1. **Check for running Root process** -- auto-close Root if running.
+2. **Re-deploy hook files** -- overwrite all artifacts.
+3. **Set environment variables** -- rewrite all env vars.
+4. **Re-patch HTML files** -- strip existing patches, re-inject fresh ones.
+5. **Verify installation** -- re-run detection to confirm.
 
 ---
 

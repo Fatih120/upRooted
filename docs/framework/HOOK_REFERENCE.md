@@ -46,24 +46,24 @@ The hook layer consists of 21 source files in the `hook/` directory:
 |------|------:|---------|
 | `Entry.cs` | 33 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 315 | Multi-phase startup orchestrator (Phase 0-5) |
-| `AvaloniaReflection.cs` | 1943 | Reflection cache for ~50 Avalonia types, ~55 members |
+| `StartupHook.cs` | 348 | Multi-phase startup orchestrator (Phase 0-5) |
+| `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1088 | Timer-based sidebar injection and content management |
-| `ContentPages.cs` | 1753 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | 2218 | Runtime theme engine with resource + visual tree color override |
+| `SidebarInjector.cs` | 1280 | Timer-based sidebar injection and content management |
+| `ContentPages.cs` | 2454 | Page builders for Uprooted/Plugins/Themes settings |
+| `ThemeEngine.cs` | 2360 | Runtime theme engine with resource + visual tree color override |
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
-| `HtmlPatchVerifier.cs` | 344 | Self-healing HTML patch system with FileSystemWatcher |
+| `HtmlPatchVerifier.cs` | 429 | Self-healing HTML patch system with FileSystemWatcher |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
-| `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `LinkEmbedEngine.cs` | 1589 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
-| `AnimatedImage.cs` | 796 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
-| `MessageLogger.cs` | 1198 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
-| `MessageStore.cs` | 217 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
+| `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `LinkEmbedEngine.cs` | 1763 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
+| `MessageLogger.cs` | 1253 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
+| `MessageStore.cs` | 216 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
-| `UprootedSettings.cs` | 91 | INI-based settings persistence |
-| `Logger.cs` | 28 | Thread-safe file logging |
+| `UprootedSettings.cs` | 147 | INI-based settings persistence |
+| `Logger.cs` | 46 | Thread-safe file logging |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
 ---

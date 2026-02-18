@@ -17,7 +17,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Hook Reference            | [`docs/framework/HOOK_REFERENCE.md`](framework/HOOK_REFERENCE.md)                 | C# .NET hook layer deep dive (Avalonia reflection, sidebar injection, startup phases) | Framework contributors                 |
 | TypeScript Reference      | [`docs/framework/TYPESCRIPT_REFERENCE.md`](framework/TYPESCRIPT_REFERENCE.md)     | TypeScript browser injection layer (plugin runtime, theme engine, bridge proxies)     | Plugin authors, framework contributors |
 | CLR Profiler              | [`docs/framework/CLR_PROFILER.md`](framework/CLR_PROFILER.md)                     | Native C profiler DLL (IL injection, environment variables, attach flow)              | Framework contributors                 |
-| Installer Reference       | [`docs/framework/INSTALLER.md`](framework/INSTALLER.md)                           | Tauri/Rust installer (detection, patching, file deployment)                           | Framework contributors                 |
+| Installer Reference       | [`docs/framework/INSTALLER.md`](framework/INSTALLER.md)                           | Console TUI installer (detection, patching, file deployment)                          | Framework contributors                 |
 | Build Guide               | [`docs/install/BUILD.md`](install/BUILD.md)                                       | Build pipeline for all layers (C# hook, TypeScript bundle, Rust installer)            | Contributors                           |
 | Tasks                     | [`TASKS.md`](../TASKS.md)                                                         | Active task board — pick up work, track progress                                      | Contributors                           |
 | Roadmap                   | [`docs/ROADMAP.md`](ROADMAP.md)                                                   | Known issues, planned features, and future direction                                  | Developers, insiders                   |
@@ -44,11 +44,12 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | gRPC Library Reference    | [`docs/research/GRPC_LIB_REFERENCE.md`](research/GRPC_LIB_REFERENCE.md)           | API reference for grpc_lib.py encoding/decoding library                               | Security researchers                   |
 | Advanced Plugin Dev       | [`docs/plugins/ADVANCED_DEVELOPMENT.md`](plugins/ADVANCED_DEVELOPMENT.md)         | Deep plugin patterns: bridge chains, performance, error recovery                      | Plugin authors                         |
 | Plugin Contribution Guide | [`docs/plugins/CONTRIBUTING_PLUGINS.md`](plugins/CONTRIBUTING_PLUGINS.md)         | Fork-to-PR workflow for contributing plugins                                          | Plugin authors                         |
-| Built-in Plugins Index    | [`docs/plugins/builtin/INDEX.md`](plugins/builtin/INDEX.md)                       | Overview of all four shipped plugins                                                  | Everyone                               |
+| Built-in Plugins Index    | [`docs/plugins/builtin/INDEX.md`](plugins/builtin/INDEX.md)                       | Overview of built-in plugins (4 active + 1 planned)                                   | Everyone                               |
 | Sentry Blocker            | [`docs/plugins/builtin/sentry-blocker.md`](plugins/builtin/sentry-blocker.md)     | Privacy plugin: blocks Sentry telemetry                                               | Everyone                               |
 | Themes                    | [`docs/plugins/builtin/themes.md`](plugins/builtin/themes.md)                     | CSS variable theme engine with presets and custom colors                              | Everyone                               |
 | Settings Panel            | [`docs/plugins/builtin/settings-panel.md`](plugins/builtin/settings-panel.md)     | In-app settings UI injected into Root's sidebar                                       | Everyone                               |
 | Link Embeds               | [`docs/plugins/builtin/link-embeds.md`](plugins/builtin/link-embeds.md)           | Discord-style rich link previews and YouTube embeds                                   | Everyone                               |
+| Message Logger            | [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md)     | Logs deleted and edited messages with visual indicators (planned)                     | Everyone                               |
 | Archives                  | [`docs/archives/`](archives/)                                                     | Miscellaneous notes, one-off fixes, and historical context                            | Contributors                           |
 | AI Session Onboarding     | [`NEW-SESSION.md`](../NEW-SESSION.md)                                             | Context-efficient AI agent onboarding reference card                                  | AI contributors                        |
 
@@ -72,7 +73,7 @@ For developers who want to build plugins for Uprooted.
 3. [Bridge Reference](plugins/BRIDGE_REFERENCE.md) -- intercept and extend Root's IPC bridge
 4. [Root Environment](plugins/ROOT_ENVIRONMENT.md) -- DOM structure, CSS variables, Chromium context
 5. [Plugin Examples](plugins/EXAMPLES.md) -- annotated real-world patterns
-6. [Built-in Plugins](plugins/builtin/INDEX.md) -- study the four shipped plugins as reference implementations
+6. [Built-in Plugins](plugins/builtin/INDEX.md) -- study the built-in plugins as reference implementations
 7. [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md) -- fork-to-PR workflow for submitting your plugin
 8. [Plugin Roadmap](PLUGIN_ROADMAP.md) -- planned plugins and their implementation strategies
 
@@ -96,7 +97,7 @@ For those who want the complete technical picture.
 3. [Hook Reference](framework/HOOK_REFERENCE.md) -- C# hook deep dive
 4. [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md) -- browser injection deep dive
 5. [CLR Profiler](framework/CLR_PROFILER.md) -- native profiler internals
-6. [Installer Reference](framework/INSTALLER.md) -- Tauri installer internals
+6. [Installer Reference](framework/INSTALLER.md) -- Console TUI installer internals
 7. [Roadmap](ROADMAP.md) -- where the project is headed
 8. [Plugin Roadmap](PLUGIN_ROADMAP.md) -- planned plugin designs and implementation strategies
 

@@ -33,7 +33,7 @@ Before you start, you need:
 - **Root Communications** v0.9.86 installed
 - **Uprooted** installed -- run `powershell -File Install-Uprooted.ps1`
 
-For full dev environment setup instructions (including .NET SDK for the hook and Tauri for the installer), see [BUILD.md](../install/BUILD.md).
+For full dev environment setup instructions (including .NET SDK for the hook and Rust/Cargo for the installer), see [BUILD.md](../install/BUILD.md).
 
 Verify your Uprooted installation is working by launching Root and checking for the "UPROOTED" section in Root's settings sidebar.
 
