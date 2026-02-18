@@ -3,17 +3,22 @@
 .SYNOPSIS
     Uninstaller for Uprooted - removes all modifications.
 .DESCRIPTION
-    1. Removes all Uprooted environment variables (both profiler and startup hooks)
-    2. Restores Root.exe from backup if it was patched
-    3. Removes installed DLL directory
-    4. Optionally removes log and settings files
+    1. Restores all shortcuts to point to Root.exe
+    2. Restores the rootapp:// protocol handler
+    3. Removes all Uprooted environment variables (DOTNET_ profiler + legacy CORECLR_)
+    4. Restores Root.exe from backup if it was patched
+    5. Removes installed DLL directory
+    6. Optionally removes log and settings files
 #>
 
 $ErrorActionPreference = "Stop"
 
-$RootExePath = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"
+$RootDir = Join-Path $env:LOCALAPPDATA "Root"
+$RootCurrent = Join-Path $RootDir "current"
+$RootExePath = Join-Path $RootCurrent "Root.exe"
 $BackupPath = "$RootExePath.uprooted.bak"
-$InstallDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
+$InstallDir = Join-Path $RootDir "uprooted"
+$BackupFile = Join-Path $InstallDir "shortcuts-backup.txt"
 
 function Write-Step($msg) { Write-Host "[*] $msg" -ForegroundColor Cyan }
 function Write-OK($msg) { Write-Host "[+] $msg" -ForegroundColor Green }
@@ -21,7 +26,7 @@ function Write-Warn($msg) { Write-Host "[!] $msg" -ForegroundColor Yellow }
 
 Write-Host ""
 Write-Host "  +---------------------------------+" -ForegroundColor Yellow
-Write-Host "  |   Uprooted Uninstaller v0.3.6rc   |" -ForegroundColor Yellow
+Write-Host "  |   Uprooted Uninstaller v0.3.6-rc   |" -ForegroundColor Yellow
 Write-Host "  +---------------------------------+" -ForegroundColor Yellow
 Write-Host ""
 
@@ -39,13 +44,122 @@ if ($rootProcess) {
     }
 }
 
-# Step 1: Remove all environment variables
+# Step 1: Restore shortcuts (BEFORE deleting uprooted dir, which contains the backup file)
+Write-Step "Restoring shortcuts..."
+
+$shell = New-Object -ComObject WScript.Shell
+$restoreCount = 0
+
+if (Test-Path $BackupFile) {
+    Get-Content $BackupFile | ForEach-Object {
+        $parts = $_ -split '\|'
+
+        if ($parts[0] -eq "REGISTRY") {
+            # Registry entry - handled in Step 2
+            return
+        }
+
+        if ($parts.Count -lt 5) { return }
+
+        $lnkPath = $parts[0]
+        $origTarget = $parts[1]
+        $origWorkDir = $parts[2]
+        $origArgs = $parts[3]
+        $origIcon = $parts[4]
+
+        if (-not (Test-Path $lnkPath)) {
+            Write-Host "  Skip (not found): $lnkPath" -ForegroundColor DarkGray
+            return
+        }
+
+        try {
+            $lnk = $shell.CreateShortcut($lnkPath)
+            $lnk.TargetPath = $origTarget
+            $lnk.WorkingDirectory = $origWorkDir
+            $lnk.Arguments = $origArgs
+            if ($origIcon) { $lnk.IconLocation = $origIcon }
+            $lnk.Save()
+            $restoreCount++
+            Write-OK "  Restored: $lnkPath -> $origTarget"
+        } catch {
+            Write-Warn "  Failed to restore: $lnkPath - $($_.Exception.Message)"
+        }
+    }
+    Write-OK "Shortcuts restored ($restoreCount)"
+} else {
+    Write-Warn "No backup file found, restoring shortcuts to Root.exe directly..."
+
+    $shortcutPaths = @(
+        (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Root.lnk"),
+        (Join-Path ([Environment]::GetFolderPath('Desktop')) "Root.lnk"),
+        (Join-Path $env:APPDATA "Microsoft\Windows\Start Menu\Programs\Startup\Root.lnk"),
+        (Join-Path $env:APPDATA "Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Root.lnk")
+    )
+
+    foreach ($lnkPath in $shortcutPaths) {
+        if (-not (Test-Path $lnkPath)) { continue }
+        try {
+            $lnk = $shell.CreateShortcut($lnkPath)
+            if ($lnk.TargetPath -like "*UprootedLauncher*") {
+                $lnk.TargetPath = $RootExePath
+                $lnk.WorkingDirectory = $RootCurrent
+                $lnk.IconLocation = "$RootExePath,0"
+                $lnk.Save()
+                $restoreCount++
+                Write-OK "  Restored: $lnkPath"
+            }
+        } catch {
+            Write-Warn "  Failed: $lnkPath - $($_.Exception.Message)"
+        }
+    }
+}
+
+# Step 2: Restore protocol handler
+Write-Step "Restoring protocol handler..."
+
+$regPath = "HKCU:\SOFTWARE\Classes\rootapp\shell\open\command"
+if (Test-Path $regPath) {
+    $currentCmd = (Get-ItemProperty $regPath).'(default)'
+
+    if ($currentCmd -like "*UprootedLauncher*") {
+        # Try to find original from backup
+        $origCmd = $null
+        if (Test-Path $BackupFile) {
+            Get-Content $BackupFile | ForEach-Object {
+                $parts = $_ -split '\|'
+                if ($parts[0] -eq "REGISTRY" -and $parts[1] -eq $regPath) {
+                    $origCmd = $parts[2]
+                }
+            }
+        }
+
+        if (-not $origCmd) {
+            $origCmd = "`"$RootExePath`" `"%1`""
+        }
+
+        Set-ItemProperty $regPath -Name '(default)' -Value $origCmd
+        Write-OK "Protocol handler restored: $origCmd"
+    } else {
+        Write-Host "  Protocol handler already points to Root.exe" -ForegroundColor DarkGray
+    }
+} else {
+    Write-Host "  No rootapp:// handler found" -ForegroundColor DarkGray
+}
+
+# Step 3: Remove all environment variables (DOTNET_ profiler + legacy CORECLR_)
 Write-Step "Removing environment variables..."
 
 $envVars = @(
+    # Current DOTNET_ profiler vars (set by install-hook.ps1)
+    "DOTNET_EnableDiagnostics",
+    "DOTNET_ENABLE_PROFILING",
+    "DOTNET_PROFILER",
+    "DOTNET_PROFILER_PATH",
+    # Legacy CORECLR_ vars (older installs)
     "CORECLR_ENABLE_PROFILING",
     "CORECLR_PROFILER",
     "CORECLR_PROFILER_PATH",
+    # Startup hook vars
     "DOTNET_ReadyToRun",
     "DOTNET_STARTUP_HOOKS"
 )
@@ -63,7 +177,7 @@ foreach ($var in $envVars) {
 }
 Write-OK "Environment variables cleaned"
 
-# Step 2: Restore Root.exe from backup
+# Step 4: Restore Root.exe from backup
 Write-Step "Checking for Root.exe backup..."
 if (Test-Path $BackupPath) {
     Copy-Item $BackupPath $RootExePath -Force
@@ -73,7 +187,7 @@ if (Test-Path $BackupPath) {
     Write-OK "No backup found (Root.exe was not patched)"
 }
 
-# Step 3: Remove installed DLL directory
+# Step 5: Remove installed DLL directory
 Write-Step "Removing installed files..."
 if (Test-Path $InstallDir) {
     Remove-Item $InstallDir -Recurse -Force
@@ -82,10 +196,10 @@ if (Test-Path $InstallDir) {
     Write-OK "Install directory was already clean"
 }
 
-# Step 4: Clean up log and settings (optional)
+# Step 6: Clean up log and settings (optional)
 $profileDir = Join-Path $env:LOCALAPPDATA "Root Communications\Root\profile\default"
 $logFile = Join-Path $profileDir "uprooted-hook.log"
-$settingsFile = Join-Path $profileDir "uprooted-settings.json"
+$settingsFile = Join-Path $profileDir "uprooted-settings.ini"
 
 $hasLeftovers = (Test-Path $logFile) -or (Test-Path $settingsFile)
 if ($hasLeftovers) {

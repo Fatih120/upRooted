@@ -125,15 +125,30 @@ jobs:
       - name: Rename installer exe
         run: |
           $src = "installer\src-tauri\target\release\uprooted.exe"
-          $dst = "installer\src-tauri\target\release\Uprooted-0.3.6rc-Setup.exe"
+          $dst = "installer\src-tauri\target\release\Uprooted-0.3.6-rc-Setup.exe"
           Move-Item $src $dst
-          Write-Host "Renamed to Uprooted-0.3.6rc-Setup.exe"
+          Write-Host "Renamed to Uprooted-0.3.6-rc-Setup.exe"
 
-      - name: Upload installer exe
+      - name: Upload installer exe (CI artifact)
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted
           path: installer/src-tauri/target/release/Uprooted-*-Setup.exe
+
+      - name: Pack auto-update package
+        run: python scripts/pack-update.py --input-dir installer\src-tauri\artifacts --output auto-update.uprpkg --verify
+
+      - name: Publish to private repo release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "0.3.6-rc"
+          $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
+          gh release create "v$version" --title "v$version" --notes "Windows installer" 2>&1
+          gh release upload "v$version" $exe.FullName --clobber 2>&1
+          gh release upload "v$version" auto-update.uprpkg --clobber 2>&1
+          Write-Host "Uploaded Setup.exe + auto-update.uprpkg to private repo v$version"
 
       - name: Publish to public repo release
         if: success()
@@ -144,13 +159,9 @@ jobs:
             Write-Host "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           }
-          $version = "0.3.6rc"
+          $version = "0.3.6-rc"
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
-          Write-Host "Uploading $($exe.Name) to watchthelight/uprooted v$version"
           gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" 2>&1
           gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
-          if ($LASTEXITCODE -ne 0) { Write-Host "Release upload failed or no release found, skipping" }
-          # Pack auto-update package (.uprpkg) and upload
-          python scripts/pack-update.py --input-dir installer\src-tauri\artifacts --output auto-update.uprpkg --verify
           gh release upload "v$version" auto-update.uprpkg --repo watchthelight/uprooted --clobber 2>&1
-          Write-Host "  Uploaded auto-update.uprpkg"
+          Write-Host "Uploaded Setup.exe + auto-update.uprpkg to public repo v$version"

@@ -118,21 +118,39 @@ jobs:
 
       - name: Rename Linux binary
         run: |
-          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
-          chmod +x installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
-          echo "Renamed to Uprooted-0.3.6rc-linux-amd64"
+          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
+          chmod +x installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
+          echo "Renamed to Uprooted-0.3.6-rc-linux-amd64"
 
-      - name: Upload Linux binary
+      - name: Upload Linux binary (CI artifact)
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux
-          path: installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
+          path: installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
 
-      - name: Upload artifacts tarball
+      - name: Upload artifacts tarball (CI artifact)
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux-artifacts
           path: uprooted-linux-artifacts.tar.gz
+
+      - name: Pack auto-update package
+        run: python3 scripts/pack-update.py --input-dir installer/src-tauri/artifacts --output auto-update.uprpkg --verify
+
+      - name: Publish to private repo release
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="0.3.6-rc"
+          gh release create "v$VERSION" --title "v$VERSION" --notes "Linux installer" 2>/dev/null || true
+          for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
+                   uprooted-linux-artifacts.tar.gz \
+                   auto-update.uprpkg \
+                   install-uprooted-linux.sh; do
+            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --clobber || true
+          done
+          echo "Uploaded Linux assets to private repo v$VERSION"
 
       - name: Publish to public repo release
         if: success()
@@ -143,13 +161,12 @@ jobs:
             echo "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           fi
-          VERSION="0.3.6rc"
-          echo "Uploading Linux artifacts to watchthelight/uprooted v$VERSION"
+          VERSION="0.3.6-rc"
           gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" 2>/dev/null || true
           for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
-                   uprooted-linux-artifacts.tar.gz; do
+                   uprooted-linux-artifacts.tar.gz \
+                   auto-update.uprpkg \
+                   install-uprooted-linux.sh; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done
-          # Pack auto-update package (.uprpkg) and upload
-          python3 scripts/pack-update.py --input-dir installer/src-tauri/artifacts --output auto-update.uprpkg --verify
-          gh release upload "v$VERSION" auto-update.uprpkg --repo watchthelight/uprooted --clobber 2>/dev/null && echo "  Uploaded auto-update.uprpkg" || true
+          echo "Uploaded Linux assets to public repo v$VERSION"

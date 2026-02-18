@@ -32,6 +32,7 @@ try {
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path $ScriptDir -Parent
 $HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
+$ToolsDir   = Join-Path $RepoRoot "tools"
 $UprootedDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
 $RootExe = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"
 $Launcher = Join-Path $UprootedDir "UprootedLauncher.exe"
@@ -94,6 +95,18 @@ foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
         Copy-Item $src (Join-Path $UprootedDir $jsFile) -Force
         Write-OK "  $jsFile"
     }
+}
+
+# Native artifacts from tools/ (not part of dotnet build)
+$srcProfiler = Join-Path $ToolsDir "uprooted_profiler.dll"
+if (Test-Path $srcProfiler) {
+    Copy-Item $srcProfiler (Join-Path $UprootedDir "uprooted_profiler.dll") -Force
+    Write-OK "  uprooted_profiler.dll"
+}
+$srcLauncher = Join-Path $ToolsDir "UprootedLauncher.exe"
+if (Test-Path $srcLauncher) {
+    Copy-Item $srcLauncher (Join-Path $UprootedDir "UprootedLauncher.exe") -Force
+    Write-OK "  UprootedLauncher.exe"
 }
 
 # --- Relaunch ---
