@@ -63,6 +63,11 @@ internal class MessageLogger
     // Deletion detection via CollectionChanged Remove events (buffered + debounced)
     private readonly List<BufferedRemove> _pendingRemoves = new();
 
+    // Settling filter: messages present at subscription time are protected from false-positive
+    // Remove events for 30s, since Root's buffer management fires Remove for scroll-off.
+    private readonly HashSet<string> _initialSnapshotIds = new();
+    private DateTime _lastSubscriptionTime = DateTime.UtcNow;
+
     // Diagnostic counters: track Add/Remove correlation per flush window
     private int _addsSinceFlush;
     private int _removesSinceFlush;

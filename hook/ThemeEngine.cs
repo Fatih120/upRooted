@@ -684,7 +684,7 @@ internal class ThemeEngine
     {
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
-            foreach (var delayMs in new[] { 200, 500, 1000 })
+            foreach (var delayMs in new[] { 50, 200, 500, 1000 })
             {
                 Thread.Sleep(delayMs);
                 if (_activeColorMap == null) return;

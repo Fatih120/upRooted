@@ -616,22 +616,22 @@ internal static class ContentPages
         {
             KnownPlugins = new PluginInfo[]
             {
-                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.6rc",
+                new() { Id = "sentry-blocker", DisplayName = "SentryBlocker", Version = "0.3.6rc",
                     Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "Themes", Version = "0.3.6rc",
                     Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
-                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.6rc",
+                new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.3.6rc",
                     Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
                     DefaultEnabled = true, HasSettings = true, TestingStatus = 2 },
                 new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.3.6rc",
                     Description = "Automatically strips tracking parameters (utm_source, fbclid, gclid, etc.) from URLs you send for cleaner links and better privacy.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "message-logger", DisplayName = "Message Logger", Version = "0.3.6rc",
+                new() { Id = "message-logger", DisplayName = "MessageLogger", Version = "0.3.6rc",
                     Description = "Logs deleted and edited messages. Shows visual indicators in chat with original content.",
                     DefaultEnabled = true, HasSettings = true, TestingStatus = 0 },
-                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.6rc",
+                new() { Id = "content-filter", DisplayName = "ContentFilter", Version = "0.3.6rc",
                     Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };

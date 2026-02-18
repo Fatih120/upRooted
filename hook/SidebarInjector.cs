@@ -175,6 +175,8 @@ internal class SidebarInjector
                     Logger.Log("Injector", $"ListBox selection changed {_lastListBoxIdx} -> {currentIdx}");
                     _lastListBoxIdx = currentIdx;
                     RemoveContentPage();
+                    // New Root tab content loads with default colors — walk burst to recolor
+                    _themeEngine.ScheduleWalkBurst();
                 }
             }
 
@@ -337,9 +339,8 @@ internal class SidebarInjector
             // Step 6: Record current ListBox selection
             _lastListBoxIdx = _listBox != null ? _r.GetSelectedIndex(_listBox) : -1;
 
-            // Step 6b: Subscribe to ListBox.SelectionChanged for instant Uprooted→Root transitions.
-            // Without this, switching from an Uprooted tab to a Root tab waits up to 200ms
-            // (next timer poll) to remove our content page, causing visible body lag.
+            // Step 6b: Subscribe to ListBox.SelectionChanged for instant Uprooted→Root transitions
+            // and immediate theme recoloring when Root loads new tab content.
             if (_listBox != null)
             {
                 _r.SubscribeEvent(_listBox, "SelectionChanged", () =>
@@ -350,12 +351,19 @@ internal class SidebarInjector
                         _lastListBoxIdx = idx;
                         RemoveContentPage();
                     }
+                    // Walk burst on every Root tab selection — new content loads with default colors
+                    if (idx >= 0)
+                        _themeEngine.ScheduleWalkBurst();
                 });
             }
 
             _injected = true;
             Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
                 $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
+
+            // Walk burst after injection — Root will auto-select a tab, loading content
+            // with default theme colors that needs immediate recoloring
+            _themeEngine.ScheduleWalkBurst();
         }
         catch (Exception ex)
         {
@@ -779,6 +787,11 @@ internal class SidebarInjector
 
             _activePage = pageName;
             UpdateNavHighlights();
+
+            // Immediate synchronous theme walk to prevent flash of unthemed content.
+            // The LayoutUpdated interceptor has an 80ms debounce that can skip the walk
+            // if a recent walk happened, causing a 1-frame flash of Root's default colors.
+            _themeEngine.WalkVisualTreeNow();
 
             if (_contentPanel != null)
                 Logger.Log("Injector", $"Content page '{pageName}' displayed in content Panel");
