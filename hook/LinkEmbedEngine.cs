@@ -323,8 +323,17 @@ internal class LinkEmbedEngine
             }
 
             var data = FetchMetadata(url);
-            if (data == null) return;
-            if (string.IsNullOrEmpty(data.Title)) return;
+
+            // Fallback: if no metadata or no title, show minimal domain-only card
+            if (data == null || string.IsNullOrEmpty(data.Title))
+            {
+                try
+                {
+                    var host = new Uri(url).Host;
+                    data = new EmbedData(url, null, null, host, null, null, null, null);
+                }
+                catch { return; }
+            }
 
             // Fast path: if we already have cached image bytes (re-injection after
             // VirtualizingStackPanel recycle), build the full card with image in one shot

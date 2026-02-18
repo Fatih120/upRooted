@@ -6,6 +6,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.3.41] - 2026-02-18
+
+### Fixed
+- Link embeds: fallback to domain-only card when URL returns no OG metadata or title (e.g. Google Docs login redirects, JS-only SPAs)
+
 ## [0.3.4] - 2026-02-17
 
 ### Added
