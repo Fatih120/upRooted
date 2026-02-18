@@ -7,15 +7,16 @@
 ### Added
 
 - **Message Logger plugin** — detects deleted and edited messages in chat, preserves original content with visual indicators
-  - Deletion detection via `ObservableCollection` `CollectionChanged` subscription (Remove events = real deletions; channel switches detected separately via ItemsSource swap/Reset)
-  - Edit detection via content snapshot comparison on each poll tick
+  - Deletion detection via `ObservableCollection` `CollectionChanged` subscription with diagnostic instrumentation (probes `HasBeenDeleted`, tracks Add/Remove correlation, logs remove indices); channel switches detected via bulk threshold (10+) or ItemsSource swap/Reset
+  - Diagnostic build: one-time property dump of all boolean properties on first Remove event, enhanced flush logging with collection size and snapshot age
+  - Edit detection via content snapshot comparison on each poll tick (currently disabled — false positives)
   - Deleted messages re-injected into chat as red-tinted inline panels with author, timestamp, and original content
   - Edit history accessible per message (timestamped list of previous versions)
   - Flat-file persistence (`uprooted-message-log.dat`) — pipe-delimited, append-only, URI-encoded fields
   - Buffered flush every 5 seconds, automatic retention enforcement (configurable max messages)
   - Right-click context menu on logged messages for "Clear message history"
   - Settings page: Log Deletes toggle, Log Edits toggle, Ignore Own Messages toggle, Max Messages retention limit
-  - New files: `hook/MessageLogger.cs` (1185 lines), `hook/MessageStore.cs` (232 lines)
+  - New files: `hook/MessageLogger.cs` (1393 lines), `hook/MessageStore.cs` (232 lines)
 - **Auto-updater** — in-process update checker that polls GitHub releases, downloads updated files to a staging directory, verifies integrity, then overwrites in-place. Changes take effect on next Root restart.
   - Periodic background checks (every 6 hours, throttled by last-check timestamp)
   - Manual "Check for Updates" button in About → UPDATES card
@@ -36,6 +37,10 @@
   - Heuristic popup detection: avatar Image/Ellipse + username TextBlock + "Roles" header
   - Diagnostic tree dump on first popup detection (logged to uprooted-hook.log) for iterative refinement
   - New file: `hook/ProfileBadgeInjector.cs`, Phase 4.5e in `StartupHook.cs` (25s delay)
+- **ClearURLs engine** — strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor when the user presses Enter to send
+  - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` with `AddHandler(RoutedEvent, …, handledEventsToo: true)` and all routing strategies — required because AvaloniaEdit marks Enter `Handled=true`
+  - 33-param HashSet (O(1) lookup), fragment-preserving, idempotent
+  - New file: `hook/ClearUrlsEngine.cs`
 - **Restart banners** — prominent "Restart Root to apply changes" notices with a **Restart** button that relaunches Root
   - Plugins page: amber banner appears when any plugin state diverges from initial; disappears if user reverts all changes back to original state (themes excluded — they apply live)
   - Updates section: green banner appears after auto-updater applies an update
@@ -46,6 +51,7 @@
 
 - **Sentry Blocker**: testing status promoted Alpha → Beta
 - **Link Embeds**: testing status promoted Alpha → Beta
+- **ProfileBadgeInjector**: badge repositioned below the username (was appearing beside it in the horizontal name row); now walks up to the first vertical StackPanel before inserting; badge made smaller and centered (font 10, padding 7,2, `HorizontalAlignment=Center`)
 - **Sidebar: Uprooted section repositioned above App Settings** — the UPROOTED nav section (About, Plugins, Themes) now appears between the USER SETTINGS and APP SETTINGS sections instead of at the bottom of the sidebar, so users don't have to scroll to reach Uprooted settings. Uses `FindAppSettingsInsertionPoint` to walk up from the "APP SETTINGS" TextBlock and insert into the items panel at the correct index. Falls back to appending at the end if the insertion point can't be determined.
 - **Linux installer: smarter Root auto-detection** — `find_root()` now uses 7 search strategies instead of just hardcoded paths:
   1. Exact well-known paths (fastest, same as before)

@@ -10,7 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 - **MessageLogger plugin** (WIP) — logs deleted messages in Avalonia-native chat with visual indicators
-  - Deletion detection via `ObservableCollection.CollectionChanged` Remove events (event-based, not polling); buffered per-tick with debounce (3+ removes = channel switch → discard, 1-2 = real deletions)
+  - Deletion detection via `ObservableCollection.CollectionChanged` Remove events (event-based, not polling); buffered per-tick with debounce (10+ removes = channel switch → discard)
+  - Diagnostic instrumentation: probes `HasBeenDeleted` property on removed items, tracks Add/Remove correlation per flush window, logs remove indices, one-time boolean property dump on first Remove event
   - Post-subscription settling filter: messages present at subscription time (`_initialSnapshotIds`) protected from false-positive removes for 30s; messages arriving via Add events trusted immediately with zero delay
   - Per-type property cache (`Dictionary<Type, TypeProps>`) handles multiple ViewModel types with nested `.Message` bridge property resolution
   - Deleted messages re-injected as Discord-style full-width red-tinted background stripes with 3px red left accent border, right-click "Clear message history" context menu
@@ -33,6 +34,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
 - **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay; active only when update channel is set to Developer; 500ms timer polls all TopLevel windows for new popup controls
   - File: `hook/ProfileBadgeInjector.cs`
+- **ClearURLs engine** — strips tracking parameters from URLs in the compose editor before the message is sent
+  - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` via `AddHandler(RoutedEvent, …, handledEventsToo: true)` with all routing strategies (Bubble|Tunnel|Direct) — required because AvaloniaEdit marks Enter as `Handled=true`
+  - 33 tracking params (utm_*, fbclid, gclid, etc.) in a case-insensitive `HashSet` for O(1) lookup; fragment-preserving; idempotent (no write if no params remain)
+  - Timer-based `TextArea` discovery (2s interval) via visual tree walk for `RootMessageTextboxView`
+  - File: `hook/ClearUrlsEngine.cs`
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
 
@@ -47,6 +53,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Cargo.toml version format: `0.3.6rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
 - **SidebarInjector**: UPROOTED section header spacing now matches Root's native section categories (16px top margin on container, -4px bottom margin on header wrapper)
 - **SidebarInjector**: switching from Uprooted tabs back to Root tabs is now instant (subscribed `ListBox.SelectionChanged` instead of waiting for 200ms timer poll)
+- **ProfileBadgeInjector**: fixed `double?` to `double` implicit conversion error in username font size comparison
+- **ProfileBadgeInjector**: badge was appearing beside the username (inside the horizontal name row) instead of below it — fixed by walking up the visual tree to find the first vertical StackPanel (`Orientation == Vertical`), then inserting at the username row's index+1; added `IsVerticalPanel()` helper (checks `Orientation` property for StackPanels, falls back to Y-bounds delta comparison for Grid/DockPanel)
+- **ProfileBadgeInjector**: badge made smaller and centered (font 12→10, padding 10,4→7,2, dot 8×8→6×6, `HorizontalAlignment=Center`)
+- **Deploy script**: `deploy-hook.ps1` now relaunches Root via `UprootedLauncher.exe` (sets CLR profiler env vars) instead of bare `Root.exe`
 
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
