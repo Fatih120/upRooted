@@ -273,6 +273,9 @@ internal static class ContentPages
                     s.Save();
                 });
 
+            // Update channel row
+            BuildChannelRow(r, updatesContent, settings, font);
+
             // Separator line
             var sep = r.CreateBorder(CardBorder, 0);
             if (sep != null)
@@ -2492,6 +2495,230 @@ internal static class ContentPages
         }
 
         r.AddChild(container, row);
+    }
+
+    /// <summary>
+    /// Build the update channel row: shows current channel with a clickable switch.
+    /// Switching to "Developer" prompts for a password inline.
+    /// Switching back to "Stable" is immediate (no password needed).
+    /// </summary>
+    private static void BuildChannelRow(AvaloniaReflection r, object container,
+        UprootedSettings settings, object? font)
+    {
+        var row = r.CreatePanel();
+        if (row == null) return;
+        r.SetMargin(row, 0, 14, 0, 0);
+
+        // Left side: label + description
+        var leftStack = r.CreateStackPanel(vertical: true, spacing: 2);
+        if (leftStack != null)
+        {
+            r.SetHorizontalAlignment(leftStack, "Left");
+            r.SetVerticalAlignment(leftStack, "Center");
+            r.SetMargin(leftStack, 0, 0, 140, 0);
+
+            var nameText = r.CreateTextBlock("Update channel", 13, TextWhite);
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.AddChild(leftStack, nameText);
+
+            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 12, TextMuted);
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.AddChild(leftStack, descText);
+
+            r.AddChild(row, leftStack);
+        }
+
+        // Right side: channel badge (clickable)
+        var isDev = settings.AutoUpdateChannel == "developer";
+        var badgeColor = isDev ? "#8B6914" : AccentGreen;
+        var badgeLabel = isDev ? "Developer" : "Stable";
+
+        var badgeText = r.CreateTextBlock(badgeLabel, 12, TextWhite);
+        r.SetFontWeightNumeric(badgeText, 500);
+        ApplyFont(r, badgeText, font);
+        r.SetHorizontalAlignment(badgeText, "Center");
+
+        var badge = r.CreateBorder(badgeColor, 8, badgeText);
+        if (badge != null)
+        {
+            r.SetPadding(badge, 12, 5, 12, 5);
+            r.SetHorizontalAlignment(badge, "Right");
+            r.SetVerticalAlignment(badge, "Center");
+            r.SetCursorHand(badge);
+
+            var badgeRef = badge;
+            var badgeTextRef = badgeText;
+            var containerRef = container;
+
+            r.SubscribeEvent(badge, "PointerPressed", () =>
+            {
+                var current = UprootedSettings.Load().AutoUpdateChannel;
+                if (current == "developer")
+                {
+                    // Switch back to Stable — no password needed
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateChannel = "stable";
+                    s.Save();
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
+                    r.SetBackground(badgeRef, AccentGreen);
+                    Logger.Log("AutoUpdate", "Switched to Stable channel");
+                }
+                else
+                {
+                    // Show inline password prompt below the row
+                    if (badgeTextRef != null)
+                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font);
+                }
+            });
+
+            r.SubscribeEvent(badge, "PointerEntered", () =>
+            {
+                var c = UprootedSettings.Load().AutoUpdateChannel;
+                r.SetBackground(badge, ColorUtils.Lighten(c == "developer" ? "#8B6914" : AccentGreen, 10));
+            });
+            r.SubscribeEvent(badge, "PointerExited", () =>
+            {
+                var c = UprootedSettings.Load().AutoUpdateChannel;
+                r.SetBackground(badge, c == "developer" ? "#8B6914" : AccentGreen);
+            });
+
+            r.AddChild(row, badge);
+        }
+
+        r.AddChild(container, row);
+    }
+
+    /// <summary>
+    /// Show an inline password prompt to switch to Developer channel.
+    /// Inserts a row after the channel row with a TextBox + Submit button.
+    /// </summary>
+    private static void ShowChannelPasswordPrompt(AvaloniaReflection r, object container,
+        object channelRow, object badge, object badgeText, object? font)
+    {
+        // Create the prompt row
+        var promptRow = r.CreateStackPanel(vertical: false, spacing: 8);
+        if (promptRow == null) return;
+        r.SetMargin(promptRow, 0, 10, 0, 0);
+        r.SetHorizontalAlignment(promptRow, "Left");
+
+        // Password text box
+        var passBox = r.CreateTextBox("Enter password...", "", 30);
+        if (passBox == null) return;
+        passBox.GetType().GetProperty("FontSize")?.SetValue(passBox, 13.0);
+        r.SetWidth(passBox, 180);
+        r.SetHeight(passBox, 32);
+        r.SetBackground(passBox, ColorUtils.Lighten(CardBg, 5));
+        r.SetForeground(passBox, TextWhite);
+        ApplyFont(r, passBox, font);
+        // Set PasswordChar to mask input
+        try
+        {
+            passBox.GetType().GetProperty("PasswordChar")?.SetValue(passBox, '\u2022');
+        }
+        catch { /* older Avalonia may not have this */ }
+        r.AddChild(promptRow, passBox);
+
+        // Submit button
+        var submitText = r.CreateTextBlock("Go", 12, TextWhite);
+        r.SetFontWeightNumeric(submitText, 500);
+        ApplyFont(r, submitText, font);
+        r.SetHorizontalAlignment(submitText, "Center");
+        r.SetVerticalAlignment(submitText, "Center");
+
+        var submitBtn = r.CreateBorder(AccentGreen, 6, submitText);
+        if (submitBtn != null)
+        {
+            r.SetPadding(submitBtn, 12, 5, 12, 5);
+            r.SetVerticalAlignment(submitBtn, "Center");
+            r.SetCursorHand(submitBtn);
+            r.AddChild(promptRow, submitBtn);
+        }
+
+        // Result text (for success/error feedback)
+        var resultText = r.CreateTextBlock("", 12, "#E04040");
+        ApplyFont(r, resultText, font);
+        r.SetVerticalAlignment(resultText, "Center");
+        r.AddChild(promptRow, resultText);
+
+        // Insert prompt row into container after the channel row
+        // Find the index of channelRow in container's Children and insert after it
+        try
+        {
+            var children = container.GetType().GetProperty("Children")?.GetValue(container);
+            if (children != null)
+            {
+                var indexOfMethod = children.GetType().GetMethod("IndexOf");
+                var insertMethod = children.GetType().GetMethod("Insert");
+                if (indexOfMethod != null && insertMethod != null)
+                {
+                    var idx = (int)indexOfMethod.Invoke(children, new[] { channelRow })!;
+                    insertMethod.Invoke(children, new object[] { idx + 1, promptRow });
+                }
+                else
+                {
+                    // Fallback: just add at end
+                    r.AddChild(container, promptRow);
+                }
+            }
+        }
+        catch
+        {
+            r.AddChild(container, promptRow);
+        }
+
+        // Wire up submit action
+        var passBoxRef = passBox;
+        var promptRowRef = promptRow;
+        var badgeRef = badge;
+        var badgeTextRef = badgeText;
+        var resultTextRef = resultText;
+        var containerRef = container;
+
+        Action doSubmit = () =>
+        {
+            var input = r.GetTextBoxText(passBoxRef)?.Trim() ?? "";
+            if (string.IsNullOrEmpty(input)) return;
+
+            if (AutoUpdater.ValidateDevPassword(input))
+            {
+                // Success — switch to developer channel
+                var s = UprootedSettings.Load();
+                s.AutoUpdateChannel = "developer";
+                s.Save();
+
+                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
+                r.SetBackground(badgeRef, "#8B6914");
+                r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
+                Logger.Log("AutoUpdate", "Switched to Developer channel");
+
+                // Remove the prompt row
+                try
+                {
+                    var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
+                    children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { promptRowRef });
+                }
+                catch { }
+            }
+            else
+            {
+                // Wrong password — show error
+                r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "Incorrect");
+                var brush = r.CreateBrush("#E04040");
+                resultTextRef?.GetType().GetProperty("Foreground")?.SetValue(resultTextRef, brush);
+                r.SetTextBoxText(passBoxRef, "");
+            }
+        };
+
+        if (submitBtn != null)
+        {
+            r.SubscribeEvent(submitBtn, "PointerPressed", doSubmit);
+            r.SubscribeEvent(submitBtn, "PointerEntered", () =>
+                r.SetBackground(submitBtn, ColorUtils.Lighten(AccentGreen, 10)));
+            r.SubscribeEvent(submitBtn, "PointerExited", () =>
+                r.SetBackground(submitBtn, AccentGreen));
+        }
     }
 
     /// <summary>

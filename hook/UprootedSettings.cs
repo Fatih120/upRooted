@@ -22,6 +22,7 @@ internal class UprootedSettings
     // Auto-update settings
     public bool AutoUpdateEnabled { get; set; } = true;
     public bool AutoUpdateNotify { get; set; } = true;
+    public string AutoUpdateChannel { get; set; } = "stable";
     public string LastUpdateCheck { get; set; } = "";
     public string PendingUpdateVersion { get; set; } = "";
 
@@ -92,6 +93,7 @@ internal class UprootedSettings
                         break;
                     case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
                     case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
+                    case "AutoUpdate.Channel": settings.AutoUpdateChannel = val; break;
                     case "AutoUpdate.LastCheck": settings.LastUpdateCheck = val; break;
                     case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
                     case var k when k.StartsWith("Plugin."):
@@ -142,6 +144,7 @@ internal class UprootedSettings
                 "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
                 "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
                 "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
+                "AutoUpdate.Channel=" + AutoUpdateChannel,
                 "AutoUpdate.LastCheck=" + LastUpdateCheck,
                 "AutoUpdate.PendingVersion=" + PendingUpdateVersion
             };

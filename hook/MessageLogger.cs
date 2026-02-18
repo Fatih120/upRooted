@@ -21,7 +21,6 @@ internal class MessageLogger
 {
     private const string Tag = "MsgLogger";
     private const int ScanIntervalMs = 1500;
-    private const int InitialDelayMs = 3000;
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -61,9 +60,15 @@ internal class MessageLogger
     private string _currentChannelId = "";
     private int _freshnessCounter;
 
-    // Deletion detection via ID-diff polling (not CollectionChanged events)
-    private HashSet<string> _previousIdSnapshot = new();
-    private bool _idSnapshotInitialized;
+    // Deletion detection via CollectionChanged Remove events (buffered + debounced)
+    private readonly List<BufferedRemove> _pendingRemoves = new();
+    private int _cooldownTicksRemaining; // suppress removes after channel switch / subscription
+
+    private struct BufferedRemove
+    {
+        public string MessageId;
+        public string Content;
+    }
 
     // Message caches
     private readonly Dictionary<string, CachedMessage> _messageCache = new();
@@ -101,11 +106,20 @@ internal class MessageLogger
 
         _r.RunOnUIThread(() =>
         {
-            try { RunDiscoveryScan(); }
+            try
+            {
+                RunDiscoveryScan();
+                // Subscribe immediately — don't wait for timer tick
+                if (_chatItemsControl != null && _currentItemsSource != null)
+                {
+                    SubscribeToCollection(_currentItemsSource);
+                    SnapshotMessages(_currentItemsSource);
+                }
+            }
             catch (Exception ex) { Logger.LogException(Tag, "Discovery error", ex); }
         });
 
-        _scanTimer = new Timer(OnScanTick, null, InitialDelayMs, ScanIntervalMs);
+        _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
         Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms)");
     }
 
@@ -143,12 +157,11 @@ internal class MessageLogger
                     EnsureCollectionSubscription();
                     if (_propertiesResolved)
                     {
-                        PollDeletions(settings);
+                        FlushPendingRemoves(settings);
                         // TODO: PollEdits has false positives (content changes during send/render)
                         // TODO: ApplyEditIndicators breaks message layout (greyed out, "(edited)" on every msg)
                         // Disabled until edit detection is reliable.
                         // PollEdits(settings);
-                        // InjectDeletedMessageCards skips edit indicators when edits disabled
                         InjectDeletedMessageCards(settings);
                     }
                 }
@@ -401,8 +414,7 @@ internal class MessageLogger
                 _chatItemsControl = activeControl;
                 _currentItemsSource = activeSource;
                 _contentSnapshot.Clear();
-                _previousIdSnapshot.Clear();
-                _idSnapshotInitialized = false;
+                _pendingRemoves.Clear();
                 ClearInjectedCards();
                 ReadCurrentChannelId();
                 if (activeSource != null)
@@ -435,8 +447,7 @@ internal class MessageLogger
             UnsubscribeCollection();
             _currentItemsSource = currentSource;
             _contentSnapshot.Clear();
-            _previousIdSnapshot.Clear();
-            _idSnapshotInitialized = false;
+            _pendingRemoves.Clear();
             ClearInjectedCards();
             ReadCurrentChannelId();
             SubscribeToCollection(currentSource);
@@ -597,7 +608,11 @@ internal class MessageLogger
             _collectionChangedHandler = handler;
             _collectionChangedEvent = ev;
             _subscribed = true;
-            Logger.Log(Tag, "Subscribed to CollectionChanged");
+            // Suppress removes for ~15s after subscription — Root adjusts its buffer
+            // after loading a channel (backfill removes are NOT real deletions).
+            _cooldownTicksRemaining = 10;
+            _pendingRemoves.Clear();
+            Logger.Log(Tag, "Subscribed to CollectionChanged (cooldown=10 ticks)");
         }
         catch (Exception ex)
         {
@@ -620,6 +635,7 @@ internal class MessageLogger
         if (!_propertiesResolved) return;
         try
         {
+            int count = 0;
             var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
             if (en == null) return;
             while (en.MoveNext())
@@ -630,7 +646,9 @@ internal class MessageLogger
                 if (msgId == null) continue;
                 _contentSnapshot[msgId] = ReadContent(item) ?? "";
                 CacheMessage(item, msgId);
+                count++;
             }
+            Logger.Log(Tag, $"Snapshot: {count} messages cached");
         }
         catch (Exception ex) { Logger.Log(Tag, $"Snapshot error: {ex.Message}"); }
     }
@@ -651,6 +669,11 @@ internal class MessageLogger
                     if (newItems != null) HandleAdded(newItems);
                     break;
 
+                case 1: // Remove — buffer for debounced deletion detection
+                    var oldItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+                    if (oldItems != null) HandleRemoved(oldItems);
+                    break;
+
                 case 2: // Replace — cache the new version
                     var replaceItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
                     if (replaceItems != null) HandleAdded(replaceItems);
@@ -659,16 +682,13 @@ internal class MessageLogger
                 case 4: // Reset — Root rebuilt the collection, force re-discovery
                     Logger.Log(Tag, "Collection Reset — forcing re-discovery");
                     _contentSnapshot.Clear();
-                    _previousIdSnapshot.Clear();
-                    _idSnapshotInitialized = false;
+                    _pendingRemoves.Clear();
                     ClearInjectedCards();
                     UnsubscribeCollection();
                     _chatItemsControl = null;
                     _currentItemsSource = null;
                     _subscribed = false;
                     break;
-
-                // Remove (1) and Move (3) — ignored. Deletion detection is via ID-diff polling.
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"CollectionChanged error: {ex.Message}"); }
@@ -688,88 +708,108 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Detect deletions by comparing current collection IDs with previous snapshot.
-    /// IDs that disappeared (present before, absent now) are deletions — IF only
-    /// a few disappeared. Many disappearances = channel switch, trigger re-discovery.
+    /// Buffer removed items for debounced processing on next tick.
+    /// We capture the message ID and content NOW (while the item is still alive)
+    /// because after the event returns, Root may dispose it.
     /// </summary>
-    private void PollDeletions(UprootedSettings settings)
+    private void HandleRemoved(System.Collections.IList items)
     {
-        if (!settings.MessageLoggerLogDeletes || _currentItemsSource == null) return;
-
-        // Build current ID set
-        var currentIds = new HashSet<string>();
-        try
+        if (!_propertiesResolved) return;
+        foreach (var item in items)
         {
-            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
-            if (en == null) return;
-            while (en.MoveNext())
-            {
-                var item = en.Current;
-                if (item == null) continue;
-                var msgId = ReadMessageId(item);
-                if (msgId != null) currentIds.Add(msgId);
-            }
+            if (item == null) continue;
+            var msgId = ReadMessageId(item);
+            if (msgId == null) continue;
+            var content = ReadContent(item) ?? "";
+
+            // Also check cache for richer content (sometimes ViewModel content is empty on removal)
+            if (string.IsNullOrEmpty(content) && _messageCache.TryGetValue(msgId, out var cached))
+                content = cached.Content;
+
+            _pendingRemoves.Add(new BufferedRemove { MessageId = msgId, Content = content });
+            Logger.Log(Tag, $"[remove-event] buffered: {msgId} ({Truncate(content, 40)})");
         }
-        catch { return; }
+    }
 
-        if (!_idSnapshotInitialized)
+    /// <summary>
+    /// Process buffered Remove events from CollectionChanged. Called each tick.
+    ///
+    /// Debounce logic based on log analysis of real Root behavior:
+    ///   - Real deletion: 1 Remove event, followed ~1ms later by 1 Add (history backfill)
+    ///   - Channel switch: Many Remove events burst within &lt;1ms (or a Reset event)
+    ///   - Buffer trim: NOT observed during normal use
+    ///
+    /// Rule: 3+ buffered removes since last tick = channel switch (discard).
+    ///        1-2 removes = real deletions.
+    /// </summary>
+    private void FlushPendingRemoves(UprootedSettings settings)
+    {
+        // Decrement cooldown (counts down even with no removes)
+        if (_cooldownTicksRemaining > 0) _cooldownTicksRemaining--;
+
+        if (_pendingRemoves.Count == 0) return;
+        if (!settings.MessageLoggerLogDeletes)
         {
-            _previousIdSnapshot = currentIds;
-            _idSnapshotInitialized = true;
-            Logger.Log(Tag, $"ID snapshot initialized: {currentIds.Count} IDs");
+            _pendingRemoves.Clear();
             return;
         }
 
-        // Find disappeared IDs (in previous but not in current)
-        var disappeared = new List<string>();
-        foreach (var id in _previousIdSnapshot)
-            if (!currentIds.Contains(id)) disappeared.Add(id);
+        int count = _pendingRemoves.Count;
 
-        // Find new IDs
-        int newCount = 0;
-        foreach (var id in currentIds)
-            if (!_previousIdSnapshot.Contains(id)) newCount++;
-
-        if (disappeared.Count > 0)
-            Logger.Log(Tag, $"ID diff: {disappeared.Count} gone, {newCount} new, prev={_previousIdSnapshot.Count} cur={currentIds.Count}");
-
-        _previousIdSnapshot = currentIds;
-
-        if (disappeared.Count == 0) return;
-
-        // Many disappearances OR many new IDs = channel switch or scroll-load, not deletions
-        // (navigating to a channel with overlapping messages can produce 1 gone + 50 new)
-        if (disappeared.Count >= 3 || newCount >= 5)
+        // During cooldown after subscription, suppress all removes (Root is still loading/settling)
+        if (_cooldownTicksRemaining > 0)
         {
-            Logger.Log(Tag, $"Navigation detected ({disappeared.Count} gone, {newCount} new) — resetting snapshot");
+            Logger.Log(Tag, $"Cooldown: discarding {count} remove(s) ({_cooldownTicksRemaining} ticks left)");
+            _pendingRemoves.Clear();
+            return;
+        }
+
+        if (count >= 3)
+        {
+            // Bulk removes = channel switch or collection rebuild.
+            // The Reset handler or freshness check will handle re-discovery.
+            Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding");
+            _pendingRemoves.Clear();
             _contentSnapshot.Clear();
             ClearInjectedCards();
-            if (disappeared.Count >= 3)
-            {
-                // Full channel switch — force rediscovery
-                UnsubscribeCollection();
-                _chatItemsControl = null;
-                _currentItemsSource = null;
-                _subscribed = false;
-                _idSnapshotInitialized = false;
-                TryRediscoverChat();
-            }
             return;
         }
 
-        // 1-2 disappearances with few new IDs = real deletions
-        foreach (var msgId in disappeared)
+        // 1-2 removes = real deletions
+        foreach (var removed in _pendingRemoves)
         {
-            _contentSnapshot.Remove(msgId);
+            _contentSnapshot.Remove(removed.MessageId);
 
-            if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
+            if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
             {
                 cached.IsDeleted = true;
                 cached.DeletedAt = DateTime.UtcNow;
-                _store.RecordDeletion(msgId, cached.ChannelId, DateTime.UtcNow);
+                _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
                 Logger.Log(Tag, $"MSG DEL: {Truncate(cached.Content, 80)}");
             }
+            else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
+            {
+                // Message wasn't in cache yet (e.g. sent and immediately deleted before cache)
+                var newCached = new CachedMessage
+                {
+                    MessageId = removed.MessageId,
+                    ChannelId = _currentChannelId,
+                    AuthorId = "",
+                    AuthorName = "Unknown",
+                    Timestamp = DateTime.UtcNow,
+                    Content = removed.Content,
+                    IsDeleted = true,
+                    DeletedAt = DateTime.UtcNow
+                };
+                _messageCache[removed.MessageId] = newCached;
+                _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
+                    newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
+                _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
+                Logger.Log(Tag, $"MSG DEL (uncached): {Truncate(removed.Content, 80)}");
+            }
         }
+
+        _pendingRemoves.Clear();
     }
 
     // ===== Edit Detection via Polling =====
@@ -844,42 +884,47 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Build a red-tinted card that shows the deleted message content inline.
-    /// Content is immediately visible (no click-to-reveal).
+    /// Build a Discord-style deleted message row: full-width red-tinted background stripe
+    /// with the message content shown inline. Matches Discord's MessageLogger style.
     /// Right-click context menu has "Clear message history".
     /// </summary>
     private object? BuildDeletedMessageCard(CachedMessage cached, string tag)
     {
         try
         {
-            // Content stack: header + body
-            var stack = _r.CreateStackPanel(vertical: true, spacing: 2);
-            if (stack == null) return null;
-
-            // Author + timestamp header
-            var timeStr = cached.DeletedAt?.ToLocalTime().ToString("HH:mm") ?? "??:??";
-            var header = _r.CreateTextBlock($"[deleted] — {timeStr}", 11, "#FFCC4444", "SemiBold");
-            if (header != null) _r.AddChild(stack, header);
-
-            // Message content — immediately visible, red-tinted text
+            // Message content — white text, wrapping
             var body = _r.CreateTextBlock(cached.Content, 13, "#DDDDDD");
-            if (body != null)
-            {
-                _r.SetTextWrapping(body, "Wrap");
-                _r.AddChild(stack, body);
-            }
+            if (body == null) return null;
+            _r.SetTextWrapping(body, "Wrap");
 
-            // Red semi-transparent border wrapping everything
-            var card = _r.CreateBorder("#30FF3333", cornerRadius: 4, child: stack);
+            // Full-width red-tinted background stripe (no rounded corners — matches Discord)
+            var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: body);
             if (card == null) return null;
 
+            // Red left accent border (3px) via nested border
+            var leftAccent = _r.CreateBorder("#60FF4444", cornerRadius: 0, child: null);
+            if (leftAccent != null)
+            {
+                leftAccent.GetType().GetProperty("Width")?.SetValue(leftAccent, 3.0);
+                _r.SetHorizontalAlignment(leftAccent, "Left");
+            }
+
+            // Wrap in a panel to overlay the left accent
+            var wrapper = _r.CreatePanel();
+            if (wrapper != null)
+            {
+                _r.AddChild(wrapper, card);
+                if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
+                _r.SetTag(wrapper, tag);
+                _r.SetPadding(card, 56, 4, 16, 4); // Left padding past avatars
+                AttachContextMenu(wrapper, cached);
+                return wrapper;
+            }
+
+            // Fallback if panel creation fails
             _r.SetTag(card, tag);
-            _r.SetPadding(card, 12, 8, 12, 8);
-            _r.SetMargin(card, 56, 2, 16, 2); // Left margin to align with message content (past avatars)
-
-            // Right-click context menu: "Clear message history"
+            _r.SetPadding(card, 56, 4, 16, 4);
             AttachContextMenu(card, cached);
-
             return card;
         }
         catch (Exception ex)

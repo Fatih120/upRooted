@@ -1,4 +1,6 @@
 using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Uprooted;
@@ -13,10 +15,39 @@ namespace Uprooted;
 /// </summary>
 internal class AutoUpdater
 {
-    private const string GitHubApiUrl = "https://api.github.com/repos/watchthelight/uprooted/releases/latest";
-    private const string DownloadBaseUrl = "https://github.com/watchthelight/uprooted/releases/download";
+    // Stable channel (public repo)
+    private const string StableApiUrl = "https://api.github.com/repos/watchthelight/uprooted/releases/latest";
+    private const string StableDownloadBase = "https://github.com/watchthelight/uprooted/releases/download";
+
+    // Developer channel (private repo)
+    private const string DevApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases/latest";
+    private const string DevDownloadBase = "https://github.com/The-Uprooted-Project/uprooted-private/releases/download";
+
     private const int CheckIntervalHours = 6;
     private const int HttpTimeoutSeconds = 30;
+
+    // SHA-256 hash of the developer channel password
+    private const string DevPasswordHash = "81bb7db1c3e4c805aff0096621f2c5c910f522d8ffd4550e14d03ccbbeb99966";
+
+    // XOR-encrypted GitHub PAT (read-only, scoped to The-Uprooted-Project/uprooted-private)
+    private static readonly byte[] EncryptedPat =
+    {
+        0x0B, 0x47, 0xD9, 0x4B, 0x96, 0xA5, 0x7E, 0xFE, 0xFD, 0x7E, 0x20, 0xE8, 0x71, 0x69, 0x7B, 0xA6,
+        0xA4, 0xD4, 0x02, 0x19, 0x03, 0x7D, 0xBB, 0x10, 0x2A, 0x1C, 0xFB, 0x66, 0x6A, 0xE4, 0x2E, 0x46,
+        0x27, 0x27, 0x78, 0xDE, 0xF1, 0xDF, 0x65, 0xB3, 0x76, 0x9A, 0x76, 0xC4, 0x27, 0x03, 0x0A, 0xF0,
+        0x68, 0x93, 0xF4, 0x86, 0x15, 0xF6, 0x1D, 0xB1, 0x67, 0x3C, 0x95, 0xE0, 0xCF, 0xB0, 0x4B, 0x3B,
+        0xF7, 0x02, 0xDF, 0x96, 0x4B, 0x2D, 0x5E, 0x05, 0xB4, 0xF5, 0x7F, 0xD9, 0x22, 0x4E, 0x61, 0x59,
+        0x73, 0x3C, 0x1A, 0x3B, 0x90, 0x84, 0xF4, 0x83, 0xD9, 0xE2, 0x8E, 0x58, 0xD9
+    };
+    private static readonly byte[] PatXorKey =
+    {
+        0x6C, 0x2E, 0xAD, 0x23, 0xE3, 0xC7, 0x21, 0x8E, 0x9C, 0x0A, 0x7F, 0xD9, 0x40, 0x2B, 0x32, 0xE7,
+        0xE8, 0x93, 0x44, 0x48, 0x33, 0x2F, 0xD9, 0x58, 0x7F, 0x4A, 0xBC, 0x36, 0x5B, 0xA2, 0x4B, 0x24,
+        0x41, 0x78, 0x4A, 0x9D, 0x81, 0xAA, 0x30, 0xF1, 0x31, 0xD9, 0x24, 0x8B, 0x17, 0x74, 0x45, 0xA7,
+        0x2A, 0xAB, 0xAC, 0xB0, 0x50, 0xB9, 0x49, 0xD3, 0x26, 0x46, 0xD2, 0x8F, 0xA9, 0xF2, 0x3B, 0x79,
+        0xAE, 0x6D, 0x87, 0xC5, 0x2C, 0x40, 0x04, 0x6B, 0xD7, 0x80, 0x06, 0x9A, 0x43, 0x02, 0x2C, 0x10,
+        0x47, 0x7E, 0x4E, 0x6B, 0xDD, 0xC9, 0xAD, 0xC2, 0x98, 0x8F, 0xD9, 0x6E, 0xB5
+    };
 
     // Files to download per update (profiler DLL excluded — locked on Windows, rarely changes)
     private static readonly string[] UpdateFiles =
@@ -34,11 +65,39 @@ internal class AutoUpdater
     private string? _latestTag;
     private bool _updateApplied;
     private string? _lastError;
-    private volatile bool _checking;
+    private int _checking; // 0 = idle, 1 = checking (atomic via Interlocked)
     private Timer? _periodicTimer;
 
     // Singleton for UI access
     internal static AutoUpdater? Instance { get; set; }
+
+    internal static bool IsDevChannel => UprootedSettings.Load().AutoUpdateChannel == "developer";
+
+    /// <summary>
+    /// Validate the developer channel password by comparing SHA-256 hashes.
+    /// </summary>
+    internal static bool ValidateDevPassword(string input)
+    {
+        try
+        {
+            using var sha = SHA256.Create();
+            var hash = sha.ComputeHash(Encoding.UTF8.GetBytes(input));
+            var hex = BitConverter.ToString(hash).Replace("-", "").ToLowerInvariant();
+            return hex == DevPasswordHash;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static string DecryptPat()
+    {
+        var result = new byte[EncryptedPat.Length];
+        for (int i = 0; i < EncryptedPat.Length; i++)
+            result[i] = (byte)(EncryptedPat[i] ^ PatXorKey[i]);
+        return Encoding.ASCII.GetString(result);
+    }
 
     // HTTP via reflection (own copy — project convention of self-contained files)
     private static object? s_httpClient;
@@ -68,7 +127,7 @@ internal class AutoUpdater
             if (ShouldCheck(settings))
             {
                 Logger.Log("AutoUpdate", "Running initial update check...");
-                RunCheck();
+                CheckForUpdate();
             }
             else
             {
@@ -82,7 +141,7 @@ internal class AutoUpdater
                 {
                     var s = UprootedSettings.Load();
                     if (s.AutoUpdateEnabled && ShouldCheck(s))
-                        RunCheck();
+                        CheckForUpdate();
                 }
                 catch (Exception ex)
                 {
@@ -102,8 +161,9 @@ internal class AutoUpdater
     /// </summary>
     internal void CheckForUpdate()
     {
-        if (_checking) return;
-        RunCheck();
+        if (Interlocked.CompareExchange(ref _checking, 1, 0) != 0) return;
+        try { RunCheck(); }
+        finally { Interlocked.Exchange(ref _checking, 0); }
     }
 
     /// <summary>
@@ -111,28 +171,31 @@ internal class AutoUpdater
     /// </summary>
     internal (string text, string color) GetStatus()
     {
-        if (_checking)
+        var channelSuffix = IsDevChannel ? " (Dev)" : "";
+
+        if (_checking != 0)
             return ("Checking for updates...", ContentPages.TextMuted);
 
         if (_updateApplied)
-            return ($"Updated to v{_latestVersion} \u2014 restart Root to apply", ContentPages.AccentGreen);
+            return ($"Updated to v{_latestVersion}{channelSuffix} \u2014 restart Root to apply", ContentPages.AccentGreen);
 
         if (_lastError != null)
             return ($"Check failed: {_lastError}", "#E04040");
 
+        var currentVersion = UprootedSettings.Load().Version;
         if (_latestVersion != null)
         {
-            var current = UprootedSettings.Load().Version;
-            var cmp = CompareVersions(_latestVersion, current);
+            var cmp = CompareVersions(_latestVersion, currentVersion);
             if (cmp > 0)
-                return ($"Update available: v{_latestVersion}", "#C0A820");
+                return ($"Update available: v{_latestVersion}{channelSuffix}", "#C0A820");
+            if (cmp < 0)
+                return ($"Ahead of latest release (v{currentVersion} > v{_latestVersion}){channelSuffix}", ContentPages.AccentGreen);
         }
 
-        var currentVersion = UprootedSettings.Load().Version;
-        return ($"Up to date (v{currentVersion})", ContentPages.AccentGreen);
+        return ($"Up to date (v{currentVersion}){channelSuffix}", ContentPages.AccentGreen);
     }
 
-    internal bool IsChecking => _checking;
+    internal bool IsChecking => _checking != 0;
     internal bool HasUpdate => _latestVersion != null && CompareVersions(_latestVersion, UprootedSettings.Load().Version) > 0;
     internal bool UpdateApplied => _updateApplied;
 
@@ -152,21 +215,23 @@ internal class AutoUpdater
 
     private void RunCheck()
     {
-        if (_checking) return;
-        _checking = true;
         _lastError = null;
 
         try
         {
-            Logger.Log("AutoUpdate", "Checking for updates...");
+            var settings = UprootedSettings.Load();
+            var isDev = settings.AutoUpdateChannel == "developer";
+            var apiUrl = isDev ? DevApiUrl : StableApiUrl;
+            var authToken = isDev ? DecryptPat() : null;
+
+            Logger.Log("AutoUpdate", $"Checking for updates (channel: {settings.AutoUpdateChannel})...");
 
             // Update last check timestamp immediately (we attempted a check regardless of outcome)
-            var settings = UprootedSettings.Load();
             settings.LastUpdateCheck = DateTime.UtcNow.ToString("o");
             settings.Save();
 
             // Hit GitHub API
-            var json = HttpGetString(GitHubApiUrl);
+            var json = HttpGetString(apiUrl, authToken);
             if (json == null)
             {
                 _lastError = "Could not reach GitHub";
@@ -214,16 +279,16 @@ internal class AutoUpdater
             _lastError = ex.Message;
             Logger.Log("AutoUpdate", $"Check error: {ex.Message}");
         }
-        finally
-        {
-            _checking = false;
-        }
     }
 
     private void DownloadAndApply()
     {
         var uprootedDir = PlatformPaths.GetUprootedDir();
         var stagingDir = Path.Combine(uprootedDir, "update-staging");
+
+        var isDev = UprootedSettings.Load().AutoUpdateChannel == "developer";
+        var downloadBase = isDev ? DevDownloadBase : StableDownloadBase;
+        var authToken = isDev ? DecryptPat() : null;
 
         try
         {
@@ -237,10 +302,10 @@ internal class AutoUpdater
             // Download all files to staging
             foreach (var filename in UpdateFiles)
             {
-                var url = $"{DownloadBaseUrl}/{_latestTag}/{filename}";
+                var url = $"{downloadBase}/{_latestTag}/{filename}";
                 Logger.Log("AutoUpdate", $"Downloading {filename}...");
 
-                var bytes = HttpGetBytes(url);
+                var bytes = HttpGetBytes(url, authToken);
                 if (bytes == null || bytes.Length == 0)
                 {
                     _lastError = $"Failed to download {filename}";
@@ -462,13 +527,13 @@ internal class AutoUpdater
         }
     }
 
-    private static string? HttpGetString(string url)
+    private static string? HttpGetString(string url, string? authToken = null)
     {
         EnsureHttpResolved();
         if (s_httpClient == null) return null;
 
-        // Try GetStringAsync first
-        if (s_getStringAsync != null)
+        // When auth is needed, must use SendAsync to set per-request Authorization header
+        if (authToken == null && s_getStringAsync != null)
         {
             try
             {
@@ -487,12 +552,15 @@ internal class AutoUpdater
             }
         }
 
-        // Fallback: SendAsync
+        // Fallback / auth path: SendAsync
         if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
         {
             try
             {
                 var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
+                if (request != null)
+                    SetRequestAuth(request, authToken);
+
                 var sendParams = s_sendAsync.GetParameters();
                 object?[] args = sendParams.Length == 1
                     ? new[] { request }
@@ -520,13 +588,13 @@ internal class AutoUpdater
         return null;
     }
 
-    private static byte[]? HttpGetBytes(string url)
+    private static byte[]? HttpGetBytes(string url, string? authToken = null)
     {
         EnsureHttpResolved();
         if (s_httpClient == null) return null;
 
-        // Try GetByteArrayAsync first
-        if (s_getByteArrayAsync != null)
+        // When auth is needed, skip GetByteArrayAsync (can't set per-request headers)
+        if (authToken == null && s_getByteArrayAsync != null)
         {
             try
             {
@@ -540,12 +608,13 @@ internal class AutoUpdater
             catch { /* Fall through */ }
         }
 
-        // Fallback: GetAsync or SendAsync -> stream -> bytes
+        // Fallback / auth path: GetAsync or SendAsync -> stream -> bytes
         try
         {
             object? response = null;
 
-            if (s_getAsync != null)
+            // GetAsync can't carry auth headers, skip when auth is needed
+            if (authToken == null && s_getAsync != null)
             {
                 var paramType = s_getAsync.GetParameters()[0].ParameterType;
                 object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
@@ -556,6 +625,9 @@ internal class AutoUpdater
             if (response == null && s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
                 var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
+                if (request != null)
+                    SetRequestAuth(request, authToken);
+
                 var sendParams = s_sendAsync.GetParameters();
                 object?[] args = sendParams.Length == 1
                     ? new[] { request }
@@ -587,6 +659,26 @@ internal class AutoUpdater
             var inner = UnwrapException(ex);
             Logger.Log("AutoUpdate", $"HTTP GET bytes error for {url}: {inner.Message}");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Set Authorization: Bearer header on an HttpRequestMessage via reflection.
+    /// </summary>
+    private static void SetRequestAuth(object request, string? authToken)
+    {
+        if (authToken == null) return;
+        try
+        {
+            var headers = request.GetType().GetProperty("Headers")?.GetValue(request);
+            if (headers == null) return;
+            var tryAdd = headers.GetType().GetMethod("TryAddWithoutValidation",
+                new[] { typeof(string), typeof(string) });
+            tryAdd?.Invoke(headers, new object[] { "Authorization", $"Bearer {authToken}" });
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("AutoUpdate", $"SetRequestAuth error: {ex.Message}");
         }
     }
 
