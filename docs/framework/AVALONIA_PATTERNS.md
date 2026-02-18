@@ -37,7 +37,7 @@ Avalonia concept and the reflection pattern used to reach it.
 - Events are wired via `Expression.Lambda` because delegate types are unknown at compile time.
 - Mistakes produce silent failures, cryptic exceptions, or UI freezes.
 
-The central class is `AvaloniaReflection` (`hook/AvaloniaReflection.cs`, ~1943
+The central class is `AvaloniaReflection` (`hook/AvaloniaReflection.cs`, ~2030
 lines). It resolves roughly 50 Avalonia types and 55 member handles during startup,
 then exposes them through typed wrapper methods.
 

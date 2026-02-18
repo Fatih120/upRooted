@@ -30,7 +30,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.3.5 Loaded ===");
+            Logger.Log("Startup", "=== Uprooted Hook v0.3.6rc Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
@@ -225,6 +225,80 @@ internal class StartupHook
             else
             {
                 Logger.Log("Startup", "Phase 4.5b: Link embeds plugin disabled, skipping");
+            }
+
+            // Phase 4.5c: Message Logger (discovery + logging + visual indicators)
+            var msgLogSettings = UprootedSettings.Load();
+            var wantMsgLogger = !msgLogSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) || mlEnabled;
+
+            if (wantMsgLogger)
+            {
+                var mlWindow = mainWindow!;
+                var mlResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(20_000); // Wait 20s for chat to populate
+                        Logger.Log("Startup", "Phase 4.5c: Starting message logger...");
+                        var logger = new MessageLogger(mlResolver, mlWindow);
+                        logger.Initialize();
+                        Logger.Log("Startup", "Phase 4.5c OK: Message logger active");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5c error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5c: Message logger disabled, skipping");
+            }
+
+            // Phase 4.5d: Auto-updater (background update check)
+            ThreadPool.QueueUserWorkItem(_ =>
+            {
+                try
+                {
+                    Thread.Sleep(30_000); // Wait 30s for app to fully settle
+                    Logger.Log("Startup", "Phase 4.5d: Starting auto-updater...");
+                    var updater = new AutoUpdater();
+                    AutoUpdater.Instance = updater;
+                    updater.Initialize();
+                    Logger.Log("Startup", "Phase 4.5d OK: Auto-updater initialized");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Startup", $"Phase 4.5d error: {ex.Message}");
+                }
+            });
+
+            // Phase 4.5e: Profile badge injector (dev channel only)
+            var badgeSettings = UprootedSettings.Load();
+            if (badgeSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+            {
+                var badgeWindow = mainWindow!;
+                var badgeResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(25_000); // Wait 25s — profile popups won't be used immediately
+                        Logger.Log("Startup", "Phase 4.5e: Starting profile badge injector (dev channel)...");
+                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow);
+                        badge.Initialize();
+                        Logger.Log("Startup", "Phase 4.5e OK: Profile badge injector active");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5e error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5e: Profile badge skipped (not on developer channel)");
             }
 
             // Phase 5: DotNetBrowser features (NSFW filter)

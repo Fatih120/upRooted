@@ -241,6 +241,239 @@ internal static class ContentPages
             r.AddChild(page, statusCard);
         }
 
+        // Card 2.5: Updates
+        var updatesCard = CreateCard(r);
+        if (updatesCard != null)
+        {
+            r.SetMargin(updatesCard, 0, 12, 0, 0);
+            var updatesContent = r.CreateStackPanel(vertical: true, spacing: 0);
+            if (updatesContent == null) { r.AddChild(page, updatesCard); goto afterUpdates; }
+            r.SetMargin(updatesContent, 24, 24, 24, 24);
+
+            var updatesTitle = CreateSectionHeader(r, "UPDATES", font);
+            r.AddChild(updatesContent, updatesTitle);
+
+            // Auto-check toggle
+            BuildSettingsToggle(r, updatesContent, "Auto-check for updates",
+                "Check for new versions in the background",
+                settings.AutoUpdateEnabled, font, enabled =>
+                {
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateEnabled = enabled;
+                    s.Save();
+                });
+
+            // Notification toggle
+            BuildSettingsToggle(r, updatesContent, "Update notifications",
+                "Show a notification when Uprooted auto-updates",
+                settings.AutoUpdateNotify, font, enabled =>
+                {
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateNotify = enabled;
+                    s.Save();
+                });
+
+            // Update channel row
+            BuildChannelRow(r, updatesContent, settings, font);
+
+            // Separator line
+            var sep = r.CreateBorder(CardBorder, 0);
+            if (sep != null)
+            {
+                sep.GetType().GetProperty("Height")?.SetValue(sep, 1.0);
+                r.SetMargin(sep, 0, 18, 0, 0);
+                r.AddChild(updatesContent, sep);
+            }
+
+            // Status text (dynamic)
+            var updater = AutoUpdater.Instance;
+            var (statusText, statusColor) = updater?.GetStatus()
+                ?? ($"Up to date (v{settings.Version})", AccentGreen);
+
+            object? statusValueText = null;
+            var updateStatusRow = r.CreateStackPanel(vertical: false, spacing: 0);
+            if (updateStatusRow != null)
+            {
+                r.SetMargin(updateStatusRow, 0, 16, 0, 0);
+
+                var statusLabel = r.CreateTextBlock("Status: ", 13, TextMuted);
+                r.SetFontWeightNumeric(statusLabel, 450);
+                ApplyFont(r, statusLabel, font);
+                r.AddChild(updateStatusRow, statusLabel);
+
+                statusValueText = r.CreateTextBlock(statusText, 13, statusColor);
+                r.SetFontWeightNumeric(statusValueText, 450);
+                ApplyFont(r, statusValueText, font);
+                r.AddChild(updateStatusRow, statusValueText);
+
+                r.AddChild(updatesContent, updateStatusRow);
+            }
+
+            // Last checked timestamp
+            var lastCheckText = "Never";
+            if (!string.IsNullOrEmpty(settings.LastUpdateCheck))
+            {
+                try
+                {
+                    var lastCheck = DateTime.Parse(settings.LastUpdateCheck, null,
+                        System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime();
+                    lastCheckText = lastCheck.ToString("MMM d, yyyy h:mm tt");
+                }
+                catch { /* keep "Never" */ }
+            }
+            var lastCheckLabel = r.CreateTextBlock($"Last checked: {lastCheckText}", 12, TextDim);
+            if (lastCheckLabel != null)
+            {
+                ApplyFont(r, lastCheckLabel, font);
+                r.SetMargin(lastCheckLabel, 0, 8, 0, 0);
+                r.AddChild(updatesContent, lastCheckLabel);
+            }
+
+            // Check for Updates button
+            var isChecking = updater?.IsChecking ?? false;
+            var hasUpdate = updater?.HasUpdate ?? false;
+            var wasUpdated = updater?.UpdateApplied ?? false;
+
+            var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
+            var btnText = r.CreateTextBlock(btnLabel, 13, TextWhite);
+            r.SetFontWeightNumeric(btnText, 500);
+            ApplyFont(r, btnText, font);
+            r.SetHorizontalAlignment(btnText, "Center");
+
+            var btnColor = hasUpdate ? "#C0A820" : AccentGreen;
+            var btn = r.CreateBorder(btnColor, 8, btnText);
+            if (btn != null)
+            {
+                r.SetPadding(btn, 16, 8, 16, 8);
+                r.SetMargin(btn, 0, 14, 0, 0);
+                r.SetHorizontalAlignment(btn, "Left");
+                r.SetCursorHand(btn);
+
+                if (!isChecking && !wasUpdated)
+                {
+                    var btnRef = btn;
+                    var btnTextRef = btnText;
+                    var statusValueRef = statusValueText;
+                    var lastCheckRef = lastCheckLabel;
+                    r.SubscribeEvent(btn, "PointerPressed", () =>
+                    {
+                        var u = AutoUpdater.Instance;
+                        if (u == null || u.IsChecking) return;
+
+                        r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Checking...");
+                        r.SetBackground(btnRef, ColorUtils.Lighten(btnColor, 10));
+
+                        ThreadPool.QueueUserWorkItem(_ =>
+                        {
+                            u.CheckForUpdate();
+
+                            // Update UI on completion
+                            r.RunOnUIThread(() =>
+                            {
+                                var (newStatus, newColor) = u.GetStatus();
+                                var newBtnLabel = u.UpdateApplied ? "Updated!" : u.HasUpdate ? "Update Now" : "Check for Updates";
+                                var newBtnColor = u.HasUpdate ? "#C0A820" : AccentGreen;
+
+                                r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, newBtnLabel);
+                                r.SetBackground(btnRef, newBtnColor);
+
+                                if (statusValueRef != null)
+                                {
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(statusValueRef, newStatus);
+                                    var brush = r.CreateBrush(newColor);
+                                    statusValueRef.GetType().GetProperty("Foreground")?.SetValue(statusValueRef, brush);
+                                }
+
+                                if (lastCheckRef != null)
+                                {
+                                    var s = UprootedSettings.Load();
+                                    var lcText = "Never";
+                                    if (!string.IsNullOrEmpty(s.LastUpdateCheck))
+                                    {
+                                        try
+                                        {
+                                            var lc = DateTime.Parse(s.LastUpdateCheck, null,
+                                                System.Globalization.DateTimeStyles.RoundtripKind).ToLocalTime();
+                                            lcText = lc.ToString("MMM d, yyyy h:mm tt");
+                                        }
+                                        catch { }
+                                    }
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(lastCheckRef, $"Last checked: {lcText}");
+                                }
+                            });
+                        });
+                    });
+
+                    r.SubscribeEvent(btn, "PointerEntered", () =>
+                        r.SetBackground(btn, ColorUtils.Lighten(btnColor, 10)));
+                    r.SubscribeEvent(btn, "PointerExited", () =>
+                        r.SetBackground(btn, btnColor));
+                }
+
+                r.AddChild(updatesContent, btn);
+            }
+
+            // Restart notice after update applied
+            if (wasUpdated)
+            {
+                var updateBannerOuter = r.CreatePanel();
+                if (updateBannerOuter != null)
+                {
+                    var restartRow = r.CreateStackPanel(vertical: false, spacing: 8);
+                    if (restartRow != null)
+                    {
+                        r.SetVerticalAlignment(restartRow, "Center");
+                        var restartIcon = r.CreateTextBlock("\u26A0", 14, AccentGreen);
+                        ApplyFont(r, restartIcon, font);
+                        r.AddChild(restartRow, restartIcon);
+
+                        var restartText = r.CreateTextBlock("Restart Root to use the new version", 13, AccentGreen);
+                        r.SetFontWeightNumeric(restartText, 500);
+                        ApplyFont(r, restartText, font);
+                        r.AddChild(restartRow, restartText);
+                    }
+
+                    var innerBorder = r.CreateBorder(AccentGreen + "15", 8, restartRow);
+                    if (innerBorder != null)
+                    {
+                        r.SetPadding(innerBorder, 14, 10, 14, 10);
+                        SetBorderStroke(r, innerBorder, AccentGreen + "40", 1);
+                    }
+
+                    // Restart button
+                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                    r.SetFontWeightNumeric(updateRestartBtnText, 500);
+                    ApplyFont(r, updateRestartBtnText, font);
+                    r.SetHorizontalAlignment(updateRestartBtnText, "Center");
+                    var updateRestartBtn = r.CreateBorder(AccentGreen, 6, updateRestartBtnText);
+                    if (updateRestartBtn != null)
+                    {
+                        r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
+                        r.SetHorizontalAlignment(updateRestartBtn, "Right");
+                        r.SetVerticalAlignment(updateRestartBtn, "Center");
+                        r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
+                        r.SetCursorHand(updateRestartBtn);
+                        r.SubscribeEvent(updateRestartBtn, "PointerPressed", RestartRoot);
+                        var urBtnRef = updateRestartBtn;
+                        r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
+                            r.SetBackground(urBtnRef, ColorUtils.Lighten(AccentGreen, 10)));
+                        r.SubscribeEvent(updateRestartBtn, "PointerExited", () =>
+                            r.SetBackground(urBtnRef, AccentGreen));
+                    }
+
+                    if (innerBorder != null) r.AddChild(updateBannerOuter, innerBorder);
+                    if (updateRestartBtn != null) r.AddChild(updateBannerOuter, updateRestartBtn);
+
+                    r.SetMargin(updateBannerOuter, 0, 14, 0, 0);
+                    r.AddChild(updatesContent, updateBannerOuter);
+                }
+            }
+
+            r.SetBorderChild(updatesCard, updatesContent);
+            r.AddChild(page, updatesCard);
+        }
+        afterUpdates:
+
         // Card 3: Links
         var linksCard = CreateCard(r);
         if (linksCard != null)
@@ -298,16 +531,49 @@ internal static class ContentPages
             var logTitle = CreateSectionHeader(r, "DIAGNOSTICS", font);
             r.AddChild(cardContent, logTitle);
 
-            var logPathText = r.CreateTextBlock(
-                "Log file: " + Logger.GetLogPath(),
-                12, TextDim);
-            if (logPathText != null)
+            // Log file row: path text + Open button
+            var logRow = r.CreatePanel();
+            if (logRow != null)
             {
-                ApplyFont(r, logPathText, font);
-                r.SetTextWrapping(logPathText, "Wrap");
-                r.SetMargin(logPathText, 0, 12, 0, 0);
+                r.SetMargin(logRow, 0, 12, 0, 0);
+
+                var logPathText = r.CreateTextBlock(
+                    "Log file: " + Logger.GetLogPath(),
+                    12, TextDim);
+                if (logPathText != null)
+                {
+                    ApplyFont(r, logPathText, font);
+                    r.SetTextWrapping(logPathText, "Wrap");
+                    r.SetVerticalAlignment(logPathText, "Center");
+                    r.SetMargin(logPathText, 0, 0, 70, 0); // leave room for button
+                }
+                r.AddChild(logRow, logPathText);
+
+                // "Open" button
+                var openBtnText = r.CreateTextBlock("Open", 12, TextWhite);
+                r.SetFontWeightNumeric(openBtnText, 500);
+                ApplyFont(r, openBtnText, font);
+                r.SetHorizontalAlignment(openBtnText, "Center");
+                var openBtnBg = ColorUtils.Lighten(CardBg, 8);
+                var openBtn = r.CreateBorder(openBtnBg, 6, openBtnText);
+                if (openBtn != null)
+                {
+                    r.SetPadding(openBtn, 12, 5, 12, 5);
+                    r.SetHorizontalAlignment(openBtn, "Right");
+                    r.SetVerticalAlignment(openBtn, "Center");
+                    r.SetCursorHand(openBtn);
+                    SetBorderStroke(r, openBtn, CardBorder, 0.5);
+                    var logPath = Logger.GetLogPath();
+                    r.SubscribeEvent(openBtn, "PointerPressed", () => OpenInExplorer(logPath));
+                    r.SubscribeEvent(openBtn, "PointerEntered", () =>
+                        r.SetBackground(openBtn, ColorUtils.Lighten(openBtnBg, 8)));
+                    r.SubscribeEvent(openBtn, "PointerExited", () =>
+                        r.SetBackground(openBtn, openBtnBg));
+                }
+                r.AddChild(logRow, openBtn);
+
+                r.AddChild(cardContent, logRow);
             }
-            r.AddChild(cardContent, logPathText);
 
             r.SetBorderChild(logCard, cardContent);
             r.AddChild(page, logCard);
@@ -350,19 +616,22 @@ internal static class ContentPages
         {
             KnownPlugins = new PluginInfo[]
             {
-                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.5",
+                new() { Id = "sentry-blocker", DisplayName = "Sentry Blocker", Version = "0.3.6rc",
                     Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
-                    DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.5",
+                    DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
+                new() { Id = "themes", DisplayName = "Themes", Version = "0.3.6rc",
                     Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 2 },
-                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.5",
+                new() { Id = "link-embeds", DisplayName = "Link Embeds", Version = "0.3.6rc",
                     Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
-                    DefaultEnabled = true, HasSettings = true, TestingStatus = 1 },
-                new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.3.5",
+                    DefaultEnabled = true, HasSettings = true, TestingStatus = 2 },
+                new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.3.6rc",
                     Description = "Automatically strips tracking parameters (utm_source, fbclid, gclid, etc.) from URLs you send for cleaner links and better privacy.",
                     DefaultEnabled = true, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.5",
+                new() { Id = "message-logger", DisplayName = "Message Logger", Version = "0.3.6rc",
+                    Description = "Logs deleted and edited messages. Shows visual indicators in chat with original content.",
+                    DefaultEnabled = true, HasSettings = true, TestingStatus = 0 },
+                new() { Id = "content-filter", DisplayName = "Content Filter", Version = "0.3.6rc",
                     Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
@@ -403,6 +672,82 @@ internal static class ContentPages
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
+
+        // Snapshot initial plugin states so we can hide the banner when user reverts
+        var initialPluginStates = new Dictionary<string, bool>();
+        if (KnownPlugins != null)
+        {
+            foreach (var plugin in KnownPlugins)
+            {
+                bool isOn = plugin.Id == "content-filter"
+                    ? settings.NsfwFilterEnabled
+                    : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
+                initialPluginStates[plugin.Id] = isOn;
+            }
+        }
+
+        // Restart notice banner (hidden until a plugin state diverges from initial)
+        object? restartBanner = null;
+        {
+            var bannerOuter = r.CreatePanel();
+            if (bannerOuter != null)
+            {
+                var bannerContent = r.CreateStackPanel(vertical: false, spacing: 8);
+                if (bannerContent != null)
+                {
+                    r.SetVerticalAlignment(bannerContent, "Center");
+                    var icon = r.CreateTextBlock("\u26A0", 14, "#E0A030");
+                    ApplyFont(r, icon, font);
+                    r.AddChild(bannerContent, icon);
+
+                    var bannerText = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#E0A030");
+                    r.SetFontWeightNumeric(bannerText, 500);
+                    ApplyFont(r, bannerText, font);
+                    r.AddChild(bannerContent, bannerText);
+                }
+
+                // Restart button (right-aligned)
+                var restartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                r.SetFontWeightNumeric(restartBtnText, 500);
+                ApplyFont(r, restartBtnText, font);
+                r.SetHorizontalAlignment(restartBtnText, "Center");
+                var restartBtn = r.CreateBorder("#E0A030", 6, restartBtnText);
+                if (restartBtn != null)
+                {
+                    r.SetPadding(restartBtn, 12, 5, 12, 5);
+                    r.SetHorizontalAlignment(restartBtn, "Right");
+                    r.SetVerticalAlignment(restartBtn, "Center");
+                    r.SetCursorHand(restartBtn);
+                    r.SubscribeEvent(restartBtn, "PointerPressed", RestartRoot);
+                    r.SubscribeEvent(restartBtn, "PointerEntered", () =>
+                        r.SetBackground(restartBtn, ColorUtils.Lighten("#E0A030", 10)));
+                    r.SubscribeEvent(restartBtn, "PointerExited", () =>
+                        r.SetBackground(restartBtn, "#E0A030"));
+                }
+
+                var innerBorder = r.CreateBorder("#E0A03015", 8, bannerContent);
+                if (innerBorder != null)
+                {
+                    r.SetPadding(innerBorder, 14, 10, 14, 10);
+                    SetBorderStroke(r, innerBorder, "#E0A03040", 1);
+                }
+
+                // Use Panel overlay: banner content stretches, restart button right-aligned
+                if (innerBorder != null) r.AddChild(bannerOuter, innerBorder);
+                if (restartBtn != null)
+                {
+                    r.SetMargin(restartBtn, 0, 0, 14, 0);
+                    r.AddChild(bannerOuter, restartBtn);
+                }
+
+                r.SetMargin(bannerOuter, 0, 12, 0, 0);
+                r.SetIsVisible(bannerOuter, false);
+                r.AddChild(page, bannerOuter);
+                restartBanner = bannerOuter;
+            }
+        }
+        var restartBannerRef = restartBanner;
+        var initialStatesRef = initialPluginStates;
 
         // State for search and filter
         string[] searchText = { "" };
@@ -518,6 +863,7 @@ internal static class ContentPages
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
+                restartBannerRef, initialStatesRef,
                 plugin.HasSettings, plugin.TestingStatus);
             if (card != null)
             {
@@ -643,8 +989,9 @@ internal static class ContentPages
     private static object? BuildPluginCard(AvaloniaReflection r, UprootedSettings settings,
         string pluginId, string displayName, string description,
         bool isEnabled, object? font, ThemeEngine? themeEngine,
-        int[] filterMode, Action? onRebuildNeeded, bool hasSettings = false,
-        int testingStatus = -1)
+        int[] filterMode, Action? onRebuildNeeded, object? restartBanner = null,
+        Dictionary<string, bool>? initialStates = null,
+        bool hasSettings = false, int testingStatus = -1)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -772,6 +1119,22 @@ internal static class ContentPages
                     try { settings.Save(); }
                     catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
                     Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+
+                    // Show/hide restart banner based on whether any plugin diverged from initial state
+                    // (themes apply live, so they don't count)
+                    if (restartBanner != null && initialStates != null)
+                    {
+                        bool anyDiverged = false;
+                        foreach (var kv in initialStates)
+                        {
+                            if (kv.Key == "themes") continue;
+                            bool currentVal = kv.Key == "content-filter"
+                                ? settings.NsfwFilterEnabled
+                                : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
+                            if (currentVal != kv.Value) { anyDiverged = true; break; }
+                        }
+                        r.SetIsVisible(restartBanner, anyDiverged);
+                    }
 
                     // Rebuild grid if filter is active so toggled plugins appear/disappear
                     if (filterMode[0] != 0)
@@ -1937,6 +2300,8 @@ internal static class ContentPages
         // Plugin-specific settings content
         if (pluginId == "content-filter")
             BuildContentFilterSettings(r, content, settings, font);
+        else if (pluginId == "message-logger")
+            BuildMessageLoggerSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -2147,6 +2512,402 @@ internal static class ContentPages
     }
 
     /// <summary>
+    /// Build the message logger settings UI inside a lightbox container.
+    /// Toggle: Log Deletes, Toggle: Log Edits, Toggle: Ignore Self, Number: Max Messages.
+    /// </summary>
+    private static void BuildMessageLoggerSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // Log Deletes toggle
+        BuildSettingsToggle(r, content, "Log Deleted Messages",
+            "Record messages that are deleted by other users",
+            settings.MessageLoggerLogDeletes, font, isEnabled =>
+            {
+                settings.MessageLoggerLogDeletes = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Log Edits toggle
+        BuildSettingsToggle(r, content, "Log Edited Messages",
+            "Record message content before edits",
+            settings.MessageLoggerLogEdits, font, isEnabled =>
+            {
+                settings.MessageLoggerLogEdits = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Ignore Self toggle
+        BuildSettingsToggle(r, content, "Ignore Own Messages",
+            "Don't log your own deleted or edited messages",
+            settings.MessageLoggerIgnoreSelf, font, isEnabled =>
+            {
+                settings.MessageLoggerIgnoreSelf = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+            });
+
+        // Max Messages
+        var maxTitle = CreateSectionHeader(r, "RETENTION", font);
+        if (maxTitle != null)
+        {
+            r.SetMargin(maxTitle, 0, 20, 0, 0);
+            r.AddChild(content, maxTitle);
+        }
+
+        var maxRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (maxRow != null)
+        {
+            r.SetMargin(maxRow, 0, 12, 0, 0);
+            r.SetVerticalAlignment(maxRow, "Center");
+
+            var maxLabel = r.CreateTextBlock("Max logged messages:", 13, TextMuted);
+            r.SetFontWeightNumeric(maxLabel, 450);
+            ApplyFont(r, maxLabel, font);
+            r.SetVerticalAlignment(maxLabel, "Center");
+            r.AddChild(maxRow, maxLabel);
+
+            var maxBox = r.CreateTextBox("10000", settings.MessageLoggerMaxMessages.ToString(), 20);
+            if (maxBox != null)
+            {
+                maxBox.GetType().GetProperty("FontSize")?.SetValue(maxBox, 13.0);
+                r.SetWidth(maxBox, 80);
+                r.SetHeight(maxBox, 32);
+                r.SetBackground(maxBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetForeground(maxBox, TextWhite);
+                ApplyFont(r, maxBox, font);
+                if (r.CornerRadiusType != null)
+                {
+                    var cr = Activator.CreateInstance(r.CornerRadiusType, 6.0, 6.0, 6.0, 6.0);
+                    maxBox.GetType().GetProperty("CornerRadius")?.SetValue(maxBox, cr);
+                }
+
+                var maxBoxRef = maxBox;
+                r.SubscribeEvent(maxBox, "LostFocus", () =>
+                {
+                    var text = r.GetTextBoxText(maxBoxRef)?.Trim() ?? "";
+                    if (int.TryParse(text, out var val) && val > 0 && val <= 100000)
+                    {
+                        settings.MessageLoggerMaxMessages = val;
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
+                    }
+                });
+
+                r.AddChild(maxRow, maxBox);
+            }
+
+            r.AddChild(content, maxRow);
+        }
+
+        var retentionHelp = r.CreateTextBlock(
+            "Oldest messages are automatically removed when this limit is exceeded.",
+            12, TextDim);
+        if (retentionHelp != null)
+        {
+            ApplyFont(r, retentionHelp, font);
+            r.SetTextWrapping(retentionHelp, "Wrap");
+            r.SetMargin(retentionHelp, 0, 8, 0, 0);
+        }
+        r.AddChild(content, retentionHelp);
+    }
+
+    /// <summary>
+    /// Build a toggle row for plugin settings: label + description on left, pill toggle on right.
+    /// Reusable pattern for any boolean setting.
+    /// </summary>
+    private static void BuildSettingsToggle(AvaloniaReflection r, object container,
+        string label, string description, bool currentValue, object? font, Action<bool> onChanged)
+    {
+        var row = r.CreatePanel();
+        if (row == null) return;
+        r.SetMargin(row, 0, 14, 0, 0);
+
+        // Left side: label + description
+        var leftStack = r.CreateStackPanel(vertical: true, spacing: 2);
+        if (leftStack != null)
+        {
+            r.SetHorizontalAlignment(leftStack, "Left");
+            r.SetVerticalAlignment(leftStack, "Center");
+            r.SetMargin(leftStack, 0, 0, 60, 0);
+
+            var nameText = r.CreateTextBlock(label, 13, TextWhite);
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.AddChild(leftStack, nameText);
+
+            var descText = r.CreateTextBlock(description, 12, TextMuted);
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.AddChild(leftStack, descText);
+
+            r.AddChild(row, leftStack);
+        }
+
+        // Right side: toggle pill
+        bool[] state = { currentValue };
+        var toggleBg = currentValue ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
+        var pill = r.CreateBorder(toggleBg, 10);
+        if (pill != null)
+        {
+            r.SetWidth(pill, 40);
+            r.SetHeight(pill, 20);
+            r.SetHorizontalAlignment(pill, "Right");
+            r.SetVerticalAlignment(pill, "Center");
+            r.SetCursorHand(pill);
+
+            var dot = r.CreateBorder("#FFFFFF", 7);
+            if (dot != null)
+            {
+                r.SetWidth(dot, 14);
+                r.SetHeight(dot, 14);
+                r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
+                r.SetMargin(dot, 3, 3, 3, 3);
+                r.SetBorderChild(pill, dot);
+
+                var pillRef = pill;
+                var dotRef = dot;
+                r.SubscribeEvent(pill, "PointerPressed", () =>
+                {
+                    state[0] = !state[0];
+                    r.SetBackground(pillRef, state[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20));
+                    r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
+                    onChanged(state[0]);
+                });
+            }
+
+            r.AddChild(row, pill);
+        }
+
+        r.AddChild(container, row);
+    }
+
+    /// <summary>
+    /// Build the update channel row: shows current channel with a clickable switch.
+    /// Switching to "Developer" prompts for a password inline.
+    /// Switching back to "Stable" is immediate (no password needed).
+    /// </summary>
+    private static void BuildChannelRow(AvaloniaReflection r, object container,
+        UprootedSettings settings, object? font)
+    {
+        var row = r.CreatePanel();
+        if (row == null) return;
+        r.SetMargin(row, 0, 14, 0, 0);
+
+        // Left side: label + description
+        var leftStack = r.CreateStackPanel(vertical: true, spacing: 2);
+        if (leftStack != null)
+        {
+            r.SetHorizontalAlignment(leftStack, "Left");
+            r.SetVerticalAlignment(leftStack, "Center");
+            r.SetMargin(leftStack, 0, 0, 140, 0);
+
+            var nameText = r.CreateTextBlock("Update channel", 13, TextWhite);
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.AddChild(leftStack, nameText);
+
+            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 12, TextMuted);
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.AddChild(leftStack, descText);
+
+            r.AddChild(row, leftStack);
+        }
+
+        // Right side: channel badge (clickable)
+        var isDev = settings.AutoUpdateChannel == "developer";
+        var badgeColor = isDev ? "#8B6914" : AccentGreen;
+        var badgeLabel = isDev ? "Developer" : "Stable";
+
+        var badgeText = r.CreateTextBlock(badgeLabel, 12, TextWhite);
+        r.SetFontWeightNumeric(badgeText, 500);
+        ApplyFont(r, badgeText, font);
+        r.SetHorizontalAlignment(badgeText, "Center");
+
+        var badge = r.CreateBorder(badgeColor, 8, badgeText);
+        if (badge != null)
+        {
+            r.SetPadding(badge, 12, 5, 12, 5);
+            r.SetHorizontalAlignment(badge, "Right");
+            r.SetVerticalAlignment(badge, "Center");
+            r.SetCursorHand(badge);
+
+            var badgeRef = badge;
+            var badgeTextRef = badgeText;
+            var containerRef = container;
+
+            r.SubscribeEvent(badge, "PointerPressed", () =>
+            {
+                var current = UprootedSettings.Load().AutoUpdateChannel;
+                if (current == "developer")
+                {
+                    // Switch back to Stable — no password needed
+                    var s = UprootedSettings.Load();
+                    s.AutoUpdateChannel = "stable";
+                    s.Save();
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
+                    r.SetBackground(badgeRef, AccentGreen);
+                    Logger.Log("AutoUpdate", "Switched to Stable channel");
+                }
+                else
+                {
+                    // Show inline password prompt below the row
+                    if (badgeTextRef != null)
+                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font);
+                }
+            });
+
+            r.SubscribeEvent(badge, "PointerEntered", () =>
+            {
+                var c = UprootedSettings.Load().AutoUpdateChannel;
+                r.SetBackground(badge, ColorUtils.Lighten(c == "developer" ? "#8B6914" : AccentGreen, 10));
+            });
+            r.SubscribeEvent(badge, "PointerExited", () =>
+            {
+                var c = UprootedSettings.Load().AutoUpdateChannel;
+                r.SetBackground(badge, c == "developer" ? "#8B6914" : AccentGreen);
+            });
+
+            r.AddChild(row, badge);
+        }
+
+        r.AddChild(container, row);
+    }
+
+    /// <summary>
+    /// Show an inline password prompt to switch to Developer channel.
+    /// Inserts a row after the channel row with a TextBox + Submit button.
+    /// </summary>
+    private static void ShowChannelPasswordPrompt(AvaloniaReflection r, object container,
+        object channelRow, object badge, object badgeText, object? font)
+    {
+        // Create the prompt row
+        var promptRow = r.CreateStackPanel(vertical: false, spacing: 8);
+        if (promptRow == null) return;
+        r.SetMargin(promptRow, 0, 10, 0, 0);
+        r.SetHorizontalAlignment(promptRow, "Left");
+
+        // Password text box
+        var passBox = r.CreateTextBox("Enter password...", "", 30);
+        if (passBox == null) return;
+        passBox.GetType().GetProperty("FontSize")?.SetValue(passBox, 13.0);
+        r.SetWidth(passBox, 180);
+        r.SetHeight(passBox, 32);
+        r.SetBackground(passBox, ColorUtils.Lighten(CardBg, 5));
+        r.SetForeground(passBox, TextWhite);
+        ApplyFont(r, passBox, font);
+        // Set PasswordChar to mask input
+        try
+        {
+            passBox.GetType().GetProperty("PasswordChar")?.SetValue(passBox, '\u2022');
+        }
+        catch { /* older Avalonia may not have this */ }
+        r.AddChild(promptRow, passBox);
+
+        // Submit button
+        var submitText = r.CreateTextBlock("Go", 12, TextWhite);
+        r.SetFontWeightNumeric(submitText, 500);
+        ApplyFont(r, submitText, font);
+        r.SetHorizontalAlignment(submitText, "Center");
+        r.SetVerticalAlignment(submitText, "Center");
+
+        var submitBtn = r.CreateBorder(AccentGreen, 6, submitText);
+        if (submitBtn != null)
+        {
+            r.SetPadding(submitBtn, 12, 5, 12, 5);
+            r.SetVerticalAlignment(submitBtn, "Center");
+            r.SetCursorHand(submitBtn);
+            r.AddChild(promptRow, submitBtn);
+        }
+
+        // Result text (for success/error feedback)
+        var resultText = r.CreateTextBlock("", 12, "#E04040");
+        ApplyFont(r, resultText, font);
+        r.SetVerticalAlignment(resultText, "Center");
+        r.AddChild(promptRow, resultText);
+
+        // Insert prompt row into container after the channel row
+        // Find the index of channelRow in container's Children and insert after it
+        try
+        {
+            var children = container.GetType().GetProperty("Children")?.GetValue(container);
+            if (children != null)
+            {
+                var indexOfMethod = children.GetType().GetMethod("IndexOf");
+                var insertMethod = children.GetType().GetMethod("Insert");
+                if (indexOfMethod != null && insertMethod != null)
+                {
+                    var idx = (int)indexOfMethod.Invoke(children, new[] { channelRow })!;
+                    insertMethod.Invoke(children, new object[] { idx + 1, promptRow });
+                }
+                else
+                {
+                    // Fallback: just add at end
+                    r.AddChild(container, promptRow);
+                }
+            }
+        }
+        catch
+        {
+            r.AddChild(container, promptRow);
+        }
+
+        // Wire up submit action
+        var passBoxRef = passBox;
+        var promptRowRef = promptRow;
+        var badgeRef = badge;
+        var badgeTextRef = badgeText;
+        var resultTextRef = resultText;
+        var containerRef = container;
+
+        Action doSubmit = () =>
+        {
+            var input = r.GetTextBoxText(passBoxRef)?.Trim() ?? "";
+            if (string.IsNullOrEmpty(input)) return;
+
+            if (AutoUpdater.ValidateDevPassword(input))
+            {
+                // Success — switch to developer channel
+                var s = UprootedSettings.Load();
+                s.AutoUpdateChannel = "developer";
+                s.Save();
+
+                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
+                r.SetBackground(badgeRef, "#8B6914");
+                r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
+                Logger.Log("AutoUpdate", "Switched to Developer channel");
+
+                // Remove the prompt row
+                try
+                {
+                    var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
+                    children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { promptRowRef });
+                }
+                catch { }
+            }
+            else
+            {
+                // Wrong password — show error
+                r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "Incorrect");
+                var brush = r.CreateBrush("#E04040");
+                resultTextRef?.GetType().GetProperty("Foreground")?.SetValue(resultTextRef, brush);
+                r.SetTextBoxText(passBoxRef, "");
+            }
+        };
+
+        if (submitBtn != null)
+        {
+            r.SubscribeEvent(submitBtn, "PointerPressed", doSubmit);
+            r.SubscribeEvent(submitBtn, "PointerEntered", () =>
+                r.SetBackground(submitBtn, ColorUtils.Lighten(AccentGreen, 10)));
+            r.SubscribeEvent(submitBtn, "PointerExited", () =>
+                r.SetBackground(submitBtn, AccentGreen));
+        }
+    }
+
+    /// <summary>
     /// Build the "How It Works" info box for the content filter info lightbox.
     /// </summary>
     private static object? BuildContentFilterInfoBox(AvaloniaReflection r, object? font)
@@ -2275,6 +3036,66 @@ internal static class ContentPages
         {
             var thickness = Activator.CreateInstance(r.ThicknessType, width, width, width, width);
             border.GetType().GetProperty("BorderThickness")?.SetValue(border, thickness);
+        }
+    }
+
+    /// <summary>
+    /// Restart Root: launch a new instance and exit the current process.
+    /// </summary>
+    private static void RestartRoot()
+    {
+        try
+        {
+            var exePath = Environment.ProcessPath;
+            if (string.IsNullOrEmpty(exePath))
+            {
+                Logger.Log("ContentPages", "RestartRoot: ProcessPath is null, cannot restart");
+                return;
+            }
+            Logger.Log("ContentPages", $"RestartRoot: launching {exePath} and exiting...");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = exePath,
+                UseShellExecute = true
+            });
+            Environment.Exit(0);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ContentPages", $"RestartRoot error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Open a file path in the system file explorer, selecting the file.
+    /// </summary>
+    private static void OpenInExplorer(string path)
+    {
+        try
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                    UseShellExecute = false
+                });
+            }
+            else
+            {
+                // Linux/macOS: open the containing directory
+                var dir = Path.GetDirectoryName(path) ?? path;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = dir,
+                    UseShellExecute = true
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ContentPages", $"OpenInExplorer error: {ex.Message}");
         }
     }
 }

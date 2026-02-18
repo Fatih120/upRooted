@@ -27,6 +27,13 @@ struct Cli {
     plain: bool,
 }
 
+#[derive(Clone, Copy, PartialEq)]
+pub enum InstallerMode {
+    Install,
+    Uninstall,
+    Repair,
+}
+
 fn main() {
     let args = Cli::parse();
 
@@ -35,29 +42,23 @@ fn main() {
         return;
     }
 
-    if args.uninstall {
-        if args.plain {
-            cli::run_uninstall_plain();
-        } else {
-            tui::run_uninstall();
-        }
-        return;
-    }
-
-    if args.repair {
-        if args.plain {
-            cli::run_repair_plain();
-        } else {
-            tui::run_repair();
-        }
-        return;
-    }
-
-    // Default: install
-    if args.plain {
-        cli::run_install_plain();
+    let mode = if args.uninstall {
+        InstallerMode::Uninstall
+    } else if args.repair {
+        InstallerMode::Repair
+    } else if args.plain {
+        InstallerMode::Install
     } else {
-        tui::run_install();
+        tui::run_mode_selector()
+    };
+
+    match (mode, args.plain) {
+        (InstallerMode::Install, true) => cli::run_install_plain(),
+        (InstallerMode::Install, false) => tui::run_install(),
+        (InstallerMode::Uninstall, true) => cli::run_uninstall_plain(),
+        (InstallerMode::Uninstall, false) => tui::run_uninstall(),
+        (InstallerMode::Repair, true) => cli::run_repair_plain(),
+        (InstallerMode::Repair, false) => tui::run_repair(),
     }
 }
 
@@ -68,7 +69,7 @@ fn main() {
 mod tui {
     use crate::{detection, hook, patcher};
     use crossterm::{
-        event::{self, Event, KeyEventKind},
+        event::{self, Event, KeyCode, KeyEventKind},
         execute,
         terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     };
@@ -510,5 +511,104 @@ mod tui {
             state.success = true;
             state.message = "Repair complete — restart Root to load Uprooted.".to_string();
         });
+    }
+
+    pub fn run_mode_selector() -> crate::InstallerMode {
+        const ITEMS: &[(&str, crate::InstallerMode)] = &[
+            ("Install", crate::InstallerMode::Install),
+            ("Uninstall", crate::InstallerMode::Uninstall),
+            ("Repair", crate::InstallerMode::Repair),
+        ];
+
+        let _ = enable_raw_mode();
+        let mut stdout = io::stdout();
+        let _ = execute!(stdout, EnterAlternateScreen);
+        let backend = CrosstermBackend::new(stdout);
+        let mut terminal = match Terminal::new(backend) {
+            Ok(t) => t,
+            Err(_) => {
+                let _ = disable_raw_mode();
+                return crate::InstallerMode::Install;
+            }
+        };
+
+        let mut selected: usize = 0;
+
+        loop {
+            let _ = terminal.draw(|frame| {
+                let area = frame.area();
+                let box_width = 50u16.min(area.width);
+                let box_height = 10u16.min(area.height);
+                let x = (area.width.saturating_sub(box_width)) / 2;
+                let y = (area.height.saturating_sub(box_height)) / 2;
+                let centered = Rect::new(x, y, box_width, box_height);
+
+                let block = Block::default()
+                    .borders(Borders::ALL)
+                    .border_style(Style::default().fg(Color::Cyan))
+                    .title(Span::styled(
+                        " Uprooted Installer ",
+                        Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD),
+                    ));
+
+                let inner = block.inner(centered);
+                frame.render_widget(block, centered);
+
+                let mut lines: Vec<Line> = Vec::new();
+                lines.push(Line::from(Span::styled(
+                    format!("  Uprooted v{}", env!("CARGO_PKG_VERSION")),
+                    Style::default().fg(Color::White).add_modifier(Modifier::BOLD),
+                )));
+                lines.push(Line::from(""));
+
+                for (i, (label, _)) in ITEMS.iter().enumerate() {
+                    if i == selected {
+                        lines.push(Line::from(vec![
+                            Span::styled("  \u{25b6} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
+                            Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
+                        ]));
+                    } else {
+                        lines.push(Line::from(vec![
+                            Span::raw("    "),
+                            Span::styled(*label, Style::default().fg(Color::DarkGray)),
+                        ]));
+                    }
+                }
+
+                lines.push(Line::from(""));
+                lines.push(Line::from(Span::styled(
+                    "  \u{2191}\u{2193} Navigate   Enter Select   Q Quit",
+                    Style::default().fg(Color::DarkGray),
+                )));
+
+                frame.render_widget(Paragraph::new(lines), inner);
+            });
+
+            if event::poll(Duration::from_millis(100)).unwrap_or(false) {
+                if let Ok(Event::Key(key)) = event::read() {
+                    if key.kind == KeyEventKind::Press {
+                        match key.code {
+                            KeyCode::Up => {
+                                if selected > 0 { selected -= 1; }
+                            }
+                            KeyCode::Down => {
+                                if selected < ITEMS.len() - 1 { selected += 1; }
+                            }
+                            KeyCode::Enter => break,
+                            KeyCode::Char('q') | KeyCode::Char('Q') | KeyCode::Esc => {
+                                let _ = disable_raw_mode();
+                                let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+                                std::process::exit(0);
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+            }
+        }
+
+        let _ = disable_raw_mode();
+        let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
+        ITEMS[selected].1
     }
 }

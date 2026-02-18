@@ -10,7 +10,7 @@
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
   <a href="https://github.com/watchthelight/uprooted/releases/latest"><img src="https://img.shields.io/badge/download-latest-2D7D46?style=flat" alt="download" /></a>
   <a href="https://github.com/watchthelight/uprooted/releases"><img src="https://img.shields.io/github/downloads/watchthelight/uprooted/total?style=flat&color=2D7D46&label=downloads" alt="downloads" /></a>
-  <img src="https://img.shields.io/badge/version-0.3.5-2D7D46?style=flat" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.3.6rc-2D7D46?style=flat" alt="version" />
   <img src="https://img.shields.io/badge/license-custom-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>
@@ -91,7 +91,6 @@ Root runs Chromium with `--incognito`, so `localStorage` is wiped on every launc
 - HTML patching with backup/restore
 - Auto-closes Root before install, repair, and uninstall
 - `--plain` mode for CI and scripting, `--diagnose` mode for troubleshooting
-- `--debug` mode with live installation diagnostics
 
 ## project structure
 
@@ -106,9 +105,16 @@ uprooted-private/
     ThemeEngine.cs            ResourceDictionary overrides, live preview, DWM title bar
     LinkEmbedEngine.cs        link embed engine (OG/oEmbed fetch + visual tree injection)
     AnimatedImage.cs          animated GIF/WebP decoder (SkiaSharp reflection)
+    MessageLogger.cs          message logger: edit/delete detection, visual indicators
+    MessageStore.cs           flat-file persistence for message log
     HtmlPatchVerifier.cs      self-healing HTML patches + FileSystemWatcher
     VisualTreeWalker.cs       DFS visual tree traversal, settings layout discovery
     ColorPickerPopup.cs       HSV color picker overlay
+    ColorUtils.cs             HSL/HSV/RGB color conversion
+    NativeEntry.cs            native hostfxr entry point
+    NsfwFilter.cs             NSFW filter (needs Avalonia-native redesign)
+    PlatformPaths.cs          cross-platform path resolution
+    BrowserDiscovery.cs       Phase 4.5 diagnostic scanner
     UprootedSettings.cs       INI-based settings (System.Text.Json is broken in profiler context)
     DotNetBrowserReflection.cs  reflection cache for DotNetBrowser types
     Logger.cs                 thread-safe file logging

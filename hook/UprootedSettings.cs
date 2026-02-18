@@ -3,7 +3,7 @@ namespace Uprooted;
 internal class UprootedSettings
 {
     public bool Enabled { get; set; } = true;
-    public string Version { get; set; } = "0.3.5";
+    public string Version { get; set; } = "0.3.6rc";
     public string ActiveTheme { get; set; } = "default-dark";
     public Dictionary<string, bool> Plugins { get; set; } = new();
     public string CustomCss { get; set; } = "";
@@ -12,6 +12,19 @@ internal class UprootedSettings
     public bool NsfwFilterEnabled { get; set; } = false;
     public string NsfwApiKey { get; set; } = "";
     public double NsfwThreshold { get; set; } = 0.6;
+
+    // MessageLogger settings
+    public bool MessageLoggerLogDeletes { get; set; } = true;
+    public bool MessageLoggerLogEdits { get; set; } = true;
+    public bool MessageLoggerIgnoreSelf { get; set; } = false;
+    public int MessageLoggerMaxMessages { get; set; } = 10000;
+
+    // Auto-update settings
+    public bool AutoUpdateEnabled { get; set; } = true;
+    public bool AutoUpdateNotify { get; set; } = true;
+    public string AutoUpdateChannel { get; set; } = "stable";
+    public string LastUpdateCheck { get; set; } = "";
+    public string PendingUpdateVersion { get; set; } = "";
 
     private static string? _settingsPath;
 
@@ -71,6 +84,18 @@ internal class UprootedSettings
                             System.Globalization.CultureInfo.InvariantCulture, out var threshold))
                             settings.NsfwThreshold = threshold;
                         break;
+                    case "MessageLogger.LogDeletes": settings.MessageLoggerLogDeletes = val == "true"; break;
+                    case "MessageLogger.LogEdits": settings.MessageLoggerLogEdits = val == "true"; break;
+                    case "MessageLogger.IgnoreSelf": settings.MessageLoggerIgnoreSelf = val == "true"; break;
+                    case "MessageLogger.MaxMessages":
+                        if (int.TryParse(val, out var maxMsg) && maxMsg > 0)
+                            settings.MessageLoggerMaxMessages = maxMsg;
+                        break;
+                    case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
+                    case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
+                    case "AutoUpdate.Channel": settings.AutoUpdateChannel = val; break;
+                    case "AutoUpdate.LastCheck": settings.LastUpdateCheck = val; break;
+                    case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
                         settings.Plugins[pluginName] = val == "true";
@@ -112,7 +137,16 @@ internal class UprootedSettings
                 "CustomBackground=" + CustomBackground,
                 "NsfwFilterEnabled=" + (NsfwFilterEnabled ? "true" : "false"),
                 "NsfwApiKey=" + NsfwApiKey,
-                "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                "MessageLogger.LogDeletes=" + (MessageLoggerLogDeletes ? "true" : "false"),
+                "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
+                "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
+                "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
+                "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
+                "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
+                "AutoUpdate.Channel=" + AutoUpdateChannel,
+                "AutoUpdate.LastCheck=" + LastUpdateCheck,
+                "AutoUpdate.PendingVersion=" + PendingUpdateVersion
             };
             foreach (var (name, enabled) in Plugins)
             {

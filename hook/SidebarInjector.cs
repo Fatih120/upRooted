@@ -31,10 +31,11 @@ internal class SidebarInjector
     private object? _layoutContainer;                    // Main settings Grid (for save bar search)
 
     // Injection state
-    private List<object> _injectedControls = new();   // All controls we added to NavContainer
+    private List<object> _injectedControls = new();   // All controls we injected (may be in NavContainer or items panel)
     private object? _scrollViewerWrapper;               // ScrollViewer wrapping NavContainer (if added)
     private object? _originalVersionBorder;              // Saved reference for restoration
     private object? _originalSignOutControl;             // Saved reference for restoration
+    private object? _insertionPanel;                     // Panel where Uprooted container was actually inserted (may differ from NavContainer)
     private int _advancedIndex = -1;                     // "Advanced" position in ListBox (for diagnostics)
 
     // Content state
@@ -62,7 +63,7 @@ internal class SidebarInjector
     private object? _nativeFontFamily;                   // CircularXX TT font from native controls
 
     // Version box injection (grey box at bottom of sidebar)
-    private object? _versionTextBlock;                   // "Uprooted 0.3.5" TextBlock in version box
+    private object? _versionTextBlock;                   // "Uprooted 0.3.6rc" TextBlock in version box
     private object? _versionContainer;                   // StackPanel containing version texts
 
     // Thread safety
@@ -315,12 +316,14 @@ internal class SidebarInjector
             // Step 1: Unwrap ScrollViewer if we added one
             UnwrapScrollViewer();
 
-            // Step 2: Remove all injected controls from NavContainer
-            if (_navContainer != null)
+            // Step 2: Remove all injected controls from wherever they were inserted
+            // (may be an internal items panel rather than NavContainer)
+            var removalTarget = _insertionPanel ?? _navContainer;
+            if (removalTarget != null)
             {
                 foreach (var ctrl in _injectedControls)
                 {
-                    try { _r.RemoveChild(_navContainer, ctrl); }
+                    try { _r.RemoveChild(removalTarget, ctrl); }
                     catch { }
                 }
             }
@@ -357,6 +360,7 @@ internal class SidebarInjector
     {
         _injectedControls.Clear();
         _scrollViewerWrapper = null;
+        _insertionPanel = null;
         _listBox = null;
         _navContainer = null;
         _contentPanel = null;
@@ -437,8 +441,21 @@ internal class SidebarInjector
                 _r.AddChild(container, item);
         }
 
-        // Add the container as a single child of NavContainer
-        _r.AddChild(_navContainer, container);
+        // Insert before APP SETTINGS so Uprooted appears between USER SETTINGS and APP SETTINGS.
+        // Walk up from the "APP SETTINGS" TextBlock to find the items panel and insertion index.
+        var (insertPanel, insertIdx) = FindAppSettingsInsertionPoint(layout.AppSettingsText);
+        if (insertPanel != null && insertIdx >= 0)
+        {
+            _r.InsertChild(insertPanel, insertIdx, container);
+            _insertionPanel = insertPanel;
+            Logger.Log("Injector", $"Uprooted section inserted before APP SETTINGS at {insertPanel.GetType().Name}[{insertIdx}]");
+        }
+        else
+        {
+            // Fallback: append to NavContainer (below everything)
+            _r.AddChild(_navContainer, container);
+            Logger.Log("Injector", "Uprooted section appended to NavContainer (fallback)");
+        }
         _injectedControls.Add(container);
 
         // 3. Re-add original version Border
@@ -454,6 +471,54 @@ internal class SidebarInjector
             _r.AddChild(_navContainer, _originalSignOutControl);
             // Don't add to _injectedControls -- it's Root's original control
         }
+    }
+
+    /// <summary>
+    /// Walk up from the "APP SETTINGS" TextBlock toward NavContainer, finding the highest
+    /// StackPanel ancestor where the text's ancestor is a Panel child. This locates the
+    /// items panel (e.g. VirtualizingStackPanel inside the ListBox) and the index of the
+    /// APP SETTINGS section within it, so we can insert our container before it.
+    /// Falls back to NavContainer itself if no internal StackPanel is found.
+    /// </summary>
+    private (object? panel, int index) FindAppSettingsInsertionPoint(object appSettingsText)
+    {
+        object? bestPanel = null;
+        int bestIndex = -1;
+
+        var current = appSettingsText;
+        while (current != null)
+        {
+            var parent = _r.GetParent(current);
+            if (parent == null) break;
+
+            var parentType = parent.GetType().Name;
+            bool isStackPanel = parentType.Contains("StackPanel");
+            bool isNavContainer = parent == _navContainer;
+
+            if (isStackPanel || isNavContainer)
+            {
+                var children = _r.GetChildren(parent);
+                if (children != null)
+                {
+                    int idx = children.IndexOf(current);
+                    if (idx >= 0)
+                    {
+                        bestPanel = parent;
+                        bestIndex = idx;
+                    }
+                }
+            }
+
+            if (isNavContainer) break;
+            current = parent;
+        }
+
+        if (bestPanel != null)
+            Logger.Log("Injector", $"APP SETTINGS insertion point: {bestPanel.GetType().Name}[{bestIndex}] ({_r.GetChildCount(bestPanel)} siblings)");
+        else
+            Logger.Log("Injector", "Could not find APP SETTINGS insertion point");
+
+        return (bestPanel, bestIndex);
     }
 
     private object? BuildSectionHeader(string text, double fontSize, object? fontWeight, object? foreground, object? fontFamily)
@@ -787,7 +852,7 @@ internal class SidebarInjector
     // ===== Version box injection =====
 
     /// <summary>
-    /// Inject "Uprooted 0.3.5" into the grey version info box at the bottom of the sidebar.
+    /// Inject "Uprooted 0.3.6rc" into the grey version info box at the bottom of the sidebar.
     /// The box lives in SidebarGrid Row=1 and contains "Root Version: X.Y.Z" and "System Info: ...".
     /// </summary>
     private void InjectVersionText()
@@ -822,7 +887,7 @@ internal class SidebarInjector
                 return;
             }
 
-            // Create "Uprooted 0.3.5" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
+            // Create "Uprooted 0.3.6rc" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
             var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, "#66f2f2f2");
             if (versionText == null) return;
 

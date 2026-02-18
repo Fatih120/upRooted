@@ -58,6 +58,10 @@ uprooted-private/
 │   ├── ClearUrlsEngine.cs             # ClearURLs: strip tracking params from compose editor URLs on send
 │   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed fetch + animated images + visual tree injection)
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
+│   ├── MessageLogger.cs              # Message logger: edit/delete detection, visual indicators, collection subscription
+│   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
+│   ├── AutoUpdater.cs                # In-process auto-updater (GitHub releases API, stable + dev channels)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
 │   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging
@@ -119,6 +123,7 @@ uprooted-private/
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
 ├── TASKS.md                           # Active task board (read by /hi each session)
+├── NEXT-RELEASE.md                    # Changes since last release (replaced each release)
 ├── CHANGELOG.md                       # Internal changelog (Keep a Changelog format)
 ├── CHANGELOG_PUBLIC.md                # Public changelog (mirrors GitHub release notes)
 ├── CONTRIBUTING.md                    # Contribution guidelines

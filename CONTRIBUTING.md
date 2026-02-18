@@ -52,7 +52,7 @@ Always pull before starting work -- another contributor may have pushed changes.
 | Node.js | 18+ | TypeScript build tooling |
 | pnpm | 8+ | Package manager |
 | .NET SDK | 10 | C# hook compilation |
-| Rust / Cargo | stable | Tauri installer build |
+| Rust / Cargo | stable | Console TUI installer build |
 | Root Communications | desktop app | Runtime testing target |
 
 ### Clone and Setup
@@ -75,8 +75,8 @@ pnpm build
 # C# hook
 dotnet build hook/ -c Release
 
-# Tauri installer
-cd installer && cargo tauri build
+# Console TUI installer
+cd installer/src-tauri && cargo build --release
 
 # Full installer with embedded artifacts
 powershell -File scripts/build_installer.ps1

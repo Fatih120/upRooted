@@ -15,6 +15,12 @@ Uprooted ships four built-in plugins that run in the DotNetBrowser Chromium laye
 | [Settings Panel](settings-panel.md) | Injects Uprooted UI into Root's settings sidebar | None | `src/plugins/settings-panel/` |
 | [Link Embeds](link-embeds.md) | Discord-style rich link previews and YouTube embeds | YouTube toggle, website toggle, max embeds | `src/plugins/link-embeds/` |
 
+### Planned
+
+| Plugin | Purpose | Settings | Layer |
+|--------|---------|----------|-------|
+| [Message Logger](message-logger.md) | Logs deleted and edited messages with visual indicators | Delete/edit toggles, display style, retention, ignore filters | C# hook (Avalonia-native) |
+
 ## Load Order
 
 Plugins are registered and started in this order:
@@ -39,4 +45,4 @@ All built-in plugins run inside DotNetBrowser's embedded Chromium instance. Key 
 |--------|------|---------|
 | `window.__UPROOTED_SETTINGS__` | `UprootedSettings` | Settings loaded from `uprooted-settings.json` by the installer/patcher |
 | `window.__UPROOTED_LOADER__` | `PluginLoader` | Plugin lifecycle manager (used by settings-panel) |
-| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.3.5"`) |
+| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.3.6rc"`) |

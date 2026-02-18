@@ -41,27 +41,30 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 18 source files in the `hook/` directory:
+The hook layer consists of 21 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
 | `Entry.cs` | 33 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 315 | Multi-phase startup orchestrator (Phase 0-5) |
-| `AvaloniaReflection.cs` | 1943 | Reflection cache for ~50 Avalonia types, ~55 members |
+| `StartupHook.cs` | 366 | Multi-phase startup orchestrator (Phase 0-5) |
+| `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1088 | Timer-based sidebar injection and content management |
-| `ContentPages.cs` | 1753 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | 2218 | Runtime theme engine with resource + visual tree color override |
+| `SidebarInjector.cs` | 1280 | Timer-based sidebar injection and content management |
+| `ContentPages.cs` | 2628 | Page builders for Uprooted/Plugins/Themes settings |
+| `ThemeEngine.cs` | 2360 | Runtime theme engine with resource + visual tree color override |
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
-| `HtmlPatchVerifier.cs` | 344 | Self-healing HTML patch system with FileSystemWatcher |
+| `HtmlPatchVerifier.cs` | 429 | Self-healing HTML patch system with FileSystemWatcher |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
-| `BrowserDiscovery.cs` | 498 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `LinkEmbedEngine.cs` | 1589 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `LinkEmbedEngine.cs` | 1763 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
+| `MessageLogger.cs` | 1185 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
+| `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
-| `UprootedSettings.cs` | 91 | INI-based settings persistence |
-| `Logger.cs` | 28 | Thread-safe file logging |
+| `UprootedSettings.cs` | 161 | INI-based settings persistence |
+| `Logger.cs` | 46 | Thread-safe file logging |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
 ---
@@ -152,7 +155,7 @@ Native DLL proxy -> hostfxr -> NativeEntry.Initialize()
 
 ## Startup Sequence
 
-**File:** `hook/StartupHook.cs` (315 lines)
+**File:** `hook/StartupHook.cs` (366 lines)
 
 The `StartupHook` class is the internal, no-namespace class required by .NET's
 `DOTNET_STARTUP_HOOKS` mechanism. It contains the multi-phase initialization sequence
@@ -289,7 +292,7 @@ detected.
 **Time:** 10 seconds after Phase 4
 **Failure mode:** Non-fatal; purely informational
 
-**File:** `hook/BrowserDiscovery.cs` (498 lines)
+**File:** `hook/BrowserDiscovery.cs` (496 lines)
 
 A diagnostic phase that performs a full DFS visual tree dump of the main window and
 scans all loaded assemblies. Results are logged for architecture discovery and debugging.
@@ -575,7 +578,7 @@ Any feature that needs to intercept outgoing messages can follow this same patte
 
 ## AvaloniaReflection Deep Dive
 
-**File:** `hook/AvaloniaReflection.cs` (1943 lines)
+**File:** `hook/AvaloniaReflection.cs` (2030 lines)
 
 ### Why Reflection Is Needed
 
@@ -1198,7 +1201,7 @@ indices (content is to the right of nav).
 
 ## Sidebar Injection
 
-**File:** `hook/SidebarInjector.cs` (1088 lines)
+**File:** `hook/SidebarInjector.cs` (1280 lines)
 
 ### Architecture Overview
 
@@ -1324,7 +1327,7 @@ allows:
 
 ## Content Pages
 
-**File:** `hook/ContentPages.cs` (1753 lines)
+**File:** `hook/ContentPages.cs` (2628 lines)
 
 ### Page Builder Pattern
 
@@ -1424,7 +1427,7 @@ Three sections:
 
 ## Theme Engine
 
-**File:** `hook/ThemeEngine.cs` (2218 lines)
+**File:** `hook/ThemeEngine.cs` (2360 lines)
 
 The theme engine is the largest and most complex component. It modifies Root's native
 Avalonia UI colors at runtime through two complementary strategies: resource dictionary
@@ -1703,7 +1706,7 @@ swatch, or to the left if near the window edge. Vertically centered on the swatc
 
 ## HTML Patch Verifier
 
-**File:** `hook/HtmlPatchVerifier.cs` (344 lines)
+**File:** `hook/HtmlPatchVerifier.cs` (429 lines)
 
 ### Purpose
 
@@ -1790,7 +1793,7 @@ Watchers monitor `LastWrite`, `Size`, and `CreationTime` notifications.
 
 ## Settings
 
-**File:** `hook/UprootedSettings.cs` (91 lines)
+**File:** `hook/UprootedSettings.cs` (161 lines)
 
 ### Format
 
@@ -1802,7 +1805,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.3.5";
+public string Version { get; set; } = "0.3.6rc";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -1839,7 +1842,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.3.5
+Version=0.3.6rc
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
@@ -1853,7 +1856,7 @@ Plugin.themes=true
 
 ### Logger.cs
 
-**File:** `hook/Logger.cs` (28 lines)
+**File:** `hook/Logger.cs` (46 lines)
 
 Thread-safe file logger. Writes to `{profileDir}/uprooted-hook.log`.
 

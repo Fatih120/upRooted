@@ -118,15 +118,15 @@ jobs:
 
       - name: Rename Linux binary
         run: |
-          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.5-linux-amd64
-          chmod +x installer/src-tauri/target/release/Uprooted-0.3.5-linux-amd64
-          echo "Renamed to Uprooted-0.3.5-linux-amd64"
+          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
+          chmod +x installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
+          echo "Renamed to Uprooted-0.3.6rc-linux-amd64"
 
       - name: Upload Linux binary
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux
-          path: installer/src-tauri/target/release/Uprooted-0.3.5-linux-amd64
+          path: installer/src-tauri/target/release/Uprooted-0.3.6rc-linux-amd64
 
       - name: Upload artifacts tarball
         uses: actions/upload-artifact@v4
@@ -143,10 +143,16 @@ jobs:
             echo "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           fi
-          VERSION="0.3.5"
+          VERSION="0.3.6rc"
           echo "Uploading Linux artifacts to watchthelight/uprooted v$VERSION"
-          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" --draft 2>/dev/null || true
+          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" 2>/dev/null || true
           for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
                    uprooted-linux-artifacts.tar.gz; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
+          done
+          # Upload individual artifact files for auto-updater
+          for f in libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json \
+                   uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js; do
+            p="installer/src-tauri/artifacts/$f"
+            [ -f "$p" ] && gh release upload "v$VERSION" "$p" --repo watchthelight/uprooted --clobber 2>/dev/null && echo "  Uploaded $f" || true
           done
