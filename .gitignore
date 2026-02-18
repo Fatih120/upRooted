@@ -48,6 +48,7 @@ tools/*.obj
 tools/*.dll
 tools/*.lib
 tools/*.exp
+tools/_build_output.txt
 
 # Hook build output
 hook/_out/
