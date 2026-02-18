@@ -1,13 +1,16 @@
+using System.Linq;
+
 namespace Uprooted;
 
 /// <summary>
-/// Detects profile popups in Root's visual tree and injects an "Uprooted Dev" badge
-/// into the roles section. Only active when AutoUpdateChannel == "developer".
+/// Detects profile popups in Root's visual tree and injects a small "Uprooted Dev"
+/// badge directly below the username. Only active when AutoUpdateChannel == "developer".
 ///
 /// Architecture:
 /// - 500ms timer polls all TopLevel windows for new popup/overlay controls
 /// - Profile popups identified by presence of username TextBlock + avatar Image pattern
-/// - Roles container discovered by looking for pill-style Border+TextBlock pairs
+/// - Username TextBlock found by largest font size in popup
+/// - Badge inserted at username's index+1 in its parent panel (centered, compact)
 /// - Badge injected once per popup instance (tagged to prevent duplicates)
 /// - Full tree dump logged on first popup detection for discovery/refinement
 /// </summary>
@@ -90,16 +93,8 @@ internal class ProfileBadgeInjector
                     DumpPopupTree(topLevel);
                 }
 
-                // Attempt to find roles container and inject badge
-                var rolesContainer = FindRolesContainer(topLevel);
-                if (rolesContainer != null)
-                {
-                    InjectDevBadge(rolesContainer);
-                }
-                else
-                {
-                    Logger.Log("ProfileBadge", "Roles container not found in popup — badge not injected");
-                }
+                // Inject badge below the username TextBlock
+                InjectBadgeUnderUsername(topLevel);
             }
         }
 
@@ -122,11 +117,7 @@ internal class ProfileBadgeInjector
                         DumpPopupTree(child);
                     }
 
-                    var rolesContainer = FindRolesContainer(child);
-                    if (rolesContainer != null)
-                        InjectDevBadge(rolesContainer);
-                    else
-                        Logger.Log("ProfileBadge", "Roles container not found in overlay popup");
+                    InjectBadgeUnderUsername(child);
                 }
             }
         }
@@ -243,130 +234,13 @@ internal class ProfileBadgeInjector
     }
 
     /// <summary>
-    /// Find the container holding role badge pills in the profile popup.
-    /// Looks for:
-    /// 1. A "Roles" or "ROLES" TextBlock header
-    /// 2. A sibling or descendant panel containing multiple small Border+TextBlock pairs (role pills)
-    /// 3. Fallback: any WrapPanel or horizontal StackPanel with pill-shaped children
+    /// Find the username TextBlock (largest font size in the popup, excluding known labels),
+    /// then insert a compact badge immediately after it in its parent panel.
     /// </summary>
-    private object? FindRolesContainer(object popup)
+    private void InjectBadgeUnderUsername(object popup)
     {
-        // Strategy 1: Find "Roles"/"ROLES" header and look at next sibling
+        // Check if badge already exists anywhere in this popup
         foreach (var node in _walker.DescendantsDepthFirst(popup))
-        {
-            if (!_r.IsTextBlock(node)) continue;
-            var text = _r.GetText(node);
-            if (text == null) continue;
-            if (!text.Equals("Roles", StringComparison.OrdinalIgnoreCase) &&
-                !text.Equals("ROLES", StringComparison.OrdinalIgnoreCase))
-                continue;
-
-            Logger.Log("ProfileBadge", $"Found roles header: \"{text}\" in {node.GetType().Name}");
-
-            // Walk up to find the parent panel, then look for a child panel (the roles container)
-            var parent = _r.GetParent(node);
-            for (int d = 0; d < 5 && parent != null; d++)
-            {
-                var children = _r.GetChildren(parent);
-                if (children == null || children.Count < 2)
-                {
-                    parent = _r.GetParent(parent);
-                    continue;
-                }
-
-                // Find the index of the node (or its ancestor) in this parent
-                int rolesHeaderIdx = -1;
-                var current = node;
-                for (int up = 0; up <= d; up++)
-                {
-                    rolesHeaderIdx = children.IndexOf(current);
-                    if (rolesHeaderIdx >= 0) break;
-                    current = _r.GetParent(current);
-                }
-
-                if (rolesHeaderIdx >= 0 && rolesHeaderIdx + 1 < children.Count)
-                {
-                    var candidate = children[rolesHeaderIdx + 1];
-                    if (candidate == null) { parent = _r.GetParent(parent); continue; }
-                    var candidateType = candidate.GetType().Name;
-                    Logger.Log("ProfileBadge", $"Roles container candidate: {candidateType} (sibling after header)");
-
-                    // Verify it contains pill-like children (Border with small height)
-                    if (ContainsPills(candidate))
-                        return candidate;
-                }
-
-                parent = _r.GetParent(parent);
-            }
-        }
-
-        // Strategy 2: Find any WrapPanel containing pill-like children
-        foreach (var node in _walker.DescendantsDepthFirst(popup))
-        {
-            var typeName = node.GetType().Name;
-            if (typeName.Contains("WrapPanel"))
-            {
-                if (ContainsPills(node))
-                {
-                    Logger.Log("ProfileBadge", $"Roles container found via WrapPanel scan: {typeName}");
-                    return node;
-                }
-            }
-        }
-
-        // Strategy 3: Any horizontal StackPanel or panel with pill children
-        foreach (var node in _walker.DescendantsDepthFirst(popup))
-        {
-            var typeName = node.GetType().Name;
-            if (!typeName.Contains("Panel")) continue;
-
-            if (ContainsPills(node))
-            {
-                Logger.Log("ProfileBadge", $"Roles container found via panel scan: {typeName}");
-                return node;
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Check if a container has pill-like children (Border with rounded corners
-    /// containing a TextBlock, typically 20-30px tall).
-    /// </summary>
-    private bool ContainsPills(object container)
-    {
-        int pillCount = 0;
-        foreach (var child in _r.GetVisualChildren(container))
-        {
-            if (!_r.IsBorder(child)) continue;
-            var bounds = _r.GetBounds(child);
-            if (bounds == null) continue;
-
-            // Pill badges are typically 20-36px tall, 40-200px wide
-            if (bounds.Value.H >= 16 && bounds.Value.H <= 40 && bounds.Value.W >= 30)
-            {
-                // Check for TextBlock inside
-                foreach (var inner in _walker.DescendantsDepthFirst(child))
-                {
-                    if (_r.IsTextBlock(inner))
-                    {
-                        pillCount++;
-                        break;
-                    }
-                }
-            }
-        }
-        return pillCount >= 1; // At least one role pill
-    }
-
-    /// <summary>
-    /// Inject the "Uprooted Dev" badge pill into the roles container.
-    /// </summary>
-    private void InjectDevBadge(object rolesContainer)
-    {
-        // Check if badge already exists in this container
-        foreach (var node in _walker.DescendantsDepthFirst(rolesContainer))
         {
             if (_r.GetTag(node) == BadgeTag)
             {
@@ -375,60 +249,149 @@ internal class ProfileBadgeInjector
             }
         }
 
-        var badge = CreateBadgePill();
-        if (badge == null)
+        // Find the username: largest-font TextBlock that isn't a label or action text
+        object? usernameBlock = null;
+        double maxFontSize = 0;
+
+        foreach (var node in _walker.DescendantsDepthFirst(popup))
         {
-            Logger.Log("ProfileBadge", "Failed to create badge pill");
+            if (!_r.IsTextBlock(node)) continue;
+            var text = _r.GetText(node);
+            if (string.IsNullOrEmpty(text) || text.Length < 2 || text.Length > 40) continue;
+
+            // Skip known UI labels
+            if (text.Equals("Roles", StringComparison.OrdinalIgnoreCase)) continue;
+            if (text.Equals("Notes", StringComparison.OrdinalIgnoreCase)) continue;
+            if (text.StartsWith("Click here", StringComparison.OrdinalIgnoreCase)) continue;
+            if (text.StartsWith("Message @", StringComparison.OrdinalIgnoreCase)) continue;
+            if (text.StartsWith("Uprooted", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var fontSize = _r.GetFontSize(node);
+            if (fontSize >= 14 && fontSize > maxFontSize)
+            {
+                maxFontSize = fontSize;
+                usernameBlock = node;
+            }
+        }
+
+        if (usernameBlock == null)
+        {
+            Logger.Log("ProfileBadge", "Username TextBlock not found — badge not injected");
             return;
         }
 
+        Logger.Log("ProfileBadge", $"Found username: \"{_r.GetText(usernameBlock)}\" (fontSize={maxFontSize})");
+
+        // Walk up from the username to find a parent panel that directly contains it
+        // (or a close ancestor), then insert the badge at index+1
+        var candidate = usernameBlock;
+        for (int up = 0; up < 6; up++)
+        {
+            var parent = _r.GetParent(candidate);
+            if (parent == null) break;
+
+            var children = _r.GetChildren(parent);
+            if (children != null)
+            {
+                var idx = children.IndexOf(candidate);
+                if (idx >= 0)
+                {
+                    var badge = CreateBadgePill();
+                    if (badge == null) return;
+
+                    if (TryInsertChild(parent, badge, idx + 1))
+                    {
+                        Logger.Log("ProfileBadge", $"Badge inserted at index {idx + 1} in {parent.GetType().Name}");
+                        return;
+                    }
+                }
+            }
+
+            candidate = parent;
+        }
+
+        Logger.Log("ProfileBadge", "Could not find insertion point under username — badge not injected");
+    }
+
+    /// <summary>
+    /// Insert a child into a panel's Children collection at a specific index.
+    /// Falls back to appending if Insert is not available.
+    /// </summary>
+    private bool TryInsertChild(object panel, object child, int index)
+    {
         try
         {
-            _r.AddChild(rolesContainer, badge);
-            Logger.Log("ProfileBadge", "Uprooted Dev badge injected into roles container");
+            var childrenProp = panel.GetType().GetProperty("Children");
+            if (childrenProp == null) return false;
+
+            var children = childrenProp.GetValue(panel);
+            if (children == null) return false;
+
+            var countProp = children.GetType().GetProperty("Count");
+            var count = countProp != null ? (int)countProp.GetValue(children)! : 0;
+            var insertAt = Math.Min(index, count);
+
+            // Try typed Insert(int, IControl) or Insert(int, object)
+            var insertMethod = children.GetType().GetMethods()
+                .FirstOrDefault(m => m.Name == "Insert" && m.GetParameters().Length == 2);
+
+            if (insertMethod != null)
+            {
+                insertMethod.Invoke(children, new object[] { insertAt, child });
+                return true;
+            }
+
+            // Fallback: just append
+            var addMethod = children.GetType().GetMethod("Add");
+            addMethod?.Invoke(children, new[] { child });
+            return true;
         }
         catch (Exception ex)
         {
-            Logger.Log("ProfileBadge", $"Badge injection failed: {ex.Message}");
+            Logger.Log("ProfileBadge", $"TryInsertChild error: {ex.Message}");
+            return false;
         }
     }
 
     /// <summary>
-    /// Build the "Uprooted Dev" pill badge matching Root's native role pill style.
+    /// Build the compact "Uprooted Dev" pill badge displayed below the username.
+    /// Smaller than the role pills: tighter padding, smaller font, centered horizontally.
     /// Structure:
-    ///   Border (pill shape, CR=10, padding 10,4,10,4, bg=#8B691420, border=#8B691460)
-    ///     StackPanel (horizontal, spacing=6)
-    ///       Border (8x8, CR=4, bg=#8B6914) — color dot
-    ///       TextBlock ("Uprooted Dev", size=12, weight=500)
+    ///   Border (pill, CR=8, padding 7,2,7,2, bg=#8B691420, border=#8B691460, HAlign=Center)
+    ///     StackPanel (horizontal, spacing=4, VAlign=Center)
+    ///       Border (6x6, CR=3, bg=#8B6914) — color dot
+    ///       TextBlock ("Uprooted Dev", size=10, weight=500)
     /// </summary>
     private object? CreateBadgePill()
     {
-        // Color dot
-        var dot = _r.CreateBorder(BadgeColor, cornerRadius: 4);
+        // Color dot (smaller: 6x6)
+        var dot = _r.CreateBorder(BadgeColor, cornerRadius: 3);
         if (dot == null) return null;
-        _r.SetWidth(dot, 8);
-        _r.SetHeight(dot, 8);
+        _r.SetWidth(dot, 6);
+        _r.SetHeight(dot, 6);
+        _r.SetVerticalAlignment(dot, "Center");
 
-        // Label text
-        var label = _r.CreateTextBlock("Uprooted Dev", fontSize: 12, foregroundHex: "#fff2f2f2");
+        // Label text (smaller: size 10)
+        var label = _r.CreateTextBlock("Uprooted Dev", fontSize: 10, foregroundHex: "#fff2f2f2");
         if (label == null) return null;
         _r.SetFontWeightNumeric(label, 500);
         _r.SetVerticalAlignment(label, "Center");
 
-        // Inner StackPanel (horizontal: dot + label)
-        var inner = _r.CreateStackPanel(vertical: false, spacing: 6);
+        // Inner StackPanel (horizontal: dot + label, tighter spacing)
+        var inner = _r.CreateStackPanel(vertical: false, spacing: 4);
         if (inner == null) return null;
         _r.SetVerticalAlignment(inner, "Center");
         _r.AddChild(inner, dot);
         _r.AddChild(inner, label);
 
-        // Outer pill Border
-        var pill = _r.CreateBorder(bgHex: BadgeColor + "20", cornerRadius: 10, child: inner);
+        // Outer pill Border (smaller padding, centered)
+        var pill = _r.CreateBorder(bgHex: BadgeColor + "20", cornerRadius: 8, child: inner);
         if (pill == null) return null;
-        _r.SetPadding(pill, 10, 4, 10, 4);
+        _r.SetPadding(pill, 7, 2, 7, 2);
         _r.SetTag(pill, BadgeTag);
+        _r.SetHorizontalAlignment(pill, "Center");
 
-        // Border stroke (using BorderBrush + BorderThickness)
+        // Border stroke
         try
         {
             var strokeBrush = _r.CreateBrush(BadgeColor + "60");
