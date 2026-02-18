@@ -143,6 +143,10 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | `BuildLinkEmbedSettings()` — "Show Embedded File Names" toggle in LinkEmbeds settings lightbox, calls `LinkEmbedEngine.Instance?.RefreshTitleVisibility()` |
 | `hook/StartupHook.cs` | Sets `LinkEmbedEngine.Instance = engine` in Phase 4.5b for external access |
 | `hook/UprootedSettings.cs` | `LinkEmbedsShowFilenames` property (bool, default false), INI load/save for `LinkEmbeds.ShowFilenames` |
+| `hook/Logger.cs` | Added `LogSeparator()` method — writes blank lines to log for visual separation on startup |
+| `hook/Entry.cs` | Calls `LogSeparator()` before first `[Entry]` log in both ModuleInitializer and constructor |
+| `hook/ContentPages.cs` | Scaled up all lightbox/settings font sizes (section headers 12→18, labels 13→19, descriptions 12→16, titles 18→26, inputs 13→17, toggle pills 40×20→52×26, card width 480→560); API key textbox vertically centered |
+| `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 

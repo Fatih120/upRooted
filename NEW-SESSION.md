@@ -35,14 +35,14 @@ Two independent injection layers into one app:
 
 | File | Lines | Purpose |
 |------|------:|---------|
-| `Entry.cs` | 35 | Profiler injection entry point, `[ModuleInitializer]` guard |
+| `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
 | `StartupHook.cs` | ~430 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1421 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers |
-| `ContentPages.cs` | ~3429 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | ~3435 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | ~2513 | ResourceDictionary overrides, live theme preview, custom ping color override |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
@@ -58,7 +58,7 @@ Two independent injection layers into one app:
 | `ProfileBadgeInjector.cs` | ~535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
-| `Logger.cs` | 46 | Thread-safe file logging, swallows own exceptions |
+| `Logger.cs` | 59 | Thread-safe file logging, startup separator, swallows own exceptions |
 
 ### TypeScript Layer (`src/`)
 
@@ -141,6 +141,8 @@ Two independent injection layers into one app:
 - LinkEmbedEngine: HTTP status code + Content-Type validation in HttpGetBytes (rejects Cloudflare challenge pages), OG fallback for image-extension URLs that serve HTML (Zipline /view/, /u/), image border corners fix, robust OG regex for meta tags with extra attributes, timeout increased to 10s
 - Video embeds (.mp4, .webm, .mov): dark 16:9 placeholder with centered play button overlay, click opens in browser. Detected by extension or `video/*` Content-Type. No HTTP fetch for extension-matched URLs.
 - LinkEmbeds "Show file names" toggle: image-only embeds hide filename by default, live toggle via `RefreshTitleVisibility()` in settings lightbox
+- Lightbox font sizes scaled up (section headers 18, labels 19, descriptions 16, titles 26, inputs 17, pills 52×26, card width 560)
+- Log startup separator: 3 blank lines before first [Entry] log on Root launch; watch-log colors [Entry] green, fallback messages yellow
 
 **Known issues:**
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)

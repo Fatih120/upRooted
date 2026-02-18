@@ -54,6 +54,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change
 
 ### Changed
+- **Lightbox font sizes**: scaled up all text in plugin settings and info lightboxes — section headers 12→18, labels 13→19, descriptions 12→16, titles 18→26, inputs 13→17, toggle pills 40×20→52×26, card width 480→560
+- **ContentFilter API key textbox**: vertically centered text with padding (matches search box style)
+- **Log startup separator**: 3 blank lines before first `[Entry]` log on Root launch for clear visual separation
+- **watch-log.ps1**: `[Entry]` lines colored green; lines matching `fail`/`error` that also contain `fallback` shown as yellow (warning) instead of red
 - **Plugin names**: renamed to PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching similar services like Vencord; Themes and ClearURLs unchanged
 - **SentryBlocker**: testing status promoted from Alpha → Beta
 - **LinkEmbeds**: testing status promoted from Alpha → Beta
