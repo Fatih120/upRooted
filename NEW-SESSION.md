@@ -238,6 +238,8 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Root Environment | `docs/plugins/ROOT_ENVIRONMENT.md` | Root internals -- DOM, CSS variables, Chromium context |
 | Plugin Examples | `docs/plugins/EXAMPLES.md` | Annotated example plugins covering common patterns |
 | Advanced Plugin Dev | `docs/plugins/ADVANCED_DEVELOPMENT.md` | Advanced plugin patterns and techniques |
+| Plugin Roadmap | `docs/PLUGIN_ROADMAP.md` | Planned plugins with architecture notes and implementation strategies |
+| Built-in Plugins | `docs/plugins/builtin/INDEX.md` | Per-plugin docs for all shipped plugins (sentry-blocker, themes, settings-panel, link-embeds) |
 
 ### Research and Deep Dives
 
