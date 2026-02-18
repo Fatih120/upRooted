@@ -295,6 +295,22 @@ internal class SidebarInjector
             // Step 6: Record current ListBox selection
             _lastListBoxIdx = _listBox != null ? _r.GetSelectedIndex(_listBox) : -1;
 
+            // Step 6b: Subscribe to ListBox.SelectionChanged for instant Uprooted→Root transitions.
+            // Without this, switching from an Uprooted tab to a Root tab waits up to 200ms
+            // (next timer poll) to remove our content page, causing visible body lag.
+            if (_listBox != null)
+            {
+                _r.SubscribeEvent(_listBox, "SelectionChanged", () =>
+                {
+                    int idx = _r.GetSelectedIndex(_listBox);
+                    if (idx >= 0 && _activePage != null)
+                    {
+                        _lastListBoxIdx = idx;
+                        RemoveContentPage();
+                    }
+                });
+            }
+
             _injected = true;
             Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
                 $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
@@ -401,6 +417,9 @@ internal class SidebarInjector
         var container = _r.CreateStackPanel(vertical: true, spacing: 0);
         if (container == null) return;
         _r.SetTag(container, InjectedTag);
+        // Top margin separates UPROOTED section from the sidebar top edge
+        // (native sections inside the ListBox get spacing from ListBox padding)
+        _r.SetMargin(container, 0, 16, 0, 0);
 
         // Get styling info from the "APP SETTINGS" header
         var headerFontSize = _r.GetFontSize(layout.AppSettingsText) ?? 11;
@@ -525,11 +544,13 @@ internal class SidebarInjector
     {
         // Match Root's native section header structure:
         //   ListBoxItem (H=40) → Panel (M=0,2,0,2) → ... → StackPanel (M=12,12,12,0)
-        // We replicate: Panel (H=40) → StackPanel (M=12,14,12,0)
+        // We replicate: Panel (H=40, M=0,0,0,4) → StackPanel (M=12,14,12,0)
         //   14 = 12 (native StackPanel margin) + 2 (native Panel margin-top)
+        //   Bottom margin 4 separates the section header from the first nav item
         var wrapper = _r.CreatePanel();
         if (wrapper == null) return null;
         _r.SetHeight(wrapper, 40);
+        _r.SetMargin(wrapper, 0, 0, 0, -4);
         _r.SetTag(wrapper, InjectedTag);
 
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);
