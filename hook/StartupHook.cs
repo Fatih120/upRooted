@@ -282,33 +282,6 @@ internal class StartupHook
                 }
             });
 
-            // Phase 4.5e: Profile badge injector (dev channel only)
-            var badgeSettings = UprootedSettings.Load();
-            if (badgeSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
-            {
-                var badgeWindow = mainWindow!;
-                var badgeResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try
-                    {
-                        Thread.Sleep(25_000); // Wait 25s — profile popups won't be used immediately
-                        Logger.Log("Startup", "Phase 4.5e: Starting profile badge injector (dev channel)...");
-                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow);
-                        badge.Initialize();
-                        Logger.Log("Startup", "Phase 4.5e OK: Profile badge injector active");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5e error: {ex.Message}");
-                    }
-                });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5e: Profile badge skipped (not on developer channel)");
-            }
-
             // Phase 5: DotNetBrowser features (NSFW filter)
             var phase5Settings = UprootedSettings.Load();
             var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
