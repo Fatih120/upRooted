@@ -4,42 +4,37 @@ All notable changes to Uprooted are documented here. This file mirrors the [GitH
 
 ---
 
-## [v0.3.44](https://github.com/watchthelight/uprooted/releases/tag/v0.3.44) — 2026-02-18
-
-### Improvements
-- Linux installer auto-fetches latest release from GitHub — stale scripts no longer download wrong version
-- Download errors now show specific HTTP status and actionable fix suggestions
-- Validates tarball integrity before extraction (catches corrupt downloads)
-- Build-from-source falls back to pre-built artifacts on failure instead of dying
-- `find_root()` lists all searched paths on failure with a locate hint
-- Post-install messaging uses prominent box: "You MUST log out and log back in"
-
-### Changed
-- `.desktop` file creation is now opt-in (`--desktop` flag) — no more unwanted app menu entries
-
-## [v0.3.43](https://github.com/watchthelight/uprooted/releases/tag/v0.3.43) — 2026-02-18
-
-### Fixed
-- Linux installer: standalone `.sh` script now auto-uses pre-built artifacts (no more `pnpm` error when run from Downloads)
-- Skip Root server invite links (rootapp.gg) — Root renders these natively
-- Fallback domain card for URLs with no metadata (login redirects, JS-only pages)
-
-## [v0.3.3](https://github.com/watchthelight/uprooted/releases/tag/v0.3.3) — 2026-02-17
+## [v0.3.5](https://github.com/watchthelight/uprooted/releases/tag/v0.3.5) — 2026-02-18
 
 ### New
+- **Animated image embeds** — `.gif` and `.webp` URLs play inline with frame-accurate timing; graceful fallback to static first frame if frame APIs are unavailable
 - **Link embeds for non-YouTube sites** — Twitter/X, Reddit, and any site with OpenGraph or oEmbed support now gets rich embed previews with images
 - **Direct image embeds** — Image URLs (`.jpg`, `.png`, `.gif`, `.webp`) render instantly with zero network overhead
 - **oEmbed discovery** — automatically detects oEmbed endpoints from any page's HTML, no hardcoded provider list needed
+- **Fallback domain cards** — URLs with no metadata (login redirects, JS-only pages) get a clean domain-only card instead of nothing
+- **Theme: "Cosmic Smoothie"** — deep purple accent with dark space background
 
 ### Improvements
 - Browser-like User-Agent for better site compatibility (replaces bot UA that was rejected by Twitter/X and others)
-- Content-Type gate prevents parsing PDFs, binaries, and other non-HTML as OpenGraph
-- Smart UA switching — embed-fixer domains (vxtwitter, fxtwitter, fixupx) and Twitter/X get a crawler UA to receive rich metadata
-- Falls back to `twitter:image`/`twitter:title` meta tags when `og:*` tags are missing
+- Smart UA switching — embed-fixer domains and Twitter/X get a crawler UA to receive rich metadata
 - Embed-fixer domain normalization — fixupx/fxtwitter links auto-resolve to vxtwitter for best image support
+- Content-Type gate prevents parsing PDFs, binaries, and other non-HTML as OpenGraph
+- Falls back to `twitter:image`/`twitter:title` meta tags when `og:*` tags are missing
+- Skip Tenor and rootapp.gg links — Root renders these natively, avoids double-embedding
 - Settings cache reduces disk reads (10s TTL instead of every 500ms tick)
+- Settings sidebar and content headers renamed for clarity ("About", "Plugin Settings", "Theme Settings")
+- Plugin search box: improved font size, padding, and vertical centering
+- Linux installer auto-fetches latest release from GitHub — stale scripts no longer download wrong version
+- Linux installer: download errors now show specific HTTP status and actionable fix suggestions
+- Linux installer: validates tarball integrity before extraction (catches corrupt downloads)
+- Linux installer: standalone `.sh` script auto-uses pre-built artifacts when run outside the repo
+- Linux installer: build-from-source falls back to pre-built artifacts on failure
+- `.desktop` file creation is now opt-in (`--desktop` flag) — no more unwanted app menu entries
+- Post-install messaging uses prominent box: "You MUST log out and log back in"
 
 ### Fixes
+- Fixed settings crash — clicking the back arrow on Uprooted tabs no longer freezes Root
+- Fixed settings header to show page title and preserve X close button, matching Root's native layout
 - Fixed oEmbed JSON parsing crash caused by trimmed regex delegate in Root's binary
 - Fixed oEmbed endpoint fetch failures caused by trimmed charset methods — switched to stream-based body reading
 
