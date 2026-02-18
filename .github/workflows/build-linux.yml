@@ -150,9 +150,6 @@ jobs:
                    uprooted-linux-artifacts.tar.gz; do
             [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
           done
-          # Upload individual artifact files for auto-updater
-          for f in libuprooted_profiler.so UprootedHook.dll UprootedHook.deps.json \
-                   uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js; do
-            p="installer/src-tauri/artifacts/$f"
-            [ -f "$p" ] && gh release upload "v$VERSION" "$p" --repo watchthelight/uprooted --clobber 2>/dev/null && echo "  Uploaded $f" || true
-          done
+          # Pack auto-update package (.uprpkg) and upload
+          python3 scripts/pack-update.py --input-dir installer/src-tauri/artifacts --output auto-update.uprpkg --verify
+          gh release upload "v$VERSION" auto-update.uprpkg --repo watchthelight/uprooted --clobber 2>/dev/null && echo "  Uploaded auto-update.uprpkg" || true

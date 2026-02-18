@@ -41,6 +41,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - 33 tracking params (utm_*, fbclid, gclid, etc.) in a case-insensitive `HashSet` for O(1) lookup; fragment-preserving; idempotent (no write if no params remain)
   - Timer-based `TextArea` discovery (2s interval) via visual tree walk for `RootMessageTextboxView`
   - File: `hook/ClearUrlsEngine.cs`
+- **Custom ping/reply highlight color** — standalone override for the mention/reply highlight color, independent of active theme
+  - "HIGHLIGHT OVERRIDE" card on Themes settings page with toggle, color input, swatch + color picker, reset button
+  - ThemeEngine: `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()` override `HighlightForegroundColor/Brush` and `TextSelectionHighlightColor` (0x60 alpha) in Styles[0].Resources + MergedDictionary
+  - Applied as Phase 6 after theme apply and live preview updates; restored to theme defaults on clear
+  - New setting: `CustomPingColor` in UprootedSettings (INI), applied at startup in Phase 3.5
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
 

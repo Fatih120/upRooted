@@ -553,7 +553,8 @@ shortcuts.
 8. `cargo build --release` in `installer/src-tauri/`
 9. Rename output to `Uprooted-{version}-Setup.exe`
 10. Upload as GitHub Actions artifact
-11. Publish to public repo (`watchthelight/uprooted`) as a draft release
+11. Pack `auto-update.uprpkg` (encrypted package of the 6 auto-updater files via `scripts/pack-update.py`)
+12. Publish installer + `auto-update.uprpkg` to public repo (`watchthelight/uprooted`) release
 
 ### build-linux.yml
 
@@ -574,7 +575,8 @@ dependencies needed -- the installer is a console TUI)
 4. `cargo build --release` in `installer/src-tauri/`
 5. Rename output to `Uprooted-{version}-linux-amd64`
 6. Upload as GitHub Actions artifact
-7. Publish to public repo release
+7. Pack `auto-update.uprpkg` (encrypted package via `scripts/pack-update.py`)
+8. Publish installer + `auto-update.uprpkg` to public repo release
 
 ---
 
@@ -593,6 +595,7 @@ dependencies needed -- the installer is a console TUI)
 | `libuprooted_profiler.so` | `gcc` (Linux)                   | Linux equivalent of the profiler                     |
 | `uprooted.exe`            | `cargo build --release` (Win)   | Self-contained Windows installer with all artifacts  |
 | `uprooted`                | `cargo build --release` (Linux) | Self-contained Linux installer with all artifacts    |
+| `auto-update.uprpkg`      | `scripts/pack-update.py`        | Encrypted package of 6 auto-updater files (DLL, deps.json, JS, CSS) |
 
 ### Staging Directory
 
@@ -613,6 +616,37 @@ installer/src-tauri/artifacts/
 
 They are compiled into the final binary via Rust's `include_bytes!()` in
 `installer/src-tauri/src/embedded.rs`.
+
+### Auto-Update Package
+
+Separately from the installer, the auto-updater downloads a single encrypted
+`.uprpkg` package from GitHub releases instead of 6 individual files. This
+package is built by `scripts/pack-update.py`:
+
+```bash
+python scripts/pack-update.py --input-dir installer/src-tauri/artifacts --output auto-update.uprpkg --verify
+```
+
+The `--verify` flag packs then immediately unpacks and compares byte-for-byte.
+
+The package format bundles 6 files (everything except the profiler DLL/SO,
+which is locked on Windows and rarely changes):
+
+- `UprootedHook.dll`, `UprootedHook.deps.json`
+- `uprooted-preload.js`, `uprooted.css`
+- `nsfw-filter.js`, `link-embeds.js`
+
+Each file is encrypted with multi-layer XOR (64-byte master key + per-build
+32-byte random nonce + position-dependent derivation). The auto-updater in
+`hook/AutoUpdater.cs` decrypts and unpacks at runtime.
+
+**Release assets** (3 total per release):
+
+| Asset | Source |
+|-------|--------|
+| `Uprooted-{version}-Setup.exe` | Windows CI workflow |
+| `Uprooted-{version}-linux-amd64` | Linux CI workflow |
+| `auto-update.uprpkg` | CI workflow (via `pack-update.py`) |
 
 See [Architecture](../framework/ARCHITECTURE.md) for how these components fit together
 at runtime.

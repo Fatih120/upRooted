@@ -104,8 +104,8 @@ Next 2-3 releases. Expanding the platform and improving the developer/user exper
 ### Plugin marketplace / repository
 A discoverable listing of community plugins. Could be a static registry (JSON manifest in a GitHub repo) or a simple web interface. Plugin authors would submit metadata; users would browse and install from within Uprooted.
 
-### Auto-update mechanism
-Detect new Uprooted versions and offer in-app updates. Needs to handle hook DLL replacement while Root is not running, HTML re-patching, and TypeScript bundle updates.
+### Auto-update mechanism — SHIPPED (v0.3.6-rc)
+In-process auto-updater (`hook/AutoUpdater.cs`) checks GitHub releases every 6 hours, downloads a single encrypted `.uprpkg` package, decrypts and unpacks 6 update files, and overwrites them in-place. Developer channel with password-gated access to pre-release builds. Changes take effect on next Root restart.
 
 ### Linux support improvements
 The standalone bash installer (`install-uprooted-linux.sh`) covers basic installation. Improve detection reliability, test across distributions, and ensure the native profiler (`tools/uprooted_profiler_linux.c`) handles Linux-specific edge cases.
@@ -165,12 +165,17 @@ Several Root findings involve injection vectors (C5 open redirect via `restart(u
 
 ### Update mechanism security
 
-Uprooted plans an auto-update system (Medium-term Goals). Root's own update mechanism has known weaknesses (M7 unsigned manifests, M8 no certificate pinning). Uprooted must avoid repeating these:
+The auto-updater (shipped v0.3.6-rc) downloads an encrypted `.uprpkg` package from GitHub releases over HTTPS. Current protections:
 
-- **Sign release manifests with an asymmetric key.** The update manifest (version list, download URLs, checksums) must be signed with a private key held offline. The client verifies the signature with an embedded public key before downloading anything.
-- **Verify binary integrity after download.** Downloaded hook DLLs, TypeScript bundles, and profiler binaries must be checked against SHA-256 hashes listed in the signed manifest. Reject any file whose hash does not match.
-- **Pin TLS certificates for the update channel.** If updates are served from a known domain, pin the expected certificate chain to prevent MITM substitution. At minimum, pin the root CA.
-- **Fail closed on verification failure.** If signature verification, hash verification, or TLS pinning fails, the update must be rejected entirely. Never apply a partially-verified update.
+- **Encrypted package format** — multi-layer XOR with 64-byte master key + per-build 32-byte random nonce + position-dependent key derivation. Prevents casual inspection of release artifacts.
+- **Staging + verification** — files are unpacked to a staging directory, verified non-empty and complete, then copied to production. Partial downloads or corruption abort without touching production files.
+- **Authenticated developer channel** — XOR-obfuscated PAT for private repo API access; password-gated channel selection (SHA-256 hash comparison).
+
+Future hardening opportunities (not yet implemented):
+
+- **Asymmetric signature on package** — sign `.uprpkg` with an offline private key, verify with embedded public key before decryption.
+- **SHA-256 hash manifest** — publish per-file hashes in a signed manifest; verify after decryption.
+- **Certificate pinning** — pin GitHub's TLS certificate chain for the update channel.
 
 ### Privacy protections
 

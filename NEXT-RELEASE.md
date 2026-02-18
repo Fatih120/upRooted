@@ -49,6 +49,11 @@
   - Updates section: green banner appears after auto-updater applies an update
   - Restart button launches new Root.exe via `Process.Start` and calls `Environment.Exit(0)`
 - **Diagnostics "Open" button** — the DIAGNOSTICS card on the About page now shows an "Open" button next to the log file path that opens the file in Explorer (Windows) or the containing directory (Linux)
+- **Custom ping/reply highlight color** — standalone override for the mention/reply highlight color that persists across theme switches
+  - "HIGHLIGHT OVERRIDE" card on the Themes settings page with toggle indicator, color input, swatch with color picker, and Reset button
+  - Overrides `HighlightForegroundColor`, `HighlightForegroundBrush`, and `TextSelectionHighlightColor` in both Styles[0].Resources and MergedDictionary
+  - Applied as Phase 6 after every theme apply and live preview update; restored to theme defaults on clear
+  - Persists in `CustomPingColor` INI setting; applied at startup in Phase 3.5 after theme init
 
 ### Changed
 

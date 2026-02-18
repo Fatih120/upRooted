@@ -69,13 +69,13 @@ Key details:
 | 1 | StartupHook | Wait for Avalonia assemblies (30s) |
 | 2 | StartupHook | Wait for Application.Current (30s) |
 | 3 | StartupHook | Wait for MainWindow (60s) |
-| 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
+| 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme + custom ping color |
 | 4 | SidebarInjector | Start settings page monitor (200ms poll) |
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
 | 4.5a | ClearUrlsEngine | Strip tracking params from compose editor on Enter (14s delay) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
-| 4.5d | AutoUpdater | Background update check (every 6 hours), download + apply |
+| 4.5d | AutoUpdater | Background update check (every 6 hours), encrypted .uprpkg download + decrypt + apply |
 | 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (developer channel only, 25s delay) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
@@ -121,6 +121,10 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI, BuildChannelRow for update channel switching, restart banners (plugins + updates), state-aware plugin banner (hides on revert), Restart button (Process.Start + Environment.Exit), DIAGNOSTICS "Open" button (explorer /select) |
 | `hook/ProfileBadgeInjector.cs` | New file: profile popup detection via TopLevel/OverlayLayer scan, heuristic matching (avatar + username + roles), tree dump diagnostics, role pill container discovery, "Uprooted Dev" badge injection (gold #8B6914 pill) |
 | `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (25s delay, developer channel only) |
+| `hook/UprootedSettings.cs` | Added `CustomPingColor` property (string, default empty), INI load/save |
+| `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
+| `hook/ContentPages.cs` | Added "HIGHLIGHT OVERRIDE" section to Themes page: `BuildPingColorSection()` with toggle indicator, color input row, swatch + color picker, reset button |
+| `hook/StartupHook.cs` | Added custom ping color apply in Phase 3.5 after theme init |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
