@@ -64,6 +64,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **ProfileBadgeInjector**: badge was appearing beside the username (inside the horizontal name row) instead of below it — fixed by walking up the visual tree to find the first vertical StackPanel (`Orientation == Vertical`), then inserting at the username row's index+1; added `IsVerticalPanel()` helper (checks `Orientation` property for StackPanels, falls back to Y-bounds delta comparison for Grid/DockPanel)
 - **ProfileBadgeInjector**: badge made smaller and centered (font 12→10, padding 10,4→7,2, dot 8×8→6×6, `HorizontalAlignment=Center`)
 - **Deploy script**: `deploy-hook.ps1` now relaunches Root via `UprootedLauncher.exe` (sets CLR profiler env vars) instead of bare `Root.exe`
+- **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
 
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins

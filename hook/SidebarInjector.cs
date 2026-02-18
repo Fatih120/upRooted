@@ -14,7 +14,7 @@ namespace Uprooted;
 internal class SidebarInjector
 {
     private const string InjectedTag = "uprooted-injected";
-    private const int PollIntervalMs = 200;
+    private const int PollIntervalMs = 200;  // Safety-net poll; LayoutUpdated handles fast detection
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -69,6 +69,7 @@ internal class SidebarInjector
     // Thread safety
     private int _injecting;
     private bool _diagnosticsDone;
+    private long _lastLayoutCheckMs;                       // Throttle for LayoutUpdated checks
 
     public SidebarInjector(AvaloniaReflection resolver, object mainWindow, ThemeEngine themeEngine)
     {
@@ -90,6 +91,14 @@ internal class SidebarInjector
     public void StartMonitoring()
     {
         Logger.Log("Injector", "Starting settings page monitor (direct injection mode)");
+
+        // Primary detection: LayoutUpdated fires on the UI thread whenever Avalonia
+        // re-layouts. This catches settings page appearance within the same render
+        // frame — no dispatch latency, no poll gap.
+        _r.SubscribeEvent(_window, "LayoutUpdated", OnLayoutUpdated);
+
+        // Safety-net poll: catches cases where LayoutUpdated alone misses detection,
+        // and handles alive checks when injected.
         _timer = new Timer(OnTimerTick, null, PollIntervalMs, PollIntervalMs);
     }
 
@@ -119,6 +128,36 @@ internal class SidebarInjector
         catch (Exception ex)
         {
             Logger.Log("Injector", $"OnTimerTick error: {ex.Message}");
+            Interlocked.Exchange(ref _injecting, 0);
+        }
+    }
+
+    /// <summary>
+    /// Fires on the UI thread whenever Avalonia re-layouts. Catches settings page
+    /// appearance within the same render frame — zero dispatch latency.
+    /// Throttled to avoid running FindSettingsLayout on every layout pass.
+    /// </summary>
+    private void OnLayoutUpdated()
+    {
+        if (_injected) return;  // Already injected, nothing to detect
+
+        // Throttle: at most one check per 32ms (~2 frames at 60fps)
+        long now = Environment.TickCount64;
+        if (now - _lastLayoutCheckMs < 32) return;
+        _lastLayoutCheckMs = now;
+
+        // Shared re-entrancy guard with timer path
+        if (Interlocked.CompareExchange(ref _injecting, 1, 0) != 0) return;
+        try
+        {
+            CheckAndInject();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Injector", $"LayoutUpdated check error: {ex.Message}");
+        }
+        finally
+        {
             Interlocked.Exchange(ref _injecting, 0);
         }
     }
@@ -161,14 +200,17 @@ internal class SidebarInjector
 
         Logger.Log("Injector", "Settings page detected, injecting (direct injection mode)");
 
+        InjectIntoSettings(newLayout);
+
+        // Run diagnostics AFTER injection so the UI appears immediately.
+        // DumpVersionRecon does expensive deep tree walks (10-depth dumps of ListBox items)
+        // that would otherwise block the injection on first open.
         if (!_diagnosticsDone)
         {
             _diagnosticsDone = true;
             try { DumpVersionRecon(newLayout); }
             catch (Exception ex) { Logger.Log("Recon", $"DumpVersionRecon error: {ex.Message}"); }
         }
-
-        InjectIntoSettings(newLayout);
     }
 
     // ===== Core injection =====
@@ -550,7 +592,7 @@ internal class SidebarInjector
         var wrapper = _r.CreatePanel();
         if (wrapper == null) return null;
         _r.SetHeight(wrapper, 40);
-        _r.SetMargin(wrapper, 0, 0, 0, -4);
+        _r.SetMargin(wrapper, 0, 0, 0, -6);
         _r.SetTag(wrapper, InjectedTag);
 
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);

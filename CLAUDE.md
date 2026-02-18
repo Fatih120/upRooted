@@ -44,7 +44,7 @@ uprooted-private/
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types
-│   ├── SidebarInjector.cs             # Timer-based sidebar injection (200ms poll)
+│   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
 │   ├── ContentPages.cs                # Settings page builders
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB color conversion
