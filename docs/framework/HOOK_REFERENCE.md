@@ -50,7 +50,7 @@ The hook layer consists of 21 source files in the `hook/` directory:
 | `StartupHook.cs` | 366 | Multi-phase startup orchestrator (Phase 0-5) |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1280 | Timer-based sidebar injection and content management |
+| `SidebarInjector.cs` | 1366 | Timer-based sidebar injection and content management |
 | `ContentPages.cs` | 2628 | Page builders for Uprooted/Plugins/Themes settings |
 | `ThemeEngine.cs` | 2360 | Runtime theme engine with resource + visual tree color override |
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
@@ -1201,7 +1201,7 @@ indices (content is to the right of nav).
 
 ## Sidebar Injection
 
-**File:** `hook/SidebarInjector.cs` (1280 lines)
+**File:** `hook/SidebarInjector.cs` (1366 lines)
 
 ### Architecture Overview
 

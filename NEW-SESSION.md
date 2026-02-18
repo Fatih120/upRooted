@@ -41,7 +41,7 @@ Two independent injection layers into one app:
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1280 | 200ms timer poll, sidebar injection, header management, click events |
+| `SidebarInjector.cs` | 1366 | 200ms timer poll, sidebar injection, header management, click events |
 | `ContentPages.cs` | ~2450 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | 2360 | ResourceDictionary overrides, live theme preview (2nd largest) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |

@@ -45,6 +45,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 - Cargo.toml version format: `0.3.6rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
+- **SidebarInjector**: UPROOTED section header spacing now matches Root's native section categories (16px top margin on container, -4px bottom margin on header wrapper)
+- **SidebarInjector**: switching from Uprooted tabs back to Root tabs is now instant (subscribed `ListBox.SelectionChanged` instead of waiting for 200ms timer poll)
 
 ### Documentation
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
