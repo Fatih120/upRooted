@@ -41,7 +41,7 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 21 source files in the `hook/` directory:
+The hook layer consists of 24 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
@@ -51,17 +51,20 @@ The hook layer consists of 21 source files in the `hook/` directory:
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1408 | Event + timer-based sidebar injection and content management |
-| `ContentPages.cs` | 2628 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | 2360 | Runtime theme engine with resource + visual tree color override |
+| `ContentPages.cs` | ~3400 | Page builders for Uprooted/Plugins/Themes settings |
+| `ThemeEngine.cs` | ~2510 | Runtime theme engine with resource + visual tree color override + custom ping color |
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
 | `HtmlPatchVerifier.cs` | 429 | Self-healing HTML patch system with FileSystemWatcher |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `ClearUrlsEngine.cs` | 467 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
 | `LinkEmbedEngine.cs` | 1763 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
 | `MessageLogger.cs` | 1185 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
+| `AutoUpdater.cs` | ~810 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
+| `ProfileBadgeInjector.cs` | ~450 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `UprootedSettings.cs` | 161 | INI-based settings persistence |
 | `Logger.cs` | 46 | Thread-safe file logging |
@@ -265,14 +268,19 @@ resolver.RunOnUIThread(() => {
         themeEngine.ApplyCustomTheme(savedSettings.CustomAccent, savedSettings.CustomBackground);
     else if (savedSettings.ActiveTheme != "default-dark")
         themeEngine.ApplyTheme(savedSettings.ActiveTheme);
+
+    // Apply saved custom ping color override (persists across theme switches)
+    if (!string.IsNullOrEmpty(savedSettings.CustomPingColor) && ColorUtils.IsValidHex(savedSettings.CustomPingColor))
+        themeEngine.SetCustomPingColor(savedSettings.CustomPingColor);
 });
 ```
 
-(`StartupHook.cs:95-132`)
+(`StartupHook.cs:95-140`)
 
 Creates a `ThemeEngine` instance and loads saved settings. The actual theme application
 runs on the UI thread via `resolver.RunOnUIThread()` because Avalonia's
-`ResourceDictionary` requires Dispatcher access.
+`ResourceDictionary` requires Dispatcher access. After the theme is applied, any saved
+custom ping color override is applied on top via `SetCustomPingColor()`.
 
 ### Phase 4: Settings Page Monitor
 
@@ -1411,7 +1419,15 @@ Three sections:
    - "Apply Custom" button.
    - Debounced auto-save (1 second after last change).
    - Live theme preview on TextChanged events.
-3. **About Themes** -- Informational card about how themes work.
+3. **Highlight Override** -- `BuildPingColorSection()` (`ContentPages.cs:~2000-2170`) with:
+   - Card with toggle indicator (filled circle when active, empty when inactive).
+   - Description: "Override the mention/reply highlight color. Persists across theme switches."
+   - Color input row via `BuildColorInputRow()` with live preview via `themeEngine.SetCustomPingColor()`.
+   - Swatch tagged `uprooted-no-recolor` to prevent tree walker interference.
+   - Reset button to clear the override and restore theme defaults.
+   - Debounced auto-save (1 second after last change).
+   - Clicking the header when active clears the override.
+4. **About Themes** -- Informational card about how themes work.
 
 ### How to Add a New Page
 
@@ -1427,7 +1443,7 @@ Three sections:
 
 ## Theme Engine
 
-**File:** `hook/ThemeEngine.cs` (2360 lines)
+**File:** `hook/ThemeEngine.cs` (~2510 lines)
 
 The theme engine is the largest and most complex component. It modifies Root's native
 Avalonia UI colors at runtime through two complementary strategies: resource dictionary
@@ -1435,7 +1451,7 @@ injection and visual tree color walking.
 
 ### Architecture
 
-Theme application has 5 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586`):
+Theme application has 6 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586`):
 
 1. **Phase 1: Override Styles[0].Resources** -- Root's custom theme keys
    (`ThemeAccentColor`, `ThemeAccentBrush`, etc.) live in
@@ -1455,6 +1471,12 @@ Theme application has 5 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586
 
 5. **Phase 5: DWM Title Bar** -- Sets the Windows 11 title bar color via
    `DwmSetWindowAttribute(DWMWA_CAPTION_COLOR)`.
+
+6. **Phase 6: Custom Ping Color Override** -- If the user has set a custom ping/reply
+   highlight color (`_customPingColor`), overrides `HighlightForegroundColor`,
+   `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (with `0x60` alpha)
+   in both `Styles[0].Resources` and the injected `MergedDictionary`. This runs last
+   so the override persists across theme switches.
 
 ### Resource Dictionary Injection
 
@@ -1603,6 +1625,9 @@ Converts `#RRGGBB` to COLORREF format (`0x00BBGGRR`).
 - `RevertTheme()` -- Restore original Root colors.
 - `WalkVisualTreeNow()` -- Trigger an immediate walk.
 - `ScheduleWalkBurst()` -- Immediate + follow-up walks.
+- `SetCustomPingColor(hex)` -- Set a custom ping/reply highlight color override (persists across theme switches).
+- `ClearCustomPingColor()` -- Clear the override and restore theme defaults.
+- `GetCustomPingColor()` -- Get the current custom ping color (null if not set).
 - `ActiveThemeName` -- Current theme name (null if reverted).
 - `GetAccentColor()` -- Current accent hex.
 - `GetBgPrimary()` -- Current background hex.
@@ -1811,6 +1836,17 @@ public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
 public string CustomAccent { get; set; } = "#3B6AF8";
 public string CustomBackground { get; set; } = "#0D1521";
+public string CustomPingColor { get; set; } = "";  // Empty = use theme default
+// MessageLogger settings
+public bool MessageLoggerLogDeletes { get; set; } = true;
+public bool MessageLoggerLogEdits { get; set; } = true;
+public bool MessageLoggerIgnoreSelf { get; set; } = false;
+public int MessageLoggerMaxMessages { get; set; } = 1000;
+// AutoUpdate settings
+public bool AutoUpdateEnabled { get; set; } = true;
+public bool AutoUpdateNotify { get; set; } = true;
+public string AutoUpdateChannel { get; set; } = "stable";
+public string AutoUpdateLastCheck { get; set; } = "";
 ```
 
 ### File Location
@@ -1826,7 +1862,9 @@ Resolved via `PlatformPaths.GetProfileDir()` (`UprootedSettings.cs:20-21`).
 `UprootedSettings.Load()` (`UprootedSettings.cs:30-63`):
 
 Reads lines, splits on `=`, and maps keys:
-- `ActiveTheme`, `Enabled`, `CustomCss`, `CustomAccent`, `CustomBackground` -- direct properties.
+- `ActiveTheme`, `Enabled`, `CustomCss`, `CustomAccent`, `CustomBackground`, `CustomPingColor` -- direct properties.
+- `MessageLogger.*` -- MessageLogger settings (LogDeletes, LogEdits, IgnoreSelf, MaxMessages).
+- `AutoUpdate.*` -- AutoUpdater settings (Enabled, Notify, Channel, LastCheck).
 - `Plugin.{name}` -- entries in the `Plugins` dictionary.
 
 Returns a default instance if the file doesn't exist.
@@ -1846,6 +1884,14 @@ Version=0.3.6rc
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
+CustomPingColor=#FF0000
+MessageLogger.LogDeletes=true
+MessageLogger.LogEdits=true
+MessageLogger.IgnoreSelf=false
+MessageLogger.MaxMessages=1000
+AutoUpdate.Enabled=true
+AutoUpdate.Notify=true
+AutoUpdate.Channel=stable
 Plugin.sentry-blocker=true
 Plugin.themes=true
 ```

@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-18)
 
-## Release: v0.3.6rc
+## Release: v0.3.6-rc
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
@@ -119,7 +119,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization (20s delay for chat population) |
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
 | `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI, BuildChannelRow for update channel switching, restart banners (plugins + updates), state-aware plugin banner (hides on revert), Restart button (Process.Start + Environment.Exit), DIAGNOSTICS "Open" button (explorer /select) |
-| `hook/ProfileBadgeInjector.cs` | New file: profile popup detection via TopLevel/OverlayLayer scan, heuristic matching (avatar + username + roles), tree dump diagnostics, role pill container discovery, "Uprooted Dev" badge injection (gold #8B6914 pill) |
+| `hook/ProfileBadgeInjector.cs` | New file: profile popup detection via TopLevel/OverlayLayer scan, heuristic matching (avatar + username + roles), tree dump diagnostics, username TextBlock discovery (largest font size), vertical panel walk-up to insert badge below username (`IsVerticalPanel()` helper), "Uprooted Dev" badge (gold #8B6914 pill, font 10, centered) |
 | `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (25s delay, developer channel only) |
 | `hook/UprootedSettings.cs` | Added `CustomPingColor` property (string, default empty), INI load/save |
 | `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
@@ -167,7 +167,7 @@ The Avalonia-native link embed engine is broadly functional:
 3. **Reddit link embeds** — Reddit serves OG tags to crawlers; add dedicated handling
 4. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
-6. **Refine ProfileBadgeInjector** — Check tree dump logs for actual popup structure, refine heuristics in `IsProfilePopup` and `FindRolesContainer`
+6. **Refine ProfileBadgeInjector** — Check tree dump logs for actual popup structure, refine heuristics in `IsProfilePopup` and `InjectBadgeUnderUsername`
 
 ## ClearURLs Engine Notes
 

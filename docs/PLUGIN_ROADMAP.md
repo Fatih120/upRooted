@@ -43,7 +43,7 @@ See [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md
 
 ## Planned Plugins
 
-### ClearURLs (IMPLEMENTED - v0.3.5)
+### ClearURLs (IMPLEMENTED - v0.3.6-rc)
 
 **Inspired by:** Vencord's ClearURLs plugin (which uses the [ClearURLs](https://docs.clearurls.xyz/latest/) browser extension rule database to strip tracking parameters from URLs).
 
@@ -70,72 +70,6 @@ Key technical details:
 - gRPC send-time interception (alternative to compose-input approach)
 - ClearURLs rules database import for broader coverage
 - Custom rules and domain exceptions settings
-
----
-
-### MessageLogger
-
-**Inspired by:** Vencord's MessageLogger plugin (logs deleted and edited messages, shows them with visual indicators in chat).
-
-**Layer:** C# hook (chat is Avalonia-native)
-
-#### Message deletion detection
-
-Two possible approaches:
-
-- **Visual tree watching:** Monitor the chat's VirtualizingStackPanel for children being removed. Unreliable on its own because virtualization constantly adds/removes children as the user scrolls - distinguishing a genuine deletion from recycling is non-trivial.
-- **gRPC interception:** Intercept gRPC responses that signal message deletions. More reliable because the deletion event is unambiguous at the protocol level. The gRPC Protocol reference documents the message service endpoints.
-
-The gRPC approach is preferred. Visual tree watching alone would require heuristics to distinguish deletions from virtualization, which would produce false positives.
-
-#### Message edit detection
-
-Intercept gRPC message update responses and cache the previous content before Root's UI updates. Store the edit history per message ID.
-
-#### Storage
-
-Use a simple flat-file format (not System.Text.Json - broken in profiler context). Store per message:
-
-- Message ID
-- Channel/room ID
-- Original content
-- Edit history (timestamped list of previous versions)
-- Deletion timestamp (if deleted)
-
-Retention policy needed to prevent unbounded growth:
-
-- Option A: Last N messages (e.g., 1000)
-- Option B: Time-based (e.g., last 24 hours)
-- Option C: Size-based (e.g., max 10MB)
-
-#### Display
-
-Modify the visual tree to show logged messages:
-
-- **Deleted messages:** Show with a red-tinted overlay or red text styling, matching Vencord's "Delete Style" options. Use the same Avalonia control creation pattern as LinkEmbedEngine (reflection-based Border, TextBlock, etc.).
-- **Edited messages:** Show edit history inline below the message, or via a tooltip/popup on hover. Each previous version displayed with a timestamp.
-
-#### Settings
-
-| Setting          | Type   | Default       | Description                                                 |
-| ---------------- | ------ | ------------- | ----------------------------------------------------------- |
-| Log Deletes      | bool   | true          | Log deleted messages                                        |
-| Log Edits        | bool   | true          | Log edited messages                                         |
-| Delete Style     | select | "red overlay" | How deleted messages are shown: "red overlay" or "red text" |
-| Collapse Deleted | bool   | false         | Collapse deleted message content behind a click-to-reveal   |
-| Inline Edits     | bool   | true          | Show edit history inline vs. tooltip-only                   |
-| Ignore Bots      | bool   | false         | Skip logging bot messages                                   |
-| Ignore Self      | bool   | false         | Skip logging your own messages                              |
-| Ignore Users     | text   | (empty)       | Comma-separated user IDs to exclude from logging            |
-
-#### Complexity
-
-High. This plugin requires either:
-
-- gRPC interception infrastructure (new capability, not yet built), or
-- Reliable visual tree change detection that can distinguish real deletions from VirtualizingStackPanel recycling
-
-Additionally: storage format design, retention policy implementation, edit history UI, and the usual Avalonia reflection control creation. This is one of the more ambitious planned plugins.
 
 ---
 

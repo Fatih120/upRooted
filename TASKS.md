@@ -31,7 +31,7 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
-- [ ] **Refine ProfileBadgeInjector heuristics** — Check tree dump logs from first real popup detection, refine `IsProfilePopup` and `FindRolesContainer` to match actual Root popup structure.
+- [ ] **Refine ProfileBadgeInjector heuristics** — Check tree dump logs from first real popup detection, refine `IsProfilePopup` and `InjectBadgeUnderUsername` to match actual Root popup structure. Badge currently inserted by walking up to first vertical StackPanel above the username; tree dump will confirm if this is correct.
   - Files: `hook/ProfileBadgeInjector.cs`
 
 - [ ] **Theme click handlers** — Add click handlers to the native Themes page so users can switch themes from the Avalonia settings UI.
@@ -42,9 +42,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 
 - [ ] **Deep merge for settings** — Replace shallow spread merge with recursive merge that correctly combines nested objects (especially `plugins` map).
   - Files: `src/core/settings.ts`
-
-- [ ] **Custom ping/reply highlight color** — Let users pick a custom color for the ping/reply message highlight independently from the rest of the theme. This should be a standalone setting that persists even when switching preset themes, so users can apply e.g. "Cosmic Smoothie" but keep their preferred ping color. Needs a new `CustomPingColor` setting in UprootedSettings, a color picker in the Themes page UI, and ThemeEngine logic to apply it as a separate override on top of whatever theme is active.
-  - Files: `hook/UprootedSettings.cs`, `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
 
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
@@ -104,6 +101,7 @@ Move completed items here with the date.
 - [x] **Plugin toggle functionality** (2026-02-18) — Plugin toggles save state to settings, show restart banner when state diverges from initial (hides on revert). Themes apply live (no restart needed). Restart button launches new Root.exe and exits.
 - [x] **ProfileBadgeInjector** (2026-02-18) — "Uprooted Dev" badge on profile popups for developer channel users. Timer polls TopLevels + OverlayLayer, heuristic detection, diagnostic tree dump, tagged duplicate prevention. Phase 4.5e in StartupHook (25s delay).
 - [x] **Restart banners + Diagnostics Open button** (2026-02-18) — Plugins page: state-aware amber restart banner. Updates section: green restart banner after update applied. Both with Restart button. DIAGNOSTICS card: "Open" button opens log file in Explorer.
+- [x] **Custom ping/reply highlight color** (2026-02-18) — Standalone `CustomPingColor` setting in UprootedSettings that persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle indicator, color input row, swatch with color picker popup, reset button. ThemeEngine overrides `HighlightForegroundColor`, `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (0x60 alpha) in both Styles[0].Resources and injected MergedDictionary. Applied as Phase 6 after theme apply + after live preview updates. Restored to theme defaults on clear.
 
 ---
 

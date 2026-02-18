@@ -7,7 +7,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.3.6rc. Target: Root v0.9.92+.
+Version: 0.3.6-rc. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -37,16 +37,16 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | ~340 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | ~430 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1408 | LayoutUpdated event + timer poll, sidebar injection, header management, click events |
-| `ContentPages.cs` | ~2450 | Settings page builders (Uprooted, Plugins, Themes) |
-| `ThemeEngine.cs` | 2360 | ResourceDictionary overrides, live theme preview (2nd largest) |
+| `ContentPages.cs` | ~3400 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ThemeEngine.cs` | ~2510 | ResourceDictionary overrides, live theme preview, custom ping color override |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
-| `UprootedSettings.cs` | ~145 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
+| `UprootedSettings.cs` | ~170 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
@@ -104,7 +104,7 @@ Two independent injection layers into one app:
 
 **Source:** `hook/SESSION_STATE.md` (2026-02-18)
 
-**Versions:** 0.3.6rc | Target Root 0.9.92
+**Versions:** 0.3.6-rc | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -134,6 +134,7 @@ Two independent injection layers into one app:
 - ProfileBadgeInjector: "Uprooted Dev" badge on profile popups (dev channel only), diagnostic tree dump on first detection
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
+- Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle, color input, swatch + color picker, reset. ThemeEngine applies as Phase 6 after theme apply + live updates.
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)
@@ -254,7 +255,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Plugin Examples | `docs/plugins/EXAMPLES.md` | Annotated example plugins covering common patterns |
 | Advanced Plugin Dev | `docs/plugins/ADVANCED_DEVELOPMENT.md` | Advanced plugin patterns and techniques |
 | Plugin Roadmap | `docs/PLUGIN_ROADMAP.md` | Planned plugins with architecture notes and implementation strategies |
-| Built-in Plugins | `docs/plugins/builtin/INDEX.md` | Per-plugin docs for all shipped plugins (sentry-blocker, themes, settings-panel, link-embeds) |
+| Built-in Plugins | `docs/plugins/builtin/INDEX.md` | Per-plugin docs for shipped plugins (sentry-blocker, themes, settings-panel, link-embeds, message-logger, clear-urls) |
 
 ### Research and Deep Dives
 
@@ -274,4 +275,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-*Quick-start reference for Uprooted v0.3.6rc. Last updated 2026-02-18.*
+*Quick-start reference for Uprooted v0.3.6-rc. Last updated 2026-02-18.*
