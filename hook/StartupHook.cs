@@ -220,7 +220,7 @@ internal class StartupHook
                     {
                         Thread.Sleep(15_000); // Wait 15s for chat to populate
                         Logger.Log("Startup", "Phase 4.5b: Starting native link embed engine...");
-                        var engine = new LinkEmbedEngine(embedResolver, embedWindow);
+                        var engine = new LinkEmbedEngine(embedResolver, embedWindow, themeEngine);
                         LinkEmbedEngine.Instance = engine;
                         engine.Initialize();
                         Logger.Log("Startup", "Phase 4.5b OK: Native link embeds active");
@@ -266,15 +266,18 @@ internal class StartupHook
             }
 
             // Phase 4.5d: Auto-updater (background update check)
+            // Instance is set immediately so the manual "Check for Updates" button is live
+            // from the moment the settings page opens. The actual check is deferred 5s to
+            // let the app finish initializing before making network requests.
+            var autoUpdater = new AutoUpdater();
+            AutoUpdater.Instance = autoUpdater;
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
-                    Thread.Sleep(30_000); // Wait 30s for app to fully settle
+                    Thread.Sleep(5_000);
                     Logger.Log("Startup", "Phase 4.5d: Starting auto-updater...");
-                    var updater = new AutoUpdater();
-                    AutoUpdater.Instance = updater;
-                    updater.Initialize();
+                    autoUpdater.Initialize();
                     Logger.Log("Startup", "Phase 4.5d OK: Auto-updater initialized");
                 }
                 catch (Exception ex)

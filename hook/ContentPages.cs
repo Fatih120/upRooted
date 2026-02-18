@@ -365,7 +365,16 @@ internal static class ContentPages
                     r.SubscribeEvent(btn, "PointerPressed", () =>
                     {
                         var u = AutoUpdater.Instance;
-                        if (u == null || u.IsChecking) return;
+                        if (u == null) return;
+
+                        // After a successful update, button becomes a restart button
+                        if (u.UpdateApplied)
+                        {
+                            RestartRoot();
+                            return;
+                        }
+
+                        if (u.IsChecking) return;
 
                         r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Checking...");
                         r.SetBackground(btnRef, ColorUtils.Lighten(btnColor, 10));
@@ -378,8 +387,8 @@ internal static class ContentPages
                             r.RunOnUIThread(() =>
                             {
                                 var (newStatus, newColor) = u.GetStatus();
-                                var newBtnLabel = u.UpdateApplied ? "Updated!" : u.HasUpdate ? "Update Now" : "Check for Updates";
-                                var newBtnColor = u.HasUpdate ? "#C0A820" : AccentGreen;
+                                var newBtnLabel = u.UpdateApplied ? "Restart" : u.HasUpdate ? "Update Now" : "Check for Updates";
+                                var newBtnColor = u.UpdateApplied ? AccentGreen : u.HasUpdate ? "#C0A820" : AccentGreen;
 
                                 r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, newBtnLabel);
                                 r.SetBackground(btnRef, newBtnColor);
@@ -1649,10 +1658,6 @@ internal static class ContentPages
         if (customSection != null)
             r.AddChild(page, customSection);
 
-        var pingSection = BuildPingColorSection(r, settings, font, themeEngine, onThemeChanged);
-        if (pingSection != null)
-            r.AddChild(page, pingSection);
-
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
         {
@@ -1901,63 +1906,46 @@ internal static class ContentPages
             r.AddChild(outerContent, applyRow);
         }
 
-        r.SetBorderChild(card, outerContent);
-        return card;
-    }
-
-    /// <summary>
-    /// Build the highlight override card for custom ping/reply highlight color.
-    /// Ping Color toggle card. Label+description on left, pill toggle on right.
-    /// Color input row below. Persists across theme switches.
-    /// </summary>
-    private static object? BuildPingColorSection(AvaloniaReflection r, UprootedSettings settings,
-        object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
-    {
-        bool isActive = !string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor);
-        var inactiveBorder = ColorUtils.Lighten(CardBg, 12);
-        var borderColor = isActive ? settings.CustomPingColor : inactiveBorder;
-
-        var card = r.CreateBorder(CardBg, 12);
-        if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
-
-        var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
-        if (outerContent == null) return card;
-        r.SetMargin(outerContent, 20, 16, 20, 16);
-
-        // Header: Panel overlay — label+description on left, toggle pill on right
-        var headerPanel = r.CreatePanel();
-        if (headerPanel != null)
+        // ── Ping Color (merged into this card) ──
+        var pingDivider = r.CreateBorder(CardBorder, 0);
+        if (pingDivider != null)
         {
-            // Left side: label + description
-            var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
-            if (textStack != null)
+            pingDivider.GetType().GetProperty("Height")?.SetValue(pingDivider, 1.0);
+            r.SetMargin(pingDivider, 0, 16, 0, 16);
+            r.AddChild(outerContent, pingDivider);
+        }
+
+        bool pingActive = !string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor);
+
+        var pingHeaderPanel = r.CreatePanel();
+        if (pingHeaderPanel != null)
+        {
+            var pingTextStack = r.CreateStackPanel(vertical: true, spacing: 2);
+            if (pingTextStack != null)
             {
-                r.SetHorizontalAlignment(textStack, "Left");
-                r.SetVerticalAlignment(textStack, "Center");
-                r.SetMargin(textStack, 0, 0, 60, 0); // right margin avoids toggle overlap
+                r.SetHorizontalAlignment(pingTextStack, "Left");
+                r.SetVerticalAlignment(pingTextStack, "Center");
+                r.SetMargin(pingTextStack, 0, 0, 60, 0);
 
-                var nameText = r.CreateTextBlock("Ping Color", 14, TextWhite);
-                r.SetFontWeightNumeric(nameText, 450);
-                ApplyFont(r, nameText, font);
-                r.AddChild(textStack, nameText);
+                var pingNameText = r.CreateTextBlock("Ping Color", 14, TextWhite);
+                r.SetFontWeightNumeric(pingNameText, 450);
+                ApplyFont(r, pingNameText, font);
+                r.AddChild(pingTextStack, pingNameText);
 
-                var descText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
-                ApplyFont(r, descText, font);
-                r.SetTextWrapping(descText, "Wrap");
-                r.AddChild(textStack, descText);
+                var pingDescText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
+                ApplyFont(r, pingDescText, font);
+                r.SetTextWrapping(pingDescText, "Wrap");
+                r.AddChild(pingTextStack, pingDescText);
 
-                r.AddChild(headerPanel, textStack);
+                r.AddChild(pingHeaderPanel, pingTextStack);
             }
 
-            // Right side: pill toggle
-            var togglePill = BuildToggleSwitch(r, isActive, font, enabled =>
+            var pingToggle = BuildToggleSwitch(r, pingActive, font, enabled =>
             {
                 try
                 {
                     if (enabled)
                     {
-                        // Use saved color (or fallback) when toggling on
                         var color = (!string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor))
                             ? settings.CustomPingColor : "#7B68EE";
                         settings.CustomPingColor = color;
@@ -1980,53 +1968,44 @@ internal static class ContentPages
                         });
                     }
                 }
-                catch (Exception ex)
-                {
-                    Logger.Log("Theme", "Ping color toggle error: " + ex.Message);
-                }
+                catch (Exception ex) { Logger.Log("Theme", "Ping color toggle error: " + ex.Message); }
             });
-            if (togglePill != null)
+            if (pingToggle != null)
             {
-                r.SetHorizontalAlignment(togglePill, "Right");
-                r.SetVerticalAlignment(togglePill, "Center");
-                r.AddChild(headerPanel, togglePill);
+                r.SetHorizontalAlignment(pingToggle, "Right");
+                r.SetVerticalAlignment(pingToggle, "Center");
+                r.AddChild(pingHeaderPanel, pingToggle);
             }
 
-            r.AddChild(outerContent, headerPanel);
+            r.AddChild(outerContent, pingHeaderPanel);
         }
 
-        // Color input row
-        var initialColor = isActive ? (settings.CustomPingColor ?? "#7B68EE") : "#7B68EE";
+        var pingInitialColor = pingActive ? (settings.CustomPingColor ?? "#7B68EE") : "#7B68EE";
+        string[] lastPingColor = new[] { pingInitialColor };
 
-        // Track last-known value to skip no-op TextChanged events
-        string[] lastPingColor = new[] { initialColor };
-
-        // Debounced auto-save
-        System.Threading.Timer? saveTimer = null;
-        Action debounceSave = () =>
+        System.Threading.Timer? pingSaveTimer = null;
+        Action pingDebounceSave = () =>
         {
-            saveTimer?.Dispose();
-            saveTimer = new System.Threading.Timer(_ =>
+            pingSaveTimer?.Dispose();
+            pingSaveTimer = new System.Threading.Timer(_ =>
             {
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("Theme", "Ping auto-save error: " + sx.Message); }
             }, null, 1000, System.Threading.Timeout.Infinite);
         };
 
-        var pingSwatch = r.CreateBorder(initialColor, 6);
+        var pingSwatch = r.CreateBorder(pingInitialColor, 6);
         r.SetTag(pingSwatch, "uprooted-no-recolor");
-        var colorRow = BuildColorInputRow(r, "Color", initialColor, font, pingSwatch,
+        var pingColorRow = BuildColorInputRow(r, "Color", pingInitialColor, font, pingSwatch,
             hex =>
             {
                 if (string.Equals(hex, lastPingColor[0], StringComparison.OrdinalIgnoreCase)) return;
                 lastPingColor[0] = hex;
-
                 settings.CustomPingColor = hex;
                 themeEngine?.SetCustomPingColor(hex);
-                debounceSave();
+                pingDebounceSave();
 
-                // If this is the first color entry (was inactive), rebuild to activate
-                if (!isActive && onThemeChanged != null)
+                if (!pingActive && onThemeChanged != null)
                 {
                     r.RunOnUIThread(() =>
                     {
@@ -2035,10 +2014,10 @@ internal static class ContentPages
                     });
                 }
             });
-        if (colorRow != null)
+        if (pingColorRow != null)
         {
-            r.SetMargin(colorRow, 0, 12, 0, 0);
-            r.AddChild(outerContent, colorRow);
+            r.SetMargin(pingColorRow, 0, 12, 0, 0);
+            r.AddChild(outerContent, pingColorRow);
         }
 
         r.SetBorderChild(card, outerContent);
