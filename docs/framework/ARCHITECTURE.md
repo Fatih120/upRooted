@@ -156,7 +156,7 @@ uprooted-private/
 |   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
 |   |-- AvaloniaReflection.cs (2030)  # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
-|   |-- SidebarInjector.cs    (1280)  # Timer-based sidebar monitor, injection, click events.
+|   |-- SidebarInjector.cs    (1366)  # Timer-based sidebar monitor, injection, click events.
 |   |-- ContentPages.cs      (2628)  # Settings page builders (Uprooted, Plugins, Themes).
 |   |-- ThemeEngine.cs        (2360)  # Native Avalonia theme: ResourceDictionary overrides.
 |   |-- ColorPickerPopup.cs    (533)  # HSL color picker popup for custom theme colors.
