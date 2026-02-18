@@ -50,7 +50,7 @@ The hook layer consists of 21 source files in the `hook/` directory:
 | `StartupHook.cs` | 366 | Multi-phase startup orchestrator (Phase 0-5) |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1366 | Timer-based sidebar injection and content management |
+| `SidebarInjector.cs` | 1408 | Event + timer-based sidebar injection and content management |
 | `ContentPages.cs` | 2628 | Page builders for Uprooted/Plugins/Themes settings |
 | `ThemeEngine.cs` | 2360 | Runtime theme engine with resource + visual tree color override |
 | `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
@@ -283,9 +283,9 @@ injector.StartMonitoring();
 
 (`StartupHook.cs:135-137`)
 
-Creates the `SidebarInjector` and starts its 200ms polling timer. From this point on,
-the sidebar injector continuously monitors for the settings page and injects when
-detected.
+Creates the `SidebarInjector` and starts monitoring. Primary detection uses the
+`LayoutUpdated` event on the main window for same-frame injection (zero dispatch
+latency). A 200ms safety-net timer handles alive checks and edge cases.
 
 ### Phase 4.5: Browser Discovery (Diagnostic)
 
@@ -1201,7 +1201,7 @@ indices (content is to the right of nav).
 
 ## Sidebar Injection
 
-**File:** `hook/SidebarInjector.cs` (1366 lines)
+**File:** `hook/SidebarInjector.cs` (1408 lines)
 
 ### Architecture Overview
 

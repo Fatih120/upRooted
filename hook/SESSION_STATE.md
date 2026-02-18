@@ -70,7 +70,7 @@ Key details:
 | 2 | StartupHook | Wait for Application.Current (30s) |
 | 3 | StartupHook | Wait for MainWindow (60s) |
 | 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
-| 4 | SidebarInjector | Start settings page monitor (200ms poll) |
+| 4 | SidebarInjector | Start settings page monitor (LayoutUpdated event + 200ms safety poll) |
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
 | 4.5a | ClearUrlsEngine | Strip tracking params from compose editor on Enter (14s delay) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
@@ -110,7 +110,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging |
 | `hook/AnimatedImage.cs` | Animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
 | `hook/UprootedSettings.cs` | 10s TTL settings cache to reduce disk I/O |
-| `hook/SidebarInjector.cs` | Back arrow management: hide left-side RootSvgButton by position, set header title TextBlock, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper, UPROOTED section spacing (16px top margin, -4px header bottom margin), instant Uprooted→Root tab transitions via ListBox.SelectionChanged |
+| `hook/SidebarInjector.cs` | Back arrow management, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper, UPROOTED section spacing, instant Uprooted→Root tab transitions via ListBox.SelectionChanged, LayoutUpdated event-based detection for same-frame settings injection (diagnostics deferred after injection) |
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |

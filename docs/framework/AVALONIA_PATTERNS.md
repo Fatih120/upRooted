@@ -289,12 +289,19 @@ var normalProp = priorityType.GetProperty("Normal", BindingFlags.Public | Bindin
 
 ### Threading in SidebarInjector
 
-A `System.Threading.Timer` fires every 200ms, marshaling to the UI thread via
-`RunOnUIThread`. An `Interlocked.CompareExchange` guard prevents re-entrant
-injection (`hook/SidebarInjector.cs:90-112`):
+Primary detection uses `LayoutUpdated` on the main window — fires directly on
+the UI thread during the same render frame, with zero dispatch latency. A 200ms
+`System.Threading.Timer` serves as a safety net (alive checks, edge cases),
+marshaling to the UI thread via `RunOnUIThread`. Both paths share an
+`Interlocked.CompareExchange` guard to prevent re-entrant injection:
 
 ```csharp
+// LayoutUpdated path (already on UI thread — no dispatch needed):
 if (Interlocked.CompareExchange(ref _injecting, 1, 0) != 0) return;
+try { CheckAndInject(); }
+finally { Interlocked.Exchange(ref _injecting, 0); }
+
+// Timer path (threadpool → UI thread dispatch):
 _r.RunOnUIThread(() => {
     try { CheckAndInject(); }
     finally { Interlocked.Exchange(ref _injecting, 0); }
