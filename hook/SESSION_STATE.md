@@ -133,13 +133,14 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (5s delay, developer channel only) |
 | `hook/UprootedSettings.cs` | Added `CustomPingColor` property (string, default empty), INI load/save |
 | `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
-| `hook/ContentPages.cs` | Added "HIGHLIGHT OVERRIDE" section to Themes page: `BuildPingColorSection()` with toggle indicator, color input row, swatch + color picker, reset button |
+| `hook/ContentPages.cs` | Ping Color merged into Custom Theme card (separated by divider); removed standalone `BuildPingColorSection()`; embed card `NotifyThemeChanged()` called from `ApplyThemedColors`/`UpdateLiveColors` |
 | `hook/StartupHook.cs` | Added custom ping color apply in Phase 3.5 after theme init |
 | `hook/ContentPages.cs` | Plugin DisplayNames renamed to PascalCase: SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter |
 | `hook/SidebarInjector.cs` | Theme walk burst triggers: after injection, on ListBox SelectionChanged, on Uprooted tab switch (WalkVisualTreeNow synchronous) |
 | `hook/ThemeEngine.cs` | Added 50ms rapid follow-up to ScheduleRapidFollowUp walk sequence |
 | `hook/MessageLogger.cs` | Restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix) |
 | `hook/LinkEmbedEngine.cs` | Video embeds: `VideoUrlRegex`, `SynthesizeVideoEmbed()`, `BuildVideoPlaceholder()`, `video/*` Content-Type gate, video placeholder in `BuildEmbedCard`. Also: `Instance` static property, `RefreshTitleVisibility()`, image-only title hiding with tag-based visibility toggle |
+| `hook/LinkEmbedEngine.cs` | Theme-aware embed accent: constructor now accepts `ThemeEngine?`; `BuildEmbedCard` uses `_themeEngine?.GetAccentColor()` as fallback accent; `NotifyThemeChanged()` walks all live injected cards to update background + border brush (preserves site-specific OG colors via `_metadataCache`) |
 | `hook/ContentPages.cs` | `BuildLinkEmbedSettings()` — "Show Embedded File Names" toggle in LinkEmbeds settings lightbox, calls `LinkEmbedEngine.Instance?.RefreshTitleVisibility()` |
 | `hook/StartupHook.cs` | Sets `LinkEmbedEngine.Instance = engine` in Phase 4.5b for external access |
 | `hook/UprootedSettings.cs` | `LinkEmbedsShowFilenames` property (bool, default false), INI load/save for `LinkEmbeds.ShowFilenames` |

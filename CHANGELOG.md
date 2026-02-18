@@ -42,7 +42,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Timer-based `TextArea` discovery (2s interval) via visual tree walk for `RootMessageTextboxView`
   - File: `hook/ClearUrlsEngine.cs`
 - **Custom ping/reply highlight color** — standalone override for the mention/reply highlight color, independent of active theme
-  - "HIGHLIGHT OVERRIDE" card on Themes settings page with toggle, color input, swatch + color picker, reset button
+  - "Ping Color" toggle inside the Custom Theme card (same box, separated by a divider line) — not a separate section
   - ThemeEngine: `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()` override `HighlightForegroundColor/Brush` and `TextSelectionHighlightColor` (0x60 alpha) in Styles[0].Resources + MergedDictionary
   - Applied as Phase 6 after theme apply and live preview updates; restored to theme defaults on clear
   - New setting: `CustomPingColor` in UprootedSettings (INI), applied at startup in Phase 3.5
@@ -54,7 +54,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change
 
 ### Changed
-- **Lightbox font sizes**: scaled up all text in plugin settings and info lightboxes — section headers 12→18, labels 13→19, descriptions 12→16, titles 18→26, inputs 13→17, toggle pills 40×20→52×26, card width 480→560
+- **Settings page font sizes**: tuned to match Root's native settings page scale (section headers 11, labels 13, descriptions 12, page titles 15, lightbox titles 16; toggle pills 44×24, card width 560)
 - **ContentFilter API key textbox**: vertically centered text with padding (matches search box style)
 - **Log startup separator**: 3 blank lines before first `[Entry]` log on Root launch for clear visual separation
 - **watch-log.ps1**: `[Entry]` lines colored green; lines matching `fail`/`error` that also contain `fallback` shown as yellow (warning) instead of red
@@ -84,6 +84,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **LinkEmbedEngine**: OG regex bridge pattern fixed to explicitly match complete HTML attributes — handles `<meta>` tags with extra attributes (e.g. `itemProp="image"`, `data-next-head=""`) between `property` and `content`
 - **providers.ts**: same OG regex bridge fix applied to TypeScript `parseOpenGraph()` function
 - **LinkEmbedEngine**: HTTP timeout increased from 5s to 10s for CDN-hosted images
+- **LinkEmbedEngine**: embed card accent color (left border strip) now uses the active theme's accent instead of hardcoded Discord blue (`#5865F2`); site-specific OG theme-colors (Reddit orange, website brand colors) are preserved; card background updates live during color-picker drag and on theme switch via `NotifyThemeChanged()`
+- **AutoUpdater**: post-update "Restart" button (was "OK" — required manual relaunch); `AutoUpdater.Instance` set immediately at Phase 4.5d startup so ContentPages restart button always has a reference
+- **AutoUpdater**: DLL update now uses rename-then-copy (rename existing to `.old`, copy new, delete `.old`) to avoid file-locked copy failures on Windows
+- **AutoUpdater** (dev channel): pre-releases now detected via `/releases?per_page=1` instead of `/releases/latest` (which skips pre-releases)
 
 - **Build scripts portability**: all `tools/*.cmd` scripts (`_build_profiler.cmd`, `_build.bat`, `build_all.cmd`, `build_proxy.cmd`, `build_uiohook_proxy.cmd`, `launch_hooked.cmd`) replaced hardcoded `C:\Users\bash\...` paths with `%~dp0` relative paths and `vswhere.exe` auto-detection
 - **test-hook.ps1**: updated from deprecated `CORECLR_*` env vars to `DOTNET_*` (required for .NET 10+)

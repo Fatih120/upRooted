@@ -201,11 +201,46 @@ internal class LinkEmbedEngine
 
     internal static LinkEmbedEngine? Instance { get; set; }
 
-    internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow)
+    private readonly ThemeEngine? _themeEngine;
+
+    internal LinkEmbedEngine(AvaloniaReflection resolver, object mainWindow, ThemeEngine? themeEngine = null)
     {
         _r = resolver;
         _walker = new VisualTreeWalker(resolver);
         _mainWindow = mainWindow;
+        _themeEngine = themeEngine;
+    }
+
+    /// <summary>
+    /// Update accent strip and background of all live embed cards to reflect a theme change.
+    /// Must be called on the UI thread (e.g. from ContentPages.ApplyThemedColors or UpdateLiveColors).
+    /// Site-specific colors (OG theme-color) are preserved; only cards using the default accent update.
+    /// </summary>
+    internal void NotifyThemeChanged()
+    {
+        var themeAccent = _themeEngine?.GetAccentColor() ?? ContentPages.AccentGreen;
+        var newCardBg = ContentPages.CardBg;
+        foreach (var card in _injectedCards)
+        {
+            try
+            {
+                _r.SetBackground(card, newCardBg);
+                var embedTag = _r.GetTag(card) as string;
+                const string prefix = "uprooted-embed-";
+                if (embedTag?.StartsWith(prefix) == true &&
+                    _metadataCache.TryGetValue(embedTag.Substring(prefix.Length), out var cached) &&
+                    cached?.Color != null)
+                {
+                    // Site has its own brand color — keep it
+                    SetBorderBrush(card, cached.Color);
+                }
+                else
+                {
+                    SetBorderBrush(card, themeAccent);
+                }
+            }
+            catch { }
+        }
     }
 
     internal void Initialize()
@@ -1858,11 +1893,12 @@ internal class LinkEmbedEngine
             //       ├── TextBlock (description, FontSize=12, TextMuted)      [if desc]
             //       └── Border/Grid (image + optional play overlay)          [if image]
 
-            var accentHex = data.Color ?? DefaultAccentColor;
-            // For generic embeds, use theme-color for title if available; YouTube always uses default blue.
+            var themeAccent = _themeEngine?.GetAccentColor() ?? ContentPages.AccentGreen;
+            var accentHex = data.Color ?? themeAccent;
+            // For generic embeds, use theme-color for title if available; YouTube/default uses theme accent.
             // EnsureReadable checks WCAG contrast against CardBg and falls back to TextWhite.
             var titleColorHex = EnsureReadable(
-                (data.VideoId == null && data.Color != null) ? data.Color : DefaultAccentColor);
+                (data.VideoId == null && data.Color != null) ? data.Color : themeAccent);
 
             // Build inner content
             var content = _r.CreateStackPanel(vertical: true, spacing: 6);
