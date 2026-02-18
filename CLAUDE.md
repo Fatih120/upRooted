@@ -60,7 +60,7 @@ uprooted-private/
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── MessageLogger.cs              # Message logger: edit/delete detection, visual indicators, collection subscription
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
-│   ├── AutoUpdater.cs                # In-process auto-updater (GitHub releases API, stable + dev channels)
+│   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
 │   ├── NsfwFilter.cs                  # NSFW filter JS injection (needs Avalonia-native redesign)
 │   ├── Entry.cs                       # Profiler injection entry point
@@ -84,6 +84,7 @@ uprooted-private/
 │   ├── install-hook.ps1               # Hook deployment script
 │   ├── uninstall-hook.ps1             # Hook removal script
 │   ├── diagnose.ps1                   # Installation diagnostics
+│   ├── pack-update.py                 # Packs 6 update files into encrypted .uprpkg (no pip deps)
 │   └── (additional build/test/analysis scripts)
 ├── tests/                             # Test suites
 │   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush)

@@ -54,7 +54,7 @@ Two independent injection layers into one app:
 | `MessageLogger.cs` | ~1230 | Message logger (WIP): per-type property cache, event-based deletion via Remove events, post-subscription settling filter, Discord-style deleted message rows, channel switch handling |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
-| `AutoUpdater.cs` | ~695 | In-process auto-updater (GitHub releases, HTTP via reflection, version compare) |
+| `AutoUpdater.cs` | ~810 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare) |
 | `ProfileBadgeInjector.cs` | ~340 | "Uprooted Dev" profile badge injector (dev channel only, popup tree scan) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
@@ -87,6 +87,7 @@ Two independent injection layers into one app:
 | `installer/src-tauri/src/hook.rs` | Rust: file deployment + env var management (DOTNET_ + CORECLR_) |
 | `scripts/build_installer.ps1` | Full installer build pipeline (5 steps) |
 | `scripts/build.ts` | esbuild bundler: `src/` -> `dist/` (IIFE + CSS) |
+| `scripts/pack-update.py` | Packs 6 update files into encrypted `.uprpkg` (standalone Python, `--verify` flag) |
 | `Install-Uprooted.ps1` | PowerShell one-click installer |
 
 ## 5. Reading Order
@@ -129,7 +130,7 @@ Two independent injection layers into one app:
 - MessageLogger plugin (WIP): event-based deletion detection via CollectionChanged Remove events, per-type ViewModel property cache, post-subscription settling filter, Discord-style deleted message rows (red-tinted stripe + left accent), channel switch handling, flat-file persistence (MessageStore.cs), settings UI with toggle pills. Edit detection disabled pending reliability fix.
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
-- AutoUpdater: background update check, developer channel with encrypted PAT, staging + verify + overwrite
+- AutoUpdater: encrypted `.uprpkg` package download (single file replaces 6 individual artifacts), multi-layer XOR decryption, developer channel with encrypted PAT, staging + verify + overwrite
 - ProfileBadgeInjector: "Uprooted Dev" badge on profile popups (dev channel only), diagnostic tree dump on first detection
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
@@ -166,7 +167,7 @@ powershell -File scripts/build_installer.ps1
 Claude runs inside a devcontainer and **cannot deploy or launch Root**. If `/deploy` fails with permission errors, that's expected — the container has no access to the Windows host filesystem.
 
 **The user handles deployment and log tailing on their Windows machine:**
-- `scripts/deploy-hook.ps1` — stops Root, copies the DLL, relaunches
+- `scripts/deploy-hook.ps1` — stops Root, copies the DLL, relaunches via UprootedLauncher
 - `scripts/watch-log.ps1` — tails the hook log in real time
 
 The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the container produces output visible to both sides. Claude builds, the user deploys.
