@@ -2,6 +2,16 @@ name: Build Linux Installer
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.3.7-rc). Leave blank to read from package.json.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: true
+        type: boolean
   push:
     paths:
       - "hook/**"
@@ -19,6 +29,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # ── Resolve version ──
+
+      - name: Resolve version
+        id: ver
+        run: |
+          INPUT_VER="${{ inputs.version }}"
+          INPUT_VER="${INPUT_VER// /}"
+          if [ -n "$INPUT_VER" ]; then
+            VERSION="$INPUT_VER"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Building version: $VERSION"
 
       # ── Toolchains ──
 
@@ -118,15 +143,16 @@ jobs:
 
       - name: Rename Linux binary
         run: |
-          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
-          chmod +x installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
-          echo "Renamed to Uprooted-0.3.6-rc-linux-amd64"
+          VERSION="${{ steps.ver.outputs.version }}"
+          mv installer/src-tauri/target/release/uprooted installer/src-tauri/target/release/Uprooted-$VERSION-linux-amd64
+          chmod +x installer/src-tauri/target/release/Uprooted-$VERSION-linux-amd64
+          echo "Renamed to Uprooted-$VERSION-linux-amd64"
 
       - name: Upload Linux binary (CI artifact)
         uses: actions/upload-artifact@v4
         with:
           name: Uprooted-Linux
-          path: installer/src-tauri/target/release/Uprooted-0.3.6-rc-linux-amd64
+          path: installer/src-tauri/target/release/Uprooted-*-linux-amd64
 
       - name: Upload artifacts tarball (CI artifact)
         uses: actions/upload-artifact@v4
@@ -137,13 +163,17 @@ jobs:
       - name: Pack auto-update package
         run: python3 scripts/pack-update.py --input-dir installer/src-tauri/artifacts --output auto-update.uprpkg --verify
 
+      # ── Publish release (manual trigger only) ──
+
       - name: Publish to private repo release
-        if: success()
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION="0.3.6-rc"
-          gh release create "v$VERSION" --title "v$VERSION" --notes "Linux installer" 2>/dev/null || true
+          VERSION="${{ steps.ver.outputs.version }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
+          gh release create "v$VERSION" --title "v$VERSION" --notes "Linux installer" $PRERELEASE_FLAG 2>/dev/null || true
           for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
                    uprooted-linux-artifacts.tar.gz \
                    auto-update.uprpkg \
@@ -153,7 +183,7 @@ jobs:
           echo "Uploaded Linux assets to private repo v$VERSION"
 
       - name: Publish to public repo release
-        if: success()
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
@@ -161,8 +191,10 @@ jobs:
             echo "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           fi
-          VERSION="0.3.6-rc"
-          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" 2>/dev/null || true
+          VERSION="${{ steps.ver.outputs.version }}"
+          PRERELEASE_FLAG=""
+          if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
+          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" $PRERELEASE_FLAG 2>/dev/null || true
           for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
                    uprooted-linux-artifacts.tar.gz \
                    auto-update.uprpkg \

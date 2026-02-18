@@ -2,6 +2,16 @@ name: Build Installer
 
 on:
   workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.3.7-rc). Leave blank to read from package.json.'
+        required: false
+        default: ''
+      prerelease:
+        description: 'Mark as pre-release'
+        required: false
+        default: true
+        type: boolean
   push:
     paths:
       - "hook/**"
@@ -24,6 +34,21 @@ jobs:
       CARGO_TARGET_X86_64_PC_WINDOWS_MSVC_LINKER: link.exe
     steps:
       - uses: actions/checkout@v4
+
+      # ── Resolve version ──
+
+      - name: Resolve version
+        id: ver
+        shell: pwsh
+        run: |
+          $inputVer = "${{ inputs.version }}".Trim()
+          if ($inputVer -ne "") {
+            $version = $inputVer
+          } else {
+            $version = (Get-Content package.json | ConvertFrom-Json).version
+          }
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building version: $version"
 
       # ── Toolchains ──
 
@@ -123,11 +148,13 @@ jobs:
         run: cargo build --release
 
       - name: Rename installer exe
+        shell: pwsh
         run: |
+          $version = "${{ steps.ver.outputs.version }}"
           $src = "installer\src-tauri\target\release\uprooted.exe"
-          $dst = "installer\src-tauri\target\release\Uprooted-0.3.6-rc-Setup.exe"
+          $dst = "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
           Move-Item $src $dst
-          Write-Host "Renamed to Uprooted-0.3.6-rc-Setup.exe"
+          Write-Host "Renamed to Uprooted-$version-Setup.exe"
 
       - name: Upload installer exe (CI artifact)
         uses: actions/upload-artifact@v4
@@ -138,30 +165,38 @@ jobs:
       - name: Pack auto-update package
         run: python scripts/pack-update.py --input-dir installer\src-tauri\artifacts --output auto-update.uprpkg --verify
 
+      # ── Publish release (manual trigger only) ──
+
       - name: Publish to private repo release
-        if: success()
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: pwsh
         run: |
-          $version = "0.3.6-rc"
+          $version = "${{ steps.ver.outputs.version }}"
+          $prerelease = "${{ inputs.prerelease }}" -eq "true"
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
-          gh release create "v$version" --title "v$version" --notes "Windows installer" 2>&1
+          $prereleaseFlag = if ($prerelease) { "--prerelease" } else { "" }
+          gh release create "v$version" --title "v$version" --notes "Windows installer" $prereleaseFlag 2>&1 | Out-Null
           gh release upload "v$version" $exe.FullName --clobber 2>&1
           gh release upload "v$version" auto-update.uprpkg --clobber 2>&1
           Write-Host "Uploaded Setup.exe + auto-update.uprpkg to private repo v$version"
 
       - name: Publish to public repo release
-        if: success()
+        if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
+        shell: pwsh
         run: |
           if (-not $env:GH_TOKEN) {
             Write-Host "PUBLIC_REPO_TOKEN not configured, skipping public release"
             exit 0
           }
-          $version = "0.3.6-rc"
+          $version = "${{ steps.ver.outputs.version }}"
+          $prerelease = "${{ inputs.prerelease }}" -eq "true"
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
-          gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" 2>&1
+          $prereleaseFlag = if ($prerelease) { "--prerelease" } else { "" }
+          gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" $prereleaseFlag 2>&1 | Out-Null
           gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
           gh release upload "v$version" auto-update.uprpkg --repo watchthelight/uprooted --clobber 2>&1
           Write-Host "Uploaded Setup.exe + auto-update.uprpkg to public repo v$version"
