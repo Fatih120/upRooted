@@ -1,4 +1,4 @@
-# Uprooted Hook - Session State (2026-02-17)
+# Uprooted Hook - Session State (2026-02-18)
 
 ## Release: v0.3.5
 
@@ -72,6 +72,7 @@ Key details:
 | 3.5 | StartupHook | Initialize ThemeEngine + apply saved theme |
 | 4 | SidebarInjector | Start settings page monitor (200ms poll) |
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
+| 4.5a | ClearUrlsEngine | Strip tracking params from compose editor on Enter (14s delay) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
 
@@ -100,13 +101,15 @@ The Avalonia-native link embed engine is broadly functional:
 
 | File | Changes |
 |------|---------|
+| `hook/ClearUrlsEngine.cs` | New file: strips tracking params from compose editor URLs on Enter key via AvaloniaEdit.TextArea routed event interception |
+| `hook/StartupHook.cs` | Added Phase 4.5a: ClearURLs engine registration (14s delay) |
+| `hook/ContentPages.cs` | Added ClearURLs PluginInfo entry (clear-urls, default enabled, TestingStatus=1) |
 | `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging |
-| `hook/AnimatedImage.cs` | New file: animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
+| `hook/AnimatedImage.cs` | Animated GIF/WebP decoder + timer playback via SkiaSharp reflection |
 | `hook/UprootedSettings.cs` | 10s TTL settings cache to reduce disk I/O |
-| `hook/SidebarInjector.cs` | Back arrow management: hide left-side RootSvgButton by position, set header title TextBlock, DetachedFromVisualTree safety net, Click events for Buttons, section header 40px wrapper |
-| `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
-| `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
-| `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
+| `hook/SidebarInjector.cs` | Back arrow management, header title, DetachedFromVisualTree safety net, Click events, section header 40px wrapper |
+| `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; Cosmic Smoothie preset; search box fix |
+| `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap + Themes ResourceDictionary |
 
 ## Next Steps
 
@@ -114,6 +117,15 @@ The Avalonia-native link embed engine is broadly functional:
 2. **Video preview embeds (.mp4)** — Thumbnail + play button for direct video URLs
 3. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
 4. **Plugin toggle functionality** — Wire up Plugins page toggles for runtime enable/disable
+
+## ClearURLs Engine Notes
+
+- Root's compose input is `AvaloniaEdit.TextEditor` (NOT `Avalonia.Controls.TextBox`)
+- AvaloniaEdit marks Enter as `Handled=true` — CLR event handlers don't see it
+- Must use `AddHandler(RoutedEvent, Delegate, RoutingStrategies, handledEventsToo=true)` with ALL routing strategies (Bubble|Tunnel|Direct = 7)
+- Bubble alone is insufficient — AvaloniaEdit handles Enter before Bubble propagates
+- Hook TextArea (child of TextEditor) as primary target; read/write Text from parent TextEditor
+- TextEditor.Text CLR property works (AvaloniaEdit is third-party, not trimmed)
 
 ## Deployment
 

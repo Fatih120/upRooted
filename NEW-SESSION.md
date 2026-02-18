@@ -37,18 +37,19 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 33 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 319 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | 347 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1280 | 200ms timer poll, sidebar injection, header management, click events |
-| `ContentPages.cs` | 2277 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | 2280 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | 2360 | ResourceDictionary overrides, live theme preview (2nd largest) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | 130 | INI-based settings (System.Text.Json workaround) + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
+| `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 1754 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image embeds + visual tree injection) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
@@ -96,7 +97,7 @@ Two independent injection layers into one app:
 
 ## 6. Current State
 
-**Source:** `hook/SESSION_STATE.md` (2026-02-17)
+**Source:** `hook/SESSION_STATE.md` (2026-02-18)
 
 **Versions:** 0.3.5 | Target Root 0.9.92
 
@@ -120,6 +121,7 @@ Two independent injection layers into one app:
 - DotNetBrowserReflection: full type cache, IBrowser discovery via ViewModel chain walking
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
+- ClearURLs plugin: strips tracking params (utm_source, fbclid, gclid, si, etc.) from URLs on send via AvaloniaEdit TextArea routed event interception
 
 **Known issues:**
 - Reddit embeds not yet implemented (OG tags available but no dedicated handler)

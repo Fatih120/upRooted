@@ -85,6 +85,7 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **ClearURLs plugin** (2026-02-18) — Strips tracking parameters (utm_source, fbclid, gclid, si, etc.) from URLs when the user sends a message. Hooks AvaloniaEdit.TextEditor's TextArea via Avalonia routed events with `AddHandler(handledEventsToo=true)` using all routing strategies (Bubble|Tunnel|Direct). 33 tracking params, idempotent, fragment-preserving. Plugin ID: `clear-urls`, default enabled.
 - [x] **Animated image embeds (.gif, .webp)** (2026-02-17) — Animated GIF/WebP URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`AnimatedImage.cs`). Graceful fallback to static first frame if SkiaSharp frame APIs are unavailable. Tenor URLs skipped (Root embeds natively).
 - [x] **Fix link embeds for non-YouTube sites** (2026-02-17) — Chrome-like default UA, direct image URL fast path, Content-Type gate on OG fetch, oEmbed discovery from HTML `<link>` tags, bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx), `twitter:image`/`twitter:title`/`twitter:description` fallbacks
 - [x] **Fix oEmbed parsing crash** (2026-02-17) — `DecodeJsonString` used `Regex.Replace` with lambda `MatchEvaluator` which was trimmed in Root's binary. Replaced with manual `\uXXXX` loop. Fixed `ReadAsStringAsync` → `ReadAsStreamAsync` for trimmed charset methods. Normalized fixupx/fxtwitter/fixvx URLs to vxtwitter.com for richer OG metadata with images.
