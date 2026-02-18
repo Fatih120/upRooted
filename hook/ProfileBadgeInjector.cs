@@ -267,9 +267,9 @@ internal class ProfileBadgeInjector
             if (text.StartsWith("Uprooted", StringComparison.OrdinalIgnoreCase)) continue;
 
             var fontSize = _r.GetFontSize(node);
-            if (fontSize >= 14 && fontSize > maxFontSize)
+            if (fontSize != null && fontSize >= 14 && fontSize > maxFontSize)
             {
-                maxFontSize = fontSize;
+                maxFontSize = fontSize.Value;
                 usernameBlock = node;
             }
         }
@@ -282,27 +282,31 @@ internal class ProfileBadgeInjector
 
         Logger.Log("ProfileBadge", $"Found username: \"{_r.GetText(usernameBlock)}\" (fontSize={maxFontSize})");
 
-        // Walk up from the username to find a parent panel that directly contains it
-        // (or a close ancestor), then insert the badge at index+1
+        // Walk up from the username looking for a VERTICAL panel to insert into.
+        // The username sits in a horizontal row; we need the outer vertical container
+        // so the badge appears below the name, not beside it.
         var candidate = usernameBlock;
-        for (int up = 0; up < 6; up++)
+        for (int up = 0; up < 8; up++)
         {
             var parent = _r.GetParent(candidate);
             if (parent == null) break;
 
-            var children = _r.GetChildren(parent);
-            if (children != null)
+            if (IsVerticalPanel(parent))
             {
-                var idx = children.IndexOf(candidate);
-                if (idx >= 0)
+                var children = _r.GetChildren(parent);
+                if (children != null)
                 {
-                    var badge = CreateBadgePill();
-                    if (badge == null) return;
-
-                    if (TryInsertChild(parent, badge, idx + 1))
+                    var idx = children.IndexOf(candidate);
+                    if (idx >= 0)
                     {
-                        Logger.Log("ProfileBadge", $"Badge inserted at index {idx + 1} in {parent.GetType().Name}");
-                        return;
+                        var badge = CreateBadgePill();
+                        if (badge == null) return;
+
+                        if (TryInsertChild(parent, badge, idx + 1))
+                        {
+                            Logger.Log("ProfileBadge", $"Badge inserted below username in {parent.GetType().Name} at index {idx + 1}");
+                            return;
+                        }
                     }
                 }
             }
@@ -310,7 +314,41 @@ internal class ProfileBadgeInjector
             candidate = parent;
         }
 
-        Logger.Log("ProfileBadge", "Could not find insertion point under username — badge not injected");
+        Logger.Log("ProfileBadge", "Could not find vertical panel above username — badge not injected");
+    }
+
+    /// <summary>
+    /// Returns true if the panel lays out its children vertically.
+    /// For StackPanel: checks Orientation property.
+    /// For other panels: compares Y bounds of first two children.
+    /// </summary>
+    private bool IsVerticalPanel(object panel)
+    {
+        var typeName = panel.GetType().Name;
+
+        if (typeName.Contains("StackPanel"))
+        {
+            try
+            {
+                var orientation = panel.GetType().GetProperty("Orientation")?.GetValue(panel);
+                return orientation?.ToString() == "Vertical";
+            }
+            catch { return false; }
+        }
+
+        // For Grid, DockPanel, etc: check if children stack vertically via bounds
+        var children = _r.GetChildren(panel);
+        if (children == null || children.Count < 2) return false;
+        try
+        {
+            var b0 = _r.GetBounds(children[0]);
+            var b1 = _r.GetBounds(children[1]);
+            if (b0 != null && b1 != null)
+                return Math.Abs(b1.Value.Y - b0.Value.Y) > Math.Abs(b1.Value.X - b0.Value.X);
+        }
+        catch { }
+
+        return false;
     }
 
     /// <summary>
