@@ -166,6 +166,9 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/StartupHook.cs` | Added Phase 4.5f (SilentTypingEngine, 12s delay); Phase 4.5g (NsfwFilter, Avalonia-native, 20s delay); Phase 5 now DotNetBrowser-only (NSFW no longer gated on DotNetBrowser). |
 | `src/plugins/silent-typing/index.ts` | Gutted fetch/XHR intercept; now a no-op stub (v0.1.0 → v0.2.0) with comment explaining C# handles interception. |
 | `hook/ContentPages.cs` | SilentTyping plugin entry: version `0.1.0` → `0.2.0`, `TestingStatus` `0` → `1` (beta). |
+| `hook/ContentPages.cs` | Fixed About > Status enabled plugin count: iterates `KnownPlugins` with same enabled-check as Plugins page (was counting ghost entries like `settings-panel` from legacy migration). Also: `Logger.Enable()` call on developer channel switch, `Logger.Disable()` + log reorder on stable channel switch. |
+| `hook/Logger.cs` | Added `Enable()` method for runtime re-enable when switching to developer channel. |
+| `hook/SidebarInjector.cs` | Save bar restore: replaced `ClearValue("IsVisibleProperty")` with `SetIsVisible(true)` — simpler, equivalent behavior. |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
