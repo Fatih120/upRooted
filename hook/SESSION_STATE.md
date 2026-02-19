@@ -1,4 +1,4 @@
-# Uprooted Hook - Session State (2026-02-18)
+# Uprooted Hook - Session State (2026-02-19)
 
 ## Release: v0.4.1
 
@@ -78,7 +78,7 @@ Key details:
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
 | 4.5d | AutoUpdater | Background update check (every 6 hours), encrypted .uprpkg download + decrypt + apply |
 | 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (dev channel + hardcoded usernames, 5s delay, event-driven + 500ms fallback) |
-| 4.5f | SilentTypingEngine | HttpClient handler injection: static field scan + ViewModel chain walk, TypingBlockerHandler drops SetTypingIndicator (12s delay) |
+| 4.5f | SilentTypingEngine | DiagnosticListener-based interception: subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0 (12s delay). ~90 lines, by Kurumi Nanase. |
 | 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution (video thumbnails for LinkEmbedEngine) |
 
@@ -162,7 +162,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/StartupHook.cs` | Subscribes to `AutoUpdater.BackgroundUpdateApplied` in Phase 4.5d; dispatches `ContentPages.ShowUpdateNotification()` to UI thread |
 | `hook/MessageLogger.cs` | Injection position fix: `_orderedIds` (List) + `_orderedIdIndex` (dict) track collection insertion order. `InjectDeletedMessageCards` now uses order-index comparison instead of timestamps to find the correct adjacent container. Cleared on channel switch / reset / bulk-flush. |
 | `hook/MessageLogger.cs` | Edit detection + indicators: `HandleReplaced()` (Replace action=2) with `_addedViaEvent` + `EditGracePeriodSeconds` gates; `InjectEditIndicators()` + `BuildEditIndicatorCard()` amber-tinted card injection; `SetFontStyleItalic()`, `ReadHasBeenEdited()` helpers. 1795 → 1876 lines. |
-| `hook/SilentTypingEngine.cs` | New file: C# silent typing engine. `SilentTypingEngine` scans assemblies + walks ViewModel chain to find Root's `HttpClient` instances and prepends `TypingBlockerHandler` to each. Handler drops `SetTypingIndicator` gRPC requests, returns synthetic `200 OK`. Timer-based discovery (12s startup delay, 5s retry, 30s once patched). |
+| `hook/SilentTypingEngine.cs` | **Fixed**: broadened HttpClient discovery (removed keyword gates, depth 8→12), added `HttpMessageHandler` detection, added `GrpcChannel`-aware patching (extracts `<HttpInvoker>k__BackingField` and patches `_handler`). Root uses `Grpc.Net.Client.GrpcChannel` (not raw HttpClient) for gRPC — previous scan patched analytics/connection clients but missed the gRPC transport. Now confirmed blocking SetTypingIndicator. Case-insensitive URL matching. 335→482 lines. |
+| `hook/ContentPages.cs` | Stripped em dashes from SentryBlocker, Themes, ClearURLs, ContentFilter plugin descriptions. |
 | `hook/NsfwFilter.cs` | Complete rewrite — Avalonia-native visual tree scanner replaces old DotNetBrowser JS injection. 500ms scan timer posts `ScanForImages()` to UI thread (Interlocked guard prevents queuing overlap). DFS walk finds `Image` controls: skips tagged/tiny (<100×100 PixelSize)/seen bitmaps, queues `ClassifyAndAct` on thread pool. `SemaphoreSlim(3)` caps concurrent Vision API calls. `GetBitmapBytes()` encodes via `Bitmap.Save(Stream)` reflection → PNG base64 → `POST /v1/images:annotate?key=`. `ParseLikelihood()` string-scans response (no JSON parser). NSFW images hidden, overlay injected (`Border > StackPanel > [⚠ NSFW, Click to reveal]`), Grid.Row/Col mirrored from image, click-to-reveal wired via `SubscribePointerEvent`. `RevealAllBlocked()` restores all on disable. No DotNetBrowserReflection dependency. 473 lines. |
 | `hook/StartupHook.cs` | Added Phase 4.5f (SilentTypingEngine, 12s delay); Phase 4.5g (NsfwFilter, Avalonia-native, 20s delay); Phase 5 now DotNetBrowser-only (NSFW no longer gated on DotNetBrowser). |
 | `src/plugins/silent-typing/index.ts` | Gutted fetch/XHR intercept; now a no-op stub (v0.1.0 → v0.2.0) with comment explaining C# handles interception. |
@@ -175,34 +176,43 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/UprootedSettings.cs` | Fixed: added `case "Version":` to INI parser — Version was never read from disk, breaking version migration detection |
 | `hook/StartupHook.cs` | Fixed: force-disable on upgrade now sets `NsfwFilterEnabled = false` for `content-filter` (canonical toggle, not just `Plugins` dict). Uncommented `ForceDisableOnUpgrade` entry for v0.4.0: message-logger + content-filter. |
 
-## MessageLogger Plugin (WIP — 2026-02-18)
+## MessageLogger Plugin (WIP — 2026-02-19)
 
-**Status:** Async deletion pollers deployed — uses `HasBeenDeleted` property on bridge target (Message model) to distinguish real deletions from buffer management removes.
+**Status:** Major reliability overhaul deployed — property resolution fixed (DeletedAt/EditedAt), author names working, INPC event-driven detection added, self-delete fallback added. Needs real-world validation.
 
 ### Working
 - **Phase 1 discovery**: Finds `RootMessageItemsControl` in visual tree, resolves ViewModel property accessors (MessageId, Content, AuthorId, Timestamp) via per-type cache
 - **Collection subscription**: `ObservableCollection.CollectionChanged` via `Expression.Lambda` — handles Add, Remove, Replace, Reset events
 - **Per-type property cache**: `Dictionary<Type, TypeProps>` handles multiple ViewModel types (MessageViewModel, ChannelStartMessageViewModel, ReplyUserTagViewModel) with nested `.Message` bridge property resolution
-- **Async deletion pollers**: Each removed item gets an async poller that checks `HasBeenDeleted` every 300ms for 3s. If `HasBeenDeleted` becomes true → genuine deletion. If it stays false → buffer management (discard). Epoch counter cancels stale pollers on channel switch.
-- **Diagnostic instrumentation**: DIAG-INJ/DIAG-FLUSH exhaustive logging, boolean property dump on first Remove event to discover correct deletion property, collection size and snapshot age tracking
-- **Channel switch handling**: Epoch-based cancellation — each channel switch increments a counter, pollers check their birth epoch against current and self-cancel if stale
+- **Property resolution (FIXED)**: Root's Message model uses `DeletedAt` (DateTimeOffset?) and `EditedAt` (DateTimeOffset?), NOT `HasBeenDeleted`/`IsDeleted` (bool). Non-null = deleted/edited. FindProp search order: `DeletedAt` → `HasBeenDeleted` → `IsDeleted` (with EditedAt equivalent).
+- **Author name resolution (FIXED)**: Deep property chain: `Message.SenderMember` → `.GlobalUser` → `.UserName` (with `DisplayName`/`Name` fallbacks). Replaces hardcoded "Unknown".
+- **INotifyPropertyChanged subscription**: Subscribes to `Message.PropertyChanged` for instant `DeletedAt`/`EditedAt` detection via `Expression.Lambda` delegate. Primary detection method. Cleanup on epoch change.
+- **Async deletion pollers (fallback)**: Each removed item gets an async poller that checks `DeletedAt` every 300ms for 3s. Non-null DateTimeOffset = genuine deletion. Null after 3s triggers collection-presence fallback.
+- **Self-delete fallback**: Root doesn't set `DeletedAt` for client-initiated deletes — it only removes from collection. After 3s polling timeout, checks if message ID is absent from live collection. If gone + has cached content → marked as self-deleted.
+- **Dedup already-deleted**: `HandleRemoved` skips spawning pollers for messages already marked as deleted in cache.
+- **Diagnostic instrumentation**: DIAG-INJ/DIAG-FLUSH logging, boolean + DateTimeOffset? property dumps, `_boolDumpCount` reset on epoch change
+- **Channel switch handling**: Epoch-based cancellation, PropertyChanged unsubscribe, dump counter reset
 - **Flat-file persistence**: `MessageStore.cs` — pipe-delimited, URI-encoded, append-only (MSG|DEL|EDIT|CLR record types)
-- **Visual indicators**: Discord-style deleted message rows — full-width red-tinted background stripe with red left accent border, right-click "Clear message history" context menu
-- **Analysis tool**: `scripts/analyze-msglogger.ps1` — parses hook log for MsgLogger/DIAG entries and produces structured diagnostic summary
+- **Visual indicators**: Discord-style deleted message rows — full-width red-tinted background stripe with red left accent border
+- **Scan interval**: 500ms (reduced from 1500ms) for faster VirtualizingStackPanel recycling recovery
 
-### Known Issues — Being Fixed
-- **HasBeenDeleted reliability**: The async poller approach depends on `HasBeenDeleted` being set to true by Root within the 3s polling window. Needs real-world validation — if Root sets it asynchronously after a longer delay, the timeout may need adjustment.
+### Known Issues
+- **Card injection positioning**: `FindMessageGridInContainer` returns null — containers have `MessageView` descendants but no `RootMarkdownTextBlock` inside a Grid. Container structure may have changed; needs investigation.
+- **Self-delete fallback untested**: Deployed but not yet validated by user. Second deploy cycle was cut short.
 
-### Working — Edit Detection + Indicators (2026-02-18)
-- **Edit detection**: Event-driven via `HandleReplaced()` (CollectionChanged Replace action=2). Two false-positive gates: (1) message must have been seen via an Add event (`_addedViaEvent` dict, not initial snapshot); (2) Replace must arrive >5s after Add (`EditGracePeriodSeconds = 5.0`), filtering send-completion optimistic Replaces (arrive within 0.5–2s). `PollEdits` method retained but not called.
-- **Discord-style edit indicators**: `InjectEditIndicators()` runs each scan tick — finds edited messages in VSP visible children, injects amber-tinted inline card as new Grid row. Card shows previous content (faded `#99BBBBBB`, italic) + `(edited)` / `(edited Nx)` label (amber `#99D4A843`), amber left accent border (3px `#50FFCC44`). Tag `uprooted-edit:{msgId}` for dedup + re-injection on scroll recycling.
+### Working — Edit Detection + Indicators (2026-02-19)
+- **Dual-strategy edit detection**: (1) Primary: check `EditedAt` non-null on new item during Replace event (bypasses grace period); (2) Fallback: 5s grace period gating on Replace events without EditedAt change. Re-subscribes PropertyChanged on Replace.
+- **INPC edit detection**: `OnEditedAtChanged` fires when `EditedAt` property changes on a subscribed message — instant detection.
+- **Discord-style edit indicators**: `InjectEditIndicators()` runs each scan tick — finds edited messages in VSP visible children, injects amber-tinted inline card. Tag `uprooted-edit:{msgId}` for dedup + re-injection on scroll recycling.
 
 ### Key Learnings
-- **Root's ObservableCollection is VIRTUALIZED** — Remove events fire for buffer management (scroll-off, window shifts), not just real deletions. The original assumption (Remove = real deletion) was wrong.
-- **HasBeenDeleted on bridge target** is the primary signal — true means genuine deletion, false means buffer management
+- **Root's ObservableCollection is VIRTUALIZED** — Remove events fire for buffer management (scroll-off, window shifts), not just real deletions
+- **DeletedAt (DateTimeOffset?) is the correct property** — NOT `HasBeenDeleted` (bool). Non-null = deleted. Only set for server-side/other-user deletions.
+- **Self-deletes don't set DeletedAt** — Root removes from collection without setting the property. Must use collection-presence fallback.
+- **Message implements INotifyPropertyChanged** — confirmed via ILSpy `MessageView.cs:308`. PropertyChanged is a standard CLR event (NOT a RoutedEvent), so `EventInfo.AddEventHandler` is safe.
 - Root fires straggler Remove events 8-12s after channel switch (buffer settling) — epoch-based cancellation handles this
-- Different ViewModel types have different `PropertyInfo` objects that throw `TargetException` on wrong types — per-type cache is essential
-- Root creates new `RootMessageItemsControl` instances on channel switch; old ones linger in the visual tree with stale data
+- Different ViewModel types have different `PropertyInfo` objects — per-type cache is essential
+- Root creates new `RootMessageItemsControl` instances on channel switch
 
 ## Test Suite (2026-02-18)
 
@@ -222,7 +232,7 @@ See `docs/dev/TESTING.md` for full reference.
 ## Next Steps
 
 1. **MessageLogger: validate async pollers + edit detection** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position and edit indicators deployed. Need real-world validation: test actual deletions + edits, run `scripts/analyze-msglogger.ps1`. Confirm HasBeenDeleted fires within 3s, confirm edit cards appear after grace period.
-2. **SilentTyping: validate C# interception** — `SilentTypingEngine` deployed (Phase 4.5f). Verify with two accounts: type in one session, confirm the other sees no typing indicator. Check log for `[SilentTyping] Blocked SetTypingIndicator` entries. If nothing is blocked, log will show which `HttpClient` instances were found/missed.
+2. **SilentTyping: verify with second account** — C# engine confirmed blocking SetTypingIndicator in log (GrpcChannel patching working). Need second-account test to verify the typing indicator is actually suppressed on the receiving end.
 3. **Avalonia-native NSFW filter** — Phase 4.5g deployed; verify Avalonia-native redesign is working
 4. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
 

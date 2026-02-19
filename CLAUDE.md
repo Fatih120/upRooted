@@ -63,7 +63,7 @@ uprooted-private/
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
-│   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via HttpClient handler injection
+│   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging

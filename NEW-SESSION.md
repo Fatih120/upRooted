@@ -62,12 +62,12 @@ Two independent injection layers into one app:
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 482 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
-| `MessageLogger.cs` | 1876 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking; event-driven edit detection (`HandleReplaced`, Add-event gating + 5s grace period); Discord-style deleted message rows (red) + edit indicator rows (amber) |
+| `MessageLogger.cs` | ~2100 | Message logger (WIP): property fix (DeletedAt/EditedAt DateTimeOffset?), author names (SenderMember chain), INPC event-driven detection, self-delete fallback (collection-presence), dedup, 500ms scan; edit detection (dual-strategy EditedAt + grace period); Discord-style deleted/edit indicator rows |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection, persistent canvas compositing) |
 | `AutoUpdater.cs` | 909 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare, hash-based same-version hotfix detection, `BackgroundUpdateApplied` event) |
 | `ProfileBadgeInjector.cs` | 535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
-| `SilentTypingEngine.cs` | 335 | Silent typing: HttpClient handler injection, static field scan + ViewModel chain walk, TypingBlockerHandler drops SetTypingIndicator gRPC requests |
+| `SilentTypingEngine.cs` | ~90 | Silent typing: DiagnosticListener-based interception — subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0. Replaces 482-line handler injection. |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 92 | Thread-safe file logging, startup separator, dev-channel gate (stable = no log file), runtime Enable/Disable |
@@ -139,7 +139,7 @@ Two independent injection layers into one app:
 - Theme preset: "Cosmic Smoothie" (purple accent #7328BA, dark bg #0A041E) — full TreeColorMap + ResourceDictionary + CSS variables
 - Plugin search box: font size bump, horizontal padding, vertical centering
 - ClearURLs plugin: strips tracking params (utm_source, fbclid, gclid, si, etc.) from URLs on send via AvaloniaEdit TextArea routed event interception
-- MessageLogger plugin (WIP): per-item async deletion pollers (HasBeenDeleted probe every 300ms for 3s), epoch-based channel switch cancellation, per-type ViewModel property cache, Discord-style deleted message rows (red-tinted stripe + left accent), flat-file persistence (MessageStore.cs), settings UI with toggle pills, diagnostic analysis script (`scripts/analyze-msglogger.ps1`). Edit detection disabled pending reliability fix.
+- MessageLogger plugin (WIP): property fix (DeletedAt/EditedAt DateTimeOffset?), INPC event-driven detection, self-delete fallback (collection-presence), author name resolution (SenderMember chain), dedup, 500ms scan, per-type property cache, Discord-style deleted/edit indicators, flat-file persistence (MessageStore.cs). Card injection positioning needs investigation.
 - TUI installer mode selector: interactive Install/Uninstall/Repair menu when run without flags
 - Linux Root detection: 7-strategy search in bash installer, 5-strategy search in Rust installer (glob, .desktop, /proc, PATH)
 - AutoUpdater: encrypted `.uprpkg` package download (single file replaces 6 individual artifacts), multi-layer XOR decryption, developer channel with encrypted PAT, staging + verify + overwrite
@@ -147,7 +147,7 @@ Two independent injection layers into one app:
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. Ping Color toggle merged inline into Custom Theme card (separated by 1px divider). ThemeEngine applies as Phase 6 after theme apply + live updates.
-- Silent Typing: C# reimplementation (`SilentTypingEngine.cs`, Phase 4.5f) — `TypingBlockerHandler` (DelegatingHandler) short-circuits `SetTypingIndicator` requests with synthetic `200 OK`; discovery via static field scan + ViewModel chain walk; TypeScript plugin gutted to no-op stub (v0.2.0)
+- Silent Typing: C# reimplementation (`SilentTypingEngine.cs`, Phase 4.5f) — DiagnosticListener-based interception: subscribes to .NET's built-in HTTP diagnostics, intercepts SetTypingIndicator requests before they leave the process, redirects to localhost:0. ~90 lines (replaced 482-line HttpClient handler injection). Original DiagnosticListener approach by Kurumi Nanase. TypeScript plugin gutted to no-op stub (v0.2.0)
 - Version-gated plugin force-disable on upgrade: `ForceDisableOnUpgrade` dictionary in `StartupHook` runs between Phase 0 and Phase 1, cumulative across skipped versions, downgrade-safe, `CurrentVersion` const replaces hardcoded banner string
 - Embed card accent color: link embed left border strip uses active theme accent (`ThemeEngine.GetAccentColor()`). `NotifyThemeChanged()` updates all live cards on theme switch or live drag; preserves site-specific OG colors (Reddit orange, og:theme-color).
 - Theme flash fix: walk bursts after injection completes, on ListBox selection changes, and on Uprooted tab switches prevent flash of unthemed content when opening settings or switching tabs. 50ms rapid follow-up added to catch async-loaded controls.
@@ -171,7 +171,7 @@ Two independent injection layers into one app:
 - Theme Engine v2 (resource-first, OKLCH) deployed but not yet validated in production
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
-- MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); async deletion pollers (HasBeenDeleted) need real-world validation
+- MessageLogger (WIP): card injection positioning (`FindMessageGridInContainer` returns null — container structure may have changed); self-delete fallback untested; edit indicators need real-world validation
 - ProfileBadgeInjector: `IsProfilePopup` heuristic may false-positive on non-profile popups — needs tree dump log analysis to refine
 
 ## 7. Build Commands

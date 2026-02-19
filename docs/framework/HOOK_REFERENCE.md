@@ -72,7 +72,7 @@ The hook layer consists of 24 source files in the `hook/` directory:
 | `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
 | `AutoUpdater.cs` | ~810 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
 | `ProfileBadgeInjector.cs` | ~450 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
-| `SilentTypingEngine.cs` | 335 | Blocks `SetTypingIndicator` gRPC calls at the .NET HttpClient layer. Scans assemblies + walks ViewModel chain to find Root's `HttpClient` instances; prepends `TypingBlockerHandler` (DelegatingHandler) that short-circuits the request with a synthetic `200 OK`. Phase 4.5f, 12s startup delay. |
+| `SilentTypingEngine.cs` | ~90 | Blocks `SetTypingIndicator` gRPC calls via .NET `DiagnosticListener` interception. Subscribes to HTTP diagnostic events, intercepts `HttpRequestOut.Start`, redirects matching requests to `localhost:0`. Phase 4.5f, 12s startup delay. Original DiagnosticListener approach by Kurumi Nanase. |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
 | `UprootedSettings.cs` | 161 | INI-based settings persistence |
 | `Logger.cs` | 46 | Thread-safe file logging |
@@ -446,13 +446,21 @@ usernames.
 **Time:** 12 seconds after Phase 4
 **Failure mode:** Non-fatal; typing indicators are sent normally
 
-**File:** `hook/SilentTypingEngine.cs` (335 lines)
+**File:** `hook/SilentTypingEngine.cs` (~90 lines)
 
-Blocks `SetTypingIndicator` gRPC calls at the .NET HttpClient layer. Scans assemblies
-and walks the ViewModel chain to find Root's `HttpClient` instances, then prepends a
-`TypingBlockerHandler` (DelegatingHandler) that short-circuits matching requests with a
-synthetic `200 OK` response. Timer-based discovery with 5s retry interval, 30s interval
-once patched.
+Blocks `SetTypingIndicator` gRPC calls via .NET's built-in `DiagnosticListener`
+infrastructure. Instead of discovering and patching HttpClient/GrpcChannel handler chains
+(the previous 482-line approach), subscribes to `DiagnosticListener.AllListeners` which
+fires for ALL outbound HTTP requests regardless of which client makes the call.
+
+**How it works:**
+1. `ListenerObserver` subscribes to "HttpHandlerDiagnosticListener" / "System.Net.Http"
+2. `RequestObserver` intercepts `System.Net.Http.HttpRequestOut.Start` events
+3. Extracts the `HttpRequestMessage` from the diagnostic payload via reflection
+4. If the request path contains "SetTypingIndicator", redirects to `localhost:0` (silently fails)
+
+Checks `UprootedSettings` per-request so the toggle takes effect without restart.
+Case-insensitive URL matching. Original DiagnosticListener approach by Kurumi Nanase.
 
 ### Phase 4.5g: NSFW Filter
 
