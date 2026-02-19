@@ -169,7 +169,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | SilentTyping plugin entry: version `0.1.0` → `0.2.0`, `TestingStatus` `0` → `1` (beta). |
 | `hook/ContentPages.cs` | Fixed About > Status enabled plugin count: iterates `KnownPlugins` with same enabled-check as Plugins page (was counting ghost entries like `settings-panel` from legacy migration). Also: `Logger.Enable()` call on developer channel switch, `Logger.Disable()` + log reorder on stable channel switch. |
 | `hook/Logger.cs` | Added `Enable()` method for runtime re-enable when switching to developer channel. |
-| `hook/SidebarInjector.cs` | Save bar restore: replaced `ClearValue("IsVisibleProperty")` with `SetIsVisible(true)` — simpler, equivalent behavior. |
+| `hook/SidebarInjector.cs` | Save bar: replaced all `SetIsVisible`/`ClearValue` calls with `Opacity=0`/`MaxHeight=0`/`IsHitTestVisible=false` — avoids corrupting Root's `IsVisible` binding. `CollapseSaveBar()`/`RestoreSaveBar()` methods with `_saveBarCollapsed` flag for efficient LayoutUpdated intercept. |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
