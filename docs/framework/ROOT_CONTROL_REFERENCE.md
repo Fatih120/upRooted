@@ -28,7 +28,8 @@ This document is the authoritative reference for Root's custom controls, style c
 11. [Ping Color and Mention Highlighting](#ping-color-and-mention-highlighting)
 12. [App Startup Chain](#app-startup-chain)
 13. [Data Store and Persistence](#data-store-and-persistence)
-14. [DataStore Keys](#datastore-keys)
+14. [Session and Identity](#session-and-identity)
+15. [DataStore Keys](#datastore-keys)
 
 ---
 
@@ -462,6 +463,18 @@ Lifecycle:
 
 **Impact on DotNetBrowser discovery:** `_memberProfileViewModelFactory` is the exact field walked in the DotNetBrowser discovery chain (confirmed from SESSION_STATE.md ViewModel chain). This is the injection point for Phase 4.5 browser discovery.
 
+### DirectMessageOpenerService (109 lines, Helpers.Navigation)
+
+Constructor receives: `IRootSessionAccessor`, `CallingServiceFactory`, `BrowserService`, `PrivacyBlockedActionViewModelFactory`
+
+This is the `<directMessageOpenerService>P` field in the DotNetBrowser discovery chain (MainViewModel → _memberProfileViewModelFactory → <directMessageOpenerService>P → <browserService>P → ...).
+
+- `OpenDirectMessageAsync(GlobalUser, text, startCall)` — creates/opens DM, optionally sends message and starts call
+- `OpenDirectMessage(DirectMessageGuid, focusMessage, startCall)` — opens existing DM by ID
+- Uses `WeakReferenceMessenger` for tab navigation (CheckPopoutFocusMessage, SelectTabMessage, OpenDirectMessagePaneMessage)
+
+**DotNetBrowser chain confirmation**: The `BrowserService P_2` constructor parameter is the `<browserService>P` field that leads to `_engineManager` → `.Engine` → `.Profiles[0].Browsers.__values` → IBrowser.
+
 ---
 
 ## Message View Internals
@@ -765,6 +778,32 @@ Each settings category is represented by one `MenuItemPageContainerViewModel` wi
 - `MenuItemSelected` event (`Action<MenuItemPageContainerViewModel>`) — fired when item is selected
 - `SelectMenuItem()` fires the event; called when `SelectedMenuItemPageContainer` changes and Navigator is empty
 
+### Navigator (287 lines, Helpers.Navigation)
+
+`ObservableObject` subclass — manages the settings page navigation stack.
+
+Properties (all [ObservableProperty]):
+- `CurrentViewModel` (IViewModelBase?) — the currently displayed VM
+- `HasPendingChanges` (bool, default false) — controls SaveChangesView visibility
+- `CanSave` (bool, default true) — controls save button enabled state
+- `CanGoBack` (bool) — true when stack.Count > 1
+- `WebApiStatus` (WebApiStatus) — loading/success/failed
+- `PromptToDiscardChanges` (bool) — if true, Pop() prompts instead of discarding
+- `FirstViewModel` — bottom of stack
+- `Count` — stack depth
+
+Methods:
+- `Push(IViewModelBase)` — pushes VM, sets CurrentViewModel, updates CanGoBack
+- `Pop()` — if PromptToDiscardChanges && HasPendingChanges, fires DiscardChangesAndGoBackRequested event. Otherwise pops, disposes old VM, sets CurrentViewModel to new peek, updates CanGoBack.
+- `SaveChanges()` — fires SaveChangesRequested event
+- `RevertChanges()` — fires RevertChangesRequested event
+
+Events: SaveChangesRequested, RevertChangesRequested, DiscardChangesAndGoBackRequested
+
+Internal: `Stack<IViewModelBase>` navigation stack.
+
+**Impact for SidebarInjector**: Setting `HasPendingChanges = false` on the Navigator would hide the save bar via binding, avoiding the current opacity hack. To find the Navigator: `RootSettingsContainer.SelectedMenuItemPageContainer.Navigator`.
+
 ---
 
 ## Settings Page Pattern
@@ -967,6 +1006,66 @@ Encrypted credential storage — used for tokens and credentials, NOT for settin
 
 ---
 
+## Session and Identity
+
+### IRootSessionAccessor
+
+```csharp
+public interface IRootSessionAccessor : INotifyPropertyChanged {
+    RootSession? Session { get; }
+    void SetSession(RootSession);
+    void ClearSession();
+}
+```
+
+- Held by MainViewModel as `_rootSessionAccessor`
+- `RootSessionAccessor` implementation: simple ObservableObject wrapper around `Session` [ObservableProperty]
+
+### RootSession (505 lines)
+
+The core session object — holds ALL service references after login.
+
+Key service properties:
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `UserInfoService` | `IUserInfoService` | Current user info, `SessionUser` |
+| `UserBlockService` | `IUserBlockService` | Block/unblock users |
+| `FriendService` | `IFriendService` | Friend list management |
+| `TabService` | `ITabService` | Open tabs tracking |
+| `CommunityService` | `ICommunityService` | Community (server) management |
+| `FileUploadService` | `IFileUploadService` | File upload |
+| `NotificationService` | `INotificationService` | Push notifications |
+| `DirectMessageService` | `IDirectMessageService` | DMs |
+| `ActiveMediaRoomService` | `IActiveMediaRoomService` | Voice/video calls |
+| `SupportService` | `ISupportService` | Support tickets |
+| `NotificationCountService` | `AllNotificationCountService` | Badge counts |
+| `AssetService` | `IAssetService` | Asset management |
+| `LinkService` | `ILinkService` | Link preview/unfurl |
+
+Key identity:
+- `UserId` → `UserInfoService.SessionUser.Id` (UserGuid)
+- `DeviceId` → connection ClientToken DeviceId (DeviceGuid)
+
+Packet reader: reads `ClientHubPacket` from `IApiConnection.ReadPacketsAsync()`, dispatches by PacketType to the appropriate service handler (community, DM, notification, user status, friend, asset).
+
+Reconnect: epoch-based gate prevents stale reconnect attempts, warms up gRPC with `User.GetSelfAsync()` health check.
+
+**Access path**: `IRootSessionAccessor.Session.UserInfoService.SessionUser.Id` — this is how to get the current user's ID from anywhere with a DI reference.
+
+### IViewModelBase
+
+```csharp
+public interface IViewModelBase : INotifyDataErrorInfo, IDisposable {
+    bool IsTopMostViewModel { get; set; }
+    void ValidateProperty(string propertyName);
+}
+```
+
+Used by MainViewModel's ViewModels stack. IsTopMostViewModel marks the currently-visible overlay.
+
+---
+
 ## DataStore Keys
 
 Complete `DataStoreKeys` enum (68 entries):
@@ -1035,7 +1134,7 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 
 ---
 
-**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), DataStore keys, App startup chain
+**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, DirectMessageOpenerService (DotNetBrowser chain), message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), session and identity (IRootSessionAccessor/RootSession/IViewModelBase), DataStore keys, App startup chain
 **Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
 **For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
 *Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0*

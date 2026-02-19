@@ -19,6 +19,7 @@
 | `Root` | 0.9.92.0 | 1 | Root.exe entry point |
 | `RootApp.Client.Avalonia` | 0.9.92.0 | 99 | Main UI assembly — views, styles, themes, controls, settings |
 | `RootApp.Client.Domain` | 0.9.92.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
+| `RootApp.Client.CoreDomain` | 0.9.92.0 | 3 | Core domain (IRootSessionAccessor, RootSessionAccessor, RootSession) |
 | `Avalonia.Controls` | 11.3.12.0 | 3 | Framework controls (Application, CheckBox, ToggleSwitch) |
 | `Avalonia.Themes.Simple` | 11.3.12.0 | 1 | SimpleTheme base class |
 | `AvaloniaEdit` | 11.3.0.0 | 3 | Text editor theme resources |
@@ -35,6 +36,11 @@ Root (exe)
 
 RootApp.Client.Avalonia
 ├── App                                              → App.cs
+├── Helpers
+│   └── Navigation
+│       ├── Navigator                                → Navigator.cs
+│       └── DirectMessageOpenerService               → DirectMessageOpenerService.cs
+├── IViewModelBase                                   → IViewModelBase.cs
 ├── Controls
 │   ├── HexInputBorder                               → HexInputBorder.cs
 │   ├── MemberVisibilityOption                       → MemberVisibilityOption.cs
@@ -108,6 +114,11 @@ RootApp.Client.Avalonia
 │       ├── MessageView                              → MessageView.cs
 │       └── MessageViewModel                         → MessageViewModel.cs
 
+RootApp.Client.CoreDomain
+├── IRootSessionAccessor                                 → IRootSessionAccessor.cs
+├── RootSessionAccessor                                  → RootSessionAccessor.cs
+└── RootSession                                          → RootSession.cs
+
 RootApp.Client.Domain
 └── Helpers.Store
     ├── DataStoreKeys                                → DataStoreKeys.cs
@@ -175,6 +186,8 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `ConnectionBlockingViewModelFactory.cs` | 12 | `UI.Main.ConnectionBlockingViewModelFactory` | N | DI factory for ConnectionBlockingViewModel |
 | `StreamerModeBannerViewModel.cs` | 67 | `Controls.StreamerModeBannerViewModel` | N | Streamer mode toggle state |
 | `MenuItemPageContainerViewModel.cs` | 135 | `Controls.Settings.MenuItemPageContainerViewModel` | Y | Settings page container VM — page navigation, menu item selection |
+| `IViewModelBase.cs` | 12 | `RootApp.Client.Avalonia.IViewModelBase` | Y | ViewModel base interface — IsTopMostViewModel, ValidateProperty, IDisposable |
+| `DirectMessageOpenerService.cs` | 109 | `Helpers.Navigation.DirectMessageOpenerService` | Y | DM opener — DotNetBrowser discovery chain link, WeakReferenceMessenger tab navigation |
 
 ### Custom Controls
 
@@ -219,6 +232,7 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `IPage.cs` | 7 | `Controls.Settings.IPage` | Y | Settings page interface |
 | `MenuItemPageContainerView.cs` | 281 | `Controls.Settings.MenuItemPageContainerView` | N | Settings page container with menu navigation |
 | `MenuItemPageContainerViewModel.cs` | 135 | `Controls.Settings.MenuItemPageContainerViewModel` | Y | Settings page container VM |
+| `Navigator.cs` | 287 | `Helpers.Navigation.Navigator` | Y | Settings page navigation stack — push/pop, HasPendingChanges, save/revert events |
 
 ### Data Store / Persistence
 
@@ -229,6 +243,14 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `LocalDataStore.cs` | 271 | `RootApp.Client.Domain.Helpers.Store.LocalDataStore` | Y | Settings persistence implementation |
 | `LocalDataStoreExtensions.cs` | 232 | `RootApp.Client.Domain.Helpers.Store.LocalDataStoreExtensions` | Y | Extension methods for ILocalDataStore |
 | `SecureStorageImplementation.cs` | 86 | `RootApp.Client.Domain.Helpers.Store.SecureStorageImplementation` | Y | Encrypted credential storage |
+
+### Session / Core Domain
+
+| File | Lines | Namespace | Analyzed | Description |
+|------|------:|-----------|:--------:|-------------|
+| `IRootSessionAccessor.cs` | 14 | `RootApp.Client.CoreDomain.IRootSessionAccessor` | Y | Session accessor interface — INotifyPropertyChanged, SetSession/ClearSession |
+| `RootSessionAccessor.cs` | 47 | `RootApp.Client.CoreDomain.RootSessionAccessor` | Y | ObservableObject wrapper around Session [ObservableProperty] |
+| `RootSession.cs` | 505 | `RootApp.Client.CoreDomain.RootSession` | Y | Core session object — all service refs, packet dispatch, reconnect logic |
 
 ### Theme System
 
@@ -347,7 +369,6 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 - `CommunityTabViewModel` — community tab
 
 ### Services
-- `IRootSessionAccessor` — session/user info
 - Navigation service (how Root switches between pages)
 
 ### Markdown Internals (sub-types of RootMarkdownTextBlock)
@@ -363,7 +384,7 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 
 | Document | Source Dumps |
 |----------|-------------|
-| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), **MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation** |
+| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, **Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService** |
 | [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md) | ThemesDarkAxaml, ThemesLightAxaml, ThemesPureDarkAxaml |
 | [THEME_ENGINE_DEEP_DIVE.md](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | ThemeService, ThemeMapper, SimpleTheme (partial) |
 
