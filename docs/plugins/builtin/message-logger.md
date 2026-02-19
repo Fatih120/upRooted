@@ -1,131 +1,98 @@
 # Message Logger
 
-Logs deleted and edited messages so they remain visible in chat with visual indicators. Deleted messages appear with red styling; edited messages show their version history inline.
+Logs deleted messages so they remain visible in chat with visual indicators. Deleted messages appear with red styling. Edit detection is currently disabled.
 
-> **Status:** Planned -- not yet implemented
-> **Layer:** C# hook (Avalonia-native) -- chat is not rendered in DotNetBrowser
-> **Reference pattern:** [`hook/LinkEmbedEngine.cs`](../../../hook/LinkEmbedEngine.cs)
+> **Status:** Shipped WIP (v0.4.0) — deletion detection working, edit detection disabled
+> **Layer:** C# hook (Avalonia-native) — chat is not rendered in DotNetBrowser
+> **Files:** [`hook/MessageLogger.cs`](../../../hook/MessageLogger.cs), [`hook/MessageStore.cs`](../../../hook/MessageStore.cs)
 
 ---
 
 ## What it does
 
-When someone deletes a message, Root removes it from the chat entirely. When someone edits a message, Root replaces the content with no trace of the original. Message Logger intercepts these events, caches the original content, and modifies the visual tree to keep deleted/edited messages visible.
+When someone deletes a message, Root removes it from the chat entirely. Message Logger intercepts these events, caches the original content, and re-injects a styled replacement control into the visual tree so deleted messages remain visible.
 
 | Event | Default Root behavior | With Message Logger |
 |-------|----------------------|-------------------|
-| Message deleted | Message disappears from chat | Message stays, shown with red styling |
-| Message edited | Content silently replaced | New content shown, edit history accessible |
-
-This mirrors Vencord's MessageLogger plugin, adapted from DOM manipulation to Avalonia visual tree manipulation.
+| Message deleted | Message disappears from chat | Message stays, shown with red full-width stripe and 3px red left border |
+| Message edited | Content silently replaced | Edit detection disabled (false positives — see Known Limitations) |
 
 ## How it works
 
-### Detection: gRPC interception (preferred)
+### Detection: per-item async pollers
 
-Message deletion and edit events arrive as gRPC responses from Root's backend. Intercepting at the gRPC layer provides unambiguous signals:
+MessageLogger subscribes to the chat message collection's `CollectionChanged` event. When an item is removed, a background poller is spawned for that item:
 
-- **Deletion:** The gRPC response explicitly signals which message ID was removed
-- **Edit:** The gRPC response carries the new content for a message ID, allowing the previous version to be cached before the UI updates
+- Probes `HasBeenDeleted` (a boolean property on the message ViewModel) every 300ms for up to 3 seconds
+- If `HasBeenDeleted` becomes `true` within the window → genuine user deletion → re-inject the message
+- If the 3-second window expires without `true` → buffer management / scroll virtualization discard → ignored
 
-This approach requires the **gRPC message interception layer** -- a framework-level capability not yet built. See [gRPC Protocol Reference](../../research/GRPC_PROTOCOL.md) for the protocol details.
+This approach avoids the false-positive problem with naive `CollectionChanged` Remove listeners (Avalonia's `VirtualizingStackPanel` constantly removes items during scrolling).
 
-### Detection: visual tree watching (fallback)
+**Epoch-based cancellation:** Each poller carries the channel's epoch at spawn time. When the user switches channels, the epoch increments and all in-flight pollers self-cancel, preventing cross-channel leakage.
 
-Monitor the chat's `VirtualizingStackPanel` for child removals. This is less reliable because Avalonia's virtualization constantly adds and removes children as the user scrolls -- distinguishing a genuine deletion from recycling requires heuristics that will produce false positives.
-
-Visual tree watching alone is not sufficient for edit detection since the control is reused in-place with new text.
+**Per-type property cache:** A `Dictionary<Type, TypeProps>` handles multiple ViewModel types; nested `.Message` bridge property resolution finds `HasBeenDeleted` even when the collection item isn't the message directly.
 
 ### Storage
 
-Logged messages are stored in a flat file (not System.Text.Json -- broken in profiler context). Per-message record:
+Logged messages are stored by `MessageStore` (`hook/MessageStore.cs`) in a flat file:
 
-```
-Message ID
-Channel/room ID
-Author (display name or user ID)
-Original content
-Edit history (timestamped list of previous versions)
-Deletion timestamp (if deleted)
-```
+- **Location:** `{Root profile dir}/uprooted-message-log.dat`
+- **Format:** pipe-delimited append-only records — `MSG|EDIT|DEL` record types with URI-encoded fields
+- **Flush:** buffered writes every 5 seconds
+- **Retention:** configurable max message count (enforced on flush)
 
-A retention policy prevents unbounded growth:
-
-| Policy | Description |
-|--------|-------------|
-| Count-based | Keep the last N messages (e.g., 1000) |
-| Time-based | Keep messages from the last N hours (e.g., 24) |
-| Size-based | Cap the log file at N megabytes (e.g., 10) |
-
-The default policy and limits are TBD. All three options may be exposed as settings.
+No `System.Text.Json` — broken in profiler context. All serialization is manual string formatting.
 
 ### Display: deleted messages
 
-Deleted messages are re-injected into the visual tree using the same reflection-based Avalonia control creation as LinkEmbedEngine (Border, TextBlock, StackPanel via `AvaloniaReflection`).
+Deleted messages are re-injected as Discord-style full-width cards using reflection-based Avalonia control creation (`AvaloniaReflection`):
 
-Two display styles:
+- Semi-transparent red-tinted `Border` background
+- 3px red left accent border
+- Right-click "Clear message history" context menu
 
-- **Red overlay** -- the message content is shown inside a semi-transparent red-tinted Border. The message is fully visible.
-- **Red text** -- the message content is displayed in red text with a "[deleted]" label. More subtle.
-
-If "Collapse Deleted" is enabled, the deleted message is hidden behind a clickable "Show deleted message" control that expands on click.
-
-### Display: edited messages
-
-Edit history is shown below the current message content:
-
-- **Inline mode** -- previous versions appear as faded TextBlocks below the current text, each prefixed with a timestamp. Most recent edit on top.
-- **Tooltip mode** -- a small "(edited)" label appears after the message. Hovering or clicking shows the version history in a popup.
-
-Each previous version includes the timestamp of when it was replaced.
+Cards are tagged so the LinkEmbedEngine re-injection pattern can restore them after VirtualizingStackPanel recycling.
 
 ## Lifecycle
 
-**Initialization (Phase 4.5+):**
-1. Register gRPC interception handlers for message delete and message update responses
-2. Load the message log from the flat file into an in-memory cache
-3. Begin visual tree monitoring for chat content (to inject display controls for cached messages)
+**Initialization (Phase 4.5c):**
+1. Subscribe to the chat message collection's `CollectionChanged` event
+2. Load the message log from `MessageStore` into an in-memory cache
+3. Register per-collection poller infrastructure
 
 **Runtime:**
-1. On delete event: cache the message content, inject the deleted-message control into the visual tree
-2. On edit event: cache the previous content in the edit history, inject the edit-history control
-3. On scroll/virtualization: re-inject controls for cached messages as they come back into view
-4. Periodically flush the in-memory cache to the flat file
-5. Apply retention policy on flush (evict oldest entries past the limit)
+1. On `CollectionChanged` Remove: spawn async poller for the removed item
+2. Poller confirms `HasBeenDeleted = true` → cache content → re-inject deleted card
+3. Periodic flush of in-memory cache to `MessageStore`
+4. Retention policy applied on flush
 
 **Shutdown:**
-1. Flush any unsaved cache to disk
-2. Remove injected visual tree controls
-3. Deregister gRPC interception handlers
+1. Cancel all in-flight pollers (epoch increment)
+2. Flush remaining cache to disk
+3. Unsubscribe from collection events
 
 ## Settings
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| Log Deletes | bool | `true` | Log deleted messages |
-| Log Edits | bool | `true` | Log edited messages |
-| Delete Style | select | `"red overlay"` | How deleted messages appear: "red overlay" or "red text" |
-| Collapse Deleted | bool | `false` | Hide deleted message content behind click-to-reveal |
-| Inline Edits | bool | `true` | Show edit history inline below message vs. tooltip-only |
-| Ignore Bots | bool | `false` | Skip logging messages from bots |
-| Ignore Self | bool | `false` | Skip logging your own messages |
-| Ignore Users | text | *(empty)* | Comma-separated user IDs to exclude from logging |
+| Setting | INI key | Default | Description |
+|---------|---------|---------|-------------|
+| Log Deleted Messages | `MessageLogger.LogDeleted` | `true` | Enable deletion detection and re-injection |
+| Log Edited Messages | `MessageLogger.LogEdits` | `true` | Reserved — edit detection currently disabled |
+| Ignore Own Messages | `MessageLogger.IgnoreOwn` | `false` | Skip logging your own messages |
+| Max Messages | `MessageLogger.MaxMessages` | `500` | Retention limit (enforced on flush) |
 
 Settings are managed through `UprootedSettings` (INI-based, 10s TTL cache).
 
-## Prerequisites
-
-This plugin depends on capabilities that are not yet built:
-
-1. **gRPC message interception layer** -- framework-level capability to intercept gRPC-web traffic between Root's UI and its backend. Required for reliable deletion/edit detection. Also needed by the planned ClearURLs plugin.
-2. **Reliable visual tree change detection** -- utility to distinguish genuine content changes from VirtualizingStackPanel recycling. Useful as a supplementary signal but not sufficient alone.
-
 ## Known Limitations
 
-- **No System.Text.Json** -- all serialization must use manual string formatting or INI-style parsing due to MissingMethodException in profiler context
-- **VirtualizingStackPanel recycling** -- injected controls are destroyed when scrolled out of view and must be re-injected when scrolled back. The LinkEmbedEngine pattern handles this but adds complexity.
-- **Storage is local-only** -- logged messages are stored on the user's machine. There is no sync across devices.
-- **Retention policy discards data** -- once a logged message is evicted by the retention policy, it cannot be recovered
-- **No image/attachment logging** -- only text content is logged. Deleted images or file attachments are not cached.
-- **gRPC protocol changes** -- Root backend updates may change the gRPC message format, breaking detection. The interception layer will need maintenance as Root evolves.
-- **Performance impact** -- caching every message's content in memory adds baseline memory usage proportional to the retention window
+- **Edit detection disabled** — `PollEdits` is stubbed out. False positives from content changes during message send/render made it unreliable. Needs a redesign (likely: snapshot-on-Add only for messages that arrived via Add events, not the initial collection snapshot).
+- **Injection position** — deleted cards are currently appended near the bottom of the visible area, not at the original message position. Needs position tracking.
+- **VirtualizingStackPanel recycling** — injected cards are destroyed when scrolled out of view and must be re-injected when scrolled back. The LinkEmbedEngine pattern handles this but adds complexity.
+- **No System.Text.Json** — all serialization uses manual string formatting (pipe-delimited) due to MissingMethodException in profiler context.
+- **Storage is local-only** — no sync across devices.
+- **No image/attachment logging** — only text content is logged.
+- **Performance impact** — per-item pollers add baseline threading overhead proportional to message deletion frequency.
+
+## Diagnostics
+
+Enable `DIAG-INJ` / `DIAG-FLUSH` logging by checking the hook log. The analysis script `scripts/analyze-msglogger.ps1` parses hook log output for `MsgLogger` and `DIAG` entries and summarizes deletion events, poller outcomes, and injection counts.

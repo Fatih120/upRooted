@@ -52,17 +52,9 @@ Sentry XHR blocking redirects intercepted requests to `about:blank`, which cause
 Settings panel injection uses an 80ms debounce on MutationObserver callbacks. Rapid DOM mutations during Root's page load can still trigger repeated injection attempts, causing visible lag.
 - Files: `src/plugins/settings-panel/panel.ts`
 
-**`after` patch handler not implemented**
-The `after` callback is defined in the `Patch` type interface but the plugin loader does not invoke it at runtime. Plugins defining `after` handlers get no behavior -- the handler is silently ignored.
-- Files: `src/types/plugin.ts`, `src/core/pluginLoader.ts`
-
 **Browser-side settings not persisted to disk**
 Runtime changes made via the browser-side settings panel only update the in-memory `window.__UPROOTED_SETTINGS__` object. The browser layer (running in DotNetBrowser's incognito Chromium) has no file system access to write changes back. Settings changed at runtime take effect immediately but revert on Root restart. The installer/CLI can write settings to disk, so initial configuration persists -- only runtime UI changes are session-only.
 - Files: `src/plugins/settings-panel/`, `src/core/settings.ts`
-
-**Shallow settings merge**
-Settings loading merges user settings with defaults using a shallow object spread. Nested objects (like `plugins`) get completely replaced rather than merged. If a user's saved settings contain only some plugin entries, other plugins lose their defaults.
-- Files: `src/core/settings.ts`
 
 ---
 
@@ -70,30 +62,12 @@ Settings loading merges user settings with defaults using a shallow object sprea
 
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
-### ~~Fix C# settings persistence~~ (DONE)
-INI-based `UprootedSettings` is fully implemented. The hook layer reads and writes `uprooted-settings.ini` with key=value pairs for theme, plugins, custom colors, etc.
-
 ### Complete MessageLogger plugin
-The MessageLogger plugin (Phase 4.5c) has working deletion detection via `CollectionChanged` Remove events with a snapshot-based settling filter to eliminate false positives. Still needed:
-- **Edit detection**: Currently disabled due to false positives. Need a reliable approach that doesn't trigger on content changes during message send/render.
-- **Discord-style edit indicators**: Show original content faded above new content with "(edited)" label.
+MessageLogger (shipped WIP in v0.4.0) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch). Still needed:
+- **Validate async deletion pollers**: Needs real-world confirmation that `HasBeenDeleted` is set within the 3s window.
+- **Edit detection**: Currently disabled due to false positives from content changes during message send/render.
+- **Discord-style edit indicators**: Show original content faded above the new content with an "(edited)" label.
 - Files: `hook/MessageLogger.cs`
-
-### Implement theme click handlers in native UI
-The native Avalonia Themes page shows themes with "ACTIVE" badges but has no click handlers. Add theme selection behavior so users can switch themes from the native settings UI.
-- Files: `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
-
-### Add plugin toggle functionality in native UI
-The native Plugins page lists discovered plugins but cannot toggle them on or off. Wire up toggle controls to the settings persistence layer.
-- Files: `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
-
-### Implement `after` patch handler
-The plugin loader currently ignores `after` callbacks defined in plugin patches. Implement post-execution invocation so plugins can observe return values and side effects.
-- Files: `src/core/pluginLoader.ts`, `src/types/plugin.ts`
-
-### Implement deep merge for settings
-Replace the shallow spread merge in settings loading with a recursive merge that correctly combines nested objects (especially the `plugins` map).
-- Files: `src/core/settings.ts`
 
 ---
 
@@ -104,7 +78,7 @@ Next 2-3 releases. Expanding the platform and improving the developer/user exper
 ### Plugin marketplace / repository
 A discoverable listing of community plugins. Could be a static registry (JSON manifest in a GitHub repo) or a simple web interface. Plugin authors would submit metadata; users would browse and install from within Uprooted.
 
-### Auto-update mechanism — SHIPPED (v0.3.6-rc)
+### Auto-update mechanism — SHIPPED (v0.4.0)
 In-process auto-updater (`hook/AutoUpdater.cs`) checks GitHub releases every 6 hours, downloads a single encrypted `.uprpkg` package, decrypts and unpacks 6 update files, and overwrites them in-place. Developer channel with password-gated access to pre-release builds. Changes take effect on next Root restart.
 
 ### Linux support improvements
@@ -165,7 +139,7 @@ Several Root findings involve injection vectors (C5 open redirect via `restart(u
 
 ### Update mechanism security
 
-The auto-updater (shipped v0.3.6-rc) downloads an encrypted `.uprpkg` package from GitHub releases over HTTPS. Current protections:
+The auto-updater (shipped v0.4.0) downloads an encrypted `.uprpkg` package from GitHub releases over HTTPS. Current protections:
 
 - **Encrypted package format** — multi-layer XOR with 64-byte master key + per-build 32-byte random nonce + position-dependent key derivation. Prevents casual inspection of release artifacts.
 - **Staging + verification** — files are unpacked to a staging directory, verified non-empty and complete, then copied to production. Partial downloads or corruption abort without touching production files.
@@ -199,18 +173,14 @@ See [Planning Reference](dev/PLANNING_REFERENCE.md) for the full analysis.
 Already tracked in Known Issues (Critical) and Short-term Goals. Additional debt items related to settings:
 
 - **Settings file format migration path.** The INI-style workaround in `hook/UprootedSettings.cs` is a stopgap. Define a migration strategy for when System.Text.Json is eventually resolved (new .NET host, separate process, or alternative parser). The INI format should be forward-compatible with the eventual JSON format.
-- **Shallow merge in browser-side settings.** Already tracked in Short-term Goals. The additional debt: ensure that the deep merge implementation handles arrays (plugin lists) correctly and does not duplicate entries on repeated merges.
+- **Shallow merge in browser-side settings.** `deepMerge` is now implemented in `src/core/settings.ts`. Ongoing: ensure the implementation handles arrays (plugin lists) correctly and does not duplicate entries on repeated merges.
 
 ### Code quality items
 
 These items from CONCERNS.md are not yet on the roadmap:
 
-- **Non-null assertion casts in sentry-blocker.** The `originalFetch!.call()` pattern in `src/plugins/sentry-blocker/index.ts` risks crashes if `stop()` is called while requests are in-flight. Add runtime null guards before using cached originals.
 - **`any[]` typing for XMLHttpRequest parameters.** The rest parameters in `src/plugins/sentry-blocker/index.ts` lose type information. Type them as `[async?: boolean, username?: string, password?: string]` per the MDN XMLHttpRequest.open() spec.
-- **MutationObserver circular triggering.** The settings panel observer watches the entire document body, including its own injected elements. Scope the observer to the sidebar subtree only, and add a guard to skip callbacks when the mutation source is a `data-uprooted` element.
-- **Theme variable cleanup duplication.** `src/plugins/themes/index.ts` maintains two separate lists of CSS variable names for cleanup. Consolidate into a single source of truth computed once at module load.
-- **Event listener memory leaks.** Sidebar click listeners and item handlers in `src/plugins/settings-panel/panel.ts` accumulate without cleanup on repeated settings page visits. Switch to event delegation on a stable parent element and clean up in `stopObserving()`.
-- **Window global exposure.** `window.__UPROOTED_LOADER__` and `window.__UPROOTED_SETTINGS__` are accessible to any script in the page context. Freeze the settings object with `Object.freeze()` to prevent tampering, and consider restricting loader access to plugin management only.
+- **Theme variable cleanup duplication.** `src/plugins/themes/index.ts` may still maintain separate CSS variable name lists for cleanup. Verify and consolidate into a single source of truth computed from `generateCustomVariables` keys.
 
 ### Linter and formatter configuration
 
@@ -281,7 +251,7 @@ Uprooted injects into a closed-source application that updates independently. Tr
 
 | Uprooted Version | Root Versions Tested | Status | Notes |
 |-------------------|---------------------|--------|-------|
-| 0.3.6-rc (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
+| 0.4.0 (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
 
 Maintain this matrix as new Root versions are released. When a user reports a bug, the first diagnostic question should be which Root version they are running.
 
@@ -334,4 +304,4 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-02-18 — synced with v0.4.0 (removed completed goals, updated version table, fixed code quality items)*
