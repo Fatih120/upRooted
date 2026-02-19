@@ -10,7 +10,7 @@
 
 Short-term tasks ready to be picked up. Roughly priority-ordered.
 
-- [ ] **MessageLogger: validate async deletion pollers** — Per-item async pollers deployed (HasBeenDeleted probe every 300ms for 3s, epoch-based cancellation on channel switch). Needs real-world validation: trigger actual message deletions and run `scripts/analyze-msglogger.ps1` to confirm HasBeenDeleted is set within the 3s window. Then fix injection position (insert deleted cards near original message position, not at bottom).
+- [ ] **MessageLogger: validate async deletion pollers** — Per-item async pollers deployed (HasBeenDeleted probe every 300ms for 3s, epoch-based cancellation on channel switch). Injection position fixed (order-based, not timestamp). Needs real-world validation: trigger actual message deletions and run `scripts/analyze-msglogger.ps1` to confirm HasBeenDeleted is set within the 3s window.
   - Files: `hook/MessageLogger.cs`
 
 - [ ] **MessageLogger: fix edit detection** — Edit detection (`PollEdits`) is currently disabled due to false positives from content changes during message send/render. Need a reliable approach — likely snapshot-on-Add (only compare content of messages that arrived via Add events, not initial snapshot) or property-change subscription if Root exposes one.
@@ -24,10 +24,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
-
-- [ ] **Refine ProfileBadgeInjector heuristics** — Detection is now event-driven (OverlayLayer CollectionChanged) with dev-username gating. Still needed: check tree dump logs from first real popup detection to refine `IsProfilePopup` heuristic (currently matches any popup with avatar image + large text, may false-positive on non-profile popups).
-  - Files: `hook/ProfileBadgeInjector.cs`
-
 
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
@@ -86,6 +82,8 @@ Move completed items here with the date.
 - [x] **Fix oEmbed parsing crash** (2026-02-17) — `DecodeJsonString` used `Regex.Replace` with lambda `MatchEvaluator` which was trimmed in Root's binary. Replaced with manual `\uXXXX` loop. Fixed `ReadAsStringAsync` → `ReadAsStreamAsync` for trimmed charset methods. Normalized fixupx/fxtwitter/fixvx URLs to vxtwitter.com for richer OG metadata with images.
 - [x] **Plugin toggle functionality** (2026-02-18) — Plugin toggles save state to settings, show restart banner when state diverges from initial (hides on revert). Themes apply live (no restart needed). Restart button launches new Root.exe and exits.
 - [x] **ProfileBadgeInjector** (2026-02-18) — "Uprooted Dev" badge on profile popups for known developer usernames only (hardcoded `DeveloperUsernames` HashSet). Event-driven detection via OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups. Phase 4.5e startup delay reduced from 25s to 5s.
+- [x] **Refine ProfileBadgeInjector heuristics** (2026-02-18) — `IsProfilePopup` tightened: avatar minimum 30px→40px; `StatusWords` HashSet ("Online"/"Away"/"Busy"/"Offline"/"Do Not Disturb"); `textBlockCount`; conjunction now requires `hasRolesText` OR `(hasLargeText AND hasStatusText)` OR `(hasLargeText AND textBlockCount≥3)`. Rejects notification toasts (avatar + sender name, no status word, ≤2 TextBlocks).
+  - Files: `hook/ProfileBadgeInjector.cs`
 - [x] **Restart banners + Diagnostics Open button** (2026-02-18) — Plugins page: state-aware amber restart banner. Updates section: green restart banner after update applied. Both with Restart button. DIAGNOSTICS card: "Open" button opens log file in Explorer.
 - [x] **Reddit link embeds** (2026-02-18) — Dedicated handler in LinkEmbedEngine with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (#FF4500) accent color. Falls through to generic OG if no title found. Also fixed: image embed borders (all 4 corners rounded), HTTP status/Content-Type validation in `HttpGetBytes`, OG fallback for image-extension URLs that serve HTML (Zipline `/view/`, `/u/`), robust OG regex for meta tags with extra attributes.
 - [x] **Custom ping/reply highlight color** (2026-02-18) — Standalone `CustomPingColor` setting in UprootedSettings that persists across theme switches. "HIGHLIGHT OVERRIDE" card on Themes page with toggle indicator, color input row, swatch with color picker popup, reset button. ThemeEngine overrides `HighlightForegroundColor`, `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (0x60 alpha) in both Styles[0].Resources and injected MergedDictionary. Applied as Phase 6 after theme apply + after live preview updates. Restored to theme defaults on clear.
