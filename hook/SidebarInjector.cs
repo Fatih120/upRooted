@@ -49,7 +49,6 @@ internal class SidebarInjector
     // Save bar (freeze prevention for Revert button)
     private object? _saveBar;                            // Root's save bar container (hide when Uprooted pages active)
     private object? _revertButton;                       // Revert button inside save bar (PointerPressed interception)
-    private bool _saveBarWasVisible = false;              // Original save bar visibility before we hid it
 
     // Header state (back arrow hidden + title set when Uprooted pages active)
     private object? _backButton;                         // The back arrow RootSvgButton in header (left side)
@@ -288,10 +287,6 @@ internal class SidebarInjector
             _saveBar = layout.SaveBar;
             if (_saveBar != null)
             {
-                _saveBarWasVisible = _r.GetIsVisible(_saveBar);
-            }
-            if (_saveBar != null)
-            {
                 _revertButton = _walker.FindRevertButton(_saveBar);
                 if (_revertButton != null)
                 {
@@ -448,7 +443,7 @@ internal class SidebarInjector
             // Step 5: Restore back button and save bar visibility
             RestoreBackButton();
             if (_saveBar != null)
-                _r.SetIsVisible(_saveBar, _saveBarWasVisible);
+                _r.ClearValue(_saveBar, "IsVisibleProperty");
 
             // Step 6: Remove our content from content Panel
             RemoveContentPage();
@@ -485,7 +480,6 @@ internal class SidebarInjector
         _activeContentPage = null;
         _activePage = null;
         _hiddenContentChildren.Clear();
-        _saveBarWasVisible = false;
         _versionTextBlock = null;
         _versionContainer = null;
         _lastListBoxIdx = -1;
@@ -809,14 +803,6 @@ internal class SidebarInjector
                 _activeContentPage = page;
             }
 
-            // Snapshot save bar visibility BEFORE deselection — deselection triggers
-            // Root's change detection which shows the save bar asynchronously.
-            // We must capture the real state before our action contaminates it.
-            if (_saveBar == null && _layoutContainer != null)
-                _saveBar = _walker.FindSaveBar(_layoutContainer);
-            if (_saveBar != null)
-                _saveBarWasVisible = _r.GetIsVisible(_saveBar);
-
             // Deselect Root's ListBox items (triggers Root's "no tab" state with back arrow)
             if (_listBox != null)
             {
@@ -882,12 +868,15 @@ internal class SidebarInjector
         // Only restore save bar when transitioning away from an Uprooted page.
         // When switching between Root tabs, don't touch Root's save bar —
         // it may be legitimately visible due to real unsaved settings changes.
-        if (wasOnUprootedPage)
+        //
+        // Use ClearValue instead of SetIsVisible: our SetIsVisible(false) created a
+        // local value override that sits above Root's data binding in Avalonia's
+        // property priority system. SetIsVisible(true) would also be a local override,
+        // permanently disconnecting Root's binding. ClearValue removes the local
+        // override entirely, letting Root's ViewModel binding reassert control.
+        if (wasOnUprootedPage && _saveBar != null)
         {
-            if (_saveBar == null && _layoutContainer != null)
-                _saveBar = _walker.FindSaveBar(_layoutContainer);
-            if (_saveBar != null)
-                _r.SetIsVisible(_saveBar, _saveBarWasVisible);
+            _r.ClearValue(_saveBar, "IsVisibleProperty");
         }
 
         UpdateNavHighlights();
@@ -1224,12 +1213,7 @@ internal class SidebarInjector
             }
         }
         if (_saveBar != null)
-        {
-            // Don't record _saveBarWasVisible here — it was captured before ListBox
-            // deselection. Recording now would capture Root's post-deselection state
-            // (always visible) instead of the real baseline.
             _r.SetIsVisible(_saveBar, false);
-        }
     }
 
     /// <summary>
