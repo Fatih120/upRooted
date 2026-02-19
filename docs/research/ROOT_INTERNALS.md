@@ -97,25 +97,25 @@ The three layers interact through well-defined boundaries:
 
 ```
 +----------------------------------------------------------+
-|                Root.exe (.NET 10 Process)                 |
+|                Root.exe (.NET 10 Process)                |
 |                                                          |
 |  +------------------+     +---------------------------+  |
-|  | Avalonia UI       |     | DotNetBrowser (Chromium)  |  |
-|  | - Window chrome   |     | - WebRTC voice/video      |  |
-|  | - Settings pages  |     | - OAuth flows             |  |
-|  | - Sidebar nav     |     | - Sub-app iframes         |  |
-|  | - Chat UI (native)|     |   (polls, tasks, etc.)    |  |
-|  | - Community views |     |                           |  |
+|  | Avalonia UI       |     | DotNetBrowser (Chromium) |  |
+|  | - Window chrome   |     | - WebRTC voice/video     |  |
+|  | - Settings pages  |     | - OAuth flows            |  |
+|  | - Sidebar nav     |     | - Sub-app iframes        |  |
+|  | - Chat UI (native)|     |   (polls, tasks, etc.)   |  |
+|  | - Community views |     |                          |  |
 |  +--------+---------+     +-------------+-------------+  |
 |           |                             |                |
-|           |    Binary IPC (localhost)    |                |
+|           |    Binary IPC (localhost)   |        v       |
 |           |    Named pipes              |                |
 |           +-------- JS Bridges ---------+                |
 |                                                          |
-|  +---------------------------------------------------+  |
-|  | Uprooted C# Hook          | Uprooted TS Layer     |  |
-|  | (reflection, visual tree)  | (DOM, bridge proxy)   |  |
-|  +---------------------------------------------------+  |
+|  +---------------------------------------------------+   |
+|  | Uprooted C# Hook          | Uprooted TS Layer     |   |
+|  | (reflection, visual tree)  | (DOM, bridge proxy)  |   |
+|  +---------------------------------------------------+   |
 +----------------------------------------------------------+
 ```
 
