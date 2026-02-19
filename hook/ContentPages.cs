@@ -530,34 +530,6 @@ internal static class ContentPages
             r.AddChild(page, linksCard);
         }
 
-        // Card 4: Hook Info (technical details)
-        var hookCard = CreateCard(r);
-        if (hookCard != null)
-        {
-            r.SetMargin(hookCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var hookTitle = CreateSectionHeader(r, "HOOK INFO", font);
-            r.AddChild(cardContent, hookTitle);
-
-            var hookText = r.CreateTextBlock(
-                "Uprooted is loaded via .NET CLR Profiler into Root's process. " +
-                "It persists across restarts via environment variables. " +
-                "The profiler hooks into Root's .NET runtime to inject the Uprooted module.",
-                13, TextMuted);
-            if (hookText != null)
-            {
-                ApplyFont(r, hookText, font);
-                r.SetTextWrapping(hookText, "Wrap");
-                r.SetMargin(hookText, 0, 16, 0, 0);
-            }
-            r.AddChild(cardContent, hookText);
-
-            r.SetBorderChild(hookCard, cardContent);
-            r.AddChild(page, hookCard);
-        }
-
         // Card 5: Log file path (diagnostics)
         var logCard = CreateCard(r);
         if (logCard != null)
