@@ -1916,11 +1916,6 @@ internal class ThemeEngine
                 if (brush != null) _r.AddResource(styleRes, "HighlightForegroundBrush", brush);
                 var selColor = _r.ParseColor(alphaHex);
                 if (selColor != null) _r.AddResource(styleRes, "TextSelectionHighlightColor", selColor);
-                // Override ThemeAccentBrush family — what Root actually uses for mention border
-                var accentColor = _r.ParseColor(hex);
-                if (accentColor != null) _r.AddResource(styleRes, "ThemeAccentColor", accentColor);
-                var accentBrush = _r.CreateBrush(hex);
-                if (accentBrush != null) _r.AddResource(styleRes, "ThemeAccentBrush", accentBrush);
             }
             catch (Exception ex) { Logger.Log("Theme", "Ping override Styles[0] error: " + ex.Message); }
         }
@@ -1941,11 +1936,6 @@ internal class ThemeEngine
                 if (selColor != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColor", selColor);
                 var selBrush = _r.CreateBrush(alphaHex);
                 if (selBrush != null) _r.AddResource(_injectedDict, "TextSelectionHighlightColorBrush", selBrush);
-                // Override ThemeAccentBrush family in MergedDictionary as well
-                var accentColor2 = _r.ParseColor(hex);
-                if (accentColor2 != null) _r.AddResource(_injectedDict, "ThemeAccentColor", accentColor2);
-                var accentBrush2 = _r.CreateBrush(hex);
-                if (accentBrush2 != null) _r.AddResource(_injectedDict, "ThemeAccentBrush", accentBrush2);
             }
             catch (Exception ex) { Logger.Log("Theme", "Ping override MergedDict error: " + ex.Message); }
         }
