@@ -42,6 +42,7 @@ Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The r
 
 ### Analyze existing dumps (marked "N" — not yet distilled into docs)
 
+**Style files:**
 - [ ] **Analyze Style_DropDownButton.cs** (136 lines) — DropDownButton: BackgroundTertiary bg, Border border
 - [ ] **Analyze Style_DragTabItem.cs** (54 lines) — DragTabItem: draggable tab styling
 - [ ] **Analyze Style_FlyoutPresenter.cs** (55 lines) — FlyoutPresenter: popup container
@@ -54,6 +55,29 @@ Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The r
 - [ ] **Analyze Style_TabsControl.cs** (48 lines) — TabsControl: tab container
 - [ ] **Analyze Style_TabsTheme.cs** (53 lines) — TabsTheme: tab visual theme
 - [ ] **Analyze StylesAll.cs** (5,228 lines) — Aggregate of all 27 style registrations; useful for understanding load order
+
+**Newly split — high priority (unblocks active work):**
+- [ ] **Analyze RootSettingsContainer.cs** (990 lines) — Settings page host: save bar, page switching, revert. Fixes save bar collapse hack in SidebarInjector.
+- [ ] **Analyze MainViewModel.cs** (400 lines) — Top-level VM: DataContext chain root, navigation, DI. Improves DotNetBrowser discovery.
+- [ ] **Analyze RootMessageItemsControl.cs** (378 lines) — Virtualized message list. Critical for MessageLogger: reveals recycling strategy.
+- [ ] **Analyze RootMenuFlyout.cs** (97 lines) — Context menu. Prerequisite for Translate plugin.
+- [ ] **Analyze MainWindow.cs** (317 lines) — Top-level window: title bar, tray, close/minimize.
+- [ ] **Analyze MainView.cs** (259 lines) — Main content shell: hosts RootSplitView, navigation.
+- [ ] **Analyze ILocalDataStore.cs** (13 lines) + **LocalDataStore.cs** (271 lines) + **LocalDataStoreExtensions.cs** (232 lines) — Settings persistence: full API surface for per-user settings.
+
+**Newly split — medium priority (useful context):**
+- [ ] **Analyze RootTextbox.cs** (996 lines) — Custom textbox with validation, character limit, helper text
+- [ ] **Analyze RootConfirmationControl.cs** (901 lines) — Confirmation dialog (delete/leave/ban flows)
+- [ ] **Analyze RootMessageScrollViewer.cs** (645 lines) — Message list scroll container, load-more behavior
+- [ ] **Analyze RootScrollViewer.cs** (431 lines) — Custom scroll viewer
+- [ ] **Analyze SaveChangesView.cs** (396 lines) — Settings save/revert bar UI
+- [ ] **Analyze RootMultiCheckBox.cs** (478 lines) — Multi-option checkbox group
+- [ ] **Analyze RootMemberVisibilitySwitch.cs** (747 lines) — Member visibility toggle
+- [ ] **Analyze MenuItemPageContainerView.cs** (281 lines) + **MenuItemPageContainerViewModel.cs** (135 lines) — Settings page container
+- [ ] **Analyze RootSvgImage.cs** (144 lines) — SVG image with per-theme path binding
+- [ ] **Analyze RootImageLoader.cs** (178 lines) — Image loading control
+- [ ] **Analyze RootFlyout.cs** (172 lines) — Flyout popup base
+- [ ] **Analyze SecureStorageImplementation.cs** (86 lines) — Encrypted credential storage
 
 ### Complete partial analysis
 
@@ -70,24 +94,14 @@ Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The r
 
 ### Decompile new classes (not yet in ilspy-dumps/)
 
-High-value targets for future ILSpy decompilation sessions:
+Remaining targets after batch split (Controls, Settings, UI.Main, Domain.Helpers.Store now done):
 
-- [ ] **Decompile MainWindow / MainView** — Top-level shell. Needed for understanding Root's window structure and DataContext chain.
-- [ ] **Decompile RootSettingsContainer** — Settings page host. Referenced in XamlIlTrampolines. Would reveal save/revert bar structure (currently discovered via visual tree probing).
-- [ ] **Decompile RootMenuFlyout** — Context menu control. Required for Translate plugin (right-click "Translate" menu item injection).
-- [ ] **Decompile RootMarkdownTextBlock** — Markdown renderer (CTextBlock, CSpan, CHyperlink, CRun, CCode). Understanding this unlocks message content manipulation plugins.
-- [ ] **Decompile RootMessageItemsControl** — Message list virtualized container. Critical for MessageLogger and any plugin that injects into the message flow.
-- [ ] **Decompile MainViewModel** — Top-level ViewModel. DataContext chain root for DotNetBrowser discovery and navigation.
-- [ ] **Decompile ILocalDataStore** — Settings persistence interface. Would reveal all available settings access patterns.
 - [ ] **Decompile IRootSessionAccessor** — Session/user info service. Needed for per-user features.
-- [ ] **Decompile RootSvgImage** — SVG image with per-theme path binding
-- [ ] **Decompile RootSvgButton** — Icon button (styled in Style_SvgButton.cs)
-- [ ] **Decompile RootScrollViewer / RootScrollBarThumb** — Custom scroll controls
-- [ ] **Decompile RootColorPicker** — Color picker (styled in Style_RootColorPicker.cs)
-- [ ] **Decompile RootImageLoader** — Image loading control (styled in Style_RootImageLoader.cs)
 - [ ] **Decompile profile popup views** — Profile popup structure. Would refine ProfileBadgeInjector's `IsProfilePopup` heuristic.
 - [ ] **Decompile channel list / DM list views** — Channel sidebar. Low priority until channel-related plugins are planned.
 - [ ] **Decompile navigation service** — How Root switches between pages. Would enable programmatic navigation.
+- [ ] **Decompile MembersViewModel / CommunityLogViewModel / CommunityTabViewModel** — Referenced in XamlIlTrampolines, not yet extracted.
+- [ ] **Decompile CTextBlock / CSpan / CHyperlink / CRun / CCode** — Markdown internals (sub-types of RootMarkdownTextBlock). Unlocks message content manipulation.
 
 ## Ideas / Backlog
 
