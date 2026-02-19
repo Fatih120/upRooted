@@ -19,7 +19,8 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 │   ├── watch-log.md            # /watch-log — tail the hook log file
 │   ├── diagnose.md             # /diagnose — check installation health
 │   ├── session-state.md        # /session-state — update SESSION_STATE.md + NEW-SESSION.md
-│   └── nose.md                 # /nose <ver> — bump all version references
+│   ├── nose.md                 # /nose <ver> — bump all version references
+│   └── release.md              # /release <ver> — full release pipeline (doc sweep + version bump + build + ship)
 ├── agents/                     # Specialized subagents
 │   └── uprooted-reviewer.md   # Code reviewer (critical rules, conventions)
 └── skills/                     # Knowledge skills (auto-loaded on relevant queries)
@@ -80,6 +81,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 | `/diagnose` | Check installation health: files, env vars, HTML patches, settings, log | When something isn't working after deployment |
 | `/session-state` | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history | After a work cycle, before ending session |
 | `/nose <ver>` | Bump all version refs (with content freshness audit) | Release prep |
+| `/release <ver>` | Full release pipeline: doc sweep + version bump + build + changelog audit + commit + tag + push (two user gates) | Major/minor releases |
 
 **Typical workflows:**
 
@@ -88,6 +90,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 - **Debug:** `/diagnose` → fix → `/deploy` → retest
 - **After work:** commit + push → `/ok` (sync all docs with committed code)
 - **End of session:** `/ok` covers session state, or `/session-state` for a lighter update
+- **Release:** `/release 0.5.0` — full pipeline with two user gates before ship
 
 ### Agent: uprooted-reviewer
 

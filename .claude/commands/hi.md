@@ -48,6 +48,7 @@ This command has two phases: **orient** (read core context, summarize, ask what'
      | `/diagnose` | Check installation health |
      | `/session-state` | Update SESSION_STATE.md + NEW-SESSION.md |
      | `/nose <ver>` | Bump all version references |
+     | `/release <ver>` | Full release pipeline — doc sweep, version bump, build, changelog audit, commit, tag, push |
 
      Update this table if commands have been added/removed/renamed since this file was last edited — read the actual contents of `.claude/commands/` to get the current list.
 
