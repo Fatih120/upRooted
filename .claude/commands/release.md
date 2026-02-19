@@ -1,6 +1,6 @@
 ---
 name: release
-description: Full release pipeline — doc sweep, version bump, build verification, changelog audit, commit, tag, push
+description: Full release pipeline — doc sweep, version bump, build verification, changelog audit, commit, tag, push, CI build monitoring, artifact verification
 allowed-tools:
   - Bash
   - Read
@@ -353,12 +353,7 @@ At this point only release-related files should be modified — the user has rev
 ### 6c. Commit
 
 ```bash
-git commit -m "$(cat <<'EOF'
-release: v<version>
-
-Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
-EOF
-)"
+git commit -m "release: v<version>"
 ```
 
 ### 6d. Tag
@@ -388,17 +383,161 @@ Release v<version> shipped.
   Tag:    v<version>
   Branch: main -> origin/main
 
-Next steps:
-  1. GitHub Actions -> "Build Installer" -> Run workflow:
-     - Version: <version> (or leave blank to read from package.json)
-     - Pre-release: <true if IS_PRERELEASE, false otherwise>
-  2. GitHub Actions -> "Build Linux Installer" -> Run workflow (same inputs)
-  3. After both workflows complete, verify GitHub releases page has:
-     - Uprooted-<version>-Setup.exe
-     - auto-update.uprpkg
-     - Linux artifacts (Uprooted-<version>-linux-amd64)
-  4. If stable release, verify public repo release notes match CHANGELOG_PUBLIC.md.
+Proceeding to trigger and monitor CI builds...
 ```
+
+---
+
+## Phase 8: Trigger, Monitor, and Verify CI Builds
+
+This phase triggers both GitHub Actions workflows, monitors them to completion, and verifies all release artifacts are present on both repos.
+
+### 8a. Ask whether to publish to public repo
+
+Ask via `AskUserQuestion`:
+- **Private + Public** — trigger both workflows with `publish_public=true` (releases to both `uprooted-private` and `watchthelight/uprooted`)
+- **Private only** — trigger with `publish_public=false` (only `uprooted-private` gets a release)
+- **Skip CI** — don't trigger workflows (user will do it manually)
+
+If "Skip CI", print the manual instructions and stop:
+```
+Manual steps:
+  1. GitHub Actions → "Build Installer" → Run workflow (version: <version>, prerelease: <true/false>, publish_public: <true/false>)
+  2. GitHub Actions → "Build Linux Installer" → Run workflow (same inputs)
+```
+
+### 8b. Trigger both workflows
+
+Run both workflows via `gh`:
+
+```bash
+# Windows installer
+gh workflow run "Build Installer" \
+  -f version=<version> \
+  -f prerelease=<true if IS_PRERELEASE> \
+  -f publish_public=<true/false per 8a>
+
+# Linux installer
+gh workflow run "Build Linux Installer" \
+  -f version=<version> \
+  -f prerelease=<true if IS_PRERELEASE> \
+  -f publish_public=<true/false per 8a>
+```
+
+After triggering, wait 5 seconds for GitHub to register the runs, then find the run IDs:
+
+```bash
+# Get the run IDs (most recent run for each workflow)
+gh run list --workflow=build-installer.yml --limit=1 --json databaseId,status
+gh run list --workflow=build-linux.yml --limit=1 --json databaseId,status
+```
+
+### 8c. Monitor builds
+
+Poll both workflow runs every 30 seconds until both complete. Use `gh run view <id> --json status,conclusion` for each.
+
+Display a progress update to the user each poll cycle:
+```
+Monitoring CI builds...
+  Windows: <status> (<elapsed>)
+  Linux:   <status> (<elapsed>)
+```
+
+If either run fails:
+1. Show the failure immediately.
+2. Run `gh run view <id> --log-failed` to fetch the failed step log.
+3. Show the relevant error output to the user.
+4. Ask via `AskUserQuestion`:
+   - **Retry** — re-trigger the failed workflow
+   - **Continue anyway** — proceed to artifact verification (partial release)
+   - **Abort** — stop (release commit/tag already pushed; artifacts are incomplete)
+
+Timeout: if either build hasn't completed after 20 minutes, warn the user and ask whether to keep waiting or proceed.
+
+### 8d. Verify artifacts on private repo
+
+Once both builds succeed, verify all expected release assets exist on the private repo:
+
+```bash
+gh release view "v<version>" --json assets --jq '.assets[].name'
+```
+
+**Expected assets (private repo):**
+
+| # | Asset | Source |
+|---|-------|--------|
+| 1 | `Uprooted-<version>-Setup.exe` | Windows workflow |
+| 2 | `auto-update.uprpkg` | Last workflow to upload (clobbers) |
+| 3 | `Uprooted-<version>-linux-amd64` | Linux workflow |
+| 4 | `uprooted-linux-artifacts.tar.gz` | Linux workflow |
+| 5 | `install-uprooted-linux.sh` | Linux workflow |
+
+Check each asset:
+- Exists in the release asset list
+- Has a non-zero size (parse from `--json assets --jq '.assets[] | "\(.name) \(.size)"'`)
+
+Report any missing or zero-size assets.
+
+### 8e. Verify artifacts on public repo (if publish_public=true)
+
+If the user chose to publish publicly in step 8a:
+
+```bash
+gh release view "v<version>" --repo watchthelight/uprooted --json assets --jq '.assets[].name'
+```
+
+Verify the same 5 assets exist on the public repo with non-zero sizes.
+
+### 8f. Verify release metadata
+
+For both repos (as applicable), check:
+
+```bash
+# Private
+gh release view "v<version>" --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
+
+# Public (if applicable)
+gh release view "v<version>" --repo watchthelight/uprooted --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
+```
+
+Verify:
+- `tagName` matches `v<version>`
+- `isDraft` is `false`
+- `isPrerelease` matches `IS_PRERELEASE`
+
+### 8g. Final report
+
+Present a comprehensive verification report:
+
+```
+CI Build & Artifact Verification — v<version>
+
+Workflows:
+  Windows (Build Installer):     ✓ passed (<duration>)
+  Linux (Build Linux Installer): ✓ passed (<duration>)
+
+Private repo (The-Uprooted-Project/uprooted-private):
+  Release: v<version> | prerelease: <yes/no>
+  Assets:
+    ✓ Uprooted-<version>-Setup.exe       (<size>)
+    ✓ auto-update.uprpkg                  (<size>)
+    ✓ Uprooted-<version>-linux-amd64      (<size>)
+    ✓ uprooted-linux-artifacts.tar.gz     (<size>)
+    ✓ install-uprooted-linux.sh           (<size>)
+
+Public repo (watchthelight/uprooted):          [only if publish_public]
+  Release: v<version> | prerelease: <yes/no>
+  Assets:
+    ✓ Uprooted-<version>-Setup.exe       (<size>)
+    ✓ auto-update.uprpkg                  (<size>)
+    ✓ Uprooted-<version>-linux-amd64      (<size>)
+    ✓ uprooted-linux-artifacts.tar.gz     (<size>)
+    ✓ install-uprooted-linux.sh           (<size>)
+
+Release v<version> is complete. All artifacts verified.
+```
+
+Use `✓` for present assets and `✗ MISSING` for absent ones. If any assets are missing, flag the report as incomplete and suggest the user check the workflow logs.
 
 ---
 
