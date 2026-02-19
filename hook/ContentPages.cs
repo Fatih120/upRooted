@@ -393,7 +393,7 @@ internal static class ContentPages
 
                         ThreadPool.QueueUserWorkItem(_ =>
                         {
-                            u.CheckForUpdate();
+                            u.CheckForUpdate(isManual: true);
 
                             // Update UI on completion
                             r.RunOnUIThread(() =>
@@ -689,6 +689,11 @@ internal static class ContentPages
     private static object? _settingsOverlay;
     private static object? _settingsBackdrop;
     private static object? _settingsPanel;
+
+    // Background update notification overlay state
+    private static object? _updateNotifyOverlay;
+    private static object? _updateNotifyBackdrop;
+    private static object? _updateNotifyPanel;
 
     private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
@@ -1495,6 +1500,141 @@ internal static class ContentPages
         }
 
         _infoOverlay = null;
+    }
+
+    // ===== Background Update Notification =====
+
+    /// <summary>
+    /// Show a centered overlay popup informing the user that a background auto-update was applied.
+    /// Must be called on the UI thread (use resolver.RunOnUIThread to dispatch from background).
+    /// </summary>
+    internal static void ShowUpdateNotification(AvaloniaReflection r, string version)
+    {
+        DismissUpdateNotification(r);
+
+        var mainWindow = r.GetMainWindow();
+        if (mainWindow == null) return;
+
+        var overlay = r.GetOverlayLayer(mainWindow);
+        if (overlay == null) return;
+
+        _updateNotifyOverlay = overlay;
+
+        var windowBounds = r.GetBounds(mainWindow);
+        double windowW = windowBounds?.W ?? 900;
+        double windowH = windowBounds?.H ?? 600;
+
+        // Semi-transparent dark backdrop (dimmer than lightbox — this is a notification, not a blocking dialog)
+        _updateNotifyBackdrop = r.CreateBorder("#60000000", 0);
+        if (_updateNotifyBackdrop != null)
+        {
+            r.SetWidth(_updateNotifyBackdrop, windowW);
+            r.SetHeight(_updateNotifyBackdrop, windowH);
+            r.SetCanvasPosition(_updateNotifyBackdrop, 0, 0);
+            r.SetTag(_updateNotifyBackdrop, "uprooted-no-recolor");
+            r.SubscribeEvent(_updateNotifyBackdrop, "PointerPressed", () => DismissUpdateNotification(r));
+            r.AddToOverlay(overlay, _updateNotifyBackdrop);
+        }
+
+        // Notification card
+        double cardW = 480;
+        _updateNotifyPanel = r.CreateBorder(CardBg, 14);
+        if (_updateNotifyPanel == null) return;
+        r.SetTag(_updateNotifyPanel, "uprooted-no-recolor");
+        SetBorderStroke(r, _updateNotifyPanel, AccentGreen, 1.0);
+        r.SetWidth(_updateNotifyPanel, cardW);
+
+        double cardX = (windowW - cardW) / 2;
+        double cardY = windowH * 0.28;
+        r.SetCanvasPosition(_updateNotifyPanel, cardX, cardY);
+
+        var content = r.CreateStackPanel(vertical: true, spacing: 0);
+        if (content == null) return;
+        r.SetMargin(content, 28, 22, 28, 22);
+
+        // Icon + title row
+        var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
+        if (headerRow != null)
+        {
+            r.SetVerticalAlignment(headerRow, "Center");
+
+            var icon = r.CreateTextBlock("\u2705", LightboxScale.Title, AccentGreen); // ✅
+            if (icon != null)
+            {
+                r.SetVerticalAlignment(icon, "Center");
+                r.AddChild(headerRow, icon);
+            }
+
+            var titleText = r.CreateTextBlock("Uprooted Updated", LightboxScale.Title, TextWhite);
+            if (titleText != null)
+            {
+                r.SetFontWeightNumeric(titleText, 600);
+                r.SetVerticalAlignment(titleText, "Center");
+                r.AddChild(headerRow, titleText);
+            }
+
+            r.AddChild(content, headerRow);
+        }
+
+        // Message
+        var msgText = r.CreateTextBlock(
+            $"Version {version} was installed in the background. The update will take effect the next time Root restarts.",
+            LightboxScale.Description, TextMuted);
+        if (msgText != null)
+        {
+            r.SetTextWrapping(msgText, "Wrap");
+            r.SetMargin(msgText, 0, 14, 0, 18);
+            r.AddChild(content, msgText);
+        }
+
+        // OK button
+        var okBtn = r.CreateBorder(AccentGreen, 8);
+        if (okBtn != null)
+        {
+            r.SetCursorHand(okBtn);
+            r.SetTag(okBtn, "uprooted-no-recolor");
+            r.SetHorizontalAlignment(okBtn, "Right");
+
+            var okText = r.CreateTextBlock("Got it", LightboxScale.Button, "#FFFFFF");
+            if (okText != null)
+            {
+                r.SetFontWeightNumeric(okText, 600);
+                r.SetMargin(okText, 22, 8, 22, 8);
+                r.SetBorderChild(okBtn, okText);
+            }
+
+            var okRef = okBtn;
+            var dimmedGreen = ColorUtils.Darken(AccentGreen, 15);
+            r.SubscribeEvent(okBtn, "PointerPressed", () => DismissUpdateNotification(r));
+            r.SubscribeEvent(okBtn, "PointerEntered", () => r.SetBackground(okRef, dimmedGreen));
+            r.SubscribeEvent(okBtn, "PointerExited", () => r.SetBackground(okRef, AccentGreen));
+
+            r.AddChild(content, okBtn);
+        }
+
+        r.SetBorderChild(_updateNotifyPanel, content);
+        r.AddToOverlay(overlay, _updateNotifyPanel);
+    }
+
+    /// <summary>
+    /// Dismiss the background update notification overlay.
+    /// </summary>
+    private static void DismissUpdateNotification(AvaloniaReflection r)
+    {
+        if (_updateNotifyOverlay == null) return;
+
+        if (_updateNotifyBackdrop != null)
+        {
+            r.RemoveFromOverlay(_updateNotifyOverlay, _updateNotifyBackdrop);
+            _updateNotifyBackdrop = null;
+        }
+        if (_updateNotifyPanel != null)
+        {
+            r.RemoveFromOverlay(_updateNotifyOverlay, _updateNotifyPanel);
+            _updateNotifyPanel = null;
+        }
+
+        _updateNotifyOverlay = null;
     }
 
     /// <summary>

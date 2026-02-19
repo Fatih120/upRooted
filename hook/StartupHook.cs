@@ -273,6 +273,20 @@ internal class StartupHook
             // let the app finish initializing before making network requests.
             var autoUpdater = new AutoUpdater();
             AutoUpdater.Instance = autoUpdater;
+
+            // Subscribe to background update event — shows a popup when the auto-updater
+            // applies an update without the user pressing the button.
+            var notifyResolver = resolver;
+            AutoUpdater.BackgroundUpdateApplied += (version) =>
+            {
+                Logger.Log("Startup", $"Phase 4.5d: Background update applied (v{version}) — showing notification");
+                notifyResolver.RunOnUIThread(() =>
+                {
+                    try { ContentPages.ShowUpdateNotification(notifyResolver, version); }
+                    catch (Exception ex) { Logger.Log("Startup", $"Update notification error: {ex.Message}"); }
+                });
+            };
+
             ThreadPool.QueueUserWorkItem(_ =>
             {
                 try

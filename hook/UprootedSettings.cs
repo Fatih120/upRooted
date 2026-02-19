@@ -31,6 +31,8 @@ internal class UprootedSettings
     public string AutoUpdateChannel { get; set; } = "stable";
     public string LastUpdateCheck { get; set; } = "";
     public string PendingUpdateVersion { get; set; } = "";
+    // SHA-256 of the last applied .uprpkg — used to detect same-version hotfixes
+    public string LastPackageHash { get; set; } = "";
 
     // Migration flag: tracks whether we've migrated from enabled-by-default to disabled-by-default plugins
     public bool PluginDefaultsMigrated { get; set; } = false;
@@ -109,6 +111,7 @@ internal class UprootedSettings
                     case "AutoUpdate.Channel": settings.AutoUpdateChannel = val; break;
                     case "AutoUpdate.LastCheck": settings.LastUpdateCheck = val; break;
                     case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
+                    case "AutoUpdate.LastPackageHash": settings.LastPackageHash = val; break;
                     case "Migrated.PluginDefaults": settings.PluginDefaultsMigrated = val == "true"; break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
@@ -187,6 +190,7 @@ internal class UprootedSettings
                 "AutoUpdate.Channel=" + AutoUpdateChannel,
                 "AutoUpdate.LastCheck=" + LastUpdateCheck,
                 "AutoUpdate.PendingVersion=" + PendingUpdateVersion,
+                "AutoUpdate.LastPackageHash=" + LastPackageHash,
                 "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false")
             };
             foreach (var (name, enabled) in Plugins)

@@ -77,7 +77,15 @@ internal class AutoUpdater
     private bool _updateApplied;
     private string? _lastError;
     private int _checking; // 0 = idle, 1 = checking (atomic via Interlocked)
+    private bool _isManualCheck;
     private Timer? _periodicTimer;
+
+    /// <summary>
+    /// Fired when a background (non-manual) auto-update is successfully applied.
+    /// The string argument is the new version string.
+    /// Used to show a popup notification to the user without requiring them to open settings.
+    /// </summary>
+    internal static event Action<string>? BackgroundUpdateApplied;
 
     // Singleton for UI access
     internal static AutoUpdater? Instance { get; set; }
@@ -170,10 +178,14 @@ internal class AutoUpdater
     /// <summary>
     /// Manually trigger an update check. Runs synchronously — caller should
     /// invoke on a background thread and update UI when done.
+    /// isManual=true: triggered by the user pressing "Check for Updates" — will also apply
+    /// a same-version update if the .uprpkg hash differs (catches silent hotfixes).
+    /// isManual=false: background periodic check — only applies on version bump.
     /// </summary>
-    internal void CheckForUpdate()
+    internal void CheckForUpdate(bool isManual = false)
     {
         if (Interlocked.CompareExchange(ref _checking, 1, 0) != 0) return;
+        _isManualCheck = isManual;
         try { RunCheck(); }
         finally { Interlocked.Exchange(ref _checking, 0); }
     }
@@ -278,7 +290,15 @@ internal class AutoUpdater
                 settings.PendingUpdateVersion = _latestVersion;
                 settings.Save();
 
-                // Auto-download and apply
+                // Download and apply
+                DownloadAndApply();
+            }
+            else if (cmp == 0 && _isManualCheck)
+            {
+                // Same version — on a manual check, still download the package and compare
+                // its SHA-256 against the stored hash. A differing hash means a silent hotfix
+                // was published under the same version tag.
+                Logger.Log("AutoUpdate", $"Same version ({currentVersion}) — checking package hash for silent hotfix...");
                 DownloadAndApply();
             }
             else
@@ -322,6 +342,29 @@ internal class AutoUpdater
             }
 
             Logger.Log("AutoUpdate", $"Package downloaded: {pkgBytes.Length} bytes");
+
+            // Compute package SHA-256 for hotfix detection (same-version updates)
+            var newHash = ComputeSha256Hex(pkgBytes);
+            Logger.Log("AutoUpdate", $"Package hash: {newHash[..16]}...");
+
+            // If the installed version matches the release version, only apply when the
+            // hash differs — this lets the "Check for Updates" button catch silent hotfixes
+            // without re-applying an identical package.
+            var installedVersion = UprootedSettings.Load().Version;
+            if (CompareVersions(_latestVersion!, installedVersion) == 0)
+            {
+                var storedHash = UprootedSettings.Load().LastPackageHash;
+                if (!string.IsNullOrEmpty(storedHash) && storedHash == newHash)
+                {
+                    Logger.Log("AutoUpdate", "Package hash matches stored hash — no hotfix available, nothing to apply");
+                    // No update needed; leave _updateApplied false so UI shows "Up to date"
+                    try { Directory.Delete(stagingDir, true); } catch { }
+                    return;
+                }
+                Logger.Log("AutoUpdate", string.IsNullOrEmpty(storedHash)
+                    ? "No stored hash — establishing baseline from current package"
+                    : "Package hash differs — applying hotfix (same version, updated package)");
+            }
 
             // Decrypt and unpack
             var files = UnpackPackage(pkgBytes);
@@ -377,10 +420,18 @@ internal class AutoUpdater
             var settings = UprootedSettings.Load();
             settings.Version = _latestVersion!;
             settings.PendingUpdateVersion = "";
+            settings.LastPackageHash = newHash;
             settings.Save();
 
             _updateApplied = true;
             Logger.Log("AutoUpdate", $"Update applied: v{_latestVersion} — restart Root to use new version");
+
+            // Notify UI for background (non-manual) updates — the user hasn't pressed a button
+            // so they may not be looking at the Updates settings page. Show a popup.
+            if (!_isManualCheck)
+            {
+                BackgroundUpdateApplied?.Invoke(_latestVersion!);
+            }
         }
         catch (Exception ex)
         {
@@ -521,6 +572,14 @@ internal class AutoUpdater
             Logger.Log("AutoUpdate", _lastError);
             return null;
         }
+    }
+
+    // ===== Utilities =====
+
+    private static string ComputeSha256Hex(byte[] data)
+    {
+        using var sha = SHA256.Create();
+        return BitConverter.ToString(sha.ComputeHash(data)).Replace("-", "").ToLowerInvariant();
     }
 
     // ===== Version comparison =====
