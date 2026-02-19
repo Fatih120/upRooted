@@ -86,6 +86,11 @@ internal class MessageLogger
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
 
+    // Insertion-order tracking — used for injection positioning (timestamp-based is unreliable
+    // because Root timestamps may not resolve correctly or may be UtcNow on cache miss)
+    private readonly List<string> _orderedIds = new();
+    private readonly Dictionary<string, int> _orderedIdIndex = new();
+
     // One-time diagnostic tree dump (1E)
     private bool _firstTreeDumpDone;
 
@@ -657,6 +662,8 @@ internal class MessageLogger
     private void SnapshotMessages(object collection)
     {
         if (!_propertiesResolved) return;
+        _orderedIds.Clear();
+        _orderedIdIndex.Clear();
         try
         {
             int snapshotCount = 0;
@@ -670,6 +677,11 @@ internal class MessageLogger
                 if (msgId == null) continue;
                 _contentSnapshot[msgId] = ReadContent(item) ?? "";
                 CacheMessage(item, msgId);
+                if (!_orderedIdIndex.ContainsKey(msgId))
+                {
+                    _orderedIdIndex[msgId] = _orderedIds.Count;
+                    _orderedIds.Add(msgId);
+                }
                 snapshotCount++;
             }
             Logger.Log(Tag, $"Snapshot: {snapshotCount} messages cached");
@@ -710,6 +722,8 @@ internal class MessageLogger
                     Logger.Log(Tag, "Collection Reset — forcing re-discovery");
                     _deletionEpoch++;
                     _contentSnapshot.Clear();
+                    _orderedIds.Clear();
+                    _orderedIdIndex.Clear();
                     _pendingRemoves.Clear();
                     ClearInjectedCards("CollectionChanged Reset (action=4)");
                     UnsubscribeCollection();
@@ -732,6 +746,11 @@ internal class MessageLogger
             if (msgId == null) continue;
             _contentSnapshot[msgId] = ReadContent(item) ?? "";
             CacheMessage(item, msgId);
+            if (!_orderedIdIndex.ContainsKey(msgId))
+            {
+                _orderedIdIndex[msgId] = _orderedIds.Count;
+                _orderedIds.Add(msgId);
+            }
             _addsSinceFlush++;
         }
         Logger.Log(Tag, $"[add-event] +{items.Count} (total adds since flush: {_addsSinceFlush})");
@@ -928,6 +947,8 @@ internal class MessageLogger
             Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding (epoch={_deletionEpoch})");
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
+            _orderedIds.Clear();
+            _orderedIdIndex.Clear();
             ClearInjectedCards("bulk removes (channel switch)");
             _addsSinceFlush = 0;
             _removesSinceFlush = 0;
@@ -1032,8 +1053,8 @@ internal class MessageLogger
         Logger.Log(Tag, $"[DIAG-INJ] FindMessagePanel: {(vsp != null ? "found" : "null")}, type={vsp?.GetType().Name ?? "N/A"}");
         if (vsp == null) return;
 
-        // Build list of visible messages with their containers (VSP realized items)
-        var visibleMessages = new List<(string msgId, DateTime timestamp, object container)>();
+        // Build list of visible messages with their containers (VSP realized items), in VSP order
+        var visibleMessages = new List<(string msgId, object container)>();
         int childCount = _r.GetChildCount(vsp);
         Logger.Log(Tag, $"[DIAG-INJ] VSP childCount={childCount}");
         for (int i = 0; i < childCount; i++)
@@ -1045,8 +1066,8 @@ internal class MessageLogger
             if (i < 5 || (i == childCount - 1)) // Log first 5 + last for brevity
                 Logger.Log(Tag, $"[DIAG-INJ]   child[{i}]: type={child.GetType().Name}, DC={dc?.GetType().Name ?? "null"}, msgId={msgId ?? "null"}");
             if (dc == null || msgId == null) continue;
-            if (!_messageCache.TryGetValue(msgId, out var cm)) continue;
-            visibleMessages.Add((msgId, cm.Timestamp, child));
+            if (!_messageCache.ContainsKey(msgId)) continue;
+            visibleMessages.Add((msgId, child));
         }
 
         Logger.Log(Tag, $"[DIAG-INJ] visibleMessages: {visibleMessages.Count} found");
@@ -1085,15 +1106,18 @@ internal class MessageLogger
 
             var cardTag = $"uprooted-del:{cached.MessageId}";
 
-            // Find the best visible message to attach to (chronologically just before)
+            // Find the best visible message to attach to: the visible message with the largest
+            // insertion-order index that still precedes the deleted message in collection order.
+            // This is more reliable than timestamp comparison (timestamps may not resolve correctly).
             object? targetContainer = null;
             string? targetMsgId = null;
+            int deletedOrder = _orderedIdIndex.TryGetValue(cached.MessageId, out var doi) ? doi : int.MaxValue;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
-                if (visibleMessages[i].timestamp <= cached.Timestamp)
+                if (_orderedIdIndex.TryGetValue(visibleMessages[i].msgId, out var vIdx) && vIdx <= deletedOrder)
                 { targetContainer = visibleMessages[i].container; targetMsgId = visibleMessages[i].msgId; break; }
             }
-            // Fallback: attach to the first visible message
+            // Fallback: attach to the first visible message (deleted msg older than all visible)
             if (targetContainer == null)
             {
                 targetContainer = visibleMessages[0].container;
