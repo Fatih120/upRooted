@@ -229,6 +229,14 @@ Research docs in `research/docs/`, organized into three areas:
 
 ---
 
+## Adversarial Analysis
+
+| Document | Purpose |
+|----------|---------|
+| [`docs/research/MITIGATION_COUNTERMEASURES.md`](../research/MITIGATION_COUNTERMEASURES.md) | Pre-emptive counter-strategies for all five proposed Root mitigations (CLR kill switch, HTML integrity, `file://` blocking, CSP, signed launcher) grounded in working prototype code |
+
+---
+
 ## Usage Notes
 
 **Python environment:** Requires Python 3.10+ with `httpx[http2]` (`pip install httpx[http2]`).

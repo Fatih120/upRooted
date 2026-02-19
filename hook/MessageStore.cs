@@ -14,6 +14,10 @@ internal class CachedMessage
     public List<MessageEdit> Edits = new();
     public DateTime? DeletedAt;
     public bool IsDeleted;
+    /// <summary>UUID of the user who deleted the message (from audit log). Empty if unknown.</summary>
+    public string DeletedBy = "";
+    /// <summary>Display name of the user who deleted the message (from audit log). Empty if unknown.</summary>
+    public string DeletedByName = "";
 }
 
 internal class MessageEdit
@@ -32,7 +36,7 @@ internal class MessageEdit
 ///   # uprooted-message-log v1
 ///   MSG|msgId|channelId|authorId|authorName|timestamp|content
 ///   EDIT|msgId|channelId|editTimestamp|previousContent
-///   DEL|msgId|channelId|deleteTimestamp
+///   DEL|msgId|channelId|deleteTimestamp[|actorId][|actorName]  ← actorId/actorName optional
 /// </summary>
 internal class MessageStore
 {
@@ -72,9 +76,14 @@ internal class MessageStore
         }
     }
 
-    internal void RecordDeletion(string msgId, string channelId, DateTime deleteTime)
+    internal void RecordDeletion(string msgId, string channelId, DateTime deleteTime,
+        string actorId = "", string actorName = "")
     {
-        var line = $"DEL|{Enc(msgId)}|{Enc(channelId)}|{deleteTime:O}";
+        // Actor fields are optional — only appended when non-empty (from audit log).
+        // LoadAll reads parts[4]/parts[5] conditionally so old records without them still load.
+        var line = string.IsNullOrEmpty(actorId)
+            ? $"DEL|{Enc(msgId)}|{Enc(channelId)}|{deleteTime:O}"
+            : $"DEL|{Enc(msgId)}|{Enc(channelId)}|{deleteTime:O}|{Enc(actorId)}|{Enc(actorName)}";
         lock (WriteLock)
         {
             _writeBuffer.Add(line);
@@ -145,6 +154,8 @@ internal class MessageStore
                             delMsg.IsDeleted = true;
                             delMsg.DeletedAt = DateTime.TryParse(parts[3], null,
                                 System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : DateTime.UtcNow;
+                            if (parts.Length >= 5) delMsg.DeletedBy = Dec(parts[4]);
+                            if (parts.Length >= 6) delMsg.DeletedByName = Dec(parts[5]);
                         }
                         break;
                     }

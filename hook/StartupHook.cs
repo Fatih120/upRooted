@@ -312,6 +312,14 @@ internal class StartupHook
                         var logger = new MessageLogger(mlResolver, mlWindow);
                         logger.Initialize();
                         Logger.Log("Startup", "Phase 4.5c OK: Message logger active");
+
+                        // Start audit log engine immediately after message logger so it can
+                        // intercept the very first CommunityLogGrpcService/List call.
+                        Logger.Log("Startup", "Phase 4.5c: Starting audit log engine...");
+                        var auditEngine = new AuditLogEngine(mlResolver, mlWindow);
+                        auditEngine.Initialize();
+                        logger.SetAuditLogEngine(auditEngine);
+                        Logger.Log("Startup", "Phase 4.5c OK: Audit log engine active");
                     }
                     catch (Exception ex)
                     {

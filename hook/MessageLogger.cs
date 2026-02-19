@@ -96,6 +96,11 @@ internal class MessageLogger
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
 
+    // Audit log integration: entries received before the message was cached in the visual tree.
+    // Keyed by messageId. Applied the next time the message is added to _messageCache via HandleAdded.
+    // All access is on the UI thread (SetAuditLogEngine dispatches OnEntry to UI thread).
+    private readonly Dictionary<string, AuditLogEntry> _pendingAuditDeletes = new();
+
     // Insertion-order tracking — used for injection positioning (timestamp-based is unreliable
     // because Root timestamps may not resolve correctly or may be UtcNow on cache miss)
     private readonly List<string> _orderedIds = new();
@@ -148,6 +153,90 @@ internal class MessageLogger
 
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
         Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms)");
+    }
+
+    // ===== Audit Log Integration =====
+
+    /// <summary>
+    /// Wire an AuditLogEngine to this logger. OnEntry fires on the UI thread,
+    /// so ProcessAuditEntry can safely access _messageCache and other UI-thread state.
+    /// </summary>
+    internal void SetAuditLogEngine(AuditLogEngine engine)
+    {
+        engine.OnEntry += entry =>
+        {
+            // OnEntry is already dispatched to the UI thread by AuditLogEngine.ParseDataFrame.
+            try { ProcessAuditEntry(entry); }
+            catch (Exception ex) { Logger.Log(Tag, $"ProcessAuditEntry: {ex.Message}"); }
+        };
+        Logger.Log(Tag, "AuditLogEngine wired — audit entries will supplement visual-tree detection");
+    }
+
+    /// <summary>
+    /// Process a decoded audit log entry.
+    ///
+    /// Phase 1: ActionMessageDelete/Edit are both -1/-2 (sentinels), so this is a no-op.
+    ///          OnEntry still fires for diagnostic logging in AuditLogEngine.
+    ///
+    /// Phase 2+: Update AuditLogEngine.ActionMessageDelete/Edit constants and rebuild.
+    ///           This method then handles audit-driven deletions with actor attribution.
+    /// </summary>
+    private void ProcessAuditEntry(AuditLogEntry entry)
+    {
+        if (entry.ActionType == AuditLogEngine.ActionMessageDelete)
+        {
+            Logger.Log(Tag, $"[audit] DELETE: msg={entry.MessageId} actor={entry.ActorId} ch={entry.ChannelId}");
+
+            if (string.IsNullOrEmpty(entry.MessageId)) return;
+
+            if (_messageCache.TryGetValue(entry.MessageId, out var cached))
+            {
+                // Message is already cached — apply deletion with actor info
+                if (!cached.IsDeleted)
+                {
+                    cached.IsDeleted = true;
+                    cached.DeletedAt = DateTime.UtcNow;
+                    cached.DeletedBy = entry.ActorId;
+                    cached.DeletedByName = entry.ActorName;
+                    _store.RecordDeletion(cached.MessageId, cached.ChannelId,
+                        cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
+                    Logger.Log(Tag, $"[audit] Marked deleted: {entry.MessageId} by @{entry.ActorName}");
+                }
+                else if (string.IsNullOrEmpty(cached.DeletedBy) && !string.IsNullOrEmpty(entry.ActorId))
+                {
+                    // Already marked deleted (from visual tree), but now we have actor info
+                    cached.DeletedBy = entry.ActorId;
+                    cached.DeletedByName = entry.ActorName;
+                    Logger.Log(Tag, $"[audit] Actor info added to existing deletion: {entry.MessageId} by @{entry.ActorName}");
+                }
+
+                // If a card is already injected for this message, remove it so the next
+                // scan tick re-injects it with the updated actor name in the label.
+                if (!string.IsNullOrEmpty(entry.ActorName))
+                {
+                    var cardTag = $"uprooted-del:{entry.MessageId}";
+                    if (_injectedCards.TryGetValue(cardTag, out var existingCard))
+                    {
+                        var parent = _r.GetParent(existingCard);
+                        if (parent != null) RemoveChild(parent, existingCard);
+                        _injectedCards.Remove(cardTag);
+                        Logger.Log(Tag, $"[audit] Removed stale card for re-injection with actor name: {entry.MessageId}");
+                    }
+                }
+            }
+            else
+            {
+                // Message not cached yet — store for application when it's next seen in Add event
+                _pendingAuditDeletes[entry.MessageId] = entry;
+                Logger.Log(Tag, $"[audit] Pending delete queued: {entry.MessageId} (not in cache yet)");
+            }
+        }
+        else if (entry.ActionType == AuditLogEngine.ActionMessageEdit)
+        {
+            Logger.Log(Tag, $"[audit] EDIT: msg={entry.MessageId} actor={entry.ActorId}");
+            // Edit handling is primarily via CollectionChanged Replace events.
+            // Audit log confirms the edit happened; actor info could be recorded if needed.
+        }
     }
 
     // ===== Timer =====
@@ -763,6 +852,23 @@ internal class MessageLogger
             // Only messages seen via Add events (not initial snapshot) are eligible.
             _addedViaEvent[msgId] = DateTime.UtcNow;
             CacheMessage(item, msgId);
+
+            // Apply any pending audit log deletion that arrived before this message was cached
+            if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
+            {
+                _pendingAuditDeletes.Remove(msgId);
+                if (_messageCache.TryGetValue(msgId, out var auditCached))
+                {
+                    auditCached.IsDeleted = true;
+                    auditCached.DeletedAt = DateTime.UtcNow;
+                    auditCached.DeletedBy = pendingAudit.ActorId;
+                    auditCached.DeletedByName = pendingAudit.ActorName;
+                    _store.RecordDeletion(auditCached.MessageId, auditCached.ChannelId,
+                        auditCached.DeletedAt.Value, auditCached.DeletedBy, auditCached.DeletedByName);
+                    Logger.Log(Tag, $"[audit] Applied pending delete on Add: {msgId} by @{pendingAudit.ActorName}");
+                }
+            }
+
             if (!_orderedIdIndex.ContainsKey(msgId))
             {
                 _orderedIdIndex[msgId] = _orderedIds.Count;
@@ -1346,8 +1452,29 @@ internal class MessageLogger
             if (body == null) return null;
             _r.SetTextWrapping(body, "Wrap");
 
+            // If we have actor attribution, wrap body + actor label in a StackPanel
+            object? cardContent = body;
+            if (!string.IsNullOrEmpty(cached.DeletedByName) || !string.IsNullOrEmpty(cached.DeletedBy))
+            {
+                var actorDisplay = !string.IsNullOrEmpty(cached.DeletedByName)
+                    ? $"Deleted by @{cached.DeletedByName}"
+                    : $"Deleted by {cached.DeletedBy[..Math.Min(8, cached.DeletedBy.Length)]}…";
+                var actorLabel = _r.CreateTextBlock(actorDisplay, 10, "#99FF6666");
+                if (actorLabel != null)
+                {
+                    _r.SetMargin(actorLabel, 0, 2, 0, 0);
+                    var inner = _r.CreateStackPanel(vertical: true, spacing: 0);
+                    if (inner != null)
+                    {
+                        _r.AddChild(inner, body);
+                        _r.AddChild(inner, actorLabel);
+                        cardContent = inner;
+                    }
+                }
+            }
+
             // Full-width red-tinted background stripe
-            var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: body);
+            var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: cardContent);
             if (card == null) return null;
 
             // Red left accent border (3px) via nested border
