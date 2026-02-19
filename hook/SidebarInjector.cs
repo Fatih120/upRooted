@@ -47,8 +47,9 @@ internal class SidebarInjector
     private List<object> _hiddenContentChildren = new(); // Root's content children we hid (to restore later)
 
     // Save bar (freeze prevention for Revert button)
-    private object? _saveBar;                            // Root's save bar container (hide when Uprooted pages active)
+    private object? _saveBar;                            // Root's save bar container (collapse when Uprooted pages active)
     private object? _revertButton;                       // Revert button inside save bar (PointerPressed interception)
+    private bool _saveBarCollapsed;                      // Whether we've collapsed the save bar (Opacity/MaxHeight, NOT IsVisible)
 
     // Header state (back arrow hidden + title set when Uprooted pages active)
     private object? _backButton;                         // The back arrow RootSvgButton in header (left side)
@@ -142,13 +143,12 @@ internal class SidebarInjector
         {
             // Catch Root's async save bar creation the instant it triggers a layout pass.
             // When Root creates the SaveChangesView (~200ms after our ListBox deselection),
-            // this fires on the same frame — hiding it before a single painted frame.
+            // this fires on the same frame — collapsing it before a single painted frame.
             if (_activePage != null)
             {
                 if (_saveBar != null)
                 {
-                    if (_r.GetIsVisible(_saveBar))
-                        _r.SetIsVisible(_saveBar, false);
+                    CollapseSaveBar();
                 }
                 else if (_layoutContainer != null)
                 {
@@ -156,7 +156,7 @@ internal class SidebarInjector
                     if (bar != null)
                     {
                         _saveBar = bar;
-                        _r.SetIsVisible(bar, false);
+                        CollapseSaveBar();
                         _revertButton = _walker.FindRevertButton(bar);
                         if (_revertButton != null)
                         {
@@ -166,7 +166,7 @@ internal class SidebarInjector
                                 CleanupInjection();
                             });
                         }
-                        Logger.Log("Injector", "Save bar caught+hidden via LayoutUpdated intercept");
+                        Logger.Log("Injector", "Save bar caught+collapsed via LayoutUpdated intercept");
                     }
                 }
             }
@@ -440,10 +440,9 @@ internal class SidebarInjector
             // Step 4: Remove version text from grey version box
             RemoveVersionText();
 
-            // Step 5: Restore back button and save bar visibility
+            // Step 5: Restore back button and save bar
             RestoreBackButton();
-            if (_saveBar != null)
-                _r.SetIsVisible(_saveBar, true);
+            RestoreSaveBar();
 
             // Step 6: Remove our content from content Panel
             RemoveContentPage();
@@ -468,6 +467,7 @@ internal class SidebarInjector
         _layoutContainer = null;
         _saveBar = null;
         _revertButton = null;
+        _saveBarCollapsed = false;
         _backButton = null;
         _backButtonWasVisible = true;
         _headerTitleText = null;
@@ -814,9 +814,9 @@ internal class SidebarInjector
             // Also set header title to our page name.
             FindAndHideBackButton(pageName);
 
-            // Hide save bar on Uprooted pages (prevents Revert freeze)
+            // Collapse save bar on Uprooted pages (prevents Revert freeze)
             // Search dynamically since save bar may appear after injection
-            FindAndHideSaveBar();
+            FindAndCollapseSaveBar();
 
             _activePage = pageName;
             UpdateNavHighlights();
@@ -834,7 +834,7 @@ internal class SidebarInjector
             // Schedule delayed save bar search: deselecting Root's ListBox triggers
             // Root's change detection which creates the save bar ASYNCHRONOUSLY.
             // We need to check again after Root has had time to create it.
-            ScheduleDelayedSaveBarHide();
+            ScheduleDelayedSaveBarCollapse();
         }
         catch (Exception ex)
         {
@@ -868,10 +868,8 @@ internal class SidebarInjector
         // Only restore save bar when transitioning away from an Uprooted page.
         // When switching between Root tabs, don't touch Root's save bar —
         // it may be legitimately visible due to real unsaved settings changes.
-        if (wasOnUprootedPage && _saveBar != null)
-        {
-            _r.SetIsVisible(_saveBar, true);
-        }
+        if (wasOnUprootedPage)
+            RestoreSaveBar();
 
         UpdateNavHighlights();
     }
@@ -1185,9 +1183,9 @@ internal class SidebarInjector
     }
 
     /// <summary>
-    /// Search for Root's save bar and hide it if found. Also subscribes Revert button handler.
+    /// Search for Root's save bar and collapse it if found. Also subscribes Revert button handler.
     /// </summary>
-    private void FindAndHideSaveBar()
+    private void FindAndCollapseSaveBar()
     {
         if (_saveBar == null && _layoutContainer != null)
         {
@@ -1206,22 +1204,52 @@ internal class SidebarInjector
                 }
             }
         }
-        if (_saveBar != null)
-            _r.SetIsVisible(_saveBar, false);
+        CollapseSaveBar();
     }
 
     /// <summary>
-    /// Schedule delayed save bar search+hide. Root creates the save bar ASYNCHRONOUSLY after
+    /// Collapse save bar visually without touching IsVisible. Uses Opacity/MaxHeight/IsHitTestVisible
+    /// so Root's IsVisible binding remains untouched and can reassert normally on Root tabs.
+    /// </summary>
+    private void CollapseSaveBar()
+    {
+        if (_saveBar == null || _saveBarCollapsed) return;
+        try
+        {
+            _saveBar.GetType().GetProperty("Opacity")?.SetValue(_saveBar, 0.0);
+            _saveBar.GetType().GetProperty("IsHitTestVisible")?.SetValue(_saveBar, false);
+            _saveBar.GetType().GetProperty("MaxHeight")?.SetValue(_saveBar, 0.0);
+            _saveBarCollapsed = true;
+        }
+        catch (Exception ex) { Logger.Log("Injector", $"CollapseSaveBar error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Restore save bar to normal state. Reverses CollapseSaveBar by resetting
+    /// Opacity/MaxHeight/IsHitTestVisible to defaults. IsVisible is never touched.
+    /// </summary>
+    private void RestoreSaveBar()
+    {
+        if (_saveBar == null || !_saveBarCollapsed) return;
+        try
+        {
+            _saveBar.GetType().GetProperty("Opacity")?.SetValue(_saveBar, 1.0);
+            _saveBar.GetType().GetProperty("IsHitTestVisible")?.SetValue(_saveBar, true);
+            _saveBar.GetType().GetProperty("MaxHeight")?.SetValue(_saveBar, double.PositiveInfinity);
+            _saveBarCollapsed = false;
+        }
+        catch (Exception ex) { Logger.Log("Injector", $"RestoreSaveBar error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Schedule delayed save bar search+collapse. Root creates the save bar ASYNCHRONOUSLY after
     /// we deselect its ListBox (which triggers its change detection). We need to poll briefly
     /// to catch it after Root has had time to create it.
     /// </summary>
-    private void ScheduleDelayedSaveBarHide()
+    private void ScheduleDelayedSaveBarCollapse()
     {
-        // Always schedule delayed checks: Root may show the save bar asynchronously
-        // after our ListBox deselection, even if we already found and hid it.
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
-            // Check at 200ms, 500ms, 1000ms after the nav click
             int elapsed = 0;
             foreach (var checkAt in new[] { 200, 500, 1000 })
             {
@@ -1236,20 +1264,13 @@ internal class SidebarInjector
                     try
                     {
                         if (_activePage == null) return;
-                        // Re-hide if Root showed the save bar after our last hide
                         if (_saveBar != null)
-                        {
-                            if (_r.GetIsVisible(_saveBar))
-                            {
-                                _r.SetIsVisible(_saveBar, false);
-                                Logger.Log("Injector", $"Save bar re-hidden via delayed check ({checkAt}ms)");
-                            }
-                        }
+                            CollapseSaveBar();
                         else
                         {
-                            FindAndHideSaveBar();
+                            FindAndCollapseSaveBar();
                             if (_saveBar != null)
-                                Logger.Log("Injector", $"Save bar found+hidden via delayed search ({checkAt}ms)");
+                                Logger.Log("Injector", $"Save bar found+collapsed via delayed search ({checkAt}ms)");
                         }
                     }
                     catch { }
