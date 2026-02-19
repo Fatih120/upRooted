@@ -4,9 +4,9 @@ using System;
 using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
 using Avalonia.Data;
-using Avalonia.Input;
 using Avalonia.Layout;
 using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Markup.Xaml.Templates;
@@ -303,11 +303,3 @@ public unsafe static void Populate_003A_002FResources_002FStyles_002FComboBoxIte
 	context.AvaloniaNameScope.Complete();
 }
 
-// RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
-// CompiledAvaloniaXaml.!AvaloniaResources
-using System;
-using System.Collections.Generic;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Markup.Xaml.XamlIl.Runtime;
-using Tabalonia.Controls;

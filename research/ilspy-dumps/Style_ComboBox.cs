@@ -1,10 +1,11 @@
 // RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
 // CompiledAvaloniaXaml.!AvaloniaResources
 using System;
-using System.Globalization;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Controls.Primitives;
+using Avalonia.Controls.Shapes;
 using Avalonia.Data;
 using Avalonia.Input;
 using Avalonia.Layout;
@@ -12,7 +13,6 @@ using Avalonia.Markup.Xaml.MarkupExtensions;
 using Avalonia.Markup.Xaml.Templates;
 using Avalonia.Markup.Xaml.XamlIl.Runtime;
 using Avalonia.Media;
-using Avalonia.Media.Immutable;
 using Avalonia.Styling;
 
 public unsafe static void Populate_003A_002FResources_002FStyles_002FComboBox_002Eaxaml(IServiceProvider P_0, Styles P_1)
@@ -503,19 +503,3 @@ public unsafe static void Populate_003A_002FResources_002FStyles_002FComboBox_00
 	context.AvaloniaNameScope.Complete();
 }
 
-// RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
-// CompiledAvaloniaXaml.!AvaloniaResources
-using System;
-using System.Globalization;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.Presenters;
-using Avalonia.Controls.Primitives;
-using Avalonia.Data;
-using Avalonia.Layout;
-using Avalonia.Markup.Xaml.MarkupExtensions;
-using Avalonia.Markup.Xaml.Templates;
-using Avalonia.Markup.Xaml.XamlIl.Runtime;
-using Avalonia.Media;
-using Avalonia.Media.Immutable;
-using Avalonia.Styling;

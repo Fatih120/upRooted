@@ -346,11 +346,3 @@ public unsafe static void Populate_003A_002FResources_002FStyles_002FBorderButto
 	context.AvaloniaNameScope.Complete();
 }
 
-// RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
-// CompiledAvaloniaXaml.!AvaloniaResources
-using System;
-using Avalonia;
-using Avalonia.Controls;
-using Avalonia.Controls.Primitives;
-using Avalonia.Media.Immutable;
-using Avalonia.Styling;
