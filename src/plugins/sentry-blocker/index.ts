@@ -42,7 +42,7 @@ const sentryBlockerPlugin: UprootedPlugin = {
         console.log(`[Uprooted:sentry-blocker] Blocked fetch to sentry.io (${blockedCount} total)`);
         return Promise.resolve(new Response(null, { status: 200 }));
       }
-      return originalFetch!.call(window, input, init);
+      return (originalFetch ?? window.fetch).call(window, input, init);
     };
 
     // Wrap XMLHttpRequest.open
@@ -56,9 +56,9 @@ const sentryBlockerPlugin: UprootedPlugin = {
         blockedCount++;
         console.log(`[Uprooted:sentry-blocker] Blocked XHR to sentry.io (${blockedCount} total)`);
         // Point to an invalid URL so send() is a no-op
-        return originalXHROpen!.call(this, method, "about:blank", ...rest);
+        return (originalXHROpen ?? XMLHttpRequest.prototype.open).call(this, method, "about:blank", ...rest);
       }
-      return originalXHROpen!.call(this, method, url, ...rest);
+      return (originalXHROpen ?? XMLHttpRequest.prototype.open).call(this, method, url, ...rest);
     };
 
     // Wrap sendBeacon
@@ -69,7 +69,7 @@ const sentryBlockerPlugin: UprootedPlugin = {
         console.log(`[Uprooted:sentry-blocker] Blocked sendBeacon to sentry.io (${blockedCount} total)`);
         return true;
       }
-      return originalSendBeacon!(url, data);
+      return (originalSendBeacon ?? navigator.sendBeacon.bind(navigator))(url, data);
     };
 
     console.log("[Uprooted:sentry-blocker] Network intercepts installed");

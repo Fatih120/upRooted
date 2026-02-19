@@ -28,14 +28,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Refine ProfileBadgeInjector heuristics** — Detection is now event-driven (OverlayLayer CollectionChanged) with dev-username gating. Still needed: check tree dump logs from first real popup detection to refine `IsProfilePopup` heuristic (currently matches any popup with avatar image + large text, may false-positive on non-profile popups).
   - Files: `hook/ProfileBadgeInjector.cs`
 
-- [ ] **Theme click handlers** — Add click handlers to the native Themes page so users can switch themes from the Avalonia settings UI.
-  - Files: `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
-
-- [ ] **Implement `after` patch handler** — The `after` callback is defined in the `Patch` interface but `PluginLoader` never invokes it. Implement post-execution invocation.
-  - Files: `src/core/pluginLoader.ts`, `src/types/plugin.ts`
-
-- [ ] **Deep merge for settings** — Replace shallow spread merge with recursive merge that correctly combines nested objects (especially `plugins` map).
-  - Files: `src/core/settings.ts`
 
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
@@ -44,20 +36,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 
 Smaller fixes and cleanup that improve reliability.
 
-- [ ] **Non-null assertion guards in sentry-blocker** — `originalFetch!.call()` risks crash if `stop()` called mid-request. Add runtime null guards.
-  - Files: `src/plugins/sentry-blocker/index.ts`
-
-- [ ] **Scope MutationObserver to sidebar** — Settings panel observer watches entire document body including its own elements. Scope to sidebar subtree, skip `data-uprooted` mutations.
-  - Files: `src/plugins/settings-panel/panel.ts`
-
-- [ ] **Theme variable cleanup consolidation** — Two separate CSS variable name lists for cleanup. Consolidate into single source of truth.
-  - Files: `src/plugins/themes/index.ts`
-
-- [ ] **Event listener cleanup in settings panel** — Sidebar click listeners accumulate on repeated visits. Switch to event delegation, clean up in `stopObserving()`.
-  - Files: `src/plugins/settings-panel/panel.ts`
-
-- [ ] **Freeze window globals** — `Object.freeze()` on `window.__UPROOTED_SETTINGS__` to prevent tampering. Restrict loader access.
-  - Files: `src/core/preload.ts`, `src/core/settings.ts`
 
 ## Testing
 
@@ -87,6 +65,12 @@ Items not yet committed to but worth tracking.
 ## Done
 
 Move completed items here with the date.
+
+- [x] **TypeScript code quality fixes** (2026-02-18) — 7 fixes: `after` patch callback invocation, `deepMerge` for settings (fixes nested-object overwrite), theme var names derived from `generateCustomVariables` keys, MutationObserver skips own `[data-uprooted]` mutations, sidebar click listener removed in cleanup (no more accumulation), `Object.freeze` on settings global, sentry-blocker `!` assertions replaced with null-check fallbacks.
+  - Files: `src/core/pluginLoader.ts`, `src/core/settings.ts`, `src/plugins/themes/index.ts`, `src/plugins/settings-panel/panel.ts`, `src/core/preload.ts`, `src/plugins/sentry-blocker/index.ts`
+
+- [x] **Theme click handlers** (2026-02-18) — `PointerPressed` handler calls `themeEngine.ApplyTheme(themeId)` / `themeEngine.RevertTheme()`, saves settings, triggers page rebuild. Implemented in `ContentPages.cs` lines 2187-2223.
+  - Files: `hook/ContentPages.cs`, `hook/ThemeEngine.cs`
 
 - [x] **Vigorous unit testing + Docker sandbox** (2026-02-18) — 170 tests total (113 new); zero bugs found in the three pure-logic modules. Docker test infrastructure for both unit tests and Linux installer.
   - New test files: `ClearUrlsEngineTests.cs` (58), `UprootedSettingsTests.cs` (22), `MessageStoreTests.cs` (18)

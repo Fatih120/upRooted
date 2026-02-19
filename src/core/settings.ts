@@ -20,11 +20,29 @@ const PROFILE_DIR = path.join(
 
 const SETTINGS_FILE = path.join(PROFILE_DIR, "uprooted-settings.json");
 
+function deepMerge<T>(base: T, overrides: Partial<T>): T {
+  const b = base as unknown as Record<string, unknown>;
+  const o = overrides as unknown as Record<string, unknown>;
+  const result: Record<string, unknown> = { ...b };
+  for (const key of Object.keys(o)) {
+    const bv = b[key];
+    const ov = o[key];
+    if (bv !== null && ov !== null &&
+        typeof bv === "object" && typeof ov === "object" &&
+        !Array.isArray(bv) && !Array.isArray(ov)) {
+      result[key] = deepMerge(bv, ov as Partial<typeof bv>);
+    } else if (ov !== undefined) {
+      result[key] = ov;
+    }
+  }
+  return result as unknown as T;
+}
+
 export function loadSettings(): UprootedSettings {
   try {
     if (fs.existsSync(SETTINGS_FILE)) {
       const raw = fs.readFileSync(SETTINGS_FILE, "utf-8");
-      return { ...DEFAULT_SETTINGS, ...JSON.parse(raw) };
+      return deepMerge(DEFAULT_SETTINGS, JSON.parse(raw) as Partial<UprootedSettings>);
     }
   } catch (err) {
     console.error("[Uprooted] Failed to load settings:", err);

@@ -20,6 +20,7 @@ let uprootedContent: HTMLElement | null = null;
 let activeUprootedItem: HTMLElement | null = null;
 let loader: PluginLoader | null = null;
 let debounceTimer: ReturnType<typeof setTimeout> | undefined;
+let injectedSidebar: HTMLElement | null = null;
 
 // --- Debug ---
 const DEBUG = true;
@@ -52,7 +53,11 @@ export function startObserving(pluginLoader: PluginLoader): void {
   debugLog(`startObserving called. location=${window.location.href} title=${document.title}`);
   debugLog(`body children=${document.body?.children.length} total elements=${document.querySelectorAll("*").length}`);
 
-  observer = new MutationObserver(() => {
+  observer = new MutationObserver((mutations) => {
+    const hasExternalChange = mutations.some(
+      (m) => !(m.target as Element).closest?.("[data-uprooted]"),
+    );
+    if (!hasExternalChange) return;
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(tryInject, 80);
   });
@@ -341,6 +346,7 @@ function injectSidebarSection(
   }
 
   // Listen for clicks on Root's own sidebar items to restore their content
+  injectedSidebar = sidebar;
   sidebar.addEventListener("click", onSidebarClick, true);
 }
 
@@ -516,6 +522,11 @@ function injectVersionText(): void {
 // --- Cleanup ---
 
 function cleanup(): void {
+  if (injectedSidebar) {
+    injectedSidebar.removeEventListener("click", onSidebarClick, true);
+    injectedSidebar = null;
+  }
+
   const elements = document.querySelectorAll("[data-uprooted]");
   for (const el of elements) el.remove();
 

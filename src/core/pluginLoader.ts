@@ -123,12 +123,19 @@ export class PluginLoader {
 
     const key = `${eventName}:${patch.method}`;
     const handler: EventHandler & { __plugin?: string } = (event) => {
+      let explicitlyCancelled = false;
       if (patch.replace) {
         event.returnValue = patch.replace(...event.args);
         event.cancelled = true;
       } else if (patch.before) {
         const result = patch.before(event.args);
-        if (result === false) event.cancelled = true;
+        if (result === false) {
+          event.cancelled = true;
+          explicitlyCancelled = true;
+        }
+      }
+      if (patch.after && !explicitlyCancelled) {
+        patch.after(event.returnValue, event.args);
       }
     };
     handler.__plugin = pluginName;

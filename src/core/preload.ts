@@ -24,6 +24,7 @@ const VERSION = typeof __UPROOTED_VERSION__ !== "undefined" ? __UPROOTED_VERSION
 function main(): void {
   try {
     const settings = window.__UPROOTED_SETTINGS__;
+    if (settings) Object.freeze(settings);  // shallow freeze — top-level keys become read-only
 
     if (!settings?.enabled) {
       console.log("[Uprooted] Disabled in settings, skipping initialization.");

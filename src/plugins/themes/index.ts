@@ -26,20 +26,8 @@ for (const theme of themes as ThemeDef[]) {
     allVarNames.add(name);
   }
 }
-// Also include custom theme variable names so they get cleaned up
-const customVarNames = [
-  "--rootsdk-brand-primary",
-  "--rootsdk-brand-secondary",
-  "--rootsdk-brand-tertiary",
-  "--rootsdk-background-primary",
-  "--rootsdk-background-secondary",
-  "--rootsdk-background-tertiary",
-  "--rootsdk-input",
-  "--rootsdk-border",
-  "--rootsdk-link",
-  "--rootsdk-muted",
-];
-for (const name of customVarNames) {
+// Single source of truth: derive custom var names from generateCustomVariables
+for (const name of Object.keys(generateCustomVariables("#000000", "#000000"))) {
   allVarNames.add(name);
 }
 
