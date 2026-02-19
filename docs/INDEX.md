@@ -139,7 +139,8 @@ For setting up a development environment.
 | ---------------------------- | ------------------------------------------------------------- | --------------------------- |
 | AddHandler routing strategies | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | Pitfalls                    |
 | Auto-update (.uprpkg)        | [Build Guide](install/BUILD.md)                               | Auto-Update Package         |
-| Auto-updater                 | [Architecture](framework/ARCHITECTURE.md)                     | Component table             |
+| Auto-updater                 | [Hook Reference](framework/HOOK_REFERENCE.md)                 | AutoUpdater deep dive       |
+| Auto-update channels         | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Update Channels             |
 | Avalonia patterns            | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | --                          |
 | AvaloniaEdit (compose input) | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)           | Third-Party Controls        |
 | Avalonia reflection          | [Hook Reference](framework/HOOK_REFERENCE.md)                 | Avalonia reflection cache   |

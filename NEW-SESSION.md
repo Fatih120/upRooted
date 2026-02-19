@@ -38,7 +38,7 @@ Two independent injection layers into one app:
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
 | `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
-| `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
+| `HtmlPatchVerifier.cs` | 442 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1493 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers, settings reload on nav click |
@@ -47,9 +47,9 @@ Two independent injection layers into one app:
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
 | `UprootedSettings.cs` | 210 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |
-| `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
+| `ClearUrlsEngine.cs` | 482 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
 | `MessageLogger.cs` | 1876 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking; event-driven edit detection (`HandleReplaced`, Add-event gating + 5s grace period); Discord-style deleted message rows (red) + edit indicator rows (amber) |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |

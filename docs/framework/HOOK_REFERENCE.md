@@ -16,18 +16,20 @@
 1. [Overview](#overview)
 2. [Entry Points](#entry-points)
 3. [Startup Sequence](#startup-sequence)
-4. [ClearUrlsEngine: Compose Input Interception](#clearurlsengine-compose-input-interception)
-5. [AvaloniaReflection Deep Dive](#avaloniareflection-deep-dive)
+4. [LinkEmbedEngine: Trimming Quirks and Provider Behavior](#linkembedengine-trimming-quirks-and-provider-behavior)
+5. [ClearUrlsEngine: Compose Input Interception](#clearurlsengine-compose-input-interception)
+6. [AutoUpdater: Update Channels and Package System](#autoupdater-update-channels-and-package-system)
+7. [AvaloniaReflection Deep Dive](#avaloniareflection-deep-dive)
    - [Advanced AvaloniaReflection Patterns](#advanced-avaloniareflection-patterns)
-5. [Visual Tree Discovery](#visual-tree-discovery)
-6. [Sidebar Injection](#sidebar-injection)
-7. [Content Pages](#content-pages)
-8. [Theme Engine](#theme-engine)
-9. [Color Utilities](#color-utilities)
-10. [HTML Patch Verifier](#html-patch-verifier)
-11. [Settings](#settings)
-12. [Infrastructure](#infrastructure)
-13. [Dependency Map](#dependency-map)
+8. [Visual Tree Discovery](#visual-tree-discovery)
+9. [Sidebar Injection](#sidebar-injection)
+10. [Content Pages](#content-pages)
+11. [Theme Engine](#theme-engine)
+12. [Color Utilities](#color-utilities)
+13. [HTML Patch Verifier](#html-patch-verifier)
+14. [Settings](#settings)
+15. [Infrastructure](#infrastructure)
+16. [Dependency Map](#dependency-map)
 
 ---
 
@@ -390,6 +392,76 @@ generic sites via OpenGraph tags with Content-Type gating. Direct Tenor CDN URLs
 (`media.tenor.com`) are skipped (Root renders them natively); `tenor.com/view/` pages
 go through the OG pipeline to extract and render the animated GIF inline.
 
+Sets `LinkEmbedEngine.Instance` static property for external access from ContentPages
+(settings lightbox "Show file names" toggle).
+
+### Phase 4.5c: Message Logger
+
+**Time:** 20 seconds after Phase 4 (allows chat to populate)
+**Failure mode:** Non-fatal; messages simply aren't logged
+
+**File:** `hook/MessageLogger.cs` (1876 lines), `hook/MessageStore.cs` (232 lines)
+
+Starts the message logger plugin (WIP). Finds `RootMessageItemsControl` in the visual
+tree, resolves ViewModel property accessors (MessageId, Content, AuthorId, Timestamp)
+via per-type cache, and subscribes to `ObservableCollection.CollectionChanged` via
+`Expression.Lambda`. Handles Add, Remove, Replace, and Reset events with epoch-based
+channel switch cancellation and async deletion pollers (HasBeenDeleted probe every
+300ms for 3s).
+
+### Phase 4.5d: Auto-Updater
+
+**Time:** After Phase 4.5c
+**Failure mode:** Non-fatal; updates simply don't happen
+
+**File:** `hook/AutoUpdater.cs` (~910 lines)
+
+Initializes the in-process auto-updater. Creates an `AutoUpdater` instance, sets
+`AutoUpdater.Instance` for UI access from ContentPages, and subscribes to
+`AutoUpdater.BackgroundUpdateApplied` to show a dismissable notification overlay when a
+background update is applied.
+
+See [AutoUpdater: Update Channels and Package System](#autoupdater-update-channels-and-package-system) for the full technical reference.
+
+### Phase 4.5e: Profile Badge Injector
+
+**Time:** 5 seconds after Phase 4 (developer channel only)
+**Failure mode:** Non-fatal; no badge appears
+
+**File:** `hook/ProfileBadgeInjector.cs` (~535 lines)
+
+Injects "Uprooted Dev" badge below username in profile popups. Only runs on the
+developer update channel. 500ms timer polls TopLevel windows + OverlayLayer
+`CollectionChanged` events. Heuristic popup detection (avatar + username + roles),
+username TextBlock found by largest font size, badge gated to hardcoded developer
+usernames.
+
+### Phase 4.5f: Silent Typing
+
+**Time:** 12 seconds after Phase 4
+**Failure mode:** Non-fatal; typing indicators are sent normally
+
+**File:** `hook/SilentTypingEngine.cs` (335 lines)
+
+Blocks `SetTypingIndicator` gRPC calls at the .NET HttpClient layer. Scans assemblies
+and walks the ViewModel chain to find Root's `HttpClient` instances, then prepends a
+`TypingBlockerHandler` (DelegatingHandler) that short-circuits matching requests with a
+synthetic `200 OK` response. Timer-based discovery with 5s retry interval, 30s interval
+once patched.
+
+### Phase 4.5g: NSFW Filter
+
+**Time:** 20 seconds after Phase 4
+**Failure mode:** Non-fatal; images are not filtered
+
+**File:** `hook/NsfwFilter.cs` (473 lines)
+
+Avalonia-native NSFW content filter. 500ms scan timer posts `ScanForImages()` to the UI
+thread. DFS walks the visual tree finding `Image` controls (skips tagged/tiny/seen),
+queues classification on thread pool with `SemaphoreSlim(3)` concurrency cap. NSFW
+images are hidden and an overlay injected (Border > StackPanel > warning text +
+click-to-reveal). `RevealAllBlocked()` restores all on disable.
+
 ### Phase 5: DotNetBrowser Feature Loading
 
 **Timeout:** 90 seconds (event-driven, not polling)
@@ -407,9 +479,8 @@ On detection:
 2. Discovers `IBrowser` via ViewModel chain walking: `MainWindow.DataContext` →
    `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`
    (ConcurrentDictionary).
-3. Initializes `NsfwFilter.TryInject()` (`hook/NsfwFilter.cs`, 305 lines) — still JS injection, needs Avalonia-native redesign.
 
-**Known limitation:** NSFW filter still uses DotNetBrowser JS injection and cannot affect chat (chat is Avalonia-native). Needs full redesign.
+DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps) — chat is Avalonia-native.
 
 ---
 
@@ -635,6 +706,172 @@ Any feature that needs to intercept outgoing messages can follow this same patte
 3. `AddHandler` with all routing strategies + `handledEventsToo=true` on TextArea
 4. Read/write text via parent TextEditor's CLR `Text` property
 5. Handler fires before Root processes Enter — modifications affect sent content
+
+---
+
+## AutoUpdater: Update Channels and Package System
+
+**File:** `hook/AutoUpdater.cs` (~910 lines)
+
+The auto-updater checks GitHub releases for new versions, downloads an encrypted
+`.uprpkg` package, decrypts and unpacks it to a staging directory, verifies all expected
+files are present and non-empty, then overwrites the installed files in-place. Changes
+take effect on the next Root restart.
+
+### Update Channels
+
+Two independent update channels exist, each pulling from a different GitHub repository:
+
+| Property | Stable Channel | Developer Channel |
+|----------|---------------|-------------------|
+| **Source repo** | `watchthelight/uprooted` (public) | `The-Uprooted-Project/uprooted-private` (private) |
+| **API endpoint** | `https://api.github.com/repos/watchthelight/uprooted/releases/latest` | `https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1` |
+| **Download base** | `https://github.com/watchthelight/uprooted/releases/download` | `https://github.com/The-Uprooted-Project/uprooted-private/releases/download` |
+| **Authentication** | None (public repo) | XOR-encrypted GitHub PAT (read-only, scoped to private repo) |
+| **Release type** | Non-prerelease only (`/releases/latest`) | Pre-releases included (`?per_page=1`) |
+| **Access gate** | Open | SHA-256 password validation required to switch to this channel |
+
+**Why `/releases?per_page=1` for dev channel:** The GitHub API endpoint `/releases/latest`
+only returns non-prerelease releases. Dev-channel builds are published as pre-releases,
+so `/releases/latest` would miss them entirely. Using `?per_page=1` returns the most
+recent release regardless of pre-release status.
+
+**Developer channel access:** Users must enter a password to switch to the developer
+channel. The password is validated by comparing its SHA-256 hash against a stored
+constant (`DevPasswordHash`). This is a UX gate, not a security measure — the PAT is
+embedded in the binary.
+
+The active channel is determined by the `AutoUpdateChannel` setting in
+`uprooted-settings.ini` (values: `"stable"` or `"developer"`). The setting is read fresh
+on each check via `UprootedSettings.Load()`.
+
+### Check Flow
+
+1. **Throttle:** `ShouldCheck()` compares `AutoUpdate.LastCheck` (ISO 8601 timestamp) against
+   the current time. Skips if less than 6 hours have passed (`CheckIntervalHours = 6`).
+2. **API request:** Hits the channel-appropriate GitHub API endpoint. For the dev channel,
+   sets `Authorization: Bearer {decryptedPat}` per-request via `SendAsync` (can't set
+   per-request headers with `GetStringAsync`).
+3. **Parse response:** Extracts `tag_name` from the JSON response via regex
+   (`"tag_name"\s*:\s*"([^"]+)"`) — no `System.Text.Json` (Critical Rule #3).
+4. **Version compare:** `CompareVersions()` handles `major.minor.patch-suffix` with correct
+   pre-release ordering (`0.3.6-rc < 0.3.6`). Pre-release suffixes sort below the bare
+   version.
+5. **Download decision:**
+   - `latest > current` → download and apply
+   - `latest == current` AND manual check → download and compare package hash (catches
+     silent hotfixes published under the same version tag)
+   - `latest <= current` (background check) → skip ("Already up to date")
+
+### Package Download and Apply
+
+The download URL follows the pattern:
+`{downloadBase}/{tag}/auto-update.uprpkg`
+
+For example:
+- Stable: `https://github.com/watchthelight/uprooted/releases/download/v0.4.0/auto-update.uprpkg`
+- Dev: `https://github.com/The-Uprooted-Project/uprooted-private/releases/download/v0.4.0/auto-update.uprpkg`
+
+**Package contents** (6 files — profiler DLL excluded because it's locked on Windows and rarely changes):
+
+| File | Description |
+|------|-------------|
+| `UprootedHook.dll` | C# hook assembly |
+| `UprootedHook.deps.json` | .NET dependency manifest |
+| `uprooted-preload.js` | TypeScript bundle (browser injection) |
+| `uprooted.css` | Theme and UI styles |
+| `nsfw-filter.js` | NSFW filter browser-side script |
+| `link-embeds.js` | Link embeds browser-side script |
+
+**Apply sequence:**
+1. Create staging directory (`{uprootedDir}/update-staging/`)
+2. Download `auto-update.uprpkg` (with auth token for dev channel)
+3. Compute SHA-256 of the downloaded package
+4. **Hash-based hotfix detection:** If the installed version matches the release version,
+   compare the package hash against the stored hash (`LastPackageHash` in settings). If
+   identical, skip (no hotfix). If different, apply the new package.
+5. Decrypt and unpack via `UnpackPackage()` (see [Package Format](#package-format))
+6. Write extracted files to staging directory
+7. Verify all 6 expected files are present and non-empty
+8. Copy from staging to the Uprooted install directory (`CopyFileRobust`)
+9. Clean up staging directory
+10. Update settings: `Version`, `PendingUpdateVersion`, `LastPackageHash`
+
+### Package Format (.uprpkg)
+
+Binary format with multi-layer XOR encryption:
+
+```
+Offset  Field               Size        Description
+0       Magic               4 bytes     "UPRK" (0x55 0x50 0x52 0x4B)
+4       Version             1 byte      0x01 (format version)
+5       File count          2 bytes     uint16 LE
+7       Nonce               32 bytes    Random per-build nonce
+
+Per file (repeated file_count times):
++0      Filename length     2 bytes     uint16 LE
++2      Filename            N bytes     UTF-8 encoded
++N+2    Data length         4 bytes     uint32 LE
++N+6    Encrypted data      M bytes     XOR-encrypted file contents
+```
+
+**Decryption:** Each byte is XOR'd with a position-dependent key derived from three
+sources:
+
+```
+key[pos] = MasterKey[pos % 64] ^ Nonce[pos % 32] ^ ((pos >> 8) & 0xFF)
+```
+
+The 64-byte master key is shared between `hook/AutoUpdater.cs` and
+`scripts/pack-update.py`. The 32-byte nonce is randomly generated per build and embedded
+in the package header.
+
+### Locked File Handling
+
+`CopyFileRobust()` handles the case where the destination file is locked (e.g.,
+`UprootedHook.dll` loaded in the current process). On Windows, renaming a loaded DLL is
+permitted — the old handle stays valid. The method renames the locked file to `.old`,
+copies the new file in, then attempts to delete the `.old` file.
+
+### Background Update Notification
+
+When a background (non-manual) check successfully applies an update,
+`BackgroundUpdateApplied` static event fires with the new version string. `StartupHook`
+subscribes to this event in Phase 4.5d and dispatches
+`ContentPages.ShowUpdateNotification()` to the UI thread, showing a dismissable overlay
+card with a restart button.
+
+Manual checks (user presses "Check for Updates") do not fire this event — the user is
+already looking at the settings page and sees the status directly.
+
+### HTTP via Reflection
+
+Uses its own copy of the reflection-based `HttpClient` pattern (project convention of
+self-contained files). `EnsureHttpResolved()` resolves `HttpClient`, `GetStringAsync`,
+`GetByteArrayAsync`, `GetAsync`, and `SendAsync` from loaded assemblies. Default headers
+include `User-Agent: Uprooted-AutoUpdater/1.0`, `Accept: application/vnd.github+json`,
+and `Accept-Encoding: identity` (avoids trimmed decompression handlers).
+
+For authenticated requests (dev channel), uses `SendAsync` with per-request
+`Authorization: Bearer` header rather than `GetStringAsync`/`GetByteArrayAsync` which
+only support default headers.
+
+### Settings
+
+| INI Key | Property | Type | Default | Description |
+|---------|----------|------|---------|-------------|
+| `AutoUpdate.Enabled` | `AutoUpdateEnabled` | bool | `true` | Enable periodic background checks |
+| `AutoUpdate.Notify` | `AutoUpdateNotify` | bool | `true` | Show UI notification on background update |
+| `AutoUpdate.Channel` | `AutoUpdateChannel` | string | `"stable"` | `"stable"` or `"developer"` |
+| `AutoUpdate.LastCheck` | `LastUpdateCheck` | string | `""` | ISO 8601 UTC timestamp of last check attempt |
+| `AutoUpdate.LastPackageHash` | `LastPackageHash` | string | `""` | SHA-256 hex of last applied `.uprpkg` (hotfix detection) |
+
+### Version Comparison
+
+`CompareVersions(a, b)` parses `major.minor.patch-suffix` and returns positive if `a > b`,
+negative if `a < b`, 0 if equal. Pre-release suffixes sort below the bare version
+(`0.3.6-rc < 0.3.6`). Used by the auto-updater for update decisions and by `StartupHook`
+for version migration (force-disable on upgrade).
 
 ---
 
