@@ -1,7 +1,13 @@
 # Root Control Reference
 
-> **Source:** ILSpy decompilation of `RootApp.Client.Avalonia v0.9.92.0` — all findings confirmed from compiled IL.
-> **Related:** [Avalonia Patterns](AVALONIA_PATTERNS.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [Hook Reference](HOOK_REFERENCE.md) | [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+> **What this is:** Authoritative reference for Root's custom controls, style classes, resource key usage, message view internals, and DataStore keys — all confirmed from ILSpy decompilation of v0.9.92.
+> **Read when:** Building any C# feature that touches Root's visual tree; fixing theme bugs; building message plugins; matching Root's UI aesthetic.
+> **Before this:** [ARCHITECTURE.md §Critical Rules](ARCHITECTURE.md#9-critical-rules) — constraints on how to interact with the tree.
+> **After this, for:**
+> - Theme implementation → [THEME_ENGINE_DEEP_DIVE.md §Resource-First Migration](THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan)
+> - Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md)
+> - Current feature WIP state → [hook/SESSION_STATE.md](../../hook/SESSION_STATE.md)
+> **Related docs:** [HOOK_REFERENCE](HOOK_REFERENCE.md) | [AVALONIA_PATTERNS](AVALONIA_PATTERNS.md) | [THEME_ENGINE_DEEP_DIVE](THEME_ENGINE_DEEP_DIVE.md) | [ROOT_THEME_SYSTEM_FINDINGS](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
 
 This document is the authoritative reference for Root's custom controls, style class system, message view structure, and behavioral patterns as discovered by ILSpy decompilation. Use this when building new Uprooted features to match Root's visual language and avoid rediscovering control internals.
 
@@ -744,4 +750,7 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 
 ---
 
+**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, message view named controls + `updateBackgroundColor()` logic, mention/markdown system, settings page layout pattern, DataStore keys, App startup chain
+**Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
+**For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
 *Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0*

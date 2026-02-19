@@ -1,6 +1,11 @@
 # Theme Engine Deep Dive
 
-> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | [Root Control Reference](ROOT_CONTROL_REFERENCE.md)
+> **What this is:** ThemeEngine implementation deep dive — algorithm, data structures, and the resource-first migration plan that fixes the known color inconsistency bugs.
+> **Read when:** Modifying ThemeEngine; fixing theme switch bugs; changing custom theme palette generation; implementing ping color override.
+> **Before this:** [ROOT_CONTROL_REFERENCE §Theme System](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — confirms Root uses its own 32 keys (not FluentTheme), explains why current approach fails.
+> **Color key hex values:** [ROOT_THEME_SYSTEM_FINDINGS](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) — all 32 keys across 3 themes with exact ARGB values.
+> **Does NOT cover:** Root's custom control types or style class system → [ROOT_CONTROL_REFERENCE](ROOT_CONTROL_REFERENCE.md).
+> **Related docs:** [HOOK_REFERENCE](HOOK_REFERENCE.md) | [ARCHITECTURE](ARCHITECTURE.md) | [AVALONIA_PATTERNS](AVALONIA_PATTERNS.md) | [ROOT_THEME_SYSTEM_FINDINGS](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | [ROOT_CONTROL_REFERENCE](ROOT_CONTROL_REFERENCE.md)
 
 For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 
@@ -184,6 +189,8 @@ Do NOT override `Error` for ping color — it also controls notification badge b
 ---
 
 ## Resource Dictionary Injection
+
+> **↳ Canonical source for exact hex values:** [ROOT_THEME_SYSTEM_FINDINGS.md §Dark Theme Color Table](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#dark-theme--complete-color-table) and [§Three-Theme Color Comparison](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#complete-three-theme-color-comparison).
 
 ### Where Root Stores Its Colors
 
@@ -1214,3 +1221,9 @@ full type names for DotNetBrowser controls.
 These methods were used to discover Root's color scheme, identify which resource keys
 affect which controls, and build the tree color maps. They can be called from the
 Uprooted settings page via the theme engine instance.
+
+---
+
+**Canonical for:** ThemeEngine algorithm (phases 1–6), resource-first migration plan, 32-key derivation table for custom themes, ping color fix strategy, CSS variable bridge, live preview system, revert mechanics
+**Not canonical for:** Root's 32 key hex values → [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | Root control types/style classes → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md)
+*Last updated: 2026-02-19*

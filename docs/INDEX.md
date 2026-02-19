@@ -60,6 +60,48 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 
 ---
 
+## AI Workflow Paths
+
+Ordered read sequences for common contributor tasks. Read only what you need — don't read everything.
+
+### Fix theme inconsistency bugs (controls wrong color, toggle not updating on state change)
+1. [ROOT_CONTROL_REFERENCE §Theme System](framework/ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — why current ThemeEngine fails (targets wrong keys)
+2. [THEME_ENGINE_DEEP_DIVE §Resource-First Migration](framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan) — the correct fix + 32-key derivation table
+3. [ROOT_THEME_SYSTEM_FINDINGS](../research/ROOT_THEME_SYSTEM_FINDINGS.md) — all 32 exact hex values across 3 themes
+
+### Build a C# hook feature (Avalonia, visual tree injection)
+1. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — patterns for the specific feature area
+2. [AVALONIA_PATTERNS](framework/AVALONIA_PATTERNS.md) — reflection pitfalls, Root custom control types
+3. [ROOT_CONTROL_REFERENCE](framework/ROOT_CONTROL_REFERENCE.md) — ILSpy-confirmed type names, style classes, settings page pattern
+
+### Build a TypeScript plugin (browser-side, DotNetBrowser Chromium)
+1. [TYPESCRIPT_REFERENCE](framework/TYPESCRIPT_REFERENCE.md) — layer architecture and constraints
+2. [API_REFERENCE](plugins/API_REFERENCE.md) — plugin lifecycle and full API surface
+3. [BRIDGE_REFERENCE](plugins/BRIDGE_REFERENCE.md) — IPC intercept patterns
+
+### Work on message features (Logger, embeds, NoReplyPing, Translate)
+1. [ROOT_CONTROL_REFERENCE §Message View](framework/ROOT_CONTROL_REFERENCE.md#message-view-internals) — named controls, `updateBackgroundColor()`, injection points
+2. [ROOT_CONTROL_REFERENCE §Mention System](framework/ROOT_CONTROL_REFERENCE.md#mention-and-markdown-system) — `CSpan`, mention keys, style selectors
+3. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — LinkEmbedEngine / MessageLogger implementation details
+
+### Understand Root's internals from scratch
+1. [HOW_IT_WORKS](HOW_IT_WORKS.md) — narrative from RE to running mod
+2. [ROOT_INTERNALS](research/ROOT_INTERNALS.md) — process architecture, DotNetBrowser, authentication
+3. [ROOT_CONTROL_REFERENCE](framework/ROOT_CONTROL_REFERENCE.md) — ILSpy-confirmed control types (supersedes ROOT_INTERNALS for controls)
+4. [ROOT_THEME_SYSTEM_FINDINGS](../research/ROOT_THEME_SYSTEM_FINDINGS.md) — color system (supersedes ROOT_INTERNALS §6)
+
+### Debug CLR profiler / startup failures / IL injection
+1. [CLR_PROFILER](framework/CLR_PROFILER.md) — profiler internals, GUID, env vars, IL injection
+2. [DOTNET_RUNTIME](framework/DOTNET_RUNTIME.md) — trimming gotchas, assembly scanning, AppDomain
+3. [HOOK_REFERENCE §Startup Sequence](framework/HOOK_REFERENCE.md#startup-sequence) — Phase 0–5 timing and guards
+
+### gRPC protocol / SilentTyping / network interception
+1. [GRPC_PROTOCOL](research/GRPC_PROTOCOL.md) — service catalog, message format, 27 services
+2. [ROOT_INTERNALS §gRPC](research/ROOT_INTERNALS.md#9-grpc-backend) — how Root uses gRPC
+3. [HOOK_REFERENCE §ClearUrlsEngine](framework/HOOK_REFERENCE.md#clearurlsengine-compose-input-interception) — AvaloniaEdit intercept pattern (related technique)
+
+---
+
 ## Reading Paths
 
 ### Install Uprooted

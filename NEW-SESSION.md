@@ -1,6 +1,21 @@
 # New Session Quick-Start
 
-> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md) | [Tasks](TASKS.md)
+> **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md) | [Tasks](TASKS.md) | [Root Control Reference](docs/framework/ROOT_CONTROL_REFERENCE.md)
+>
+> **AI Workflow Dispatch — jump directly to your task, skip the rest:**
+>
+> | Task | Start here | Follow with |
+> |------|-----------|-------------|
+> | Fix theme colors / controls not updating | [ROOT_CONTROL_REFERENCE §Theme System](docs/framework/ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) | [THEME_ENGINE_DEEP_DIVE §Migration](docs/framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan) |
+> | Build C# hook feature (Avalonia, visual tree) | [HOOK_REFERENCE](docs/framework/HOOK_REFERENCE.md) | [AVALONIA_PATTERNS](docs/framework/AVALONIA_PATTERNS.md) → [ROOT_CONTROL_REFERENCE](docs/framework/ROOT_CONTROL_REFERENCE.md) |
+> | Build TypeScript plugin | [TYPESCRIPT_REFERENCE](docs/framework/TYPESCRIPT_REFERENCE.md) | [API_REFERENCE](docs/plugins/API_REFERENCE.md) → [BRIDGE_REFERENCE](docs/plugins/BRIDGE_REFERENCE.md) |
+> | Message features (Logger, embeds, NoReplyPing, Translate) | [ROOT_CONTROL_REFERENCE §Message View](docs/framework/ROOT_CONTROL_REFERENCE.md#message-view-internals) | [HOOK_REFERENCE](docs/framework/HOOK_REFERENCE.md) |
+> | Theme system (palette, resource keys, 32-key catalog) | [ROOT_THEME_SYSTEM_FINDINGS](research/ROOT_THEME_SYSTEM_FINDINGS.md) | [THEME_ENGINE_DEEP_DIVE](docs/framework/THEME_ENGINE_DEEP_DIVE.md) |
+> | CLR profiler / startup / IL injection | [CLR_PROFILER](docs/framework/CLR_PROFILER.md) | [DOTNET_RUNTIME](docs/framework/DOTNET_RUNTIME.md) |
+> | gRPC / SilentTyping / network interception | [GRPC_PROTOCOL](docs/research/GRPC_PROTOCOL.md) | [ROOT_INTERNALS §9](docs/research/ROOT_INTERNALS.md#9-grpc-backend) |
+> | Root internals (DotNetBrowser, auth, process) | [ROOT_INTERNALS](docs/research/ROOT_INTERNALS.md) | [ROOT_CONTROL_REFERENCE §App Startup](docs/framework/ROOT_CONTROL_REFERENCE.md#app-startup-chain) |
+> | Release / version bump | [BUILD](docs/install/BUILD.md) | [CHANGELOG](CHANGELOG.md) |
+> | Add / run tests | [TESTING](docs/dev/TESTING.md) | [SESSION_STATE](hook/SESSION_STATE.md) for current counts |
 
 ---
 
@@ -103,7 +118,7 @@ Two independent injection layers into one app:
 
 ## 6. Current State
 
-**Source:** `hook/SESSION_STATE.md` (2026-02-18)
+**Source:** [`hook/SESSION_STATE.md`](hook/SESSION_STATE.md) (2026-02-18) — *this section is a static snapshot; SESSION_STATE.md is the live source*
 
 **Versions:** 0.4.0 | Target Root 0.9.92
 
@@ -295,4 +310,6 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-*Quick-start reference for Uprooted v0.4.0. Last updated 2026-02-18.*
+**Canonical for:** Session entry point dispatch, critical rules (§3), common pitfalls (§10), file map (§4)
+**Live state at:** [hook/SESSION_STATE.md](hook/SESSION_STATE.md) — §6 above is a static snapshot
+*Quick-start reference for Uprooted v0.4.0. Last updated 2026-02-19.*

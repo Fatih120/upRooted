@@ -1,8 +1,12 @@
 # Root Theme System — ILSpy Findings (2026-02-18)
 
+> **What this is:** Complete ILSpy decompilation of Root's color system — all 32 resource keys with hex values for all 3 themes, App.cs ThemeDictionaries wiring, 27 style files analysis, and the definitive override path.
+> **Read when:** Implementing the resource-first ThemeEngine migration; deriving theme palettes; checking exact color values; understanding how Root switches themes.
+> **Before this:** [ROOT_CONTROL_REFERENCE.md §Theme System Mechanics](../docs/framework/ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — summary of findings and implications.
+> **Implementation guide:** [THEME_ENGINE_DEEP_DIVE.md §Resource-First Migration](../docs/framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan) — how to use these values to fix ThemeEngine.
 > **Source:** ILSpy decompilation of `RootApp.Client.Avalonia v0.9.92.0`
-> **Status:** Research complete. Full source mapping: App.cs wiring, all 27 style files, SimpleTheme base layer, all views confirmed DynamicResource-only.
-> **Related:** [Theme Engine Deep Dive](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | [Root Internals](../docs/research/ROOT_INTERNALS.md)
+> **Status:** Research complete — all 32 keys decoded, 3 themes compared, App.cs wiring confirmed, all 27 style files analyzed.
+> **Related:** [THEME_ENGINE_DEEP_DIVE](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | [ROOT_CONTROL_REFERENCE](../docs/framework/ROOT_CONTROL_REFERENCE.md) | [ROOT_INTERNALS](../docs/research/ROOT_INTERNALS.md)
 
 ---
 
@@ -909,4 +913,6 @@ The `DirectMessageTabView` decompilation was reviewed in conversation but not sa
 
 ---
 
+**Canonical for:** Root's 32 color resource key hex values (all 3 themes), XamlClosure decompilation, App.cs ThemeDictionaries structure, AvaloniaEdit 10 keys, DynamicResource usage analysis across all 27 style files
+**Implementation guidance in:** [THEME_ENGINE_DEEP_DIVE.md §Resource-First Migration](../docs/framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan)
 *Last updated: 2026-02-19 — Research complete. Full source mapping: App.cs wiring, all 27 style files analyzed (69 DynamicResource usages of 22 Root keys), SimpleTheme base layer decoded, ChatView/ChatViewModel settings pattern, definitive override path confirmed.*
