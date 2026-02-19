@@ -6,6 +6,36 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.4.1] - 2026-02-19
+
+### Changed
+
+- **Theme Engine v2: resource-first rewrite with OKLCH palette generation** — Complete rewrite of `ThemeEngine.cs` (2638 → ~900 lines). Now overrides Root's actual 32 DynamicResource keys in `ThemeDictionaries[activeVariant]` instead of ~70 FluentTheme/SimpleTheme keys Root doesn't reference. DynamicResource propagation replaces continuous timer-based visual tree walking (11 walk methods, 500ms timer, layout interceptor, burst walks, cross-mapping all eliminated). Three override layers: (1) ThemeDictionaries for Root's 32 keys, (2) Styles[0].Resources for SimpleTheme keys, (3) single delayed one-shot walk for hardcoded code-behind colors.
+  - OKLCH (perceptually uniform) replaces HSL for palette generation — lightness steps now look consistent across all hues. Conversion chain: sRGB ↔ OKLab ↔ OKLCH with gamut mapping via binary search on chroma (20 iterations).
+  - New `ColorUtils.cs` functions: `SrgbToLinear`, `LinearToSrgb`, `RgbToOklab`, `OklabToRgb`, `RgbToOklch`, `OklchToRgb`, `OklchToHex`, `HexToOklch`.
+  - New `AvaloniaReflection.cs` methods: `GetThemeDictionaries`, `GetActiveThemeVariant`, `FindVariantByName`, `SubscribeActualThemeVariantChanged`.
+  - Live preview uses dict updates only (no tree walk during drag) — 60fps throttle.
+  - Revert removes direct entries from ThemeDictionaries; MergedDictionaries originals reassert via DynamicResource.
+  - Ping color now overrides `SelfMention`/`SelfMentionBackground`/`SelfMentionBorder` resource keys directly (no tree walk).
+  - Files: `hook/ThemeEngine.cs`, `hook/ColorUtils.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`
+- **Silent Typing: restored JS interception** — Replaced the no-op TypeScript stub with Kurumi Nanase's working fetch/XHR interception. Blocks `SetTypingIndicator` gRPC calls at the browser network level. Both C# (`SilentTypingEngine.cs`) and JS (`silent-typing/index.ts`) interception now active for defense-in-depth.
+  - File: `src/plugins/silent-typing/index.ts`
+
+### Fixed
+
+- **Theme switch color inconsistencies** — Targeting Root's actual 32 DynamicResource keys means controls bind directly to overridden resources. No more stale colors from missed tree walks — DynamicResource propagates instantly to all bound controls.
+- **Custom theme: Root settings controls don't recolor instantly** — Same root cause as above. Controls using `DynamicResource` bindings now update automatically when theme keys change, without requiring a tab switch or page reload.
+- **Linux crash: `MissingMethodException` on startup** — `ManualResetEventSlim.Wait(TimeSpan)` doesn't exist on .NET runtime Root ships on Linux; replaced with `Wait(int)` which is universally available.
+
+### Documentation
+
+- **Root theme system research** (`research/ROOT_THEME_SYSTEM_FINDINGS.md`) — ILSpy decompilation documenting Root's 32-key native Avalonia color system, complete color tables for Dark/Light/PureDark, theme switching mechanism, and correct override strategy
+- **ILSpy decompilation analysis** — 219 files in `research/ilspy-dumps/` (156 newly split from grouped dumps), 29 analyzed into `ROOT_CONTROL_REFERENCE.md`
+- **ROOT_CONTROL_REFERENCE.md** — Authoritative reference for Root's custom controls, style classes, resource keys, message view internals, settings infrastructure, and DataStore keys
+- Corrected 12 docs that incorrectly claimed Root uses FluentTheme keys — all now reference Root's actual 32 ThemeDictionary keys
+
+---
+
 ## [0.4.0] - 2026-02-18
 
 ### Added
@@ -146,10 +176,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **MessageLogger: edit detection needs validation** — Edit detection (CollectionChanged Replace events with 5s grace period) is deployed but not yet validated in real-world use. False positives from content changes during send/render may still occur. Edit indicator cards may break message layout in some cases.
 - **MessageLogger: deletion pollers need validation** — Async deletion pollers (`HasBeenDeleted` probe every 300ms for 3s) are deployed but unvalidated. If Root sets `HasBeenDeleted` asynchronously after a longer delay, the 3s timeout may be insufficient.
 - **ProfileBadgeInjector: false positives on non-profile popups** — The `IsProfilePopup` heuristic (avatar + username + roles/status/text count) may incorrectly identify non-profile popups as profile popups and inject the dev badge.
-- **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. tab text appears brighter than intended). Self-corrects when the settings screen is reopened. Likely a stale recolor or priority issue in the visual tree walk.
-- **Custom theme: Root settings controls don't recolor instantly** — Toggling Root's native selectors and switches while a custom theme is active does not immediately update their accent color. Colors correct themselves after changing tabs and reloading the page. The visual tree walk does not re-trigger on control state changes.
+- **Theme Engine v2: unvalidated in production** — The resource-first rewrite (OKLCH, ThemeDictionaries override) is deployed but not yet tested against Root in production. Preset themes, custom themes, live preview, revert, and variant switching all need manual verification.
 - **NSFW filter: unvalidated** — Avalonia-native redesign (Phase 4.5g) is deployed but has not been tested with the Google Vision API in production. Image classification, blur overlay, and click-to-reveal may not function correctly.
-- **SilentTyping: unvalidated** — C# `TypingBlockerHandler` (Phase 4.5f) is deployed but has not been validated with two accounts. The `HttpClient` discovery (static field scan + ViewModel chain walk) may not find all relevant instances.
+- **SilentTyping: unvalidated** — Both C# `TypingBlockerHandler` (Phase 4.5f) and JS fetch/XHR intercept are deployed but have not been validated with two accounts. The dual interception approach (C# + JS) provides defense-in-depth but needs real-world testing.
 
 ### Documentation
 
@@ -302,6 +331,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0
 [0.3.6-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.5...v0.3.6-rc
 [0.3.5]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.5

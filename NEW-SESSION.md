@@ -22,7 +22,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.4.0. Target: Root v0.9.92+.
+Version: 0.4.1. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -50,13 +50,13 @@ Two independent injection layers into one app:
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
 | `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
 | `HtmlPatchVerifier.cs` | 442 | Phase 0: self-healing HTML patches + FileSystemWatcher |
-| `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
+| `AvaloniaReflection.cs` | ~2104 | Reflection cache for ~80 Avalonia types + ThemeDictionaries access (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1493 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers, settings reload on nav click |
 | `ContentPages.cs` | 3511 | Settings page builders (Uprooted, Plugins, Themes); background update notification overlay |
-| `ThemeEngine.cs` | 2638 | ResourceDictionary overrides, live theme preview, custom ping color override (visual tree walk only — no global accent bleed) |
+| `ThemeEngine.cs` | ~900 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
-| `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
+| `ColorUtils.cs` | ~414 | HSL/RGB/OKLCH conversion, contrast calculation, gamut mapping |
 | `UprootedSettings.cs` | 210 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |
 | `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
@@ -116,7 +116,7 @@ Two independent injection layers into one app:
 
 **Source:** [`hook/SESSION_STATE.md`](hook/SESSION_STATE.md) (2026-02-18) — *this section is a static snapshot; SESSION_STATE.md is the live source*
 
-**Versions:** 0.4.0 | Target Root 0.9.92
+**Versions:** 0.4.1 | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -168,6 +168,7 @@ Two independent injection layers into one app:
 - All 170 pass. Zero bugs found. See `tests/BUG_REPORT.md`.
 
 **Known issues:**
+- Theme Engine v2 (resource-first, OKLCH) deployed but not yet validated in production
 - NSFW filter needs Avalonia-native redesign (chat is not in DotNetBrowser)
 - `after` patch handler defined in interface but not yet invoked by PluginLoader
 - MessageLogger (WIP): edit detection disabled (false positives from content changes during send/render); edit indicators disabled (break message layout); async deletion pollers (HasBeenDeleted) need real-world validation
@@ -308,4 +309,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 **Canonical for:** AI session entry point, critical rules quick-reference (§3), common pitfalls (§10), abbreviated file map (§4), workflow dispatch table
 **Not canonical for:** full critical rules → [ARCHITECTURE.md §9](docs/framework/ARCHITECTURE.md#9-critical-rules) | full file map → [CLAUDE.md](CLAUDE.md) | implementation detail → [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md)
-*Quick-start reference for Uprooted v0.4.0. Last updated 2026-02-19.*
+*Quick-start reference for Uprooted v0.4.1. Last updated 2026-02-19.*

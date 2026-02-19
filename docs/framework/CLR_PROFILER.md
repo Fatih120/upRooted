@@ -573,4 +573,4 @@ not shifted in the new runtime's header files.
 
 **Canonical for:** native C profiler implementation, COM vtable setup, IL injection bytecode sequence (26-byte payload), GUID `{D1A6F5A0-...}`, profiler environment variables, process guard, Windows vs Linux platform differences, build commands, profiler.log debugging, vtable index reference
 **Not canonical for:** .NET runtime concepts → [DOTNET_RUNTIME.md](DOTNET_RUNTIME.md) | managed hook → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | env var deployment → [INSTALLER.md](INSTALLER.md)
-*CLR profiler reference for Uprooted v0.4.0. Last updated 2026-02-19.*
+*CLR profiler reference for Uprooted v0.4.1. Last updated 2026-02-19.*

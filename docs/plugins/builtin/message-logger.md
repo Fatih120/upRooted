@@ -4,7 +4,7 @@
 
 Logs deleted and edited messages. Deleted messages appear with red styling; edited messages show the previous content with an amber edit indicator.
 
-> **Status:** Shipped WIP (v0.4.0) — deletion detection + edit detection + edit indicators working
+> **Status:** Shipped WIP (v0.4.1) — deletion detection + edit detection + edit indicators working
 > **Layer:** C# hook (Avalonia-native) — chat is not rendered in DotNetBrowser
 > **Files:** [`hook/MessageLogger.cs`](../../../hook/MessageLogger.cs), [`hook/MessageStore.cs`](../../../hook/MessageStore.cs)
 

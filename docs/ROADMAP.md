@@ -34,7 +34,7 @@ The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
 **NSFW filter unvalidated**
-The NSFW filter was redesigned in v0.4.0 to use Avalonia-native visual tree scanning (Phase 4.5g) instead of DotNetBrowser JS injection. The redesign is deployed but has not been validated end-to-end with the Google Vision API in production.
+The NSFW filter was redesigned in v0.4.1 to use Avalonia-native visual tree scanning (Phase 4.5g) instead of DotNetBrowser JS injection. The redesign is deployed but has not been validated end-to-end with the Google Vision API in production.
 - Files: `hook/NsfwFilter.cs`
 
 **Settings page text-based detection fragile**
@@ -67,7 +67,7 @@ Runtime changes made via the browser-side settings panel only update the in-memo
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
 ### Validate MessageLogger plugin
-MessageLogger (shipped WIP in v0.4.0) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch) and event-driven edit detection (`HandleReplaced` with 5s grace period). Both features are deployed but need real-world validation:
+MessageLogger (shipped WIP in v0.4.1) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch) and event-driven edit detection (`HandleReplaced` with 5s grace period). Both features are deployed but need real-world validation:
 - **Validate async deletion pollers**: Confirm `HasBeenDeleted` is set within the 3s window for genuine deletions.
 - **Validate edit detection**: Confirm grace period filters send-completion Replaces while catching genuine user edits. Check for false positives.
 - **Validate edit indicators**: Amber-tinted inline cards deployed — verify layout doesn't break in different message contexts.
@@ -82,7 +82,7 @@ Next 2-3 releases. Expanding the platform and improving the developer/user exper
 ### Plugin marketplace / repository
 A discoverable listing of community plugins. Could be a static registry (JSON manifest in a GitHub repo) or a simple web interface. Plugin authors would submit metadata; users would browse and install from within Uprooted.
 
-### Auto-update mechanism — SHIPPED (v0.4.0)
+### Auto-update mechanism — SHIPPED (v0.4.1)
 In-process auto-updater (`hook/AutoUpdater.cs`) checks GitHub releases every 6 hours, downloads a single encrypted `.uprpkg` package, decrypts and unpacks 6 update files, and overwrites them in-place. Developer channel with password-gated access to pre-release builds. Changes take effect on next Root restart.
 
 ### Linux support improvements
@@ -143,7 +143,7 @@ Several Root findings involve injection vectors (C5 open redirect via `restart(u
 
 ### Update mechanism security
 
-The auto-updater (shipped v0.4.0) downloads an encrypted `.uprpkg` package from GitHub releases over HTTPS. Current protections:
+The auto-updater (shipped v0.4.1) downloads an encrypted `.uprpkg` package from GitHub releases over HTTPS. Current protections:
 
 - **Encrypted package format** — multi-layer XOR with 64-byte master key + per-build 32-byte random nonce + position-dependent key derivation. Prevents casual inspection of release artifacts.
 - **Staging + verification** — files are unpacked to a staging directory, verified non-empty and complete, then copied to production. Partial downloads or corruption abort without touching production files.
@@ -255,7 +255,7 @@ Uprooted injects into a closed-source application that updates independently. Tr
 
 | Uprooted Version | Root Versions Tested | Status | Notes |
 |-------------------|---------------------|--------|-------|
-| 0.4.0 (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
+| 0.4.1 (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
 
 Maintain this matrix as new Root versions are released. When a user reports a bug, the first diagnostic question should be which Root version they are running.
 
@@ -308,7 +308,7 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-18 — synced with v0.4.0 (removed completed goals, updated version table, fixed code quality items)*
+*Last updated: 2026-02-18 — synced with v0.4.1 (removed completed goals, updated version table, fixed code quality items)*
 
 ---
 

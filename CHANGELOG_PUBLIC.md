@@ -4,6 +4,21 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## [v0.4.1](https://github.com/watchthelight/uprooted/releases/tag/v0.4.1) — 2026-02-19
+
+### Improvements
+
+- **Theme Engine v2** — Complete rewrite of the theme engine for better color accuracy and consistency. Themes now override Root's actual color system directly, so all controls update instantly when you switch themes — no more brief flickers or stale colors. Palette generation uses OKLCH, a perceptually uniform color space, so lightness steps look natural across all hues.
+- **Silent Typing restored** — The Silent Typing plugin now works correctly, blocking typing indicators at the network level (contributed by Kurumi Nanase).
+
+### Fixes
+
+- Theme colors no longer flicker when switching themes or opening settings
+- Custom theme accent colors now apply instantly to all Root controls (no more needing to switch tabs)
+- Fixed a startup crash on Linux
+
+---
+
 ## [v0.4.0](https://github.com/watchthelight/uprooted/releases/tag/v0.4.0) — 2026-02-18
 
 ### New
@@ -54,8 +69,7 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 - **Message logger: edit detection may be unreliable** — Edited message indicators (amber cards) are deployed but may produce false positives or miss some edits. We're still validating this in real-world use.
 - **Message logger: deletion detection may miss some deletions** — If a message is deleted with a longer server delay, the 3-second detection window may not catch it.
 - **Profile badge may appear on the wrong popup** — The "Uprooted Dev" badge (developer channel only) may occasionally appear on non-profile popups.
-- **Theme colors may flicker after switching themes** — Some controls may briefly show the wrong color after a theme switch. Reopening settings resolves it.
-- **Custom themes: Root settings controls don't recolor instantly** — Selectors and switches in Root's native settings may not immediately pick up the custom theme accent when toggled. Colors update after changing tabs.
+- **Theme Engine v2 not yet validated** — The theme engine was completely rewritten for this release. While it should be much more reliable, it hasn't been tested in production yet. Report any visual glitches.
 - **NSFW filter not yet validated** — The content filter has been redesigned but not yet tested end-to-end. It may not function correctly.
 - **Silent Typing not yet validated** — The typing indicator blocker has been rebuilt but not yet confirmed working with two accounts.
 

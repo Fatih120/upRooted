@@ -13,16 +13,13 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **MessageLogger: real-world validation** — Deletion pollers + edit detection both deployed. Validate: (1) trigger actual deletions — confirm HasBeenDeleted fires within 3s, red cards appear; (2) edit a message after 5s — confirm amber edit card appears; (3) run `scripts/analyze-msglogger.ps1` to check `[edit-gate]` / `[edit-detect]` log entries.
   - Files: `hook/MessageLogger.cs`
 
-- [ ] **SilentTyping: validate C# interception** — `SilentTypingEngine` deployed (Phase 4.5f). Test with two accounts: type in one, confirm the other sees no typing indicator. Check hook log for `[SilentTyping] Blocked SetTypingIndicator`. If nothing is blocked, log will show which `HttpClient` instances were found/missed.
-  - Files: `hook/SilentTypingEngine.cs`
+- [ ] **SilentTyping: validate dual interception** — Both C# (`SilentTypingEngine`, Phase 4.5f) and JS (fetch/XHR intercept) now deployed. Test with two accounts: type in one, confirm the other sees no typing indicator. Check hook log for `[SilentTyping] Blocked SetTypingIndicator` and browser console for `[Uprooted:Silent typing] Blocked typing indicator`.
+  - Files: `hook/SilentTypingEngine.cs`, `src/plugins/silent-typing/index.ts`
 
 - [ ] **NsfwFilter: validate Avalonia-native redesign** — Phase 4.5g deployed. Verify images are being classified and blurred. Check hook log for scan timer entries and Vision API calls. Confirm overlay + click-to-reveal works.
   - Files: `hook/NsfwFilter.cs`
 
-- [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
-  - Files: `hook/ThemeEngine.cs`
-
-- [ ] **Custom theme: Root settings controls don't recolor instantly** — Toggling Root's native selectors and switches while a custom theme is active doesn't immediately update their accent color. Colors correct themselves after changing tabs and reloading the page. Likely the visual tree walk doesn't re-trigger on control state changes (checked→unchecked, etc.).
+- [ ] **Theme Engine v2: validate in production** — ThemeEngine v2 (resource-first, OKLCH) rewrite is deployed but not yet tested in production. Verify: (1) all 3 presets (crimson, cosmic-smoothie, loki) display correctly; (2) custom theme live preview is smooth; (3) theme revert restores all defaults; (4) variant switching (Dark/PureDark/Light) preserves overrides; (5) ping color overrides SelfMention keys correctly.
   - Files: `hook/ThemeEngine.cs`
 
 ## Testing
@@ -101,6 +98,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Theme Engine v2: resource-first rewrite with OKLCH** (2026-02-19) — Full rewrite of ThemeEngine.cs (2638 → ~900 lines). Targets Root's actual 32 DynamicResource keys. OKLCH palette generation. Eliminates 11 walk methods + 500ms timer.
+- [x] **Silent Typing: restored JS interception** (2026-02-19) — Replaced no-op stub with Kurumi Nanase's working fetch/XHR intercept. Both C# and JS layers now active.
 - [x] **ILSpy batch split + analysis session** (2026-02-19) — Split 10 grouped namespace dumps into 156 individual files (66 → 219 total, 145k lines). Analyzed 29 files into ROOT_CONTROL_REFERENCE.md. Fixed Style_ file split boundaries (27 files). Tagged 3 oversized files with -GREPONLY suffix. Audited and corrected all 3 Root findings docs.
 - [x] Analyze RootSettingsContainer, MainViewModel, RootMessageItemsControl, RootMenuFlyout, MainWindow, MainView, ILocalDataStore + LocalDataStore + LocalDataStoreExtensions, SaveChangesView, IPage, MenuItemPageContainerViewModel, SecureStorageImplementation (2026-02-19)
 - [x] Analyze Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService (2026-02-19)

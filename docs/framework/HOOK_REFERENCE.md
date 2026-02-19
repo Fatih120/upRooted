@@ -245,7 +245,7 @@ version. Semantics:
 - **Upgrade only:** Fires when `CurrentVersion > settings.Version`. Uses
   `AutoUpdater.CompareVersions()` which handles `major.minor.patch-suffix` with correct
   prerelease ordering (`0.3.6-rc < 0.3.6`).
-- **Cumulative:** If a user skips from 0.3.6 to 0.5.0, entries for 0.4.0 *and* 0.5.0
+- **Cumulative:** If a user skips from 0.3.6 to 0.5.0, entries for 0.4.1 *and* 0.5.0
   both apply.
 - **Explicit false insert:** Sets `Plugins[id] = false` even if the key doesn't exist,
   because missing keys fall back to `DefaultEnabled` which may be `true`.
@@ -257,7 +257,7 @@ To add entries, edit the `ForceDisableOnUpgrade` dictionary at the top of `Start
 ```csharp
 private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
 {
-    { "0.4.0", new[] { "message-logger", "silent-typing" } },
+    { "0.4.1", new[] { "message-logger", "silent-typing" } },
 };
 ```
 
@@ -774,8 +774,8 @@ The download URL follows the pattern:
 `{downloadBase}/{tag}/auto-update.uprpkg`
 
 For example:
-- Stable: `https://github.com/watchthelight/uprooted/releases/download/v0.4.0/auto-update.uprpkg`
-- Dev: `https://github.com/The-Uprooted-Project/uprooted-private/releases/download/v0.4.0/auto-update.uprpkg`
+- Stable: `https://github.com/watchthelight/uprooted/releases/download/v0.4.1/auto-update.uprpkg`
+- Dev: `https://github.com/The-Uprooted-Project/uprooted-private/releases/download/v0.4.1/auto-update.uprpkg`
 
 **Package contents** (6 files — profiler DLL excluded because it's locked on Windows and rarely changes):
 
@@ -2137,7 +2137,7 @@ Settings use a simple INI format (not JSON). This is a deliberate design choice:
 
 ```csharp
 public bool Enabled { get; set; } = true;
-public string Version { get; set; } = "0.4.0";
+public string Version { get; set; } = "0.4.1";
 public string ActiveTheme { get; set; } = "default-dark";
 public Dictionary<string, bool> Plugins { get; set; } = new();
 public string CustomCss { get; set; } = "";
@@ -2187,7 +2187,7 @@ Writes all properties as `Key=Value` lines. Plugin entries are prefixed with `Pl
 ```ini
 ActiveTheme=crimson
 Enabled=true
-Version=0.4.0
+Version=0.4.1
 CustomCss=
 CustomAccent=#3B6AF8
 CustomBackground=#0D1521
@@ -2342,4 +2342,4 @@ Returns:
 
 **Canonical for:** all 24 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter
 **Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-*Hook reference for Uprooted v0.4.0. Last updated 2026-02-19.*
+*Hook reference for Uprooted v0.4.1. Last updated 2026-02-19.*

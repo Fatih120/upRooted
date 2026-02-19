@@ -7,7 +7,7 @@ using Uprooted;
 /// </summary>
 internal class StartupHook
 {
-    private const string CurrentVersion = "0.4.0";
+    private const string CurrentVersion = "0.4.1";
 
     // Version migration: plugins to force-disable when upgrading to (or through) a given version.
     // Users who skip versions get all intermediate entries applied cumulatively.

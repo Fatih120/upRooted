@@ -82,7 +82,7 @@ These run inside Root's .NET process via the CLR profiler. Key characteristics:
 |--------|------|---------|
 | `window.__UPROOTED_SETTINGS__` | `UprootedSettings` | Settings loaded from `uprooted-settings.json` by the installer/patcher |
 | `window.__UPROOTED_LOADER__` | `PluginLoader` | Plugin lifecycle manager (used by settings-panel) |
-| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.4.0"`) |
+| `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.4.1"`) |
 
 ---
 

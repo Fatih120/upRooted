@@ -234,4 +234,4 @@ By contributing, you agree that your contributions will be licensed under the [U
 
 **Canonical for:** contribution guidelines, branch rules, code style, PR workflow, commit format, bug/feature reporting
 **Not canonical for:** critical rules (full) → [ARCHITECTURE.md §9](docs/framework/ARCHITECTURE.md#9-critical-rules) | technical onboarding → [CONTRIBUTING_TECHNICAL.md](docs/dev/CONTRIBUTING_TECHNICAL.md) | plugin contribution → [CONTRIBUTING_PLUGINS.md](docs/plugins/CONTRIBUTING_PLUGINS.md)
-*Contributing guide for Uprooted v0.4.0. Last updated 2026-02-19.*
+*Contributing guide for Uprooted v0.4.1. Last updated 2026-02-19.*
