@@ -12,6 +12,11 @@ on:
         required: false
         default: true
         type: boolean
+      publish_public:
+        description: 'Also publish to public repo (watchthelight/uprooted)'
+        required: false
+        default: false
+        type: boolean
   push:
     paths:
       - "hook/**"
@@ -183,7 +188,7 @@ jobs:
           echo "Uploaded Linux assets to private repo v$VERSION"
 
       - name: Publish to public repo release
-        if: github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_public == true
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
