@@ -146,7 +146,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/UprootedSettings.cs` | `LinkEmbedsShowFilenames` property (bool, default false), INI load/save for `LinkEmbeds.ShowFilenames` |
 | `hook/Logger.cs` | Added `LogSeparator()` method — writes blank lines to log for visual separation on startup |
 | `hook/Entry.cs` | Calls `LogSeparator()` before first `[Entry]` log in both ModuleInitializer and constructor |
-| `hook/ContentPages.cs` | Scaled up all lightbox/settings font sizes (section headers 12→18, labels 13→19, descriptions 12→16, titles 18→26, inputs 13→17, toggle pills 40×20→52×26, card width 480→560); API key textbox vertically centered |
+| `hook/ContentPages.cs` | Modular FontScale system: `PageScale` (11/13/12/13) for main pages, `LightboxScale` (18/20/17/18) for plugin info/settings lightboxes. `CreateSectionHeader` and `BuildSettingsToggle` accept optional `FontScale?` parameter. Lightbox callers pass `LightboxScale`; main page callers unchanged. |
 | `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
 | `hook/LinkEmbedEngine.cs` | Tenor: only `media.tenor.com` skipped (not bare `tenor.com`); video embeds respect "Show file names" toggle (`isFileOnlyEmbed` includes `VideoId=="direct"`) |
 | `hook/AnimatedImage.cs` | Persistent canvas bitmap for frame compositing — fixes black pixels and frame ordering in delta-encoded GIFs; removed per-frame `DecodeFrame` method |

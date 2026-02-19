@@ -42,7 +42,7 @@ Two independent injection layers into one app:
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1421 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers |
-| `ContentPages.cs` | 3326 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | 3340 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | ~2513 | ResourceDictionary overrides, live theme preview, custom ping color override |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |

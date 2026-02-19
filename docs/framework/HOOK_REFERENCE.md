@@ -1336,7 +1336,7 @@ allows:
 
 ## Content Pages
 
-**File:** `hook/ContentPages.cs` (2628 lines)
+**File:** `hook/ContentPages.cs` (~3340 lines)
 
 ### Page Builder Pattern
 
