@@ -858,6 +858,8 @@ internal class SidebarInjector
 
     private void RemoveContentPage()
     {
+        bool wasOnUprootedPage = _activePage != null;
+
         if (_activeContentPage != null && _contentPanel != null)
         {
             try { _r.RemoveChild(_contentPanel, _activeContentPage); }
@@ -877,13 +879,16 @@ internal class SidebarInjector
         // Restore back button visibility
         RestoreBackButton();
 
-        // Restore save bar to its original pre-deselection visibility state.
-        // Search for it if not yet found (handles race where user switches back
-        // before delayed check discovers the save bar Root created).
-        if (_saveBar == null && _layoutContainer != null)
-            _saveBar = _walker.FindSaveBar(_layoutContainer);
-        if (_saveBar != null)
-            _r.SetIsVisible(_saveBar, _saveBarWasVisible);
+        // Only restore save bar when transitioning away from an Uprooted page.
+        // When switching between Root tabs, don't touch Root's save bar —
+        // it may be legitimately visible due to real unsaved settings changes.
+        if (wasOnUprootedPage)
+        {
+            if (_saveBar == null && _layoutContainer != null)
+                _saveBar = _walker.FindSaveBar(_layoutContainer);
+            if (_saveBar != null)
+                _r.SetIsVisible(_saveBar, _saveBarWasVisible);
+        }
 
         UpdateNavHighlights();
     }
