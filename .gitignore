@@ -1,6 +1,6 @@
+# Dependencies
 node_modules/
 package-lock.json
-dist/
 .pnpm-store/
 
 # IDE
@@ -12,14 +12,18 @@ dist/
 # OS
 .DS_Store
 Thumbs.db
+nul
 
-# Build
+# TypeScript build output
+dist/
 *.tsbuildinfo
 
 # Astro
 site/.astro/
+site/node_modules/
+site/dist/
 
-# Tauri
+# Tauri / installer
 installer/src-tauri/target/
 installer/src-tauri/artifacts/
 installer/dist/
@@ -27,6 +31,7 @@ installer/dist/
 # C# build output
 hook/bin/
 hook/obj/
+hook/_out/
 hook-test/**/bin/
 hook-test/**/obj/
 tests/**/bin/
@@ -36,44 +41,32 @@ tests/**/obj/
 .env
 .env.*
 
-# Old build outputs
-Uprooted/
-
-# Publish / release artifacts
-_publish/
+# Compiled native binaries
+*.so
+*.obj
 *.exe
-artifacts/
-
-# Compiled tool binaries (built locally)
-tools/*.exe
-tools/*.obj
+*.lib
+*.exp
 tools/*.dll
-tools/*.lib
-tools/*.exp
 tools/_build_output.txt
 
-# Hook build output
-hook/_out/
+# Logs and runtime artifacts
+*.log
 
-# Windows junk
-nul
+# Upload / release staging artifacts
+*.sh.upload
+_publish/
+_release_artifacts/
 
-# Research artifacts
+# Temporary media files
+media/tmp*
+media/Screenshot *.png
+
+# Research / Python artifacts
 __pycache__/
 *.pyc
 LIVE_TOKEN.txt
-*.obj
-media/tmpsd9aD4.webp
-media/Screenshot 2026-02-16 165432.png
-media/tmpq9qrI2.webp
-.gitignore
-media/Screenshot 2026-02-16 172755.png
-_release_artifacts/UprootedHook.dll
-_release_artifacts/UprootedHook.deps.json
-_release_artifacts/uprooted.css
-_release_artifacts/uprooted-preload.js
-_release_artifacts/nsfw-filter.js
-.gitignore
-_release_artifacts/auto-update.uprpkg
-.gitignore
-_release_artifacts/link-embeds.js
+
+# Legacy build dirs
+Uprooted/
+artifacts/
