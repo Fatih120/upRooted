@@ -6,8 +6,8 @@ namespace Uprooted;
 /// Styling matches Root's native settings pages:
 ///   - Cards: BG=#0f1923, CornerRadius=12, BorderThickness=0.5, inner padding 24px
 ///   - Font sizes: dual scale — PageScale for main pages (Root-native), LightboxScale for overlays
-///   - PageScale: SectionHeader=11, Label=13, Description=12, Button=13
-///   - LightboxScale: SectionHeader=18, Label=20, Description=17, Button=18
+///   - PageScale: Title=15, SectionHeader=11, Label=13, Description=12, Button=13
+///   - LightboxScale: Title=24, SectionHeader=20, Label=20, Description=17, Button=18
 ///   - Page title: FontSize=20, SemiBold(600), #fff2f2f2
 ///   - Font: CircularXX TT (passed from native controls)
 ///   - Page container: StackPanel(Margin=24,24,24,0)
@@ -33,13 +33,14 @@ internal static class ContentPages
     /// Font size presets for different UI contexts.
     /// PageScale matches Root's native settings; LightboxScale is larger for modal readability.
     private readonly record struct FontScale(
-        double SectionHeader,  // CreateSectionHeader text
+        double Title,          // lightbox title / plugin name
+        double SectionHeader,  // CreateSectionHeader text, info box headers
         double Label,          // toggle/field/radio labels
-        double Description,    // toggle/field/radio secondary text
+        double Description,    // toggle/field/radio secondary text, info box items
         double Button);        // button labels
 
-    private static readonly FontScale PageScale = new(11, 13, 12, 13);
-    private static readonly FontScale LightboxScale = new(18, 20, 17, 18);
+    private static readonly FontScale PageScale = new(15, 11, 13, 12, 13);
+    private static readonly FontScale LightboxScale = new(24, 20, 20, 17, 18);
 
     /// <summary>
     /// Update statics for live preview during color picker drag.
@@ -644,25 +645,25 @@ internal static class ContentPages
             KnownPlugins = new PluginInfo[]
             {
                 new() { Id = "sentry-blocker", DisplayName = "SentryBlocker", Version = "0.3.6-rc",
-                    Description = "Blocks Sentry error tracking to protect your privacy. Intercepts network requests to *.sentry.io.",
+                    Description = "Stops Root from sending your data to Sentry's external error tracking servers \u2014 including your IP address, session replays, and login tokens.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "Themes", Version = "0.3.6-rc",
-                    Description = "Built-in theme engine. Apply preset or custom color themes to Root's UI.",
+                    Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly \u2014 no restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.3.6-rc",
-                    Description = "Discord-style link previews for URLs in chat. Shows OpenGraph metadata and inline YouTube players.",
+                    Description = "Rich link previews right in chat. YouTube videos play inline, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 2 },
                 new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.3.6-rc",
-                    Description = "Automatically strips tracking parameters (utm_source, fbclid, gclid, etc.) from URLs you send for cleaner links and better privacy.",
+                    Description = "Automatically strips tracking parameters like utm_source, fbclid, and gclid from links you send. Over 30 trackers removed for cleaner URLs and better privacy \u2014 your links still work perfectly.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
                 new() { Id = "message-logger", DisplayName = "MessageLogger", Version = "0.3.6-rc",
-                    Description = "Logs deleted and edited messages. Shows visual indicators in chat with original content.",
+                    Description = "Keeps a record of deleted messages so you can still see what was removed. Deleted messages appear highlighted in red directly in chat. Edit tracking is still in development.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
                 new() { Id = "silent-typing", DisplayName = "SilentTyping", Version = "0.1.0",
-                    Description = "Hides your typing indicator so other users can't see when you're typing. Contributed by Kurumi Nanase.",
+                    Description = "Prevents your typing indicator from being sent, so others won't see when you're composing a message. Contributed by Kurumi Nanase.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
                 new() { Id = "content-filter", DisplayName = "ContentFilter", Version = "0.3.6-rc",
-                    Description = "Automatically blur images classified as NSFW using Google Cloud Vision's SafeSearch API.",
+                    Description = "Blurs images flagged as NSFW using Google Cloud Vision. Set up your API key in settings to get started \u2014 costs roughly $1.50 per 1,000 images checked.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
@@ -1404,7 +1405,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName, 16, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName, LightboxScale.Title, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -1422,7 +1423,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 16, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 18, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -1512,7 +1513,7 @@ internal static class ContentPages
 
         var headerText = r.CreateTextBlock(
             "Without this plugin, Root sends the following to Sentry's servers (not Root's servers):",
-            16, TextMuted);
+            LightboxScale.SectionHeader, TextMuted);
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 450);
@@ -1523,10 +1524,10 @@ internal static class ContentPages
 
         var items = new[]
         {
-            "\u2022  Your IP address (on every error event)",
-            "\u2022  Session replays: DOM snapshots, mouse movements, input values",
-            "\u2022  Authentication headers including your Bearer token",
-            "\u2022  Application traces and logs",
+            "\u2022  Your IP address on every error report",
+            "\u2022  Session replays \u2014 recordings of your activity, mouse movements, and what you type",
+            "\u2022  Your login credentials and authentication tokens",
+            "\u2022  App logs and diagnostic data",
         };
         foreach (var item in items)
         {
@@ -2377,7 +2378,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName + " Settings", 16, TextWhite);
+            var titleText = r.CreateTextBlock(pluginName + " Settings", LightboxScale.Title, TextWhite);
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -2395,7 +2396,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 16, TextMuted);
+                var closeText = r.CreateTextBlock("\u2715", 18, TextMuted);
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -2483,8 +2484,8 @@ internal static class ContentPages
         }
 
         var helperText = r.CreateTextBlock(
-            "Get a key from console.cloud.google.com -- SafeSearch costs ~$1.50/1,000 images",
-            16, TextDim);
+            "Get a free API key from Google Cloud Console \u2014 SafeSearch costs about $1.50 per 1,000 images",
+            LightboxScale.Description, TextDim);
         if (helperText != null)
         {
             ApplyFont(r, helperText, font);
@@ -2821,7 +2822,7 @@ internal static class ContentPages
 
         var retentionHelp = r.CreateTextBlock(
             "Oldest messages are automatically removed when this limit is exceeded.",
-            16, TextDim);
+            LightboxScale.Description, TextDim);
         if (retentionHelp != null)
         {
             ApplyFont(r, retentionHelp, font);
@@ -3159,7 +3160,7 @@ internal static class ContentPages
         if (boxContent == null) return box;
         r.SetMargin(boxContent, 16, 14, 16, 14);
 
-        var headerText = r.CreateTextBlock("HOW IT WORKS", 18, TextDim);
+        var headerText = r.CreateTextBlock("HOW IT WORKS", LightboxScale.SectionHeader, TextDim);
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 500);
@@ -3168,13 +3169,13 @@ internal static class ContentPages
         r.AddChild(boxContent, headerText);
 
         var howText = r.CreateTextBlock(
-            "Images in chat are checked against Google Cloud Vision's SafeSearch API. " +
-            "While classifying, images receive a light blur. If flagged as NSFW, a full " +
-            "blur is applied with a \"Click to reveal\" overlay. Results are cached by URL " +
-            "to avoid redundant API calls. The filter fails open -- if the API is unreachable " +
-            "or returns an error, images are shown normally. No images are stored or sent anywhere " +
-            "except to Google's Vision API for classification.",
-            16, TextMuted);
+            "Images in chat are checked against Google Cloud Vision's SafeSearch detection. " +
+            "While an image is being checked, it gets a light blur. If flagged as NSFW, a full " +
+            "blur is applied with a \"Click to reveal\" overlay. Results are remembered so the " +
+            "same image isn't checked twice. If Google's service is unreachable, images show " +
+            "normally \u2014 the filter never blocks you from seeing content. Your images are " +
+            "only sent to Google for classification and are not stored anywhere.",
+            LightboxScale.Description, TextMuted);
         if (howText != null)
         {
             ApplyFont(r, howText, font);
