@@ -7,6 +7,16 @@ using Uprooted;
 /// </summary>
 internal class StartupHook
 {
+    private const string CurrentVersion = "0.3.6-rc";
+
+    // Version migration: plugins to force-disable when upgrading to (or through) a given version.
+    // Users who skip versions get all intermediate entries applied cumulatively.
+    // Omit a version entirely to leave all user plugin toggles untouched for that release.
+    private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
+    {
+        // { "0.4.0", new[] { "message-logger", "silent-typing" } },
+    };
+
     // Static reference keeps FileSystemWatcher alive for process lifetime
     private static HtmlPatchVerifier? s_patchVerifier;
 
@@ -30,7 +40,7 @@ internal class StartupHook
         try
         {
             Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook v0.3.6-rc Loaded ===");
+            Logger.Log("Startup", $"=== Uprooted Hook v{CurrentVersion} Loaded ===");
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
             Logger.Log("Startup", $"PID: {Environment.ProcessId}");
@@ -50,6 +60,40 @@ internal class StartupHook
             catch (Exception ex)
             {
                 Logger.Log("Startup", $"Phase 0 non-fatal error: {ex.Message}");
+            }
+
+            // Version migration: force-disable unstable plugins on upgrade
+            {
+                var migrationSettings = UprootedSettings.Load();
+                var cmp = AutoUpdater.CompareVersions(CurrentVersion, migrationSettings.Version);
+                if (cmp > 0)
+                {
+                    Logger.Log("Startup", $"Version upgrade detected: {migrationSettings.Version} -> {CurrentVersion}");
+                    var oldVersion = migrationSettings.Version;
+                    foreach (var (version, disableList) in ForceDisableOnUpgrade)
+                    {
+                        // Apply entries for versions between old (exclusive) and current (inclusive)
+                        if (AutoUpdater.CompareVersions(version, oldVersion) > 0 &&
+                            AutoUpdater.CompareVersions(version, CurrentVersion) <= 0)
+                        {
+                            foreach (var pluginId in disableList)
+                            {
+                                migrationSettings.Plugins[pluginId] = false;
+                                Logger.Log("Startup", $"  Force-disabled plugin '{pluginId}' (v{version} policy)");
+                            }
+                        }
+                    }
+                    migrationSettings.Version = CurrentVersion;
+                    migrationSettings.Save();
+                    Logger.Log("Startup", "Version migration complete");
+                }
+                else if (cmp < 0)
+                {
+                    // Downgrade detected — stamp version but don't apply any disable policies
+                    Logger.Log("Startup", $"Version downgrade detected: {migrationSettings.Version} -> {CurrentVersion}, updating stamp only");
+                    migrationSettings.Version = CurrentVersion;
+                    migrationSettings.Save();
+                }
             }
 
             // Phase 1: Wait for Avalonia assemblies to load

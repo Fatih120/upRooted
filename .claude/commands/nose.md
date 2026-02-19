@@ -61,7 +61,7 @@ Update all files to `$ARGUMENTS.version`:
 | File | What to update |
 |------|---------------|
 | `hook/UprootedSettings.cs` | `Version` property default |
-| `hook/StartupHook.cs` | Startup log banner string |
+| `hook/StartupHook.cs` | `CurrentVersion` const + startup log banner string |
 | `hook/SidebarInjector.cs` | Version comments (3 occurrences) |
 | `hook/ContentPages.cs` | `Version` field in all `PluginInfo` entries (use `replace_all`) |
 | `hook/SESSION_STATE.md` | Release header |

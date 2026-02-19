@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 472 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features) |
+| `StartupHook.cs` | 518 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features, version migration) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |

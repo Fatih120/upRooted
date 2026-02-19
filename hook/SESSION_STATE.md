@@ -66,6 +66,7 @@ Key details:
 | Phase | File | Purpose |
 |-------|------|---------|
 | 0 | HtmlPatchVerifier | Verify/repair HTML patches + FileSystemWatcher |
+| 0→1 | StartupHook | Version migration: force-disable unstable plugins on upgrade (cumulative, downgrade-safe) |
 | 1 | StartupHook | Wait for Avalonia assemblies (30s) |
 | 2 | StartupHook | Wait for Application.Current (30s) |
 | 3 | StartupHook | Wait for MainWindow (60s) |
@@ -130,7 +131,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
 | `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI, BuildChannelRow for update channel switching, restart banners (plugins + updates), state-aware plugin banner (hides on revert), Restart button (Process.Start + Environment.Exit), DIAGNOSTICS "Open" button (explorer /select) |
 | `hook/ProfileBadgeInjector.cs` | Profile popup detection via event-driven OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups, heuristic matching (avatar + username + roles), tree dump diagnostics, username TextBlock discovery (largest font size), badge gated to hardcoded developer usernames (`DeveloperUsernames` HashSet), vertical panel walk-up to insert badge below username (`IsVerticalPanel()` helper), "Uprooted Dev" badge (gold #8B6914 pill, font 10, centered) |
-| `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (5s delay, developer channel only) |
+| `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (5s delay, developer channel only); `CurrentVersion` const + `ForceDisableOnUpgrade` dictionary + version migration block (between Phase 0 and Phase 1) |
 | `hook/UprootedSettings.cs` | Added `CustomPingColor` property (string, default empty), INI load/save |
 | `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
 | `hook/ContentPages.cs` | Ping Color merged into Custom Theme card (separated by divider); removed standalone `BuildPingColorSection()`; embed card `NotifyThemeChanged()` called from `ApplyThemedColors`/`UpdateLiveColors` |
