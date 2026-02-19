@@ -5,9 +5,9 @@ namespace Uprooted;
 /// All controls created via reflection through AvaloniaReflection.
 /// Styling matches Root's native settings pages:
 ///   - Cards: BG=#0f1923, CornerRadius=12, BorderThickness=0.5, inner padding 24px
-///   - Section headers: FontSize=18, Medium(500), #66f2f2f2
-///   - Field labels: FontSize=19, Weight=450, #a3f2f2f2
-///   - Body text: FontSize=16, Normal, #a3f2f2f2
+///   - Font sizes: dual scale — PageScale for main pages (Root-native), LightboxScale for overlays
+///   - PageScale: SectionHeader=11, Label=13, Description=12, Button=13
+///   - LightboxScale: SectionHeader=18, Label=20, Description=17, Button=18
 ///   - Page title: FontSize=20, SemiBold(600), #fff2f2f2
 ///   - Font: CircularXX TT (passed from native controls)
 ///   - Page container: StackPanel(Margin=24,24,24,0)
@@ -29,6 +29,17 @@ internal static class ContentPages
     internal static string TextMuted = DefaultTextMuted;
     internal static string TextDim = DefaultTextDim;
     internal static string AccentGreen = DefaultAccentGreen;
+
+    /// Font size presets for different UI contexts.
+    /// PageScale matches Root's native settings; LightboxScale is larger for modal readability.
+    private readonly record struct FontScale(
+        double SectionHeader,  // CreateSectionHeader text
+        double Label,          // toggle/field/radio labels
+        double Description,    // toggle/field/radio secondary text
+        double Button);        // button labels
+
+    private static readonly FontScale PageScale = new(11, 13, 12, 13);
+    private static readonly FontScale LightboxScale = new(18, 20, 17, 18);
 
     /// <summary>
     /// Update statics for live preview during color picker drag.
@@ -1431,7 +1442,7 @@ internal static class ContentPages
         }
 
         // Description
-        var descText = r.CreateTextBlock(description, 13, TextMuted);
+        var descText = r.CreateTextBlock(description, LightboxScale.Label, TextMuted);
         if (descText != null)
         {
             ApplyFont(r, descText, font);
@@ -1519,7 +1530,7 @@ internal static class ContentPages
         };
         foreach (var item in items)
         {
-            var itemText = r.CreateTextBlock(item, 12, TextDim);
+            var itemText = r.CreateTextBlock(item, LightboxScale.Description, TextDim);
             if (itemText != null)
             {
                 ApplyFont(r, itemText, font);
@@ -2441,7 +2452,7 @@ internal static class ContentPages
         UprootedSettings settings, object? font)
     {
         // API Key section
-        var apiTitle = CreateSectionHeader(r, "GOOGLE CLOUD VISION API KEY", font);
+        var apiTitle = CreateSectionHeader(r, "GOOGLE CLOUD VISION API KEY", font, scale: LightboxScale);
         if (apiTitle != null)
         {
             r.SetMargin(apiTitle, 0, 18, 0, 0);
@@ -2492,7 +2503,7 @@ internal static class ContentPages
             if (saveBtn != null)
             {
                 r.SetCursorHand(saveBtn);
-                var saveBtnText = r.CreateTextBlock("Save API Key", 13, TextWhite);
+                var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, TextWhite);
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -2564,7 +2575,7 @@ internal static class ContentPages
         }
 
         // Sensitivity section
-        var sensTitle = CreateSectionHeader(r, "SENSITIVITY", font);
+        var sensTitle = CreateSectionHeader(r, "SENSITIVITY", font, scale: LightboxScale);
         if (sensTitle != null)
         {
             r.SetMargin(sensTitle, 0, 20, 0, 0);
@@ -2619,12 +2630,12 @@ internal static class ContentPages
             if (textStack != null)
             {
                 r.SetVerticalAlignment(textStack, "Center");
-                var nameText = r.CreateTextBlock(label, 13, TextWhite);
+                var nameText = r.CreateTextBlock(label, LightboxScale.Label, TextWhite);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(desc, 12, TextMuted);
+                var descText = r.CreateTextBlock(desc, LightboxScale.Description, TextMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -2733,7 +2744,7 @@ internal static class ContentPages
                 settings.MessageLoggerLogDeletes = isEnabled;
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
-            });
+            }, scale: LightboxScale);
 
         // Log Edits toggle
         BuildSettingsToggle(r, content, "Log Edited Messages",
@@ -2743,7 +2754,7 @@ internal static class ContentPages
                 settings.MessageLoggerLogEdits = isEnabled;
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
-            });
+            }, scale: LightboxScale);
 
         // Ignore Self toggle
         BuildSettingsToggle(r, content, "Ignore Own Messages",
@@ -2753,10 +2764,10 @@ internal static class ContentPages
                 settings.MessageLoggerIgnoreSelf = isEnabled;
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("MsgLogSettings", $"Save error: {sx.Message}"); }
-            });
+            }, scale: LightboxScale);
 
         // Max Messages
-        var maxTitle = CreateSectionHeader(r, "RETENTION", font);
+        var maxTitle = CreateSectionHeader(r, "RETENTION", font, scale: LightboxScale);
         if (maxTitle != null)
         {
             r.SetMargin(maxTitle, 0, 20, 0, 0);
@@ -2769,7 +2780,7 @@ internal static class ContentPages
             r.SetMargin(maxRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(maxRow, "Center");
 
-            var maxLabel = r.CreateTextBlock("Max logged messages:", 13, TextMuted);
+            var maxLabel = r.CreateTextBlock("Max logged messages:", LightboxScale.Label, TextMuted);
             r.SetFontWeightNumeric(maxLabel, 450);
             ApplyFont(r, maxLabel, font);
             r.SetVerticalAlignment(maxLabel, "Center");
@@ -2835,7 +2846,7 @@ internal static class ContentPages
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("LinkEmbedSettings", $"Save error: {sx.Message}"); }
                 LinkEmbedEngine.Instance?.RefreshTitleVisibility();
-            });
+            }, scale: LightboxScale);
     }
 
     /// <summary>
@@ -2843,8 +2854,10 @@ internal static class ContentPages
     /// Reusable pattern for any boolean setting.
     /// </summary>
     private static void BuildSettingsToggle(AvaloniaReflection r, object container,
-        string label, string description, bool currentValue, object? font, Action<bool> onChanged)
+        string label, string description, bool currentValue, object? font, Action<bool> onChanged,
+        FontScale? scale = null)
     {
+        var s = scale ?? PageScale;
         var row = r.CreatePanel();
         if (row == null) return;
         r.SetMargin(row, 0, 14, 0, 0);
@@ -2857,12 +2870,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 60, 0);
 
-            var nameText = r.CreateTextBlock(label, 13, TextWhite);
+            var nameText = r.CreateTextBlock(label, s.Label, TextWhite);
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock(description, 12, TextMuted);
+            var descText = r.CreateTextBlock(description, s.Description, TextMuted);
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3180,9 +3193,10 @@ internal static class ContentPages
     /// Create a section header matching Root's "APP SETTINGS" style:
     /// FontSize=18, FontWeight=Medium(500), Fg=#66f2f2f2
     /// </summary>
-    private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font)
+    private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font,
+        FontScale? scale = null)
     {
-        var header = r.CreateTextBlock(text, 11, TextDim);
+        var header = r.CreateTextBlock(text, (scale ?? PageScale).SectionHeader, TextDim);
         r.SetFontWeightNumeric(header, 500);
         ApplyFont(r, header, font);
         return header;
