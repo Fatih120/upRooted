@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 518 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features, version migration) |
+| `StartupHook.cs` | 542 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features, version migration, dev-channel log gate) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
@@ -58,7 +58,7 @@ Two independent injection layers into one app:
 | `ProfileBadgeInjector.cs` | ~535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
-| `Logger.cs` | 59 | Thread-safe file logging, startup separator, swallows own exceptions |
+| `Logger.cs` | 84 | Thread-safe file logging, startup separator, dev-channel gate (stable = no log file) |
 
 ### TypeScript Layer (`src/`)
 

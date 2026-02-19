@@ -36,6 +36,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Updates settings page** in native Avalonia UI — "Auto-check for updates", "Update notifications", and "Update channel" (stable/dev) controls; wired to `AutoUpdate.*` INI keys
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
 - **Version-gated plugin force-disable on upgrade** — `ForceDisableOnUpgrade` dictionary in `StartupHook` declares which plugins to force-disable when users upgrade to (or through) a given version; cumulative application for skipped versions; downgrade-safe (stamps version only); `CurrentVersion` const replaces hardcoded banner string
+- **Developer-channel-only logging** — hook log file (`uprooted-hook.log`) is only written when the update channel is set to "developer"; stable channel users produce no log file; `Logger.Disable()` suppresses all writes and deletes any brief log fragment from early startup
 - **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
 - **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change

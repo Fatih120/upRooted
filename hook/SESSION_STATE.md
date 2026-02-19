@@ -151,6 +151,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
 | `hook/LinkEmbedEngine.cs` | Tenor: only `media.tenor.com` skipped (not bare `tenor.com`); video embeds respect "Show file names" toggle (`isFileOnlyEmbed` includes `VideoId=="direct"`) |
 | `hook/AnimatedImage.cs` | Persistent canvas bitmap for frame compositing — fixes black pixels and frame ordering in delta-encoded GIFs; removed per-frame `DecodeFrame` method |
+| `hook/Logger.cs` | Dev-channel-only logging: `_enabled` flag + `Disable()` method (suppresses writes, deletes log file). `IsEnabled` property for external queries. All log methods (`Log`, `LogSeparator`, `LogException`) check `_enabled` first. |
+| `hook/StartupHook.cs` | Dev-channel log gate at top of `InjectorLoop()`: loads settings, checks `AutoUpdateChannel`, calls `Logger.Disable()` if not "developer". Safe fallback on settings load failure (keeps logging enabled). |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
