@@ -57,11 +57,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y gcc
 
-      - name: Setup .NET 10 Preview
+      - name: Setup .NET 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.x"
-          dotnet-quality: "preview"
+          dotnet-version: "10.0.103"
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
