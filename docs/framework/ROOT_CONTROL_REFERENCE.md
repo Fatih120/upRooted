@@ -22,14 +22,15 @@ This document is the authoritative reference for Root's custom controls, style c
 5. [Main Window and View Stack](#main-window-and-view-stack)
 6. [Message View Internals](#message-view-internals)
 7. [RootMessageItemsControl](#rootmessageitemscontrol)
-8. [Mention and Markdown System](#mention-and-markdown-system)
-9. [Settings Infrastructure](#settings-infrastructure)
-10. [Settings Page Pattern](#settings-page-pattern)
-11. [Ping Color and Mention Highlighting](#ping-color-and-mention-highlighting)
-12. [App Startup Chain](#app-startup-chain)
-13. [Data Store and Persistence](#data-store-and-persistence)
-14. [Session and Identity](#session-and-identity)
-15. [DataStore Keys](#datastore-keys)
+8. [Markdown Rendering System](#markdown-rendering-system)
+9. [Mention and Markdown System](#mention-and-markdown-system)
+10. [Settings Infrastructure](#settings-infrastructure)
+11. [Settings Page Pattern](#settings-page-pattern)
+12. [Ping Color and Mention Highlighting](#ping-color-and-mention-highlighting)
+13. [App Startup Chain](#app-startup-chain)
+14. [Data Store and Persistence](#data-store-and-persistence)
+15. [Session and Identity](#session-and-identity)
+16. [DataStore Keys](#datastore-keys)
 
 ---
 
@@ -620,6 +621,131 @@ Markdown types used in selection (from `DocumentElement` hierarchy):
 
 ---
 
+## Markdown Rendering System
+
+Root implements its own rich text rendering pipeline using custom `CInline` / `CTextBlock` types. These are **NOT** standard Avalonia controls -- they are a parallel text layout system built on `StyledElement` (for inlines) and `Control` (for the text block). Understanding this hierarchy is essential for any feature that reads, modifies, or injects content into messages.
+
+### Type Hierarchy
+
+```
+CInline (abstract, StyledElement)                    -- 195 lines
++-- CRun                                              -- 75 lines (plain text)
++-- CSpan                                             -- 306 lines (rich container)
+|   +-- CHyperlink                                    -- 155 lines (clickable link)
+|   +-- CCode                                         -- 13 lines (code span, trivial CSpan subclass)
+|   +-- CBold                                         -- (formatting span)
+|   +-- CItalic                                       -- (formatting span)
+|   +-- CStrikethrough                                -- (formatting span)
++-- CImage                                            -- 174 lines (inline image)
++-- CInlineUIContainer                                -- 44 lines (embedded Control)
++-- CLineBreak                                        -- 22 lines (line break marker)
+
+CTextBlock (Control, ITextPointerHandleable)          -- 988 lines
+    Contains: AvaloniaList<CInline> Content
+    Renders: List<CGeometry> _metries (measured geometries)
+    Layout: List<LineInfo> _lines
+```
+
+### CInline (abstract base -- 195 lines)
+
+`StyledElement` subclass (NOT Control -- no visual tree presence of its own). All inline elements derive from this.
+
+Inherited text properties from Avalonia: `Foreground`, `FontFamily`, `FontWeight`, `FontSize`, `FontStyle`, `FontStretch`.
+
+Custom properties: `Background`, `IsUnderline`, `IsStrikethrough`, `TextVerticalAlignment`.
+
+Abstract methods:
+- `MeasureOverride(entireWidth, remainWidth)` -- yields `CGeometry` items describing measured layout segments
+- `AsString()` -- returns plain text representation
+
+Invalidation chain:
+- `RequestMeasure()` walks parent chain: if parent is `CInline`, delegate up; if `CTextBlock`, call `OnMeasureSourceChanged()`; if `Layoutable`, call `InvalidateMeasure()`
+- `RequestRender()` follows the same chain for visual invalidation
+- `Typeface` property rebuilt from font properties on change
+
+### CRun (plain text -- 75 lines)
+
+Leaf inline: holds a `Text` (string) property.
+
+`MeasureOverride` uses `TextFormatter.Current.FormatLine()` to break text into `TextLineGeometry` segments. First line uses `min(entireWidth, remainWidth)`, subsequent lines use `entireWidth`.
+
+`AsString()` returns `Text`.
+
+### CSpan (rich container -- 306 lines)
+
+Container inline: holds `IEnumerable<CInline> Content` (child inlines). This is the base class for all rich formatting spans (bold, italic, strikethrough, code, hyperlink).
+
+Border support properties: `BorderThickness`, `BorderBrush`, `BorderBackgroundBrush`, `CornerRadius`, `BoxShadow`, `Padding`, `Margin`, `PressedScale`.
+
+`HasBorder` property -- returns true when any border/padding/corner/margin/shadow is set. When bordered, creates an Avalonia `Border` control and wraps child geometries in `DecoratorGeometry`.
+
+`MeasureOverride` iterates children, measures each, wraps in `DecoratorGeometry` if bordered. Line break handling: if content fits on one line, emits a single `DecoratorGeometry`; if multiline, splits into per-line `DecoratorGeometry` chunks.
+
+`AsString()` concatenates all children's `AsString()`.
+
+### CHyperlink (clickable link -- 155 lines)
+
+Extends `CSpan` -- inherits all border/container behavior.
+
+Added properties: `HoverBackground`, `HoverForeground` brushes; `Command` (`Action<string>`), `CommandParameter` (`string`).
+
+`MeasureOverride` calls base, then attaches click/hover/press handlers to each `CGeometry`:
+- **OnClick** -- `Command?.Invoke(CommandParameter)` (the URL)
+- **OnMouseEnter** -- adds `:pointerover` + `:hover` pseudo-classes, sets cursor to Hand, applies `TemporaryForeground`/`TemporaryBackground` to `TextGeometry`
+- **OnMouseLeave** -- removes pseudo-classes, restores cursor, clears temporary brushes
+- **OnMousePressed/Released** -- `:pressed` pseudo-class, `PressedScale` render
+
+**For Translate plugin:** Hyperlinks in messages have a `Command` action. Clicking invokes the action with the URL as parameter. To intercept link clicks, wrap or replace the `Command` delegate.
+
+### CCode (code span -- 13 lines)
+
+Trivial `CSpan` subclass: `CCode(IEnumerable<CInline>) : base(content)` -- no overrides.
+
+Visual difference comes entirely from external styling (`BorderBackgroundBrush`, `CornerRadius` set by `Style_MessageMarkdown.cs`).
+
+### CImage (inline image -- 174 lines)
+
+Holds `Task<BitmapWrapper?>` for async image loading, resolves to `IImage?` result.
+
+Properties: `LayoutWidth`/`LayoutHeight` (override), `RelativeWidth` (fraction of line width), `FittingWhenProtrude` (shrink-to-fit, default true), `SaveAspectRatio`.
+
+`MeasureOverride` resolves image from task on first measure, calculates display size with aspect ratio, emits `ImageGeometry`. If image exceeds remaining width: emits `LineBreakMarkGeometry` first, then fits to entire width.
+
+### CTextBlock (markdown text renderer -- 988 lines)
+
+Root's custom rich text block -- **NOT Avalonia's TextBlock**. This is the primary control that renders `CInline` content trees into measured `CGeometry` layout.
+
+**Content model:**
+- `Content` property: `AvaloniaList<CInline>` -- the inline tree (CRun, CSpan, CHyperlink, CImage, etc.)
+- `Text` property: lazy concatenation of all `CInline.AsString()` -- plain text view of content
+
+**Layout pipeline:**
+- `UpdateGeometry()` measures all inlines into `List<CGeometry>` with `(Left, Top, Width, Height)` positions
+- `List<LineInfo>` -- each line has its geometries, baseline height, vertical alignment
+- Rendering iterates `_metries`, calls `CGeometry.Render(DrawingContext)`; selection rectangles drawn separately
+- Text alignment (Left/Center/Right) via edge padding calculation
+- DPI awareness: `PixelFloor`/`PixelRound`/`PixelCeil` ensure pixel-perfect rendering
+
+**Pointer interaction:**
+- PointerMoved: hit-tests `_metries` by bounds, fires `OnMouseEnter`/`OnMouseLeave` on `CGeometry`
+- PointerPressed: left button finds matching geometry, fires `OnMousePressed`, marks as `_pressed`
+- PointerReleased: if still over `_pressed` geometry, fires `OnClick`
+
+**Text selection:**
+- `Select(TextPointer, TextPointer)` / `Select(int, int)` -- sets begin/end selection range
+- `ComplementIntermediate()` -- collects geometries between selection endpoints for full-range highlighting
+- `GetSelectedText()` -- extracts text from selected segments, handles atomic (image/hyperlink) vs text segments
+- `GetBegin()`/`GetEnd()` -- returns TextPointers at start/end of all content
+- `CalcuatePointerFrom(x, y)` -- hit-test to find TextPointer at pixel position (line-then-geometry scan)
+
+**For Translate plugin -- injecting translated text below a message:**
+1. Find the `CTextBlock` in the message's visual tree (search by type name `CTextBlock`, NOT Avalonia's `TextBlock`)
+2. Read the `Text` property for the plain text content
+3. Inject a new visual element (`Border` + `TextBlock`) below the `CTextBlock` in the parent container
+4. Do NOT modify `Content` directly -- it would corrupt the markdown inline tree
+
+---
+
 ## Mention and Markdown System
 
 ### Markdown Component Types
@@ -1134,7 +1260,7 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 
 ---
 
-**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, DirectMessageOpenerService (DotNetBrowser chain), message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), session and identity (IRootSessionAccessor/RootSession/IViewModelBase), DataStore keys, App startup chain
+**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, DirectMessageOpenerService (DotNetBrowser chain), message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, markdown rendering system (CInline/CRun/CSpan/CHyperlink/CCode/CImage/CTextBlock), mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), session and identity (IRootSessionAccessor/RootSession/IViewModelBase), DataStore keys, App startup chain
 **Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
 **For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
 *Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0*

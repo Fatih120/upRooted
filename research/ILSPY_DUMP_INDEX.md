@@ -224,6 +224,18 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `TextWithBadgePanel.cs` | 66 | `Controls.TextWithBadgePanel` | N | Text + badge layout panel |
 | `MemberVisibilityOption.cs` | 8 | `Controls.MemberVisibilityOption` | N | Enum for member visibility options |
 
+### Markdown Components
+
+| File | Lines | Namespace | Analyzed | Description |
+|------|------:|-----------|:--------:|-------------|
+| `CInline.cs` | 195 | `Controls.Markdown.CInline` | Y | Abstract inline base — StyledElement, text properties, MeasureOverride/AsString abstract methods, invalidation chain |
+| `CRun.cs` | 75 | `Controls.Markdown.CRun` | Y | Leaf inline — plain text, TextFormatter line breaking |
+| `CSpan.cs` | 306 | `Controls.Markdown.CSpan` | Y | Container inline — child inlines, border/padding support, DecoratorGeometry wrapping |
+| `CHyperlink.cs` | 155 | `Controls.Markdown.CHyperlink` | Y | Clickable link — extends CSpan, Command/CommandParameter, hover/press handlers |
+| `CCode.cs` | 13 | `Controls.Markdown.CCode` | Y | Code span — trivial CSpan subclass, styling from Style_MessageMarkdown |
+| `CImage.cs` | 174 | `Controls.Markdown.CImage` | Y | Inline image — async BitmapWrapper loading, aspect ratio, shrink-to-fit |
+| `CTextBlock.cs` | 988 | `Controls.Markdown.CTextBlock` | Y | Rich text renderer — AvaloniaList<CInline> content, CGeometry layout, text selection, pointer hit-testing |
+
 ### Settings Infrastructure
 
 | File | Lines | Namespace | Analyzed | Description |
@@ -371,20 +383,13 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 ### Services
 - Navigation service (how Root switches between pages)
 
-### Markdown Internals (sub-types of RootMarkdownTextBlock)
-- `CTextBlock` — rich text container
-- `CSpan` — inline text span
-- `CHyperlink` — clickable link
-- `CRun` — text run
-- `CCode` — code block / inline code
-
 ---
 
 ## Cross-Reference: Dumps → Docs
 
 | Document | Source Dumps |
 |----------|-------------|
-| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, **Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService** |
+| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService, **CInline, CRun, CSpan, CHyperlink, CCode, CImage, CTextBlock** |
 | [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md) | ThemesDarkAxaml, ThemesLightAxaml, ThemesPureDarkAxaml |
 | [THEME_ENGINE_DEEP_DIVE.md](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | ThemeService, ThemeMapper, SimpleTheme (partial) |
 
