@@ -19,12 +19,16 @@ This document is the authoritative reference for Root's custom controls, style c
 2. [Style Class System](#style-class-system)
 3. [Resource Key Reference](#resource-key-reference)
 4. [Theme System Mechanics](#theme-system-mechanics)
-5. [Message View Internals](#message-view-internals)
-6. [Mention and Markdown System](#mention-and-markdown-system)
-7. [Settings Page Pattern](#settings-page-pattern)
-8. [Ping Color and Mention Highlighting](#ping-color-and-mention-highlighting)
-9. [App Startup Chain](#app-startup-chain)
-10. [DataStore Keys](#datastore-keys)
+5. [Main Window and View Stack](#main-window-and-view-stack)
+6. [Message View Internals](#message-view-internals)
+7. [RootMessageItemsControl](#rootmessageitemscontrol)
+8. [Mention and Markdown System](#mention-and-markdown-system)
+9. [Settings Infrastructure](#settings-infrastructure)
+10. [Settings Page Pattern](#settings-page-pattern)
+11. [Ping Color and Mention Highlighting](#ping-color-and-mention-highlighting)
+12. [App Startup Chain](#app-startup-chain)
+13. [Data Store and Persistence](#data-store-and-persistence)
+14. [DataStore Keys](#datastore-keys)
 
 ---
 
@@ -153,13 +157,27 @@ Has `ForegroundProperty` for text color. `updateMemberColor()` sets it via `Them
 
 ### RootMenuFlyout
 
+`MenuFlyout` subclass (97 lines) — thin wrapper that adds zoom support.
+
+```csharp
+public class RootMenuFlyout : MenuFlyout {
+    // CreatePresenter: wraps inner presenter in LayoutTransformControl with ScaleTransform
+    // OnOpened: adjusts popup offset by -12px H and V, subscribes to ZoomChanged
+    // OnClosed: unsubscribes from ZoomChanged
+}
+```
+
+- Gets `ZoomService` from `Application.Current.ApplicationLifetime.MainWindow.DataContext as MainViewModel`
+- **No custom item injection** — items live in the base `MenuFlyout.Items` collection
+- Contains `MenuItem` items with classes like `DeleteMenuItem`. `MenuItem` selected state uses `HighlightNormal`.
+
 Context menu used in MessageView:
 ```csharp
 private RootMenuFlyout? _contextMenu;
 _contextMenu = MessageBackgroundBorder.ContextFlyout as RootMenuFlyout;
 ```
 
-Contains `MenuItem` items with classes like `DeleteMenuItem`. `MenuItem` selected state uses `HighlightNormal`.
+**For plugin item injection (e.g. Translate plugin):** Inject `MenuItem` instances into `MenuFlyout.Items`. The flyout has no protection against additional items — no count validation, no sealed collection.
 
 ---
 
@@ -375,6 +393,77 @@ themeDict["TextPrimary"] = CreateSolidColorBrush("#F2F2F2");
 
 ---
 
+## Main Window and View Stack
+
+### MainWindow (317 lines, UI.Main)
+
+`Window` subclass — the top-level application window.
+
+```
+MainWindow (title: "Root", default 1200x800, min 850x480)
+├── RootZoomContainer ("ZoomContainer")
+│   └── DockPanel ("ContentWrapper")
+│       ├── ContentControl (TitleBar, Dock.Top)
+│       └── DockPanel (bg = BackgroundTertiary)
+│           └── ContentControl (DataContext binding)
+```
+
+- Custom title bar: `ExtendClientAreaToDecorationsHint = true`, `NoChrome` chrome hints
+- Keybinding: tunneling `KeyDown` + `PointerPressed` dispatched to `KeybindingDispatchService`
+- Window state persistence: saves position/size/maximized to `DataStoreKeys.WindowState` via `ILocalDataStore`
+- Tray: `HideToTray()` saves state, `RestoreFromTray()` restores
+- Constructor receives: `MainViewModel` (DataContext), `ILocalDataStore`, `KeybindingDispatchService`
+
+### MainView (259 lines, UI.Main)
+
+`UserControl` with `DataContext = MainViewModel`. Hosts the entire content area.
+
+```csharp
+// Content: ItemsControl bound to ViewModels collection
+// ItemsPanel = Grid (stacked overlays) — NOT StackPanel
+// ItemTemplate = ContentControl
+```
+
+- **ViewModels are overlaid in a Grid, not sequentially stacked.** Last VM is on top (z-order).
+- Attached flyout: `RootFlyout` for profile popup, bound to `IsPopupOpen` / `MemberProfile`
+- Profile popup: `RootBorder(BackgroundSecondary, Border brush, CornerRadius 8, Margin 12)` > `RootScrollViewer` > `ContentControl(MemberProfile)`
+
+### MainViewModel (400 lines, UI.Main)
+
+`ViewModelBase<MainViewModel>, IOverlayStackTracker` — the root of the DataContext chain.
+
+Key DI fields:
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `_loginFactory` | factory | Creates LoginViewModel |
+| `_homeFactory` | factory | Creates HomeViewModel |
+| `_rootService` | `IRootService` | Connection/session management |
+| `_memberProfileViewModelFactory` | factory | **DotNetBrowser discovery chain root** |
+| `_rootSessionAccessor` | `IRootSessionAccessor` | Session/user info |
+| `_focusService` | service | Focus tracking |
+| `_activityTrackerService` | service | Activity tracking |
+| `_appBadgeService` | service | App badge/notification count |
+| `_windowRegistry` | registry | Window management |
+| `_overlayStackService` | service | Overlay stack management |
+
+Key properties:
+- `ViewModels` (`ObservableCollection<IViewModelBase>`) — active VM stack
+- `TitleBarViewModel` — title bar VM
+- `ZoomService` — zoom level management
+- `IsPopupOpen` (`[ObservableProperty]`) — profile flyout state
+- `MemberProfile` (`[ObservableProperty]`) — profile flyout content
+- `OverlayCount` — overlay stack depth
+
+Lifecycle:
+- `ViewLoadedAsync`: connects via `IRootService`, adds `LoginViewModel` or `HomeViewModel`
+- Messaging: `WeakReferenceMessenger` for Push/Pop/Toggle ViewModel stack operations
+- Profile flyout: `onShowProfileFlyoutAtMousePositionByUrlMessage` walks logical tree to find `MessageView` > `MessageViewModel` > `Message.MessageContainer.GetMemberAsync(userGuid)`
+
+**Impact on DotNetBrowser discovery:** `_memberProfileViewModelFactory` is the exact field walked in the DotNetBrowser discovery chain (confirmed from SESSION_STATE.md ViewModel chain). This is the injection point for Phase 4.5 browser discovery.
+
+---
+
 ## Message View Internals
 
 ### Control Structure
@@ -479,6 +568,45 @@ MessageBackgroundBorder.Margin = message.ShowUserProfile || message.IsSystemMess
 
 ---
 
+## RootMessageItemsControl
+
+### RootMessageItemsControl (378 lines, Controls)
+
+`ItemsControl` subclass — the message list container. **NOT a VirtualizingStackPanel itself** — it IS an `ItemsControl` with `StyleKeyOverride = typeof(ItemsControl)`. The VirtualizingStackPanel is the `ItemsPanel` inside it.
+
+```csharp
+public class RootMessageItemsControl : ItemsControl {
+    protected override Type StyleKeyOverride => typeof(ItemsControl);
+    // Background = Brushes.Transparent (set in constructor)
+}
+```
+
+**Child access pattern:**
+```csharp
+ItemsPanelRoot.Children.OfType<ContentPresenter>().Select(c => c.Child)
+```
+
+Children must implement `ISelectableMessage` interface:
+```csharp
+interface ISelectableMessage {
+    DocumentElement? Document { get; }  // For text selection
+}
+```
+
+**Key finding for MessageLogger:** Items are `ContentPresenter` > `ISelectableMessage`, not bare controls. When walking the message list, unwrap the `ContentPresenter.Child` to get the actual `MessageView`.
+
+Text selection infrastructure:
+- Pointer press/move/release handlers for drag selection
+- Double-click: word select
+- Triple-click: line select
+- `GetSelectedText()` builds text from selection across multiple messages
+- Attaches/detaches pointer handlers in `OnAttachedToVisualTree` / `OnDetachedFromVisualTree`
+
+Markdown types used in selection (from `DocumentElement` hierarchy):
+`DocumentRootElement`, `ListBlockElement`, `ListItemElement`, `CTextBlockElement`, `CTextBlock`, `CInline`, `CHyperlink`, `CSpan`, `CImage`, `CCode`
+
+---
+
 ## Mention and Markdown System
 
 ### Markdown Component Types
@@ -538,6 +666,104 @@ Simple (non-interactive) variants use `CRun` instead of `CHyperlink`:
 ```
 
 **Important:** These are the resource keys for the **inline mention pills** (text-level). The **message row highlight** (background wash behind the entire message) uses different keys — see [Ping Color section](#ping-color-and-mention-highlighting).
+
+---
+
+## Settings Infrastructure
+
+### RootSettingsContainer (990 lines, Controls.Settings)
+
+`UserControl` subclass — the main settings page host. This is the top-level container for all Root settings.
+
+```
+RootSettingsContainer (named: "RootSettingsContainerUserControl")
+├── Grid (4 columns, 3 rows)
+│   ├── Column 0: BackgroundTertiary full-height panel (spans all 3 rows)
+│   ├── Column 1: Left sidebar
+│   │   ├── StackPanel
+│   │   │   ├── MainListBox (class "SettingsContainerListBox")
+│   │   │   ├── ListFooter (ContentControl)
+│   │   │   └── SidePanelFooter (ContentControl)
+│   │   └── bg = BackgroundTertiary
+│   ├── Separator: 0.5px Rectangle, Fill = DynamicResource("Border")
+│   ├── Column 2: Content area (max 900px)
+│   │   ├── Row 0: Header (85px)
+│   │   │   ├── Back button (RootSvgButton, DownArrowSVG rotated 90°)
+│   │   │   ├── Title TextBlock (24px, FontWeight.Medium, TextPrimary)
+│   │   │   └── Close button (RootSvgButton, ExitThickSVG, BackgroundSecondary)
+│   │   ├── Row 1: Page content
+│   │   └── Row 1-2: SaveChangesView overlay
+│   └── Column 3: right margin (1*)
+```
+
+Grid layout: `1* | Auto (separator) | 20* max 900 | 1*` columns, `85px | 1* | Auto` rows.
+
+StyledProperties:
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `MenuWidth` | `double` | Sidebar width |
+| `MenuItemPageContainers` | `ObservableCollection<MenuItemPageContainerViewModel>` | Settings categories |
+| `SelectedMenuItemPageContainer` | `MenuItemPageContainerViewModel` | Active category |
+| `CloseViewModelCommand` | `ICommand` | Close settings panel |
+| `WebApiStatus` | object | API status indicator |
+| `ListHeader` | `ContentControl` | Sidebar header slot |
+| `ListFooter` | `ContentControl` | Sidebar footer slot |
+| `SidePanelFooter` | `ContentControl` | Sidebar bottom slot |
+
+Behavior:
+- `OnLoaded`: selects first item with `ForceInitialLoad = true`, or first non-header item
+- Back: calls `SelectedMenuItemPageContainer.Navigator.Pop()`
+- Save/Revert: calls `Navigator.SaveChanges()` / `RevertChanges()` via `[RelayCommand]`
+- Page title: bound to `SelectedMenuItemPageContainer.Navigator.CurrentViewModel` cast to `IPage.PageTitle`
+- ListBox item styles: `:pointerover` = `HighlightLight` bg, `:selected` = `HighlightNormal` bg
+- Header items disabled via `BoolInverter` on `IsHeaderItem`
+
+### SaveChangesView (396 lines, Controls)
+
+The "unsaved changes" bar that appears at bottom of settings pages.
+
+```
+SaveChangesView (named: "RootSaveChangesControl")
+├── BrandPrimary background bar (height 56px, CornerRadius 12)
+│   ├── TextBlock: "You Have Unsaved Changes" (TextWhite, 14px, Bold)
+│   ├── RevertChangesButton (.TextButton class, TextWhite, 35px, CornerRadius 16)
+│   └── ThemeVariantScope(Light)
+│       └── SaveChangesButton (.BorderButton class, TextWhite bg, 32x122px, CornerRadius 16)
+│           ├── SaveChangesButtonTextBlock (normal state)
+│           └── LoadingSpinner (Lottie, loading state)
+```
+
+- Starts with `IsVisible = false` (controlled by parent binding to `Navigator.HasPendingChanges`)
+- Loading state: swaps TextBlock for Lottie spinner, disables control
+- Save button wrapped in `ThemeVariantScope(Light)` to force light-theme styling
+
+**Impact on SidebarInjector:** The save bar visibility is controlled by `Navigator.HasPendingChanges` binding. The current opacity hack in SidebarInjector may be avoidable by manipulating the `Navigator.HasPendingChanges` property or by targeting the `SaveChangesView` control directly.
+
+### IPage Interface
+
+```csharp
+interface IPage {
+    string PageTitle { get; }
+}
+```
+
+Settings ViewModels implement this interface. The page title is displayed in the header row of `RootSettingsContainer` via binding to `Navigator.CurrentViewModel` cast to `IPage`.
+
+### MenuItemPageContainerViewModel (135 lines, Controls.Settings)
+
+Each settings category is represented by one `MenuItemPageContainerViewModel` with its own `Navigator` stack.
+
+| Property | Type | Purpose |
+|----------|------|---------|
+| `Navigator` | `Navigator` | Page navigation stack for this category |
+| `MenuTitle` | `string` | Display name in sidebar |
+| `IsHeaderItem` | `bool` | If true, renders as non-clickable section header |
+| `ForceInitialLoad` | `bool` | If true, auto-selects on settings open |
+| `ShowUpdateIndicator` | `bool` (`[ObservableProperty]`) | Shows update dot on menu item |
+
+- `MenuItemSelected` event (`Action<MenuItemPageContainerViewModel>`) — fired when item is selected
+- `SelectMenuItem()` fires the event; called when `SelectedMenuItemPageContainer` changes and Navigator is empty
 
 ---
 
@@ -682,6 +908,65 @@ DefaultMenuInteractionHandler.MenuShowDelay = TimeSpan.Zero;
 
 ---
 
+## Data Store and Persistence
+
+### ILocalDataStore Interface
+
+```csharp
+interface ILocalDataStore {
+    void Set<T>(ReadOnlySpan<string> path, T value, JsonTypeInfo<T> typeInfo);
+    bool TryGet<T>(ReadOnlySpan<string> path, out T value, JsonTypeInfo<T> typeInfo);
+}
+```
+
+- Path segments create nested JSON objects: `["userId", "theme"]` produces `{"userId": {"theme": value}}`
+- Uses `System.Text.Json` source-generated serialization (NOT reflection-based)
+
+### LocalDataStore (271 lines, Domain.Helpers.Store)
+
+File-backed settings persistence.
+
+| Aspect | Detail |
+|--------|--------|
+| File | `data.json` in `ApplicationDirectory` (profile/default/) |
+| Encoding | XOR "obfuscation" with 32-byte static key (**not real encryption**, trivially reversible) |
+| Obfuscation key | `[138, 79, 46, 29, 156, 123, 106, 95, 62, 45, 28, 11, ...]` (32 bytes, repeating) |
+| Atomic writes | Write to `data.tmp.json`, then `File.Move(temp, real, overwrite: true)` |
+| Corruption handling | Quarantines to `invalid-data.json`, starts fresh |
+| Migration | Auto-detects plain JSON (first non-whitespace = `{`) and re-saves as obfuscated |
+| Thread safety | All reads/writes under `lock(_sync)` |
+
+### LocalDataStoreExtensions
+
+Convenience methods:
+
+```csharp
+// Global setting (single-segment path):
+SetGlobal(DataStoreKeys key, T value)
+TryGetGlobal(DataStoreKeys key, out T value)
+
+// Per-user setting (multi-segment path):
+SetWithPath(string[] path, T value)
+TryGetWithPath(string[] path, out T value)
+```
+
+Source-generated serializer context supports: `int`, `long`, `double`, `string`.
+
+### SecureStorageImplementation (86 lines, Domain.Helpers.Store)
+
+Encrypted credential storage — used for tokens and credentials, NOT for settings.
+
+| Aspect | Detail |
+|--------|--------|
+| Encryption | Windows DPAPI (`ProtectedData.Protect/Unprotect`) |
+| Entropy | HMAC-SHA384 derived from key name using 80-byte static hex key |
+| Storage | File-based: one file per key in `Store/` subdirectory |
+| Atomic writes | Temp file + rename pattern |
+
+**Security note:** The DPAPI key is tied to the Windows user account. The HMAC entropy key is a static hex string embedded in the binary — provides per-key differentiation but not additional secrecy beyond DPAPI's machine/user binding.
+
+---
+
 ## DataStore Keys
 
 Complete `DataStoreKeys` enum (68 entries):
@@ -750,7 +1035,7 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 
 ---
 
-**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, message view named controls + `updateBackgroundColor()` logic, mention/markdown system, settings page layout pattern, DataStore keys, App startup chain
+**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), DataStore keys, App startup chain
 **Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
 **For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
 *Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0*

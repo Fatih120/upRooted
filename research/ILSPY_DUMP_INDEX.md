@@ -4,7 +4,7 @@
 > Source: ILSpy decompilation of Root v0.9.92 and its Avalonia dependencies.
 > Each file preserves original ILSpy comments (assembly version, full namespace path).
 
-**Total:** 66 files, 111,603 lines, 7.1 MB
+**Total:** 112 files, 122,174 lines, 7.7 MB
 
 **Already analyzed into docs:** Files marked with a checkmark have been distilled into [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) or [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md). The raw dumps remain the authoritative source — the docs are curated summaries.
 
@@ -17,8 +17,8 @@
 | Assembly | Version | Files | Description |
 |----------|---------|-------|-------------|
 | `Root` | 0.9.92.0 | 1 | Root.exe entry point |
-| `RootApp.Client.Avalonia` | 0.9.92.0 | 55 | Main UI assembly — views, styles, themes, controls |
-| `RootApp.Client.Domain` | 0.9.92.0 | 1 | Domain layer (DataStoreKeys) |
+| `RootApp.Client.Avalonia` | 0.9.92.0 | 99 | Main UI assembly — views, styles, themes, controls, settings |
+| `RootApp.Client.Domain` | 0.9.92.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
 | `Avalonia.Controls` | 11.3.12.0 | 3 | Framework controls (Application, CheckBox, ToggleSwitch) |
 | `Avalonia.Themes.Simple` | 11.3.12.0 | 1 | SimpleTheme base class |
 | `AvaloniaEdit` | 11.3.0.0 | 3 | Text editor theme resources |
@@ -36,9 +36,43 @@ Root (exe)
 RootApp.Client.Avalonia
 ├── App                                              → App.cs
 ├── Controls
+│   ├── HexInputBorder                               → HexInputBorder.cs
+│   ├── MemberVisibilityOption                       → MemberVisibilityOption.cs
 │   ├── RootBorder                                   → RootBorder.cs
+│   ├── RootChannelTypeRadioButton                   → RootChannelTypeRadioButton.cs
+│   ├── RootCircleProgressBar                        → RootCircleProgressBar.cs
+│   ├── RootCircularPanel                            → RootCircularPanel.cs
+│   ├── RootConfirmationControl                      → RootConfirmationControl.cs
+│   ├── RootFlyout                                   → RootFlyout.cs
+│   ├── RootImageLoader                              → RootImageLoader.cs
+│   ├── RootLinkButton                               → RootLinkButton.cs
+│   ├── RootMarkdownTextBlock                        → RootMarkdownTextBlock.cs
+│   ├── RootMemberVisibilitySwitch                   → RootMemberVisibilitySwitch.cs
+│   ├── RootMenuFlyout                               → RootMenuFlyout.cs
+│   ├── RootMessageItemsControl                      → RootMessageItemsControl.cs
+│   ├── RootMessageScrollViewer                      → RootMessageScrollViewer.cs
+│   ├── RootMultiCheckBox                            → RootMultiCheckBox.cs
+│   ├── RootPercentageSlider                         → RootPercentageSlider.cs
+│   ├── RootScrollBarThumb                           → RootScrollBarThumb.cs
+│   ├── RootScrollViewer                             → RootScrollViewer.cs
+│   ├── RootSplitView                                → RootSplitView.cs
+│   ├── RootSvgButton                                → RootSvgButton.cs
+│   ├── RootSvgCheckBox                              → RootSvgCheckBox.cs
+│   ├── RootSvgImage                                 → RootSvgImage.cs
+│   ├── RootTextbox                                  → RootTextbox.cs
+│   ├── RootToolTip                                  → RootToolTip.cs
+│   ├── RootTrimTooltipTextBlock                     → RootTrimTooltipTextBlock.cs
+│   ├── RootWebApiStatus                             → RootWebApiStatus.cs
+│   ├── RootZoomContainer                            → RootZoomContainer.cs
+│   ├── SaveChangesView                              → SaveChangesView.cs
+│   ├── StreamerModeBanner                           → StreamerModeBanner.cs
+│   ├── StreamerModeBannerViewModel                  → StreamerModeBannerViewModel.cs
+│   ├── TextWithBadgePanel                           → TextWithBadgePanel.cs
 │   └── Settings
-│       └── RootSettingsContainer                    (referenced in XamlIlTrampolines.cs)
+│       ├── IPage                                    → IPage.cs
+│       ├── MenuItemPageContainerView                → MenuItemPageContainerView.cs
+│       ├── MenuItemPageContainerViewModel           → MenuItemPageContainerViewModel.cs
+│       └── RootSettingsContainer                    → RootSettingsContainer.cs
 ├── Resources
 │   ├── Converters
 │   │   └── ThemeToBoolConverter                     → ThemeToBoolConverter.cs
@@ -60,6 +94,14 @@ RootApp.Client.Avalonia
 │   │       ├── ChangeThemeViewModelFactory          → ChangeThemeViewModelFactory.cs
 │   │       ├── ChatView                             → ChatView.cs
 │   │       └── ChatViewModel                        → ChatViewModel.cs
+│   ├── Main
+│   │   ├── ConnectionBlockingView                   → ConnectionBlockingView.cs
+│   │   ├── ConnectionBlockingViewModel              → ConnectionBlockingViewModel.cs
+│   │   ├── ConnectionBlockingViewModelFactory       → ConnectionBlockingViewModelFactory.cs
+│   │   ├── MainView                                 → MainView.cs
+│   │   ├── MainViewModel                            → MainViewModel.cs
+│   │   ├── MainViewModelFactory                     → MainViewModelFactory.cs
+│   │   └── MainWindow                               → MainWindow.cs
 │   └── Messages
 │       ├── ChannelStartMessageView                  → ChannelStartMessageView.cs
 │       ├── ChannelStartMessageViewModel             → ChannelStartMessageViewModel.cs
@@ -68,7 +110,11 @@ RootApp.Client.Avalonia
 
 RootApp.Client.Domain
 └── Helpers.Store
-    └── DataStoreKeys                                → DataStoreKeys.cs
+    ├── DataStoreKeys                                → DataStoreKeys.cs
+    ├── ILocalDataStore                              → ILocalDataStore.cs
+    ├── LocalDataStore                               → LocalDataStore.cs
+    ├── LocalDataStoreExtensions                     → LocalDataStoreExtensions.cs
+    └── SecureStorageImplementation                   → SecureStorageImplementation.cs
 
 CompiledAvaloniaXaml (XAML-to-C# generated code)
 ├── !AvaloniaResources                               → -AvaloniaResources.cs (55k lines)
@@ -107,6 +153,12 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `ChangeThemeView.cs` | 815 | `UI.Home.SystemTray.Profile.Settings.ChangeThemeView` | Y | Settings > Theme picker — RadioButton per theme, preview SVGs |
 | `ChannelStartMessageView.cs` | 352 | `UI.Messages.ChannelStartMessageView` | N | "Welcome to #channel" start message |
 | `App.cs` | 635 | `RootApp.Client.Avalonia.App` | partial | Application subclass — Initialize(), resource/style registration |
+| `MainWindow.cs` | 317 | `UI.Main.MainWindow` | Y | Top-level window — title bar, tray icon, close/minimize behavior |
+| `MainView.cs` | 259 | `UI.Main.MainView` | Y | Main content shell — hosts RootSplitView, navigation |
+| `ConnectionBlockingView.cs` | 91 | `UI.Main.ConnectionBlockingView` | N | Connection blocked / offline banner |
+| `SaveChangesView.cs` | 396 | `Controls.SaveChangesView` | Y | Settings save/revert bar UI |
+| `StreamerModeBanner.cs` | 202 | `Controls.StreamerModeBanner` | N | Streamer mode notification banner |
+| `MenuItemPageContainerView.cs` | 281 | `Controls.Settings.MenuItemPageContainerView` | N | Settings page container with menu item navigation |
 
 ### ViewModels
 
@@ -117,12 +169,66 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `ChangeThemeViewModel.cs` | 55 | `UI.Home.SystemTray.Profile.Settings.ChangeThemeViewModel` | Y | Theme picker VM: Theme property, ThemeToBoolConverter binding |
 | `ChangeThemeViewModelFactory.cs` | 10 | `UI.Home.SystemTray.Profile.Settings.ChangeThemeViewModelFactory` | Y | DI factory for ChangeThemeViewModel |
 | `ChannelStartMessageViewModel.cs` | 17 | `UI.Messages.ChannelStartMessageViewModel` | Y | Thin wrapper: exposes Message property |
+| `MainViewModel.cs` | 400 | `UI.Main.MainViewModel` | Y | Top-level VM — DataContext chain root, navigation, DI container |
+| `MainViewModelFactory.cs` | 24 | `UI.Main.MainViewModelFactory` | N | DI factory for MainViewModel |
+| `ConnectionBlockingViewModel.cs` | 14 | `UI.Main.ConnectionBlockingViewModel` | N | Connection blocking state |
+| `ConnectionBlockingViewModelFactory.cs` | 12 | `UI.Main.ConnectionBlockingViewModelFactory` | N | DI factory for ConnectionBlockingViewModel |
+| `StreamerModeBannerViewModel.cs` | 67 | `Controls.StreamerModeBannerViewModel` | N | Streamer mode toggle state |
+| `MenuItemPageContainerViewModel.cs` | 135 | `Controls.Settings.MenuItemPageContainerViewModel` | Y | Settings page container VM — page navigation, menu item selection |
 
 ### Custom Controls
 
 | File | Lines | Namespace | Analyzed | Description |
 |------|------:|-----------|:--------:|-------------|
 | `RootBorder.cs` | 61 | `Controls.RootBorder` | Y | Border subclass with DPI-aware DynamicBorderThickness |
+| `RootMenuFlyout.cs` | 97 | `Controls.RootMenuFlyout` | Y | Context menu flyout — Translate plugin prerequisite |
+| `RootMessageItemsControl.cs` | 378 | `Controls.RootMessageItemsControl` | Y | Virtualized message list — critical for MessageLogger |
+| `RootMessageScrollViewer.cs` | 645 | `Controls.RootMessageScrollViewer` | N | Message list scroll container with load-more behavior |
+| `RootMarkdownTextBlock.cs` | 91 | `Controls.RootMarkdownTextBlock` | N | Markdown renderer entry point (CTextBlock, CSpan, etc.) |
+| `RootScrollViewer.cs` | 431 | `Controls.RootScrollViewer` | N | Custom scroll viewer with opacity-based thumb show/hide |
+| `RootScrollBarThumb.cs` | 61 | `Controls.RootScrollBarThumb` | N | Custom scrollbar thumb |
+| `RootSvgImage.cs` | 144 | `Controls.RootSvgImage` | N | SVG image with per-theme path binding |
+| `RootSvgButton.cs` | 35 | `Controls.RootSvgButton` | N | Icon button (styled in Style_SvgButton.cs) |
+| `RootSvgCheckBox.cs` | 35 | `Controls.RootSvgCheckBox` | N | Checkbox with SVG check mark |
+| `RootImageLoader.cs` | 178 | `Controls.RootImageLoader` | N | Image loading control with placeholder |
+| `RootLinkButton.cs` | 30 | `Controls.RootLinkButton` | N | Username display button |
+| `RootFlyout.cs` | 172 | `Controls.RootFlyout` | N | Flyout popup base control |
+| `RootConfirmationControl.cs` | 901 | `Controls.RootConfirmationControl` | N | Confirmation dialog (delete/leave/ban flows) |
+| `RootTextbox.cs` | 996 | `Controls.RootTextbox` | N | Custom textbox with validation, character limit, helper text |
+| `RootMultiCheckBox.cs` | 478 | `Controls.RootMultiCheckBox` | N | Multi-option checkbox group |
+| `RootMemberVisibilitySwitch.cs` | 747 | `Controls.RootMemberVisibilitySwitch` | N | Member visibility toggle (complex multi-state control) |
+| `RootCircularPanel.cs` | 290 | `Controls.RootCircularPanel` | N | Circular layout panel |
+| `RootCircleProgressBar.cs` | 277 | `Controls.RootCircleProgressBar` | N | Circular progress indicator |
+| `RootColorPicker.cs` | — | `Controls.RootColorPicker` | N | Color picker (styled in Style_RootColorPicker.cs, code-behind not yet split) |
+| `RootWebApiStatus.cs` | 282 | `Controls.RootWebApiStatus` | N | Web API status indicator |
+| `RootZoomContainer.cs` | 79 | `Controls.RootZoomContainer` | N | Zoom/scale container |
+| `RootToolTip.cs` | 70 | `Controls.RootToolTip` | N | Custom tooltip |
+| `RootTrimTooltipTextBlock.cs` | 51 | `Controls.RootTrimTooltipTextBlock` | N | TextBlock with tooltip on text trim |
+| `RootPercentageSlider.cs` | 35 | `Controls.RootPercentageSlider` | N | Percentage slider |
+| `RootChannelTypeRadioButton.cs` | 61 | `Controls.RootChannelTypeRadioButton` | N | Channel type radio button |
+| `RootSplitView.cs` | 13 | `Controls.RootSplitView` | N | Split view (thin wrapper — template in Style_RootSplitView.cs) |
+| `HexInputBorder.cs` | 123 | `Controls.HexInputBorder` | N | Hex color input with border |
+| `TextWithBadgePanel.cs` | 66 | `Controls.TextWithBadgePanel` | N | Text + badge layout panel |
+| `MemberVisibilityOption.cs` | 8 | `Controls.MemberVisibilityOption` | N | Enum for member visibility options |
+
+### Settings Infrastructure
+
+| File | Lines | Namespace | Analyzed | Description |
+|------|------:|-----------|:--------:|-------------|
+| `RootSettingsContainer.cs` | 990 | `Controls.Settings.RootSettingsContainer` | Y | Settings page host — save bar, page switching, revert logic |
+| `IPage.cs` | 7 | `Controls.Settings.IPage` | Y | Settings page interface |
+| `MenuItemPageContainerView.cs` | 281 | `Controls.Settings.MenuItemPageContainerView` | N | Settings page container with menu navigation |
+| `MenuItemPageContainerViewModel.cs` | 135 | `Controls.Settings.MenuItemPageContainerViewModel` | Y | Settings page container VM |
+
+### Data Store / Persistence
+
+| File | Lines | Namespace | Analyzed | Description |
+|------|------:|-----------|:--------:|-------------|
+| `DataStoreKeys.cs` | 69 | `RootApp.Client.Domain.Helpers.Store.DataStoreKeys` | Y | All 68 settings keys (theme, audio, overlay, analytics, streamer mode) |
+| `ILocalDataStore.cs` | 13 | `RootApp.Client.Domain.Helpers.Store.ILocalDataStore` | Y | Settings persistence interface |
+| `LocalDataStore.cs` | 271 | `RootApp.Client.Domain.Helpers.Store.LocalDataStore` | Y | Settings persistence implementation |
+| `LocalDataStoreExtensions.cs` | 232 | `RootApp.Client.Domain.Helpers.Store.LocalDataStoreExtensions` | Y | Extension methods for ILocalDataStore |
+| `SecureStorageImplementation.cs` | 86 | `RootApp.Client.Domain.Helpers.Store.SecureStorageImplementation` | Y | Encrypted credential storage |
 
 ### Theme System
 
@@ -224,44 +330,32 @@ These are generated by Avalonia's XAML-to-IL compiler. Mostly boilerplate, but c
 
 ## Not Yet Decompiled
 
-Classes referenced in the dumps but not present as standalone files. These are candidates for future decompilation:
+Classes referenced in the dumps but not present as standalone files. Candidates for future decompilation:
 
-### Views (high value for UI redraw)
-- `MainWindow` / `MainView` — top-level shell
-- `RootSplitView` — sidebar + content split (template in `Style_RootSplitView.cs`, but code-behind missing)
-- `RootSettingsContainer` — settings page host (referenced in XamlIlTrampolines)
+### Views
 - Channel list view(s) — channel sidebar
 - Members panel view(s) — `MembersViewModel` referenced
 - DM list view
 - Voice/call UI views
-- Profile popup views
+- Profile popup views — would refine ProfileBadgeInjector heuristics
 - Community settings views — `CommunityLogViewModel` referenced
 - `CommunityTabViewModel` / view — community tab
 
-### Custom Controls
-- `RootSvgImage` — SVG image with per-theme path binding
-- `RootSvgButton` — icon button (styled in `Style_SvgButton.cs`)
-- `RootSvgCheckBox` — checkbox with SVG check mark
-- `RootScrollViewer` / `RootScrollBarThumb` — custom scroll controls
-- `RootMarkdownTextBlock` — markdown renderer (CTextBlock, CSpan, CHyperlink, CRun, CCode)
-- `RootLinkButton` — username display button
-- `RootMenuFlyout` — context menu
-- `RootMessageScrollViewer` — message list scroll container
-- `RootMessageItemsControl` — message list virtualized container
-- `RootColorPicker` — color picker (styled in `Style_RootColorPicker.cs`)
-- `RootImageLoader` — image loading control
-- `RootSettingsContainer` — settings save/revert container
-
 ### ViewModels
-- `MainViewModel` — top-level VM (DataContext chain root for DotNetBrowser discovery)
 - `MembersViewModel` — members panel
 - `CommunityLogViewModel` — community audit log
 - `CommunityTabViewModel` — community tab
 
 ### Services
-- `ILocalDataStore` — settings persistence
 - `IRootSessionAccessor` — session/user info
 - Navigation service (how Root switches between pages)
+
+### Markdown Internals (sub-types of RootMarkdownTextBlock)
+- `CTextBlock` — rich text container
+- `CSpan` — inline text span
+- `CHyperlink` — clickable link
+- `CRun` — text run
+- `CCode` — code block / inline code
 
 ---
 
@@ -269,10 +363,10 @@ Classes referenced in the dumps but not present as standalone files. These are c
 
 | Document | Source Dumps |
 |----------|-------------|
-| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial) |
+| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), **MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation** |
 | [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md) | ThemesDarkAxaml, ThemesLightAxaml, ThemesPureDarkAxaml |
 | [THEME_ENGINE_DEEP_DIVE.md](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | ThemeService, ThemeMapper, SimpleTheme (partial) |
 
 ---
 
-*Last updated: 2026-02-19 — 66 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0*
+*Last updated: 2026-02-19 — 112 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Batch split: Controls (32), Controls.Settings (4), UI.Main (7), Domain.Helpers.Store (5).*
