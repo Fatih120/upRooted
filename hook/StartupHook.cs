@@ -453,35 +453,24 @@ internal class StartupHook
                     {
                         Logger.Log("Startup", "Phase 5: Waiting for DotNetBrowser assemblies...");
 
-                        // Event-driven detection: react immediately when DotNetBrowser loads
+                        // Poll for DotNetBrowser assemblies.
+                        // Note: event-driven detection via AssemblyLoadEventHandler was removed because
+                        // AppImage/trimmed .NET builds trim System.AssemblyLoadEventHandler, causing a
+                        // TypeLoadException at JIT compilation time (before any try/catch can handle it).
                         if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                         {
-                            using var assemblyEvent = new ManualResetEventSlim(false);
-                            AssemblyLoadEventHandler handler = (_, args) =>
+                            const int pollIntervalMs = 2000;
+                            const int maxWaitMs = 90_000;
+                            int elapsed = 0;
+                            while (elapsed < maxWaitMs && !DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                             {
-                                var name = args.LoadedAssembly.GetName().Name ?? "";
-                                if (name.StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    Logger.Log("Startup", $"Phase 5: DotNetBrowser assembly loaded via event: {name}");
-                                    assemblyEvent.Set();
-                                }
-                            };
-                            AppDomain.CurrentDomain.AssemblyLoad += handler;
-                            try
-                            {
-                                // Double-check after subscribing (assembly may have loaded between check and subscribe)
-                                if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
-                                {
-                                    if (!assemblyEvent.Wait(TimeSpan.FromSeconds(90)))
-                                    {
-                                        Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 90s, skipping");
-                                        return;
-                                    }
-                                }
+                                Thread.Sleep(pollIntervalMs);
+                                elapsed += pollIntervalMs;
                             }
-                            finally
+                            if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                             {
-                                AppDomain.CurrentDomain.AssemblyLoad -= handler;
+                                Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 90s, skipping");
+                                return;
                             }
                             // Brief pause for any companion assemblies to finish loading
                             Thread.Sleep(1000);

@@ -3116,6 +3116,7 @@ internal static class ContentPages
             var badgeRef = badge;
             var badgeTextRef = badgeText;
             var containerRef = container;
+            bool promptVisible = false;
 
             r.SubscribeEvent(badge, "PointerPressed", () =>
             {
@@ -3128,14 +3129,18 @@ internal static class ContentPages
                     s.AutoUpdateChannel = "stable";
                     s.Save();
                     Logger.Disable();
+                    promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
                 }
                 else
                 {
-                    // Show inline password prompt below the row
-                    if (badgeTextRef != null)
-                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font);
+                    // Show inline password prompt below the row (guard against duplicates)
+                    if (!promptVisible && badgeTextRef != null)
+                    {
+                        promptVisible = true;
+                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font, onClose: () => { promptVisible = false; });
+                    }
                 }
             });
 
@@ -3161,7 +3166,7 @@ internal static class ContentPages
     /// Inserts a row after the channel row with a TextBox + Submit button.
     /// </summary>
     private static void ShowChannelPasswordPrompt(AvaloniaReflection r, object container,
-        object channelRow, object badge, object badgeText, object? font)
+        object channelRow, object badge, object badgeText, object? font, Action? onClose = null)
     {
         // Create the prompt row
         var promptRow = r.CreateStackPanel(vertical: false, spacing: 8);
@@ -3265,6 +3270,7 @@ internal static class ContentPages
                 {
                     var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
                     children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { promptRowRef });
+                    onClose?.Invoke();
                 }
                 catch { }
             }
