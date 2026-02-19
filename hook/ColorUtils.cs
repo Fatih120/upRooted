@@ -259,4 +259,156 @@ internal static class ColorUtils
     /// </summary>
     public static string PureHueHex(double hue)
         => HsvToHex(hue, 1.0, 1.0);
+
+    // ===== OKLCH Color Space =====
+    // Perceptually uniform color space: L (lightness 0-1), C (chroma ≥0), H (hue 0-360°).
+    // Chain: sRGB → linear RGB → OKLab (L,a,b) → OKLCH (L,C,H).
+
+    /// <summary>sRGB gamma decode: sRGB [0,1] → linear [0,1].</summary>
+    public static double SrgbToLinear(double c)
+        => c <= 0.04045 ? c / 12.92 : Math.Pow((c + 0.055) / 1.055, 2.4);
+
+    /// <summary>Linear [0,1] → sRGB [0,1] gamma encode.</summary>
+    public static double LinearToSrgb(double c)
+        => c <= 0.0031308 ? 12.92 * c : 1.055 * Math.Pow(c, 1.0 / 2.4) - 0.055;
+
+    /// <summary>
+    /// Convert sRGB bytes to OKLab (L, a, b).
+    /// Uses the Oklab forward transform via LMS cube-root intermediary.
+    /// </summary>
+    public static (double L, double a, double b) RgbToOklab(byte R, byte G, byte B)
+    {
+        double r = SrgbToLinear(R / 255.0);
+        double g = SrgbToLinear(G / 255.0);
+        double b = SrgbToLinear(B / 255.0);
+
+        // sRGB linear → LMS (Oklab M1 matrix)
+        double l = 0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b;
+        double m = 0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b;
+        double s = 0.0883024619 * r + 0.2024326373 * g + 0.6892650198 * b;
+
+        // Cube root
+        double l_ = Math.Cbrt(l);
+        double m_ = Math.Cbrt(m);
+        double s_ = Math.Cbrt(s);
+
+        // LMS cube-root → Lab (Oklab M2 matrix)
+        return (
+            0.2104542553 * l_ + 0.7936177850 * m_ - 0.0040720468 * s_,
+            1.9779984951 * l_ - 2.4285922050 * m_ + 0.4505937099 * s_,
+            0.0259040371 * l_ + 0.7827717662 * m_ - 0.8086757660 * s_
+        );
+    }
+
+    /// <summary>
+    /// Convert OKLab (L, a, b) to sRGB bytes with gamut clamping.
+    /// </summary>
+    public static (byte R, byte G, byte B) OklabToRgb(double L, double a, double b)
+    {
+        // Lab → LMS cube-root (inverse M2)
+        double l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+        double m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+        double s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+        // Cube
+        double l = l_ * l_ * l_;
+        double m = m_ * m_ * m_;
+        double s = s_ * s_ * s_;
+
+        // LMS → sRGB linear (inverse M1)
+        double r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+        double g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+        double bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+
+        // Gamma encode + clamp to [0, 255]
+        return (
+            (byte)Math.Clamp((int)Math.Round(LinearToSrgb(r) * 255), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(LinearToSrgb(g) * 255), 0, 255),
+            (byte)Math.Clamp((int)Math.Round(LinearToSrgb(bl) * 255), 0, 255)
+        );
+    }
+
+    /// <summary>Convert sRGB bytes to OKLCH (L, C, H). H in degrees 0-360.</summary>
+    public static (double L, double C, double H) RgbToOklch(byte R, byte G, byte B)
+    {
+        var (l, a, b) = RgbToOklab(R, G, B);
+        double c = Math.Sqrt(a * a + b * b);
+        double h = Math.Atan2(b, a) * (180.0 / Math.PI);
+        if (h < 0) h += 360.0;
+        return (l, c, h);
+    }
+
+    /// <summary>
+    /// Convert OKLCH to sRGB bytes with gamut mapping.
+    /// Reduces chroma via binary search until the result fits sRGB [0,255].
+    /// 20 iterations gives sub-perceptual precision (~0.001 chroma).
+    /// </summary>
+    public static (byte R, byte G, byte B) OklchToRgb(double L, double C, double H)
+    {
+        double hRad = H * (Math.PI / 180.0);
+        double a = C * Math.Cos(hRad);
+        double b = C * Math.Sin(hRad);
+
+        var (r, g, bl) = OklabToRgb(L, a, b);
+
+        // Check if in gamut (no clamping occurred)
+        if (IsInGamut(L, a, b))
+            return (r, g, bl);
+
+        // Binary search: reduce chroma until in gamut
+        double lo = 0, hi = C;
+        for (int i = 0; i < 20; i++)
+        {
+            double mid = (lo + hi) / 2;
+            double ma = mid * Math.Cos(hRad);
+            double mb = mid * Math.Sin(hRad);
+            if (IsInGamut(L, ma, mb))
+                lo = mid;
+            else
+                hi = mid;
+        }
+
+        double fa = lo * Math.Cos(hRad);
+        double fb = lo * Math.Sin(hRad);
+        return OklabToRgb(L, fa, fb);
+    }
+
+    /// <summary>Check if an OKLab color maps to valid sRGB without clamping.</summary>
+    private static bool IsInGamut(double L, double a, double b)
+    {
+        double l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+        double m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+        double s_ = L - 0.0894841775 * a - 1.2914855480 * b;
+
+        double l = l_ * l_ * l_;
+        double m = m_ * m_ * m_;
+        double s = s_ * s_ * s_;
+
+        double r = +4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s;
+        double g = -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s;
+        double bl = -0.0041960863 * l - 0.7034186147 * m + 1.7076147010 * s;
+
+        double rs = LinearToSrgb(r);
+        double gs = LinearToSrgb(g);
+        double bs = LinearToSrgb(bl);
+
+        const double eps = 0.001;
+        return rs >= -eps && rs <= 1.0 + eps &&
+               gs >= -eps && gs <= 1.0 + eps &&
+               bs >= -eps && bs <= 1.0 + eps;
+    }
+
+    /// <summary>OKLCH → "#RRGGBB" hex string (gamut-mapped).</summary>
+    public static string OklchToHex(double L, double C, double H)
+    {
+        var (r, g, b) = OklchToRgb(L, C, H);
+        return ToHex(r, g, b);
+    }
+
+    /// <summary>"#RRGGBB" (or "#AARRGGBB") hex string → OKLCH (L, C, H).</summary>
+    public static (double L, double C, double H) HexToOklch(string hex)
+    {
+        var (r, g, b) = ParseHex(hex);
+        return RgbToOklch(r, g, b);
+    }
 }

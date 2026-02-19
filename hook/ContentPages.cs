@@ -52,8 +52,8 @@ internal static class ContentPages
 
         // Use palette colors so Uprooted elements match Root's tree-walked colors
         if (palette != null &&
-            palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
-            palette.TryGetValue("TextFillColorPrimary", out var palText))
+            palette.TryGetValue("BackgroundSecondary", out var palBg) &&
+            palette.TryGetValue("TextPrimary", out var palText))
         {
             CardBg = palBg;
             CardBorder = ColorUtils.WithAlpha(palText, 0x19);

@@ -1996,6 +1996,80 @@ internal class AvaloniaReflection
         _imageSource?.SetValue(image, bitmap);
     }
 
+    // ===== ThemeDictionaries Access (for Theme Engine v2) =====
+
+    /// <summary>
+    /// Gets ResourceDictionary.ThemeDictionaries from a resource dictionary.
+    /// Returns the IDictionary&lt;ThemeVariant, IThemeVariantProvider&gt; for keying.
+    /// </summary>
+    public IDictionary? GetThemeDictionaries(object? resources)
+    {
+        if (resources == null) return null;
+        try
+        {
+            var prop = resources.GetType().GetProperty("ThemeDictionaries",
+                BindingFlags.Public | BindingFlags.Instance);
+            return prop?.GetValue(resources) as IDictionary;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"GetThemeDictionaries error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Gets Application.Current.ActualThemeVariant (a ThemeVariant struct).
+    /// </summary>
+    public object? GetActiveThemeVariant()
+    {
+        var app = GetAppCurrent();
+        if (app == null) return null;
+        try
+        {
+            var prop = app.GetType().GetProperty("ActualThemeVariant",
+                BindingFlags.Public | BindingFlags.Instance);
+            return prop?.GetValue(app);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"GetActiveThemeVariant error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Find a ThemeVariant key by string name (e.g. "PureDark", "Dark", "Light").
+    /// Iterates ThemeDictionaries keys and matches by ToString().
+    /// </summary>
+    public object? FindVariantByName(IDictionary themeDicts, string variantName)
+    {
+        try
+        {
+            foreach (var key in themeDicts.Keys)
+            {
+                if (key?.ToString() == variantName)
+                    return key;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"FindVariantByName error: {ex.Message}");
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Subscribe to Application.ActualThemeVariantChanged event.
+    /// Fires when the user switches between Dark/Light/PureDark.
+    /// </summary>
+    public void SubscribeActualThemeVariantChanged(Action callback)
+    {
+        var app = GetAppCurrent();
+        if (app == null) return;
+        SubscribeEvent(app, "ActualThemeVariantChanged", callback);
+    }
+
     /// <summary>
     /// Enumerate all resource keys in a resource dictionary (for diagnostics).
     /// </summary>
