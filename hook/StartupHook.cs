@@ -500,7 +500,7 @@ internal class StartupHook
                                 catch (Exception ex) { Logger.Log("Startup", $"Phase 5: FindBrowserDirect UI error: {ex.Message}"); }
                                 found.Set();
                             });
-                            found.Wait(TimeSpan.FromSeconds(15));
+                            found.Wait(15_000);
                             browser = result;
                             if (browser != null) break;
                             Logger.Log("Startup", $"Phase 5: IBrowser not found (attempt {attempt}/6), retrying in 5s...");

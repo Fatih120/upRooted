@@ -106,7 +106,7 @@ internal class SilentTypingEngine
                 catch (Exception ex) { Logger.Log(Tag, $"ViewModel scan error: {ex.Message}"); }
                 finally { done.Set(); }
             });
-            done.Wait(TimeSpan.FromSeconds(10));
+            done.Wait(10_000);
 
             if (_patchCount > 0)
             {
