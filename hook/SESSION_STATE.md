@@ -92,7 +92,7 @@ The Avalonia-native link embed engine is broadly functional:
 - Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) with per-request bot UA
 - Embed-fixer normalization (fixupx/fxtwitter/fixvx → vxtwitter.com)
 - `twitter:image`/`twitter:title`/`twitter:description` meta tag fallbacks
-- Tenor URL skip (Root embeds natively)
+- Tenor: only `media.tenor.com` (direct CDN) skipped; `tenor.com/view/` pages go through OG pipeline for animated GIF embeds
 - Settings cache: 10s TTL on `UprootedSettings.Load()`
 
 - Reddit embeds: dedicated handler with old.reddit.com OG fetch, subreddit provider label, orange accent
@@ -148,6 +148,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/Entry.cs` | Calls `LogSeparator()` before first `[Entry]` log in both ModuleInitializer and constructor |
 | `hook/ContentPages.cs` | Scaled up all lightbox/settings font sizes (section headers 12→18, labels 13→19, descriptions 12→16, titles 18→26, inputs 13→17, toggle pills 40×20→52×26, card width 480→560); API key textbox vertically centered |
 | `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
+| `hook/LinkEmbedEngine.cs` | Tenor: only `media.tenor.com` skipped (not bare `tenor.com`); video embeds respect "Show file names" toggle (`isFileOnlyEmbed` includes `VideoId=="direct"`) |
+| `hook/AnimatedImage.cs` | Persistent canvas bitmap for frame compositing — fixes black pixels and frame ordering in delta-encoded GIFs; removed per-frame `DecodeFrame` method |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 

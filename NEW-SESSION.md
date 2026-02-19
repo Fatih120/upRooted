@@ -50,10 +50,10 @@ Two independent injection layers into one app:
 | `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
-| `LinkEmbedEngine.cs` | 2406 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
+| `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
 | `MessageLogger.cs` | ~1624 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, Discord-style deleted message rows, diagnostic instrumentation |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
-| `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection) |
+| `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection, persistent canvas compositing) |
 | `AutoUpdater.cs` | 850 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare) |
 | `ProfileBadgeInjector.cs` | ~535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated) |
 | `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |

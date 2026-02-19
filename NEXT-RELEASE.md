@@ -8,6 +8,9 @@
 
 - **Custom theme color swatches** — accent and background swatches in the custom theme section now display the correct color. The ThemeEngine visual tree walker was recoloring them because they lacked the `uprooted-no-recolor` tag (which the ping color swatch already had). Both swatches now tagged correctly in `ContentPages.cs`.
 - **Auto-updater dev channel** — developer channel now correctly detects pre-release versions. Was using `/releases/latest` which only returns non-prerelease releases. Fixed by switching to `/releases?per_page=1` which returns the most recent release including pre-releases.
+- **Tenor embed bypass too aggressive** — `NativeEmbedDomainRegex` was skipping all `tenor.com` URLs, but Root only natively embeds `media.tenor.com` (direct CDN GIF URLs). Now only `media.tenor.com` is skipped; `tenor.com/view/` pages go through the OG pipeline, extracting the `og:image` GIF URL and rendering it as an animated inline embed.
+- **Animated GIF frame compositing** — GIF frames had black pixels and out-of-order appearance because each frame was decoded into a fresh zeroed bitmap, but `PriorFrame` told SKCodec the buffer already had the previous frame's data. Now uses a persistent canvas bitmap that accumulates frame data across all frames, fixing delta-encoded GIF rendering.
+- **Video embed filename toggle** — direct video embeds (`.mp4`, `.webm`, `.mov`) now respect the "Show file names" LinkEmbeds setting. Previously always showed the filename because the `isImageOnlyEmbed` check excluded `VideoId="direct"`.
 
 ### Removed
 
