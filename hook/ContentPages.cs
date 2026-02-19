@@ -651,7 +651,7 @@ internal static class ContentPages
                     Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly \u2014 no restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.3.6-rc",
-                    Description = "Rich link previews right in chat. YouTube videos play inline, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
+                    Description = "Rich link previews right in chat. YouTube videos show a thumbnail with a play button that opens in your browser, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 2 },
                 new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.3.6-rc",
                     Description = "Automatically strips tracking parameters like utm_source, fbclid, and gclid from links you send. Over 30 trackers removed for cleaner URLs and better privacy \u2014 your links still work perfectly.",

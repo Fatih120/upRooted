@@ -1,6 +1,6 @@
 # Link Embeds
 
-Discord-style rich link previews for URLs. Fetches OpenGraph metadata and renders embed cards inline. YouTube URLs get special treatment with thumbnail-to-player embeds.
+Discord-style rich link previews for URLs. Fetches OpenGraph metadata and renders embed cards inline. YouTube URLs get special treatment with thumbnail and play button embeds that open in your browser.
 
 > **Source:** [`src/plugins/link-embeds/`](../../../src/plugins/link-embeds/) -- `index.ts`, `providers.ts`, `embeds.ts`
 
@@ -13,7 +13,7 @@ When a URL appears in the page, this plugin:
 1. Detects the `<a>` element via MutationObserver
 2. Fetches metadata (OpenGraph tags for websites, oEmbed for YouTube)
 3. Renders a styled embed card below the link
-4. For YouTube links, shows a clickable thumbnail that expands to an inline player
+4. For YouTube links, shows a clickable thumbnail with a play button that opens the video in your browser
 
 ## Settings
 
@@ -54,7 +54,8 @@ Metadata is fetched via YouTube's oEmbed endpoint (`/oembed?url=...&format=json`
 The card layout is a flex column: text body on top, video section below. The video section shows:
 - Thumbnail from `img.youtube.com/vi/{id}/hqdefault.jpg`
 - Red play button overlay (SVG)
-- Click replaces thumbnail with an autoplay iframe (`youtube.com/embed/{id}?autoplay=1`)
+- **Browser-side (TypeScript):** Click replaces thumbnail with an autoplay iframe (`youtube.com/embed/{id}?autoplay=1`). This only applies in the DotNetBrowser context (WebRTC, sub-apps).
+- **Chat (C# hook / LinkEmbedEngine):** Click opens the YouTube URL in the default browser. There is no inline player — chat is Avalonia-native.
 
 ## How it works
 

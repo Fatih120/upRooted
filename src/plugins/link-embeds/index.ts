@@ -2,7 +2,7 @@
  * Link Embeds Plugin -- Discord-style link previews for URLs in chat.
  *
  * Watches for new <a> elements via MutationObserver and renders rich embed
- * cards with OpenGraph metadata. YouTube URLs get special inline player embeds.
+ * cards with OpenGraph metadata. YouTube URLs get thumbnail + play button embeds.
  */
 
 import type { UprootedPlugin } from "../../types/plugin.js";
