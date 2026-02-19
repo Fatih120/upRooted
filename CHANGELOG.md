@@ -71,6 +71,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **About > Status plugin count** — enabled count was inflated by ghost entries in `settings.Plugins` (e.g. `settings-panel` from legacy migration). Now iterates `KnownPlugins` with the same enabled-check logic as the Plugins page, including the `content-filter` → `NsfwFilterEnabled` special case.
   - File: `hook/ContentPages.cs`
+- **Plugin restart banner disappears on tab switch** — restart banner was lost when navigating away from the Plugins tab and back because `initialPluginStates` was re-snapshotted from current settings on each page rebuild. Now persists as static `_launchPluginStates` (set once on first build), and the banner starts visible on rebuild if any plugin already diverges from launch state.
+  - File: `hook/ContentPages.cs`
+  - File: `hook/ContentPages.cs`
 - **Custom ping color no longer bleeds into global accent** — `ApplyPingColorOverride()` was overriding `ThemeAccentColor` and `ThemeAccentBrush` in both Styles[0] and the injected MergedDictionary, causing the entire UI accent (buttons, active states, selection indicators) to change color when a custom ping color was set. The visual tree walk already sets the ping color directly on tagged controls, making the global accent override unnecessary. Removed from both resource dictionaries.
   - File: `hook/ThemeEngine.cs`
 - **MessageLogger: deleted cards now inject at correct chat position** — Timestamp-based insertion targeting was unreliable: Root's timestamp property may not resolve, and uncached deletions defaulted to `DateTime.UtcNow` (deletion time, not send time), causing all deleted cards to land after the last visible message (bottom). Replaced with insertion-order tracking (`_orderedIds` list + `_orderedIdIndex` dict): each card now injects after the visible container with the largest collection-order index ≤ the deleted message's index.

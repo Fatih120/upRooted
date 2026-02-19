@@ -171,6 +171,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/Logger.cs` | Added `Enable()` method for runtime re-enable when switching to developer channel. |
 | `hook/SidebarInjector.cs` | Save bar: replaced all `SetIsVisible`/`ClearValue` calls with `Opacity=0`/`MaxHeight=0`/`IsHitTestVisible=false` — avoids corrupting Root's `IsVisible` binding. `CollapseSaveBar()`/`RestoreSaveBar()` methods with `_saveBarCollapsed` flag for efficient LayoutUpdated intercept. |
 | `hook/SidebarInjector.cs` | Settings reload on nav click: `_settings` changed from `readonly` to mutable; `OnNavItemClicked` calls `UprootedSettings.Load()` before building page so channel badge reflects runtime changes. |
+| `hook/ContentPages.cs` | Restart banner persists across tab switches: static `_launchPluginStates` snapshots once on first build (not re-snapshotted on rebuild). Banner starts visible on rebuild if any plugin already diverges from launch state. |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
