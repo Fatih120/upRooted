@@ -22,6 +22,7 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ### Git Workflow (IMPORTANT)
 
+- **Always commit as the logged-in git user** -- never add `Co-Authored-By` trailers. Commits should be authored by whoever `git config user.name`/`user.email` returns, not by Claude.
 - **Always `git pull` before starting any work** -- the other contributor may have pushed changes
 - **Always push after committing** -- don't leave unpushed commits sitting locally
 - **Write clear, descriptive commit messages** following this format:
