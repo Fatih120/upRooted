@@ -476,6 +476,12 @@ The verifier then starts a `FileSystemWatcher` on the profile directory, held al
 
 Phase 0 is non-fatal: if it fails (missing directories, permission errors), the hook logs the error and continues into the Avalonia phases. The native sidebar will still work; only the browser-side plugins would be affected.
 
+### Version migration: force-disable unstable plugins on upgrade
+
+Between Phase 0 and Phase 1 -- before any plugin launch decisions are made -- the hook runs a one-time version migration. It compares the `CurrentVersion` const baked into the build against the `Version` field persisted in the user's settings INI file. If the build is newer (an upgrade), it walks a compile-time dictionary called `ForceDisableOnUpgrade` and sets `Plugins[id] = false` for any plugins listed in versions between the old and current. This is cumulative: if a user skips from 0.3.6 to 0.5.0, entries for both 0.4.0 and 0.5.0 apply. On downgrade (rollback), it stamps the new version but leaves all plugin toggles alone. On a normal restart where versions match, this block is skipped entirely.
+
+Why this matters: some plugins ship in a testing state (e.g. MessageLogger). Without this gate, an auto-update would silently carry forward an enabled unstable plugin and surface bugs to users who didn't opt in. The migration ensures each release can declaratively reset specific plugins to off.
+
 ### Phase 1: Wait for Avalonia assemblies (30s timeout)
 
 Poll every 250ms for the `Avalonia.Controls` assembly to appear in the AppDomain. Single-file .NET 10 apps load assemblies lazily from memory, so we have to wait for Root to actually reference Avalonia types.
@@ -732,28 +738,29 @@ After installation, every time Root.exe launches:
 8.  UprootedHook.dll loads -> Entry.ModuleInit() fires
 9.  StartupHook.Initialize() -> background thread starts
 10. Phase 0: HtmlPatchVerifier checks/repairs HTML patches + starts FileSystemWatcher
-11. Phase 1: Wait for Avalonia assemblies
-12. Phase 2: Resolve all types via reflection
-13. Phase 3: Wait for Application.Current
-14. Phase 3.5: Initialize theme engine, apply saved theme
-15. Phase 4: Wait for MainWindow
-16. SidebarInjector.StartMonitoring() -> 200ms timer begins
-17. Root finishes loading, user sees the app
+11. Version migration: force-disable unstable plugins on upgrade (if version changed)
+12. Phase 1: Wait for Avalonia assemblies
+13. Phase 2: Resolve all types via reflection
+14. Phase 3: Wait for Application.Current
+15. Phase 3.5: Initialize theme engine, apply saved theme
+16. Phase 4: Wait for MainWindow
+17. SidebarInjector.StartMonitoring() -> 200ms timer begins
+18. Root finishes loading, user sees the app
 
      ... user opens Settings ...
 
-18. Timer tick finds "APP SETTINGS" TextBlock
-19. VisualTreeWalker discovers layout structure
-20. SidebarInjector injects UPROOTED section
-21. User sees "Uprooted", "Plugins", "Themes" in sidebar
+19. Timer tick finds "APP SETTINGS" TextBlock
+20. VisualTreeWalker discovers layout structure
+21. SidebarInjector injects UPROOTED section
+22. User sees "Uprooted", "Plugins", "Themes" in sidebar
 
      ... meanwhile, in Chromium ...
 
-22. DotNetBrowser loads WebRtcBundle/index.html
-23. <script> tag loads uprooted-preload.js before Root's bundles
-24. Bridge proxies installed on window.__nativeToWebRtc
-25. Theme plugin starts, overrides CSS variables
-26. Web UI is themed + bridge calls are interceptable
+23. DotNetBrowser loads WebRtcBundle/index.html
+24. <script> tag loads uprooted-preload.js before Root's bundles
+25. Bridge proxies installed on window.__nativeToWebRtc
+26. Theme plugin starts, overrides CSS variables
+27. Web UI is themed + bridge calls are interceptable
 ```
 
 ### Uninstall

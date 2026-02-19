@@ -95,8 +95,11 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
        |                                       |      |      |
   Phase 0: HtmlPatchVerifier                   +------+------+
        |   (verify + FileSystemWatcher)               |
-  Phase 1: Wait for Avalonia assemblies        Built-in plugins
-       |                                       (UprootedPlugin interface)
+  Version migration                            Built-in plugins
+       |   (force-disable unstable plugins     (UprootedPlugin interface)
+       |    on upgrade, stamp version)
+  Phase 1: Wait for Avalonia assemblies
+       |
   Phase 2: Wait for Application.Current
        |
   Phase 3: Wait for MainWindow
@@ -152,7 +155,7 @@ uprooted-private/
 |-- hook/                             # C# .NET hook (CLR profiler injection layer)
 |   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
 |   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs        (~430)  # Multi-phase Avalonia wait + DotNetBrowser initialization.
+|   |-- StartupHook.cs         (518)  # Multi-phase startup orchestrator, version migration.
 |   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
 |   |-- AvaloniaReflection.cs (2030)  # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
@@ -393,7 +396,16 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 - **File:** `hook/HtmlPatchVerifier.cs`
 - **Thread:** Background (no Avalonia needed)
 - **Action:** Scans `WebRtcBundle/index.html` and `RootApps/*/index.html` for injection markers. If markers are missing (e.g., Root auto-update overwrote them), re-patches the files in place. Creates a `FileSystemWatcher` for each directory to detect future overwrites and re-patch automatically.
-- **Failure mode:** Non-fatal. If Phase 0 fails, the TypeScript layer will not load, but the C# hook continues to Phase 1.
+- **Failure mode:** Non-fatal. If Phase 0 fails, the TypeScript layer will not load, but the C# hook continues.
+
+### Version Migration (between Phase 0 and Phase 1)
+
+**Purpose:** Force-disable unstable plugins when upgrading to a new build.
+
+- **File:** `hook/StartupHook.cs`
+- **Thread:** Background
+- **Mechanism:** Compares `CurrentVersion` const against `settings.Version` using `AutoUpdater.CompareVersions()`. On upgrade, iterates the `ForceDisableOnUpgrade` dictionary and sets `Plugins[id] = false` for each plugin listed in versions between old (exclusive) and current (inclusive). On downgrade, stamps version only. No-op when versions match.
+- **Failure mode:** Non-fatal. Settings update only; no UI or Avalonia dependency.
 
 ### Phase 1: Wait for Avalonia Assemblies
 

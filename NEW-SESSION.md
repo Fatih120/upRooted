@@ -135,6 +135,7 @@ Two independent injection layers into one app:
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. Ping Color toggle merged inline into Custom Theme card (separated by 1px divider). ThemeEngine applies as Phase 6 after theme apply + live updates.
+- Version-gated plugin force-disable on upgrade: `ForceDisableOnUpgrade` dictionary in `StartupHook` runs between Phase 0 and Phase 1, cumulative across skipped versions, downgrade-safe, `CurrentVersion` const replaces hardcoded banner string
 - Embed card accent color: link embed left border strip uses active theme accent (`ThemeEngine.GetAccentColor()`). `NotifyThemeChanged()` updates all live cards on theme switch or live drag; preserves site-specific OG colors (Reddit orange, og:theme-color).
 - Theme flash fix: walk bursts after injection completes, on ListBox selection changes, and on Uprooted tab switches prevent flash of unthemed content when opening settings or switching tabs. 50ms rapid follow-up added to catch async-loaded controls.
 - Plugin names: PascalCase convention (SentryBlocker, LinkEmbeds, MessageLogger, ContentFilter) matching Vencord-style naming

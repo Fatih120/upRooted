@@ -47,7 +47,7 @@ The hook layer consists of 24 source files in the `hook/` directory:
 |------|------:|---------|
 | `Entry.cs` | 33 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 366 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | 518 | Multi-phase startup orchestrator (Phase 0-5), version migration |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 1408 | Event + timer-based sidebar injection and content management |
@@ -158,11 +158,11 @@ Native DLL proxy -> hostfxr -> NativeEntry.Initialize()
 
 ## Startup Sequence
 
-**File:** `hook/StartupHook.cs` (366 lines)
+**File:** `hook/StartupHook.cs` (518 lines)
 
 The `StartupHook` class is the internal, no-namespace class required by .NET's
 `DOTNET_STARTUP_HOOKS` mechanism. It contains the multi-phase initialization sequence
-(Phase 0 through Phase 5).
+(Phase 0 through Phase 5), version migration logic, and the `CurrentVersion` constant.
 
 ### Process Guard
 
@@ -201,6 +201,58 @@ s_patchVerifier = verifier;  // prevent GC
 - The verifier is stored in the static field `s_patchVerifier` to prevent garbage
   collection of the `FileSystemWatcher` instances for the process lifetime.
 
+### Version Migration (between Phase 0 and Phase 1)
+
+**Failure mode:** Non-fatal; settings update only
+
+```csharp
+var migrationSettings = UprootedSettings.Load();
+var cmp = AutoUpdater.CompareVersions(CurrentVersion, migrationSettings.Version);
+if (cmp > 0)
+{
+    // Upgrade: apply cumulative force-disable entries, stamp new version
+    foreach (var (version, disableList) in ForceDisableOnUpgrade)
+        if (AutoUpdater.CompareVersions(version, oldVersion) > 0 &&
+            AutoUpdater.CompareVersions(version, CurrentVersion) <= 0)
+            foreach (var pluginId in disableList)
+                migrationSettings.Plugins[pluginId] = false;
+    migrationSettings.Version = CurrentVersion;
+    migrationSettings.Save();
+}
+else if (cmp < 0)
+{
+    // Downgrade: stamp version only, no plugin changes
+    migrationSettings.Version = CurrentVersion;
+    migrationSettings.Save();
+}
+```
+
+(`StartupHook.cs:55-87`)
+
+Runs once per version transition, before any plugin launch decisions are made. The
+`ForceDisableOnUpgrade` dictionary is a compile-time table mapping version strings to
+arrays of plugin IDs that should be force-disabled when upgrading to (or through) that
+version. Semantics:
+
+- **Upgrade only:** Fires when `CurrentVersion > settings.Version`. Uses
+  `AutoUpdater.CompareVersions()` which handles `major.minor.patch-suffix` with correct
+  prerelease ordering (`0.3.6-rc < 0.3.6`).
+- **Cumulative:** If a user skips from 0.3.6 to 0.5.0, entries for 0.4.0 *and* 0.5.0
+  both apply.
+- **Explicit false insert:** Sets `Plugins[id] = false` even if the key doesn't exist,
+  because missing keys fall back to `DefaultEnabled` which may be `true`.
+- **Downgrade-safe:** On downgrade, stamps the version but applies no disable policies.
+- **No-op on same version:** Skips entirely when versions match (normal restart).
+
+To add entries, edit the `ForceDisableOnUpgrade` dictionary at the top of `StartupHook`:
+
+```csharp
+private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
+{
+    { "0.4.0", new[] { "message-logger", "silent-typing" } },
+};
+```
+
 ### Phase 1: Wait for Avalonia Assemblies
 
 **Timeout:** 30 seconds (250ms poll)
@@ -214,7 +266,7 @@ if (!WaitForAvaloniaAssemblies(TimeSpan.FromSeconds(30)))
 }
 ```
 
-(`StartupHook.cs:55-61`)
+(`StartupHook.cs:89-95`)
 
 The helper `WaitForAvaloniaAssemblies` (`StartupHook.cs:149-163`) polls
 `AppDomain.CurrentDomain.GetAssemblies()` every 250ms looking for an assembly named
