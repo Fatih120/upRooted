@@ -702,6 +702,9 @@ internal static class ContentPages
 
     // Background update notification overlay state
     private static object? _updateNotifyOverlay;
+
+    // Plugin states at launch — persists across page rebuilds so restart banner stays visible
+    private static Dictionary<string, bool>? _launchPluginStates;
     private static object? _updateNotifyBackdrop;
     private static object? _updateNotifyPanel;
 
@@ -719,18 +722,19 @@ internal static class ContentPages
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
-        // Snapshot initial plugin states so we can hide the banner when user reverts
-        var initialPluginStates = new Dictionary<string, bool>();
-        if (KnownPlugins != null)
+        // Snapshot plugin states at launch (set once, survives page rebuilds)
+        if (_launchPluginStates == null && KnownPlugins != null)
         {
+            _launchPluginStates = new Dictionary<string, bool>();
             foreach (var plugin in KnownPlugins)
             {
                 bool isOn = plugin.Id == "content-filter"
                     ? settings.NsfwFilterEnabled
                     : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
-                initialPluginStates[plugin.Id] = isOn;
+                _launchPluginStates[plugin.Id] = isOn;
             }
         }
+        var initialPluginStates = _launchPluginStates ?? new Dictionary<string, bool>();
 
         // Restart notice banner (hidden until a plugin state diverges from initial)
         object? restartBanner = null;
@@ -787,7 +791,21 @@ internal static class ContentPages
                 }
 
                 r.SetMargin(bannerOuter, 0, 12, 0, 0);
-                r.SetIsVisible(bannerOuter, false);
+
+                // Check if any plugin already diverges from launch state
+                bool alreadyDiverged = false;
+                if (initialPluginStates != null)
+                {
+                    foreach (var kv in initialPluginStates)
+                    {
+                        if (kv.Key == "themes") continue;
+                        bool currentVal = kv.Key == "content-filter"
+                            ? settings.NsfwFilterEnabled
+                            : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
+                        if (currentVal != kv.Value) { alreadyDiverged = true; break; }
+                    }
+                }
+                r.SetIsVisible(bannerOuter, alreadyDiverged);
                 r.AddChild(page, bannerOuter);
                 restartBanner = bannerOuter;
             }
