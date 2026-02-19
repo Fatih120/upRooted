@@ -1,5 +1,8 @@
 // RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
 // CompiledAvaloniaXaml.!AvaloniaResources.XamlClosure_55
+
+// Referenced by RootApp.Client.Avalonia/Resources/Themes/PureDark.axaml
+
 using System;
 using System.Runtime.CompilerServices;
 using Avalonia;

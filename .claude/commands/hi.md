@@ -27,7 +27,11 @@ This command has two phases: **orient** (read core context, summarize, ask what'
 
 6. Read `hook/SESSION_STATE.md` — what changed last, pending issues, deployment notes.
 
-7. Provide a brief summary to the user confirming you are oriented. Always use this exact structure:
+7. Read `research/ILSPY_DUMP_INDEX.md`. This is the master index for all ILSpy decompiled files in `research/ilspy-dumps/`. It tracks which files have been analyzed into docs and which are pending. Note the total file/line counts and how many are marked as analyzed vs. not yet analyzed. Mention the ILSpy analysis status in your summary.
+
+8. Read `docs/framework/ROOT_CONTROL_REFERENCE.md`. This is the authoritative reference for Root's custom controls, style classes, resource keys, message view internals, settings infrastructure, DataStore keys, and more — all from ILSpy decompilation. Skim the Table of Contents and note which sections exist. You will reference this heavily when working on any C# hook feature that touches Root's visual tree.
+
+9. Provide a brief summary to the user confirming you are oriented. Always use this exact structure:
 
    - Project identity and version
    - The two injection layers (1 line each)
@@ -35,6 +39,7 @@ This command has two phases: **orient** (read core context, summarize, ask what'
    - Any known issues (bullet list)
    - Top pending tasks from TASKS.md (bullet list)
    - Next plugins to build from PLUGIN_ROADMAP.md (name, layer, complexity — bullet list)
+   - ILSpy analysis status from ILSPY_DUMP_INDEX.md (total files, analyzed count, pending count)
    - Available dev commands as a **table** — always format commands in a table like this:
 
      | Command | Purpose |
@@ -52,13 +57,13 @@ This command has two phases: **orient** (read core context, summarize, ask what'
 
      Update this table if commands have been added/removed/renamed since this file was last edited — read the actual contents of `.claude/commands/` to get the current list.
 
-8. **Ask the user what they want to work on today.** Use `AskUserQuestion` with the top pending tasks from TASKS.md as options (plus an "Other" escape hatch). If the user already stated their task in the same message as `/hi`, skip the question and proceed directly to Phase 2 with their stated task.
+10. **Ask the user what they want to work on today.** Use `AskUserQuestion` with the top pending tasks from TASKS.md as options (plus an "Other" escape hatch). If the user already stated their task in the same message as `/hi`, skip the question and proceed directly to Phase 2 with their stated task.
 
 ## Phase 2: Deep-Read
 
 Once you know the task, load all documentation that could prevent rediscovering known bugs, quirks, and patterns.
 
-9. **Map the task to topics.** Go back to `docs/INDEX.md` and use both the **Documentation Map** table and the **Quick-Reference Topic Finder** table to identify every document and section relevant to the user's task. Think broadly — include:
+11. **Map the task to topics.** Go back to `docs/INDEX.md` and use both the **Documentation Map** table and the **Quick-Reference Topic Finder** table to identify every document and section relevant to the user's task. Think broadly — include:
    - Documents directly about the feature area (e.g., LinkEmbedEngine work → Hook Reference § Link embeds, Link Embeds built-in plugin doc)
    - Documents about the patterns the task will use (e.g., visual tree work → Hook Reference § Visual tree traversal, Avalonia Patterns)
    - Documents about layers the task touches (e.g., C# hook work → Architecture, .NET Runtime, Avalonia Patterns)
@@ -66,9 +71,9 @@ Once you know the task, load all documentation that could prevent rediscovering 
    - Any built-in plugin docs (`docs/plugins/builtin/`) relevant to the feature
    - Research docs if the task involves gRPC, DotNetBrowser, or Root internals
 
-10. **Read every document identified in step 9.** Read them all — do not skip or summarize from memory. These docs contain hard-won quirks and patterns that prevent wasted debugging cycles. Read source files too if they are listed in TASKS.md for the task or are directly relevant (e.g., the .cs file you'll be modifying).
+12. **Read every document identified in step 11.** Read them all — do not skip or summarize from memory. These docs contain hard-won quirks and patterns that prevent wasted debugging cycles. Read source files too if they are listed in TASKS.md for the task or are directly relevant (e.g., the .cs file you'll be modifying).
 
-11. **Report what you read.** After completing the deep-read, tell the user:
+13. **Report what you read.** After completing the deep-read, tell the user:
     - Which documents you read and why each is relevant
     - Any specific quirks, warnings, or patterns from those docs that are directly applicable to the task
     - Confirm you are ready to begin work

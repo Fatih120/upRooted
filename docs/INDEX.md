@@ -41,6 +41,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Reverse Engineering        | [`docs/research/REVERSE_ENGINEERING.md`](research/REVERSE_ENGINEERING.md)               | RE methodology: source maps, binary analysis, protocol discovery                                                             | Security researchers                   |
 | Security Research          | [`docs/research/SECURITY_RESEARCH.md`](research/SECURITY_RESEARCH.md)                   | 105 security findings structured by category                                                                                 | Security researchers                   |
 | Root Theme System Findings | [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../research/ROOT_THEME_SYSTEM_FINDINGS.md)   | Root's 32-key native Avalonia color system (ILSpy decompilation)                                                             | Framework contributors                 |
+| ILSpy Dump Index           | [`research/ILSPY_DUMP_INDEX.md`](../research/ILSPY_DUMP_INDEX.md)                       | Master index for 219 ILSpy decompiled files (56 analyzed, 163 pending)                                                       | Framework contributors                 |
 | Research Index             | [`docs/research/RESEARCH_INDEX.md`](research/RESEARCH_INDEX.md)                         | Navigation guide for research/ directory                                                                                     | Security researchers                   |
 | Mitigation Countermeasures | [`docs/research/MITIGATION_COUNTERMEASURES.md`](research/MITIGATION_COUNTERMEASURES.md) | Counter-strategies for all five proposed Root mitigations (CLR kill switch, HTML integrity, `file://`, CSP, signed launcher) | Security researchers, contributors     |
 | Planning Reference         | [`docs/dev/PLANNING_REFERENCE.md`](dev/PLANNING_REFERENCE.md)                           | Index of .planning/codebase/ analysis files                                                                                  | Contributors                           |
@@ -226,6 +227,7 @@ For setting up a development environment.
 | Plugin examples               | [Plugin Examples](plugins/EXAMPLES.md)                                  | --                          |
 | Plugin settings               | [Plugin API Reference](plugins/API_REFERENCE.md)                        | Settings                    |
 | Plugin storage                | [Plugin API Reference](plugins/API_REFERENCE.md)                        | Storage                     |
+| ILSpy decompiled files        | [ILSpy Dump Index](../research/ILSPY_DUMP_INDEX.md)                    | --                          |
 | Research files                | [Research Index](research/RESEARCH_INDEX.md)                            | --                          |
 | Reverse engineering           | [Reverse Engineering](research/REVERSE_ENGINEERING.md)                  | --                          |
 | Root architecture             | [Root Internals](research/ROOT_INTERNALS.md)                            | --                          |

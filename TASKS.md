@@ -38,7 +38,7 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 
 ## ILSpy Research
 
-Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The raw dumps are in `research/ilspy-dumps/`.
+Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The raw dumps are in `research/ilspy-dumps/`.
 
 ### Analyze existing dumps (marked "N" — not yet distilled into docs)
 
