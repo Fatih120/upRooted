@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 542 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-e deferred features, version migration, dev-channel log gate) |
+| `StartupHook.cs` | 574 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
@@ -51,12 +51,13 @@ Two independent injection layers into one app:
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
-| `MessageLogger.cs` | 1795 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking for correct card injection position, Discord-style deleted message rows, diagnostic instrumentation |
+| `MessageLogger.cs` | 1809 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking; event-driven edit detection (`HandleReplaced`, Add-event gating + 5s grace period); Discord-style deleted message rows (red) + edit indicator rows (amber) |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection, persistent canvas compositing) |
 | `AutoUpdater.cs` | 909 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare, hash-based same-version hotfix detection, `BackgroundUpdateApplied` event) |
 | `ProfileBadgeInjector.cs` | 560 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
-| `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
+| `SilentTypingEngine.cs` | 335 | Silent typing: HttpClient handler injection, static field scan + ViewModel chain walk, TypingBlockerHandler drops SetTypingIndicator gRPC requests |
+| `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 84 | Thread-safe file logging, startup separator, dev-channel gate (stable = no log file) |
 
@@ -135,6 +136,7 @@ Two independent injection layers into one app:
 - Restart banners: plugins page (state-aware — hides when user reverts), updates section; both with Restart button
 - DIAGNOSTICS card: "Open" button opens log file in Explorer
 - Custom ping/reply highlight color: standalone override for mention/reply highlight, persists across theme switches. Ping Color toggle merged inline into Custom Theme card (separated by 1px divider). ThemeEngine applies as Phase 6 after theme apply + live updates.
+- Silent Typing: C# reimplementation (`SilentTypingEngine.cs`, Phase 4.5f) — `TypingBlockerHandler` (DelegatingHandler) short-circuits `SetTypingIndicator` requests with synthetic `200 OK`; discovery via static field scan + ViewModel chain walk; TypeScript plugin gutted to no-op stub (v0.2.0)
 - Version-gated plugin force-disable on upgrade: `ForceDisableOnUpgrade` dictionary in `StartupHook` runs between Phase 0 and Phase 1, cumulative across skipped versions, downgrade-safe, `CurrentVersion` const replaces hardcoded banner string
 - Embed card accent color: link embed left border strip uses active theme accent (`ThemeEngine.GetAccentColor()`). `NotifyThemeChanged()` updates all live cards on theme switch or live drag; preserves site-specific OG colors (Reddit orange, og:theme-color).
 - Theme flash fix: walk bursts after injection completes, on ListBox selection changes, and on Uprooted tab switches prevent flash of unthemed content when opening settings or switching tabs. 50ms rapid follow-up added to catch async-loaded controls.
@@ -195,7 +197,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 |----------|--------|
 | Where is the C# entry point? | `hook/Entry.cs` (profiler) or `hook/NativeEntry.cs` (hostfxr) |
 | Where is the TypeScript entry point? | `src/core/preload.ts` |
-| Where is the startup sequence? | `hook/StartupHook.cs` -- Phase 0-5 (4.5a-e for deferred features) |
+| Where is the startup sequence? | `hook/StartupHook.cs` -- Phase 0-5 (4.5a-g for deferred features) |
 | Where is Avalonia reflection? | `hook/AvaloniaReflection.cs` (1943 lines) |
 | Where is the sidebar injection? | `hook/SidebarInjector.cs` |
 | Where are settings pages built? | `hook/ContentPages.cs` |

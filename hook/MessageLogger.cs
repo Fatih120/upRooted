@@ -21,6 +21,12 @@ internal class MessageLogger
 {
     private const string Tag = "MsgLogger";
     private const int ScanIntervalMs = 1500;
+    /// <summary>
+    /// Seconds after a message's Add event during which Replace events are treated as
+    /// send-completion content settling (not genuine edits). Genuine user edits arrive
+    /// well after this window; send-completion Replaces arrive within 0.5-2s.
+    /// </summary>
+    private const double EditGracePeriodSeconds = 5.0;
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -82,6 +88,10 @@ internal class MessageLogger
     // Message caches
     private readonly Dictionary<string, CachedMessage> _messageCache = new();
     private readonly Dictionary<string, string> _contentSnapshot = new();
+    // Edit detection: tracks messages seen via Add events (not initial snapshot), with Add timestamp.
+    // Used by HandleReplaced to gate Replace events — only messages in this dict past
+    // EditGracePeriodSeconds are eligible. SnapshotMessages does NOT populate this.
+    private readonly Dictionary<string, DateTime> _addedViaEvent = new();
 
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
@@ -175,11 +185,10 @@ internal class MessageLogger
                     if (_propertiesResolved)
                     {
                         FlushPendingRemoves(settings);
-                        // TODO: PollEdits has false positives (content changes during send/render)
-                        // TODO: ApplyEditIndicators breaks message layout (greyed out, "(edited)" on every msg)
-                        // Disabled until edit detection is reliable.
-                        // PollEdits(settings);
+                        // Edit detection is event-driven (HandleReplaced), not poll-based.
+                        // PollEdits is kept for reference but not called.
                         InjectDeletedMessageCards(settings);
+                        InjectEditIndicators(settings);
                     }
                 }
                 catch (Exception ex) { Logger.Log(Tag, $"Scan error: {ex.Message}"); }
@@ -441,6 +450,7 @@ internal class MessageLogger
                 _currentItemsSource = activeSource;
                 _deletionEpoch++;
                 _contentSnapshot.Clear();
+                _addedViaEvent.Clear();
                 _pendingRemoves.Clear();
                 ClearInjectedCards("active control changed");
                 ReadCurrentChannelId();
@@ -478,6 +488,7 @@ internal class MessageLogger
             _currentItemsSource = currentSource;
             _deletionEpoch++;
             _contentSnapshot.Clear();
+            _addedViaEvent.Clear();
             _pendingRemoves.Clear();
             ClearInjectedCards("ItemsSource ref changed");
             ReadCurrentChannelId();
@@ -604,6 +615,7 @@ internal class MessageLogger
             _deletionEpoch++;
             _currentItemsSource = bestSource;
             _contentSnapshot.Clear();
+            _addedViaEvent.Clear();
             ClearInjectedCards("rediscover: new control found");
             ReadCurrentChannelId();
             SubscribeToCollection(bestSource);
@@ -713,15 +725,17 @@ internal class MessageLogger
                     if (oldItems != null) HandleRemoved(oldItems, removeIndex);
                     break;
 
-                case 2: // Replace — cache the new version
-                    var replaceItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
-                    if (replaceItems != null) HandleAdded(replaceItems);
+                case 2: // Replace — snapshot update + event-driven edit detection
+                    var oldReplaceItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+                    var newReplaceItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
+                    if (newReplaceItems != null) HandleReplaced(oldReplaceItems, newReplaceItems);
                     break;
 
                 case 4: // Reset — Root rebuilt the collection, force re-discovery
                     Logger.Log(Tag, "Collection Reset — forcing re-discovery");
                     _deletionEpoch++;
                     _contentSnapshot.Clear();
+                    _addedViaEvent.Clear();
                     _orderedIds.Clear();
                     _orderedIdIndex.Clear();
                     _pendingRemoves.Clear();
@@ -745,6 +759,9 @@ internal class MessageLogger
             var msgId = ReadMessageId(item);
             if (msgId == null) continue;
             _contentSnapshot[msgId] = ReadContent(item) ?? "";
+            // Record Add timestamp for edit detection grace-period gating.
+            // Only messages seen via Add events (not initial snapshot) are eligible.
+            _addedViaEvent[msgId] = DateTime.UtcNow;
             CacheMessage(item, msgId);
             if (!_orderedIdIndex.ContainsKey(msgId))
             {
@@ -754,6 +771,67 @@ internal class MessageLogger
             _addsSinceFlush++;
         }
         Logger.Log(Tag, $"[add-event] +{items.Count} (total adds since flush: {_addsSinceFlush})");
+    }
+
+    /// <summary>
+    /// Called on CollectionChanged Replace (action=2). Updates snapshots and detects genuine
+    /// edits using two gates:
+    ///   1. The message must have arrived via an Add event (recorded in _addedViaEvent), not the
+    ///      initial SnapshotMessages. This filters messages whose full history is unknown.
+    ///   2. The Replace must arrive more than EditGracePeriodSeconds after the Add. Send-completion
+    ///      Replaces (content settling after optimistic send) arrive within 0.5-2s; genuine user
+    ///      edits arrive after the grace window.
+    /// </summary>
+    private void HandleReplaced(System.Collections.IList? oldItems, System.Collections.IList newItems)
+    {
+        if (!_propertiesResolved) return;
+        var settings = UprootedSettings.Load();
+
+        for (int i = 0; i < newItems.Count; i++)
+        {
+            var newItem = newItems[i];
+            if (newItem == null) continue;
+            var msgId = ReadMessageId(newItem);
+            if (msgId == null) continue;
+            var newContent = ReadContent(newItem) ?? "";
+
+            // Capture old content from snapshot BEFORE overwriting it.
+            // Fall back to OldItems if not in snapshot (e.g. first Replace after restart).
+            _contentSnapshot.TryGetValue(msgId, out var oldContent);
+            if (string.IsNullOrEmpty(oldContent) && oldItems != null && i < oldItems.Count)
+            {
+                var oldItem = oldItems[i];
+                if (oldItem != null) oldContent = ReadContent(oldItem) ?? "";
+            }
+
+            // Always update snapshot and cache with new content.
+            _contentSnapshot[msgId] = newContent;
+            if (_messageCache.TryGetValue(msgId, out var existingCached))
+                existingCached.Content = newContent;
+            else
+                CacheMessage(newItem, msgId);
+
+            // Edit detection — gated by Add-event eligibility and grace period.
+            if (!settings.MessageLoggerLogEdits) continue;
+            if (!_addedViaEvent.TryGetValue(msgId, out var addTime)) continue;
+
+            double ageSeconds = (DateTime.UtcNow - addTime).TotalSeconds;
+            if (ageSeconds < EditGracePeriodSeconds)
+            {
+                Logger.Log(Tag, $"[edit-gate] {msgId}: age={ageSeconds:F1}s < grace ({EditGracePeriodSeconds}s), skipping (send-completion)");
+                continue;
+            }
+
+            if (string.IsNullOrEmpty(oldContent) || oldContent == newContent) continue;
+
+            Logger.Log(Tag, $"[edit-detect] {msgId}: \"{Truncate(oldContent, 40)}\" -> \"{Truncate(newContent, 40)}\"");
+            if (_messageCache.TryGetValue(msgId, out var cached))
+            {
+                cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
+                cached.Content = newContent;
+                _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, oldContent);
+            }
+        }
     }
 
     /// <summary>
@@ -947,6 +1025,7 @@ internal class MessageLogger
             Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding (epoch={_deletionEpoch})");
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
+            _addedViaEvent.Clear();
             _orderedIds.Clear();
             _orderedIdIndex.Clear();
             ClearInjectedCards("bulk removes (channel switch)");
@@ -1018,7 +1097,10 @@ internal class MessageLogger
                 if (_contentSnapshot.TryGetValue(msgId, out var prev) &&
                     prev != content && prev.Length > 0)
                 {
-                    if (_messageCache.TryGetValue(msgId, out var cached))
+                    bool? hasBeenEdited = ReadHasBeenEdited(item);
+                    // null = property not discoverable; treat as confirmed (unknown Root version)
+                    bool confirmed = hasBeenEdited != false;
+                    if (confirmed && _messageCache.TryGetValue(msgId, out var cached))
                     {
                         cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prev });
                         cached.Content = content;
@@ -1396,6 +1478,138 @@ internal class MessageLogger
     }
 
     /// <summary>
+    /// For each message with edit history in the current channel, inject an amber-tinted
+    /// inline card into the message's layout Grid (below the message text) showing the
+    /// previous content and an "(edited)" label. Mirrors InjectDeletedMessageCards().
+    /// </summary>
+    private void InjectEditIndicators(UprootedSettings settings)
+    {
+        if (!settings.MessageLoggerLogEdits || _chatItemsControl == null) return;
+
+        var vsp = FindMessagePanel();
+        if (vsp == null) return;
+
+        // Build msgId → container map from visible VSP children
+        var visible = new Dictionary<string, object>();
+        int childCount = _r.GetChildCount(vsp);
+        for (int i = 0; i < childCount; i++)
+        {
+            var child = _r.GetChild(vsp, i);
+            if (child == null) continue;
+            var dc = ReadDC(child);
+            var msgId = dc != null ? ReadMessageId(dc) : null;
+            if (msgId != null) visible[msgId] = child;
+        }
+
+        foreach (var cached in _messageCache.Values)
+        {
+            if (cached.Edits.Count == 0 || cached.IsDeleted) continue;
+            if (!visible.TryGetValue(cached.MessageId, out var container)) continue;
+
+            var editTag = $"uprooted-edit:{cached.MessageId}";
+
+            var (grid, col) = FindMessageGridInContainer(container);
+            if (grid == null) continue;
+
+            // Dedup check
+            var gridChildren = _r.GetChildren(grid);
+            if (gridChildren != null)
+            {
+                bool exists = false;
+                foreach (var c in gridChildren)
+                    if (c != null && _r.GetTag(c) == editTag) { exists = true; break; }
+                if (exists) continue;
+            }
+
+            var card = BuildEditIndicatorCard(cached, editTag);
+            if (card == null) continue;
+
+            int newRow = AddAutoRowToGrid(grid);
+            _r.SetGridRow(card, newRow);
+            _r.SetGridColumn(card, col);
+            SetGridColumnSpan(card, 99);
+            _r.AddChild(grid, card);
+            _injectedCards[editTag] = card;
+            Logger.Log(Tag, $"[EDIT] Injected indicator for {cached.MessageId} ({cached.Edits.Count} edits)");
+        }
+    }
+
+    /// <summary>
+    /// Build an edit indicator card: amber-tinted background stripe showing the previous
+    /// content (faded, italic) and an "(edited)" label. Mirrors BuildDeletedMessageCard().
+    /// </summary>
+    private object? BuildEditIndicatorCard(CachedMessage cached, string tag)
+    {
+        try
+        {
+            var lastEdit = cached.Edits[cached.Edits.Count - 1];
+            string editLabel = cached.Edits.Count > 1
+                ? $"(edited {cached.Edits.Count}x)"
+                : "(edited)";
+
+            // Previous content — faded, italic
+            var prevText = _r.CreateTextBlock(lastEdit.PreviousContent, 13, "#99BBBBBB");
+            if (prevText == null) return null;
+            _r.SetTextWrapping(prevText, "Wrap");
+            SetFontStyleItalic(prevText);
+
+            // "(edited)" label — very small, faded amber
+            var label = _r.CreateTextBlock(editLabel, 10, "#99D4A843");
+            if (label == null) return null;
+            _r.SetMargin(label, 0, 2, 0, 0);
+
+            // Stack previous content + label vertically
+            var inner = _r.CreateStackPanel(vertical: true, spacing: 0);
+            if (inner == null) return null;
+            _r.AddChild(inner, prevText);
+            _r.AddChild(inner, label);
+
+            // Amber-tinted background stripe
+            var card = _r.CreateBorder("#1AFFCC44", cornerRadius: 0, child: inner);
+            if (card == null) return null;
+            _r.SetPadding(card, 8, 4, 8, 4);
+
+            // Amber left accent border (3px)
+            var leftAccent = _r.CreateBorder("#50FFCC44", cornerRadius: 0, child: null);
+            if (leftAccent != null)
+            {
+                leftAccent.GetType().GetProperty("Width")?.SetValue(leftAccent, 3.0);
+                _r.SetHorizontalAlignment(leftAccent, "Left");
+            }
+
+            var wrapper = _r.CreatePanel();
+            if (wrapper != null)
+            {
+                _r.AddChild(wrapper, card);
+                if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
+                _r.SetTag(wrapper, tag);
+                return wrapper;
+            }
+
+            _r.SetTag(card, tag);
+            return card;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"BuildEditCard error: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void SetFontStyleItalic(object textBlock)
+    {
+        try
+        {
+            var prop = textBlock.GetType().GetProperty("FontStyle");
+            if (prop == null) return;
+            var ft = prop.PropertyType;
+            if (ft.IsEnum)
+                prop.SetValue(textBlock, Enum.Parse(ft, "Italic"));
+        }
+        catch { }
+    }
+
+    /// <summary>
     /// Apply "(edited)" text indicators on visible messages that have edit history.
     /// </summary>
     private void ApplyEditIndicators()
@@ -1556,6 +1770,21 @@ internal class MessageLogger
         var t = GetMessageTarget(item, tp);
         if (t == null) return null;
         try { return tp.Content.GetValue(t) as string; }
+        catch { return null; }
+    }
+
+    private bool? ReadHasBeenEdited(object item)
+    {
+        var tp = GetTypeProps(item);
+        if (tp?.HasBeenEdited == null) return null;
+        var t = GetMessageTarget(item, tp);
+        if (t == null) return null;
+        try
+        {
+            var val = tp.HasBeenEdited.GetValue(t);
+            if (val is bool b) return b;
+            return null;
+        }
         catch { return null; }
     }
 

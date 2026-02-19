@@ -13,15 +13,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **MessageLogger: validate async deletion pollers** — Per-item async pollers deployed (HasBeenDeleted probe every 300ms for 3s, epoch-based cancellation on channel switch). Injection position fixed (order-based, not timestamp). Needs real-world validation: trigger actual message deletions and run `scripts/analyze-msglogger.ps1` to confirm HasBeenDeleted is set within the 3s window.
   - Files: `hook/MessageLogger.cs`
 
-- [ ] **MessageLogger: fix edit detection** — Edit detection (`PollEdits`) is currently disabled due to false positives from content changes during message send/render. Need a reliable approach — likely snapshot-on-Add (only compare content of messages that arrived via Add events, not initial snapshot) or property-change subscription if Root exposes one.
-  - Files: `hook/MessageLogger.cs`
-
-- [ ] **MessageLogger: Discord-style edit indicators** — Show original content faded above the new content with an "(edited)" label, matching Discord's MessageLogger style. Requires working edit detection first.
-  - Files: `hook/MessageLogger.cs`
-
-- [ ] **Silent Typing: verify or reimplement** — Contributed by Kurumi-Nanase (PR #3). Current implementation intercepts `window.fetch` in the browser to block `SetTypingIndicator` gRPC calls. Concern: Root's gRPC calls likely go through .NET's HTTP client, not DotNetBrowser's fetch — the intercept may never fire. Need to: (1) test with a second account to verify typing indicators are actually suppressed, (2) if not working, reimplement as a C# hook feature intercepting at the .NET/gRPC level. Also fix: plugin name casing already corrected to kebab-case.
-  - Files: `src/plugins/silent-typing/index.ts`, potentially `hook/` if C# reimplementation needed
-
 - [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
   - Files: `hook/NsfwFilter.cs`
 
@@ -61,6 +52,12 @@ Items not yet committed to but worth tracking.
 ## Done
 
 Move completed items here with the date.
+
+- [x] **MessageLogger: edit detection + Discord-style edit indicators** (2026-02-18) — Event-driven via CollectionChanged Replace: `HandleReplaced()` records edits only for messages seen via Add events and only if the Replace arrives >5s after Add (`EditGracePeriodSeconds`), filtering send-completion content settling. `InjectEditIndicators()` injects amber-tinted inline cards below edited messages (previous content italic+faded, `(edited)`/`(edited Nx)` label, amber left accent). Tag-based dedup + re-injection on VSP scroll recycling. Same Grid row pattern as deleted message cards.
+  - Files: `hook/MessageLogger.cs`
+
+- [x] **Silent Typing: C# reimplementation** (2026-02-18) — Replaced broken JS fetch/XHR intercept with `SilentTypingEngine`: patches Root's `HttpClient._handler` chain via `TypingBlockerHandler` (DelegatingHandler) that short-circuits `SetTypingIndicator` requests with a synthetic `200 OK`. Discovery via static field scan + ViewModel chain walk. TypeScript plugin gutted to no-op stub (v0.1.0 → v0.2.0). Plugin version promoted to TestingStatus=1 (beta).
+  - Files: `hook/SilentTypingEngine.cs` (new), `hook/StartupHook.cs`, `src/plugins/silent-typing/index.ts`, `hook/ContentPages.cs`
 
 - [x] **TypeScript code quality fixes** (2026-02-18) — 7 fixes: `after` patch callback invocation, `deepMerge` for settings (fixes nested-object overwrite), theme var names derived from `generateCustomVariables` keys, MutationObserver skips own `[data-uprooted]` mutations, sidebar click listener removed in cleanup (no more accumulation), `Object.freeze` on settings global, sentry-blocker `!` assertions replaced with null-check fallbacks.
   - Files: `src/core/pluginLoader.ts`, `src/core/settings.ts`, `src/plugins/themes/index.ts`, `src/plugins/settings-panel/panel.ts`, `src/core/preload.ts`, `src/plugins/sentry-blocker/index.ts`

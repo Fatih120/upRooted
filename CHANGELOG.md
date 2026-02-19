@@ -10,6 +10,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 
+- **SilentTyping: C# reimplementation** — Replaced the ineffective JS fetch/XHR intercept with a native `SilentTypingEngine` that patches Root's `HttpClient` handler chain at the .NET level.
+  - `TypingBlockerHandler` (a `DelegatingHandler`) intercepts any outbound request whose path contains `"SetTypingIndicator"` and returns a synthetic `200 OK`, preventing the typing indicator from reaching Root's servers.
+  - Discovery: static field scan across non-framework assemblies for `HttpClient` on gRPC/messaging types; ViewModel chain walk from `MainWindow.DataContext` up to 8 levels deep.
+  - Timer-based: 12s startup delay, then every 5s until patched, then backs off to 30s.
+  - Enable/disable re-checked on every intercepted request — toggle is live without restart.
+  - TypeScript plugin `silent-typing` gutted to a no-op stub (v0.1.0 → v0.2.0); JS fetch/XHR interception had no effect because `SetTypingIndicator` originates from Root's .NET layer, not DotNetBrowser.
+  - Files: `hook/SilentTypingEngine.cs` (new), `hook/StartupHook.cs`, `src/plugins/silent-typing/index.ts`
 - **FontScale system** — modular font scaling for settings pages. `FontScale` record struct with `PageScale` (11/13/12/13) and `LightboxScale` (18/20/17/18) presets. Shared builders (`CreateSectionHeader`, `BuildSettingsToggle`) accept optional scale parameter, defaulting to `PageScale`. Plugin info/settings lightboxes pass `LightboxScale` for larger, more readable text in modal overlays. Main pages unaffected.
   - File: `hook/ContentPages.cs`
 - **MessageLogger plugin** (WIP) — logs deleted messages in Avalonia-native chat with visual indicators
@@ -18,7 +25,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Per-type property cache (`Dictionary<Type, TypeProps>`) handles multiple ViewModel types with nested `.Message` bridge property resolution
   - Diagnostic instrumentation: DIAG-INJ/DIAG-FLUSH logging, boolean property dump, collection size tracking
   - Deleted messages re-injected as Discord-style full-width red-tinted background stripes with 3px red left accent border, right-click "Clear message history" context menu
-  - Edit detection: disabled (false positives from content changes during send/render — needs redesign)
+  - Edit detection: event-driven via CollectionChanged Replace events (`HandleReplaced`) — two gates prevent false positives: (1) message must have arrived via an Add event (`_addedViaEvent` dict, not initial snapshot); (2) Replace must arrive >5s after Add (`EditGracePeriodSeconds = 5.0`) to filter send-completion content settling (optimistic Replaces arrive within 0.5–2s; genuine user edits arrive after the grace window)
+  - Discord-style edit indicators — amber-tinted inline card injected below edited messages via the same Grid row pattern as deleted message cards; shows previous content (faded, italic) + `(edited)` / `(edited Nx)` label with amber left accent border; tag-based dedup and re-injection on scroll recycling via `InjectEditIndicators()` + `BuildEditIndicatorCard()`
   - Analysis tool: `scripts/analyze-msglogger.ps1` parses hook log for MsgLogger/DIAG entries
   - Files: `hook/MessageLogger.cs`, `hook/MessageStore.cs`
 - **MessageStore** — flat-file persistence for message log data

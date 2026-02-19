@@ -78,7 +78,9 @@ Key details:
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
 | 4.5d | AutoUpdater | Background update check (every 6 hours), encrypted .uprpkg download + decrypt + apply |
 | 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (dev channel + hardcoded usernames, 5s delay, event-driven + 500ms fallback) |
-| 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution, NSFW + link embeds |
+| 4.5f | SilentTypingEngine | HttpClient handler injection: static field scan + ViewModel chain walk, TypingBlockerHandler drops SetTypingIndicator (12s delay) |
+| 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
+| 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution (video thumbnails for LinkEmbedEngine) |
 
 ## Link Embed Engine (v0.3.3–0.3.6-rc)
 
@@ -159,6 +161,11 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | `ShowUpdateNotification(r, version)` — dismissable overlay card shown when `BackgroundUpdateApplied` fires; `DismissUpdateNotification()` removes it. `CheckForUpdate(isManual: true)` wired to button. |
 | `hook/StartupHook.cs` | Subscribes to `AutoUpdater.BackgroundUpdateApplied` in Phase 4.5d; dispatches `ContentPages.ShowUpdateNotification()` to UI thread |
 | `hook/MessageLogger.cs` | Injection position fix: `_orderedIds` (List) + `_orderedIdIndex` (dict) track collection insertion order. `InjectDeletedMessageCards` now uses order-index comparison instead of timestamps to find the correct adjacent container. Cleared on channel switch / reset / bulk-flush. |
+| `hook/MessageLogger.cs` | Edit detection + indicators: `HandleReplaced()` (Replace action=2) with `_addedViaEvent` + `EditGracePeriodSeconds` gates; `InjectEditIndicators()` + `BuildEditIndicatorCard()` amber-tinted card injection; `SetFontStyleItalic()`, `ReadHasBeenEdited()` helpers. 1795 → 1809 lines. |
+| `hook/SilentTypingEngine.cs` | New file: C# silent typing engine. `SilentTypingEngine` scans assemblies + walks ViewModel chain to find Root's `HttpClient` instances and prepends `TypingBlockerHandler` to each. Handler drops `SetTypingIndicator` gRPC requests, returns synthetic `200 OK`. Timer-based discovery (12s startup delay, 5s retry, 30s once patched). |
+| `hook/StartupHook.cs` | Added Phase 4.5f (SilentTypingEngine, 12s delay); Phase 4.5g (NsfwFilter, Avalonia-native, 20s delay); Phase 5 now DotNetBrowser-only (NSFW no longer gated on DotNetBrowser). |
+| `src/plugins/silent-typing/index.ts` | Gutted fetch/XHR intercept; now a no-op stub (v0.1.0 → v0.2.0) with comment explaining C# handles interception. |
+| `hook/ContentPages.cs` | SilentTyping plugin entry: version `0.1.0` → `0.2.0`, `TestingStatus` `0` → `1` (beta). |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
@@ -178,9 +185,9 @@ The Avalonia-native link embed engine is broadly functional:
 ### Known Issues — Being Fixed
 - **HasBeenDeleted reliability**: The async poller approach depends on `HasBeenDeleted` being set to true by Root within the 3s polling window. Needs real-world validation — if Root sets it asynchronously after a longer delay, the timeout may need adjustment.
 
-### Not Yet Working / Disabled
-- **Edit detection**: Disabled — `PollEdits` produces false positives from content changes during message send/render. `ApplyEditIndicators` injects TextBlocks that break Avalonia's message layout (greyed out messages, "(edited 12x)" on every message)
-- **Discord-style edit indicators**: Planned — show original content faded above new content with "(edited)" label, matching Discord's MessageLogger style
+### Working — Edit Detection + Indicators (2026-02-18)
+- **Edit detection**: Event-driven via `HandleReplaced()` (CollectionChanged Replace action=2). Two false-positive gates: (1) message must have been seen via an Add event (`_addedViaEvent` dict, not initial snapshot); (2) Replace must arrive >5s after Add (`EditGracePeriodSeconds = 5.0`), filtering send-completion optimistic Replaces (arrive within 0.5–2s). `PollEdits` method retained but not called.
+- **Discord-style edit indicators**: `InjectEditIndicators()` runs each scan tick — finds edited messages in VSP visible children, injects amber-tinted inline card as new Grid row. Card shows previous content (faded `#99BBBBBB`, italic) + `(edited)` / `(edited Nx)` label (amber `#99D4A843`), amber left accent border (3px `#50FFCC44`). Tag `uprooted-edit:{msgId}` for dedup + re-injection on scroll recycling.
 
 ### Key Learnings
 - **Root's ObservableCollection is VIRTUALIZED** — Remove events fire for buffer management (scroll-off, window shifts), not just real deletions. The original assumption (Remove = real deletion) was wrong.
@@ -206,10 +213,9 @@ See `docs/dev/TESTING.md` for full reference.
 
 ## Next Steps
 
-1. **MessageLogger: validate async pollers** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position fixed (order-based). Need real-world validation: test with actual message deletions to confirm HasBeenDeleted is set within the 3s window. Run `scripts/analyze-msglogger.ps1` to analyze diagnostic output.
-2. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
-4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
-5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+1. **MessageLogger: validate async pollers + edit detection** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position and edit indicators deployed. Need real-world validation: test actual deletions + edits, run `scripts/analyze-msglogger.ps1`. Confirm HasBeenDeleted fires within 3s, confirm edit cards appear after grace period.
+2. **SilentTyping: validate C# interception** — `SilentTypingEngine` deployed (Phase 4.5f). Verify with two accounts: type in one session, confirm the other sees no typing indicator. Check log for `[SilentTyping] Blocked SetTypingIndicator` entries. If nothing is blocked, log will show which `HttpClient` instances were found/missed.
+3. **Avalonia-native NSFW filter** — Phase 4.5g deployed; verify Avalonia-native redesign is working
 6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
 
 ## ClearURLs Engine Notes
