@@ -34,15 +34,11 @@ Two independent injection layers into one app:
 
 ## 3. Critical Rules -- Never Do These
 
+> Full list with explanations: [ARCHITECTURE.md §9 Critical Rules](docs/framework/ARCHITECTURE.md#9-critical-rules). The 3 most common:
+
 - [ ] **Never use `Type.GetType()` for Avalonia types** -- fails silently in single-file .NET 10. Use `AvaloniaReflection`.
 - [ ] **Never modify `ContentControl.Content` directly** -- freezes Avalonia UI permanently. Use Grid overlay pattern.
 - [ ] **Never use `System.Text.Json` in hook** -- `MissingMethodException` in profiler context. Use INI-based `UprootedSettings`.
-- [ ] **Never use `EventInfo.AddEventHandler` for RoutedEvents** -- incompatible with Avalonia. Use `AvaloniaReflection.SubscribeEvent()` (Expression lambdas).
-- [ ] **Never use `localStorage`** -- Root runs Chromium with `--incognito`, wipes on every launch. Use file-based settings.
-- [ ] **`DispatcherPriority` is a struct, not enum** -- do not use `Enum.Parse`. `RunOnUIThread()` handles the fallback chain.
-- [ ] **Never block the UI thread** -- all heavy work on background thread, UI mutations via `RunOnUIThread()`.
-- [ ] **Never add children to `VirtualizingStackPanel`** -- items get recycled. Add to parent container.
-- [ ] **Never cross-contaminate repos** -- private and public repos are strictly separate.
 
 ## 4. File Map
 
@@ -310,6 +306,6 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 ---
 
-**Canonical for:** Session entry point dispatch, critical rules (§3), common pitfalls (§10), file map (§4)
-**Live state at:** [hook/SESSION_STATE.md](hook/SESSION_STATE.md) — §6 above is a static snapshot
+**Canonical for:** AI session entry point, critical rules quick-reference (§3), common pitfalls (§10), abbreviated file map (§4), workflow dispatch table
+**Not canonical for:** full critical rules → [ARCHITECTURE.md §9](docs/framework/ARCHITECTURE.md#9-critical-rules) | full file map → [CLAUDE.md](CLAUDE.md) | implementation detail → [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md)
 *Quick-start reference for Uprooted v0.4.0. Last updated 2026-02-19.*

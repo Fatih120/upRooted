@@ -1,5 +1,9 @@
 # Getting Started with Uprooted Plugins
 
+> **What this is:** First plugin tutorial — 5 hands-on examples from "hello world" to bridge interception and settings.
+> **Read when:** Writing your first Uprooted plugin; learning the plugin API basics.
+> **Skip if:** You need the API reference → [API_REFERENCE.md](API_REFERENCE.md). You need advanced patterns → [ADVANCED_DEVELOPMENT.md](ADVANCED_DEVELOPMENT.md).
+
 A step-by-step guide to building your first plugin for Root Communications using Uprooted.
 
 > **Related Docs:**
@@ -610,3 +614,9 @@ See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more det
 - [EXAMPLES.md](EXAMPLES.md) -- Copy-paste example plugins covering common patterns
 - [Architecture Reference](../framework/ARCHITECTURE.md) -- Authoritative reference for the full Uprooted system
 - Study the built-in plugins at `src/plugins/themes/` and `src/plugins/sentry-blocker/` for real-world patterns
+
+---
+
+**Canonical for:** first plugin tutorial, 5 hands-on examples, plugin project setup, basic lifecycle
+**Not canonical for:** API surface → [API_REFERENCE.md](API_REFERENCE.md) | bridge method catalog → [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) | advanced patterns → [ADVANCED_DEVELOPMENT.md](ADVANCED_DEVELOPMENT.md)
+*Plugin getting started guide. Last updated 2026-02-19.*

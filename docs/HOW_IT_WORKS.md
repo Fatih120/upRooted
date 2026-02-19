@@ -1,5 +1,10 @@
 # How Uprooted Works: From Zero to Injected UI
 
+> **What this is:** Complete narrative walkthrough — how Uprooted was built from reverse engineering to working framework. The origin story with every discovery step.
+> **Read when:** You want the full story of how Uprooted was built; understanding historical context; learning why certain approaches were chosen or abandoned.
+> **Skip if:** You need current architecture reference → [ARCHITECTURE.md](framework/ARCHITECTURE.md). You need implementation detail → [HOOK_REFERENCE.md](framework/HOOK_REFERENCE.md).
+> **Does NOT cover:** Current architecture (reference format) → [ARCHITECTURE.md](framework/ARCHITECTURE.md) | Per-class implementation → [HOOK_REFERENCE.md](framework/HOOK_REFERENCE.md) | Theme engine algorithm → [THEME_ENGINE_DEEP_DIVE.md](framework/THEME_ENGINE_DEEP_DIVE.md)
+
 A complete walkthrough of how we reverse-engineered Root Communications desktop app and built a client mod framework that injects custom UI into it at runtime. Every step, from opening the binary for the first time to seeing "UPROOTED" in the settings sidebar.
 
 > **Related docs:**
@@ -353,9 +358,7 @@ Root uses two separate theme systems simultaneously:
 
 Root has a **dual color system**: the 25 CSS variables above control the Chromium/web side, while the native Avalonia UI uses a separate system of **32 resource dictionary keys** (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) stored in `Application.Resources.ThemeDictionaries`. Every Root view binds to these keys via `DynamicResourceExtension` — hardcoded colors are nearly nonexistent.
 
-> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 revealed the full 32-key color system. The colors exist as `uint32` ARGB literals in compiled IL deferred factories, which is why binary string scanning missed them. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete catalog with hex values for all three themes.
-
-To theme the web UI, we override CSS variables. To theme the native Avalonia UI, we override the resource dictionary keys — DynamicResource bindings propagate the changes automatically to all bound controls.
+> For the complete 32-key color catalog and implementation plan, see [ROOT_THEME_SYSTEM_FINDINGS.md](../research/ROOT_THEME_SYSTEM_FINDINGS.md) and [THEME_ENGINE_DEEP_DIVE.md](framework/THEME_ENGINE_DEEP_DIVE.md).
 
 ---
 
@@ -461,6 +464,8 @@ For the complete process guard implementation and thread management details, see
 ## 12. Waiting for Avalonia to Load
 
 Root's Avalonia UI doesn't exist yet when our code runs. The profiler injects us very early -- before Avalonia assemblies are even loaded. We need to wait through multiple phases, each with its own timeout and failure mode.
+
+> For full implementation detail on each phase (code, timeouts, failure modes), see [HOOK_REFERENCE.md §Startup Sequence](framework/HOOK_REFERENCE.md#startup-sequence).
 
 ### Phase 0: Verify HTML patches
 
@@ -769,6 +774,8 @@ Uninstall reverses everything: remove environment variables, restore HTML files 
 
 ## 20. What Breaks and Why
 
+> See also [ARCHITECTURE.md §10 Known Limitations](framework/ARCHITECTURE.md#10-known-limitations) for the maintained reference version of fragile integration points.
+
 ### Things that will break on Root updates
 
 | Change | Impact |
@@ -809,3 +816,9 @@ We went from a closed 617 MB binary to a fully injected mod framework by:
 10. **Packaging it all** -- console TUI installer (~600KB single binary), env vars, HTML patching, clean uninstall
 
 Two independent injection layers. Zero binary modifications. Full cleanup on uninstall. The user sees "UPROOTED" in their settings sidebar, and Root doesn't know we're there.
+
+---
+
+**Canonical for:** reverse-engineering narrative, historical context (why binary patching was abandoned), discovery walkthrough, origin story
+**Not canonical for:** current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md) | implementation detail → [HOOK_REFERENCE.md](framework/HOOK_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](framework/THEME_ENGINE_DEEP_DIVE.md) | 32-key values → [ROOT_THEME_SYSTEM_FINDINGS.md](../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+*Narrative walkthrough for Uprooted v0.4.0. Last updated 2026-02-19.*

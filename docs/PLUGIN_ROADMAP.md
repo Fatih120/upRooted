@@ -1,5 +1,9 @@
 # Plugin Roadmap
 
+> **What this is:** Plugin-specific roadmap — planned plugin features, API improvements, and ecosystem goals.
+> **Read when:** Planning plugin features; understanding what plugin capabilities are coming.
+> **Skip if:** You need the main project roadmap → [ROADMAP.md](ROADMAP.md). You need the active task board → [TASKS.md](../TASKS.md).
+
 Planned plugins for Uprooted, with architectural notes and implementation strategies. Each entry documents how the plugin would be adapted from its inspiration (typically Vencord) to work within Uprooted's architecture.
 
 > **Related docs:** [Roadmap](ROADMAP.md) | [Plugin Quickstart](plugins/GETTING_STARTED.md) | [Plugin API Reference](plugins/API_REFERENCE.md) | [Built-in Plugins](plugins/builtin/INDEX.md) | [Architecture](framework/ARCHITECTURE.md)
@@ -202,3 +206,9 @@ Space for additional plugin concepts as they emerge. When adding a new idea, inc
 ---
 
 *Last updated: 2026-02-18 — added NoReplyPing and Translate plugin plans*
+
+---
+
+**Canonical for:** plugin roadmap, planned plugin features, API evolution, ecosystem goals
+**Not canonical for:** main roadmap → [ROADMAP.md](ROADMAP.md) | active tasks → [TASKS.md](../TASKS.md) | current plugin API → [API_REFERENCE.md](plugins/API_REFERENCE.md)
+*Plugin roadmap. Last updated 2026-02-19.*

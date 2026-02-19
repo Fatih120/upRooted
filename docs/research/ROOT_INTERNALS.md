@@ -1,5 +1,10 @@
 # Root Internals Reference
 
+> **What this is:** Root Communications' internal architecture from a reverse engineering perspective — process model, DotNetBrowser integration, sub-app lifecycle, authentication, theme system, update mechanism, file layout, backend protocol, and known quirks.
+> **Read when:** Understanding Root's process model, DotNetBrowser integration, authentication, update mechanism, file layout, or known quirks.
+> **Skip if:** You need Uprooted's architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md). You need Root's 32-key color values → [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
+> **Does NOT cover:** Uprooted framework architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md) | Root's 32-key hex values → [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | Root control types exhaustive reference → [ROOT_CONTROL_REFERENCE.md](../framework/ROOT_CONTROL_REFERENCE.md)
+
 Root Communications desktop application architecture from a reverse engineering perspective. This document describes Root's internal structure, process model, embedded browser integration, sub-application lifecycle, authentication flow, theme infrastructure, update mechanism, file layout, backend protocol, and known behavioral quirks -- everything a framework contributor needs to understand about the host application that Uprooted modifies at runtime.
 
 For the browser-side perspective relevant to plugin development, see [Root Environment](../plugins/ROOT_ENVIRONMENT.md).
@@ -341,51 +346,9 @@ In addition, each theme dictionary contains ~220 SVG asset path references (them
 
 ### Key Discovery: Full 32-Key Native Color System
 
-> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 revealed that Root's native Avalonia themes define a complete 32-key color system. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full catalog with hex values for all three themes.
+> ILSpy decompilation of Root v0.9.92 fully mapped Root's native color system: 32 custom resource keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]`. All Root views bind to these keys via `DynamicResourceExtension`. See [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete catalog with hex values for all three themes, AXAML structure, style stack, and DynamicResource usage analysis.
 
-The native Avalonia side has a full color resource system, not hardcoded hex colors. The 32 keys include:
-
-| Category | Keys |
-|----------|------|
-| Brand | `BrandPrimary`, `BrandSecondary`, `BrandTertiary` |
-| Text | `TextPrimary`, `TextSecondary`, `TextTertiary`, `TextWhite` |
-| Backgrounds | `BackgroundPrimary`, `BackgroundSecondary`, `BackgroundTertiary`, `Input` |
-| UI Elements | `Border`, `HighlightLight`, `HighlightNormal`, `HighlightStrong` |
-| Status | `Info`, `Warning`, `Error`, `Muted`, `Link` |
-| Mentions | `SelfMention*`, `OtherMention*`, `RoleMention*`, `ChannelMention*` (10 keys) |
-| Effects | `ScrollShadow`, `DropShadow`, `PopupBoxShadow` |
-
-These colors exist as `uint32` ARGB literals in compiled IL (deferred factories via `XamlClosure_53/54/55.Build_N`), which is why binary string scanning did not find them — the colors are not present as hex strings in the binary.
-
-**DynamicResource usage is universal.** `MessageView` (232KB, the most complex view) uses 33 `DynamicResourceExtension` calls exclusively targeting Root's 32 keys, with only 4 hardcoded color instances (server-defined role colors and transparent placeholders). Every view examined follows this pattern.
-
-### AXAML Resource Structure
-
-The compiled AXAML themes live in `Application.Resources.ThemeDictionaries`:
-
-```
-Application.Resources (ResourceDictionary)
-├── ThemeDictionaries
-│   ├── ThemeVariant.Light    → ResourceDictionary { MergedDictionaries: [Build_Light()] }
-│   ├── ThemeVariant.Dark     → ResourceDictionary { MergedDictionaries: [Build_Dark()] }
-│   └── ThemeMapper.PureDark  → ResourceDictionary { MergedDictionaries: [Build_PureDark()] }
-├── MergedDictionaries: [Fonts.axaml, Sounds.axaml]
-└── 26 deferred converters
-```
-
-Each theme's `Build_*()` ResourceDictionary contains the 32 color keys + ~220 SVG paths + metadata.
-
-### Style Stack
-
-Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard `FluentTheme`) plus 26 custom style files:
-
-```
-app.Styles[0] = SimpleTheme       // Avalonia minimal base
-app.Styles[1] = MediaFluentTheme  // NOT standard FluentTheme
-app.Styles[2..28] = 26 custom styles (CheckBox, ComboBox, MessageMarkdown, etc.)
-```
-
-The 27 custom style files reference Root's 32 keys via `DynamicResource` (69 usages of 22 unique keys). Only 4 `SimpleTheme` keys are referenced: `ThemeControlHighlightLowBrush`, `ThemeControlLowColor`, `ThemeDisabledOpacity`, `ThemeBorderThickness`.
+For Root's custom control types and style classes, see [ROOT_CONTROL_REFERENCE.md](../framework/ROOT_CONTROL_REFERENCE.md).
 
 ### CSS Variable System
 
@@ -875,3 +838,9 @@ All external endpoints behind Cloudflare. No certificate pinning on any connecti
 ### Code Signing
 
 All 11 binaries in Root's install directory are Authenticode-signed. Root Communications, Inc. signs the primary binaries (`Root.exe`, `av_libglesv2.dll`, `libonigwrap.dll`, `uiohook.dll`), Microsoft signs the runtime libraries, and Microsoft .NET signs the WPF interop DLLs. The Root certificate is issued by Microsoft ID Verified CS AOC CA 02 (Azure Code Signing) with notably short validity windows (3-day periods observed), suggesting automated CI/CD signing with ephemeral certificates. No runtime Authenticode verification is performed on loaded binaries.
+
+---
+
+**Canonical for:** Root process architecture, DotNetBrowser integration chain, sub-app lifecycle, chat-is-Avalonia-native finding, token format/storage, Velopack update mechanism, file layout, gRPC backend overview, Effects SDK, 13 known behavioral quirks
+**Not canonical for:** 32-key hex values → [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | Root control types → [ROOT_CONTROL_REFERENCE.md](../framework/ROOT_CONTROL_REFERENCE.md) | gRPC protocol detail → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md) | Uprooted architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
+*Root internals reference. Last updated 2026-02-19.*

@@ -1,5 +1,9 @@
 # Advanced Plugin Development
 
+> **What this is:** Advanced plugin development patterns — bridge chaining, multi-plugin coordination, performance optimization, error recovery, theme integration.
+> **Read when:** Building complex plugins; coordinating between plugins; optimizing performance; integrating with themes.
+> **Skip if:** You're writing your first plugin → [GETTING_STARTED.md](GETTING_STARTED.md). You need the API reference → [API_REFERENCE.md](API_REFERENCE.md).
+
 Patterns, best practices, and techniques for experienced Uprooted plugin authors.
 
 > **Related docs:** [Getting Started](GETTING_STARTED.md) | [API Reference](API_REFERENCE.md) | [Bridge Reference](BRIDGE_REFERENCE.md) | [Root Environment](ROOT_ENVIRONMENT.md) | [Examples](EXAMPLES.md)
@@ -426,6 +430,8 @@ console.log(result === false ? "Cancelled" : "Allowed, args:", event.args);
 
 ## Theme Integration
 
+For the complete CSS variable catalog and Root's theme variant system, see [ROOT_ENVIRONMENT.md -- CSS Variables](ROOT_ENVIRONMENT.md#css-variable-system).
+
 ### Reading Current Theme
 
 ```typescript
@@ -502,4 +508,6 @@ Uprooted bundles all plugins into `dist/uprooted-preload.js` via esbuild. There 
 
 ---
 
-*Last updated: 2026-02-16*
+**Canonical for:** advanced plugin patterns, bridge chaining, multi-plugin coordination, performance optimization, error recovery strategies, theme-aware plugin development
+**Not canonical for:** basic tutorial → [GETTING_STARTED.md](GETTING_STARTED.md) | API contracts → [API_REFERENCE.md](API_REFERENCE.md) | CSS variable catalog → [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md)
+*Advanced plugin development guide. Last updated 2026-02-19.*

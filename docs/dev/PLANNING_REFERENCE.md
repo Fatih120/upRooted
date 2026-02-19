@@ -1,5 +1,9 @@
 # Planning Reference
 
+> **What this is:** Reference index for the `.planning/codebase/` automated analysis files — architecture, conventions, concerns, integrations, tech stack, structure, testing snapshots.
+> **Read when:** Planning large changes; reviewing tech debt; onboarding with a codebase overview.
+> **Skip if:** You need current architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md). You need active tasks → [TASKS.md](../../TASKS.md).
+
 Reference index for the `.planning/codebase/` automated analysis files.
 
 > **Related docs:** [Roadmap](../ROADMAP.md) | [Architecture](../framework/ARCHITECTURE.md) | [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | [Index](../INDEX.md)
@@ -162,4 +166,6 @@ The following table shows which `.planning/codebase/` findings have been promote
 
 ---
 
-*Last updated: 2026-02-16*
+**Canonical for:** automated analysis summary, `.planning/codebase/` file index, tech debt tracking baseline
+**Not canonical for:** current architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md) | active tasks → [TASKS.md](../../TASKS.md) | roadmap → [ROADMAP.md](../ROADMAP.md)
+*Planning reference. Last updated 2026-02-19.*

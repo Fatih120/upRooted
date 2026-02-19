@@ -1,5 +1,10 @@
 # Installation Guide
 
+> **What this is:** End-user install/uninstall procedures — Windows and Linux, console installer and manual methods, troubleshooting, file locations, verification.
+> **Read when:** Installing or uninstalling Uprooted; diagnosing install issues; checking file deployment locations.
+> **Skip if:** You need to build from source → [BUILD.md](BUILD.md). You need installer internals → [INSTALLER.md](../framework/INSTALLER.md).
+> **Does NOT cover:** Building from source → [BUILD.md](BUILD.md) | Installer code reference → [INSTALLER.md](../framework/INSTALLER.md) | Architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
+
 Step-by-step instructions for installing, verifying, repairing, and uninstalling Uprooted on Windows and Linux.
 
 > **Related docs:** [Index](../INDEX.md) | [Build Guide](BUILD.md) | [Installer Reference](../framework/INSTALLER.md) | [Architecture](../framework/ARCHITECTURE.md)
@@ -720,3 +725,9 @@ All paths Uprooted uses on each platform.
 See [Installer Reference](../framework/INSTALLER.md) for technical details on how the console
 installer works internally. See [Build Guide](BUILD.md) for building all layers
 from source.
+
+---
+
+**Canonical for:** install/uninstall procedures (Windows + Linux), console installer usage, manual PowerShell/bash install, troubleshooting, file locations, verification steps, Arch Linux instructions
+**Not canonical for:** build from source → [BUILD.md](BUILD.md) | installer internals → [INSTALLER.md](../framework/INSTALLER.md) | runtime behavior → [HOOK_REFERENCE.md](../framework/HOOK_REFERENCE.md)
+*Installation guide for Uprooted v0.4.0. Last updated 2026-02-19.*

@@ -1,5 +1,10 @@
 # TypeScript Browser Injection Layer Reference
 
+> **What this is:** TypeScript browser injection layer reference — core runtime, plugin API, bridge proxy system, built-in plugins, type definitions, build system.
+> **Read when:** Modifying the TypeScript layer; writing plugins; understanding bridge interception; debugging browser-side behavior.
+> **Skip if:** You need the C# hook layer → [HOOK_REFERENCE.md](HOOK_REFERENCE.md). You need the bridge method catalog → [BRIDGE_REFERENCE.md](../plugins/BRIDGE_REFERENCE.md).
+> **Does NOT cover:** C# hook layer → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Bridge method catalog (71 methods) → [BRIDGE_REFERENCE.md](../plugins/BRIDGE_REFERENCE.md) | Plugin getting started tutorial → [GETTING_STARTED.md](../plugins/GETTING_STARTED.md)
+
 > **Related docs:** [Architecture](ARCHITECTURE.md) | [Hook Reference](HOOK_REFERENCE.md) | [Root Internals](../research/ROOT_INTERNALS.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [Root Environment](../plugins/ROOT_ENVIRONMENT.md)
 > - [Bridge Reference](../plugins/BRIDGE_REFERENCE.md) -- Bridge proxy interception and method catalog
 > - [Build Guide](../install/BUILD.md) -- Build instructions for all components
@@ -516,15 +521,7 @@ change would only take effect in CSS. The native Avalonia controls would not upd
 the next application restart, when the C# hook reads the updated settings file. A future
 bridge method (`__webRtcToNative.uprootedThemeChanged`) is planned to close this gap.
 
-**Why two separate engines?**
-
-Root's desktop app renders in two completely different technologies. Native controls
-(sidebar, title bar, settings chrome, overlays, **and the chat/community UI**) are Avalonia
-XAML -- they do not respond to CSS. Web content (WebRTC voice/video, sub-apps like polls
-and task tracker) is Chromium HTML via DotNetBrowser -- it does not respond to Avalonia
-resource dictionaries. Note: chat is Avalonia-native, NOT browser-rendered. There is no
-shared color bus, so each layer needs its own theme engine targeting its own rendering
-pipeline.
+> **Why two separate engines?** Root renders in two different technologies (Avalonia native + Chromium DOM) with no shared color bus. See [ARCHITECTURE.md §1](ARCHITECTURE.md#1-project-overview) for the dual-layer architecture explanation.
 
 ---
 
@@ -884,3 +881,9 @@ Loaded by `file:///` URLs from injected HTML tags.
 pnpm build              # Production build
 npx tsx scripts/build.ts # Direct invocation
 ```
+
+---
+
+**Canonical for:** TypeScript browser injection layer, core runtime (preload, pluginLoader, patcher, settings), plugin API (bridge proxy, CSS, DOM, native), built-in plugins (sentry-blocker, themes, settings-panel), type definitions (bridge interfaces, plugin interface, settings), build system (esbuild), bridge proxy deferred installation pattern, DOM discovery algorithm
+**Not canonical for:** C# hook layer → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | bridge method catalog → [BRIDGE_REFERENCE.md](../plugins/BRIDGE_REFERENCE.md) | architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md)
+*TypeScript reference for Uprooted v0.4.0. Last updated 2026-02-19.*

@@ -1,5 +1,10 @@
 # Research Directory Index
 
+> **What this is:** Navigation index for the `research/` directory — 100+ files covering security research, pentesting scripts, RE tools, and analysis utilities.
+> **Read when:** Looking for a specific research script or data file; understanding the research directory layout.
+> **Skip if:** You need the research findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) or [ROOT_INTERNALS.md](ROOT_INTERNALS.md).
+> **Does NOT cover:** Findings or analysis → see individual docs linked in the directory listing
+
 > **Related docs:** [Security Research](SECURITY_RESEARCH.md) | [Reverse Engineering](REVERSE_ENGINEERING.md) | [gRPC Protocol](GRPC_PROTOCOL.md) | [gRPC Library Reference](GRPC_LIB_REFERENCE.md)
 
 ---
@@ -258,3 +263,9 @@ paths). Phase scripts and pure-API exploits can run from any platform with netwo
 
 **Running phase scripts:** Each is standalone -- `python phases/phase1_access_rules.py` from
 the `pentesting/` directory. Each prints a banner and reports results via `TestTracker`.
+
+---
+
+**Canonical for:** research directory navigation, file inventory, script descriptions
+**Not canonical for:** findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) | methodology → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md)
+*Research index. Last updated 2026-02-19.*

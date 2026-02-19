@@ -1,5 +1,10 @@
 # Reverse Engineering Root Communications
 
+> **What this is:** Complete RE methodology narrative — how we went from an unknown .NET binary to a fully documented architecture, including source map extraction, binary analysis, protobuf discovery, token extraction, bridge API discovery, CSS/theme extraction, and DOM mapping.
+> **Read when:** Understanding HOW findings were discovered; replicating RE techniques; extending the research.
+> **Skip if:** You just need the findings → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) or [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md). You need the current token format → [ROOT_INTERNALS.md §5](ROOT_INTERNALS.md#5-authentication-and-tokens).
+> **Does NOT cover:** Current Root architecture (reference format) → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | Security findings summary → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md)
+
 How we went from an unknown 617 MB .NET executable to a fully documented application architecture,
 complete with protocol definitions, bridge interfaces, theme specifications, and injection points.
 
@@ -428,18 +433,7 @@ distinguish between "not implemented" and "bad request" failure modes.
 
 ### Token format
 
-We reverse-engineered the Bearer token structure from the source map and binary analysis:
-
-```
-128 bytes total, base64url-encoded to approximately 172 characters:
-  Bytes  0-15:   userId UUID     (16 bytes)
-  Bytes 16-31:   deviceId UUID   (16 bytes)
-  Bytes 32-127:  Cryptographic signature (96 bytes)
-```
-
-The signature prevents forgery, but the token has no expiry and no binding to IP address or
-device fingerprint. Extracting a valid token grants full API access until the user explicitly
-signs out or the token is rotated.
+128 bytes total, base64url-encoded (~172 characters): userId UUID (16 bytes) + deviceId UUID (16 bytes) + cryptographic signature (96 bytes). No expiry, no IP binding. For full token format details and security implications, see [ROOT_INTERNALS.md §5](ROOT_INTERNALS.md#5-authentication-and-tokens).
 
 ### Method 1: Hardcoded token in production bundle
 
@@ -938,4 +932,6 @@ across 8 services handle all actual functionality.
 
 ---
 
-*Last updated: 2026-02-16*
+**Canonical for:** RE methodology narrative (source map extraction, binary analysis, protobuf schema discovery, port probing, token extraction techniques, bridge API discovery, CSS/theme extraction, DOM structure mapping), tools used, ethical considerations, lessons learned
+**Not canonical for:** token format details → [ROOT_INTERNALS.md §5](ROOT_INTERNALS.md#5-authentication-and-tokens) | current Root architecture → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | security findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) | gRPC protocol → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md)
+*RE methodology reference. Last updated 2026-02-19.*

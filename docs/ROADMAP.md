@@ -1,5 +1,9 @@
 # Roadmap
 
+> **What this is:** Known issues, planned features, and future direction for Uprooted.
+> **Read when:** Checking what's planned; understanding known limitations; looking for things to work on.
+> **Skip if:** You need the active task board → [TASKS.md](../TASKS.md). You need plugin-specific roadmap → [PLUGIN_ROADMAP.md](PLUGIN_ROADMAP.md).
+
 Project direction, known issues, and planned features for Uprooted.
 
 > **Related docs:** [Index](INDEX.md) | [Architecture](framework/ARCHITECTURE.md) | [Planning Reference](dev/PLANNING_REFERENCE.md) | [Security Research](research/SECURITY_RESEARCH.md) | [Contributing Technical](dev/CONTRIBUTING_TECHNICAL.md)
@@ -305,3 +309,9 @@ When suggesting a feature, include:
 ---
 
 *Last updated: 2026-02-18 — synced with v0.4.0 (removed completed goals, updated version table, fixed code quality items)*
+
+---
+
+**Canonical for:** known issues, planned features, future direction, priority assessment
+**Not canonical for:** active tasks → [TASKS.md](../TASKS.md) | plugin roadmap → [PLUGIN_ROADMAP.md](PLUGIN_ROADMAP.md) | current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md)
+*Roadmap for Uprooted. Last updated 2026-02-19.*

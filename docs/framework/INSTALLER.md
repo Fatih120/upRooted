@@ -1,5 +1,10 @@
 # Installer Reference
 
+> **What this is:** Console TUI installer reference — Rust backend, detection, HTML patching, hook deployment, env var management, diagnostics, embedded artifacts.
+> **Read when:** Modifying the installer; debugging install/uninstall issues; understanding how artifacts get deployed; adding new embedded files.
+> **Skip if:** You need end-user install instructions → [INSTALLATION.md](../install/INSTALLATION.md). You need the build pipeline → [BUILD.md](../install/BUILD.md).
+> **Does NOT cover:** End-user instructions → [INSTALLATION.md](../install/INSTALLATION.md) | Build pipeline → [BUILD.md](../install/BUILD.md) | What the hook does at runtime → [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
+
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
 > [Installation Guide](../install/INSTALLATION.md) |
@@ -672,3 +677,9 @@ a minimal binary.
 - The `uprooted-preload.js` deployed by the installer is compiled from the public
   repo's TypeScript source -- it bootstraps the plugin system, theme engine, and bridge
   proxies inside Root's Chromium webviews.
+
+---
+
+**Canonical for:** Rust installer internals, TUI/CLI modes, detection algorithm (Windows + Linux 5-strategy), HTML patcher (markers, inject/strip/repair), hook deployment (8 artifacts), environment variable management (dual-prefix, Windows registry, Linux 5-mechanism), diagnostics mode, embedded artifacts, process management, settings JSON
+**Not canonical for:** end-user instructions → [INSTALLATION.md](../install/INSTALLATION.md) | build pipeline → [BUILD.md](../install/BUILD.md) | runtime hook behavior → [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
+*Installer reference for Uprooted v0.4.0. Last updated 2026-02-19.*

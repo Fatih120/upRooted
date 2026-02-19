@@ -1,5 +1,9 @@
 # Bridge Reference
 
+> **What this is:** Complete bridge method catalog — all 71 methods on `INativeToWebRtc` and `IWebRtcToNative`, with type signatures, interception patterns, and examples.
+> **Read when:** Intercepting a specific bridge method; understanding bridge communication; writing patches.
+> **Skip if:** You need the plugin API basics → [API_REFERENCE.md](API_REFERENCE.md). You need the gRPC protocol → [GRPC_PROTOCOL.md](../research/GRPC_PROTOCOL.md).
+
 Complete reference for all 71 bridge methods across Root's two WebRTC bridge interfaces. These are the methods you can intercept with [Patch](API_REFERENCE.md#patch-interface) definitions in your plugin.
 
 > **Related Docs:**
@@ -795,3 +799,9 @@ export default {
   }))
 } satisfies UprootedPlugin;
 ```
+
+---
+
+**Canonical for:** all 71 bridge methods, type signatures, interception patterns, bridge proxy usage examples
+**Not canonical for:** plugin API → [API_REFERENCE.md](API_REFERENCE.md) | gRPC protocol → [GRPC_PROTOCOL.md](../research/GRPC_PROTOCOL.md) | TypeScript implementation → [TYPESCRIPT_REFERENCE.md](../framework/TYPESCRIPT_REFERENCE.md)
+*Bridge reference. Last updated 2026-02-19.*

@@ -1,5 +1,10 @@
 # gRPC Library Reference
 
+> **What this is:** Python library (`grpc_lib.py`) API reference — function signatures, UUID encoding, protobuf field types, making calls, service discovery, authentication, error handling, advanced patterns.
+> **Read when:** Writing pentesting scripts that call Root's gRPC API; looking up function signatures; understanding `grpc_lib.py` usage.
+> **Skip if:** You need the protocol wire format → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md). You need Root's internal architecture → [ROOT_INTERNALS.md](ROOT_INTERNALS.md).
+> **Does NOT cover:** Protocol wire format details → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md) | Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md)
+
 > **Related docs:** [gRPC Protocol](GRPC_PROTOCOL.md) | [Research Index](RESEARCH_INDEX.md) | [Security Research](SECURITY_RESEARCH.md) | [Reverse Engineering](REVERSE_ENGINEERING.md)
 
 ## Overview
@@ -163,20 +168,11 @@ await call(client, "root.ChannelGrpcService", "List", body)    # explicit prefix
 
 Known services discovered through research:
 
-| Service | Methods | Notes |
-|---------|---------|-------|
-| `AccessRuleGrpcService` | 7 | Channel/group permission overrides |
-| `ChannelGroupGrpcService` | 6 | Channel group CRUD |
-| `ChannelGrpcService` | 6 | Channel CRUD |
-| `CommunityAppGrpcService` | 14 | App management, uses f4/f5 not f10/f11 |
-| `AppStoreGrpcService` | 6 | App store operations |
-| `FileGrpcService` | 9 | File CRUD, search, download |
-| `DirectoryGrpcService` | 8 | Directory listing and management |
-| `UserGrpcService` | -- | Includes `GetSelf` for auth checks |
-| `NotificationGrpcService` | -- | Includes `List` for discovery |
-| `CommunityRoleGrpcService` | -- | Includes `List` for role enumeration |
+> For the complete service catalog with method counts and field conventions, see [GRPC_PROTOCOL.md §Service Catalog](GRPC_PROTOCOL.md#service-catalog).
 
 ## Authentication
+
+> For token format and authentication protocol details, see [GRPC_PROTOCOL.md §Authentication](GRPC_PROTOCOL.md#authentication).
 
 All requests carry an `Authorization: Bearer {token}` header. The library manages this automatically:
 
@@ -202,23 +198,7 @@ await verify_token(client)  # calls GetSelf; sys.exit(1) if invalid
 
 The `STATUS_NAMES` dict (`:231-237`) maps numeric codes to short names:
 
-| Code | Name | Meaning |
-|------|------|---------|
-| 0 | OK | Success |
-| 1 | CANCELLED | Client cancelled the request |
-| 2 | UNKNOWN | Unknown server error |
-| 3 | BAD_ARG | Invalid argument / malformed request |
-| 4 | DEADLINE | Timeout exceeded |
-| 5 | NOT_FOUND | Resource does not exist |
-| 6 | EXISTS | Resource already exists |
-| 7 | DENIED | Permission denied (RBAC blocked the call) |
-| 8 | RESOURCE_EXHAUSTED | Rate limited |
-| 9 | PRECOND | Precondition failed |
-| 10 | ABORTED | Transaction aborted |
-| 12 | UNIMPL | Method not implemented on server |
-| 13 | INTERNAL | Internal server error |
-| 14 | UNAVAILABLE | Service temporarily unavailable |
-| 16 | UNAUTH | Token invalid or expired |
+> For the complete gRPC status code table, see [GRPC_PROTOCOL.md §Error Handling](GRPC_PROTOCOL.md#error-handling).
 
 Network errors (DNS failure, connection refused, timeout) return `('ERR', error_message, [])`.
 
@@ -330,3 +310,9 @@ async def run_tests():
 | `CHANNEL_PERMS` (`:388`) | Channel permission field numbers (10-31), 20 permissions |
 | `COMMUNITY_PERMS` (`:412`) | Community permission field numbers (10-23), 14 permissions |
 | `STATUS_NAMES` (`:231`) | gRPC status code-to-name map (codes 0-16) |
+
+---
+
+**Canonical for:** `grpc_lib.py` function signatures, encoding/decoding API, UUID helper functions, call patterns, error extraction, advanced usage examples, utility functions, module constants
+**Not canonical for:** protocol wire format → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md) | service catalog → [GRPC_PROTOCOL.md §Service Catalog](GRPC_PROTOCOL.md#service-catalog) | status codes → [GRPC_PROTOCOL.md §Error Handling](GRPC_PROTOCOL.md#error-handling) | UUID binary format (canonical) → [GRPC_PROTOCOL.md §UUID Format](GRPC_PROTOCOL.md#uuid-format)
+*gRPC library reference. Last updated 2026-02-19.*

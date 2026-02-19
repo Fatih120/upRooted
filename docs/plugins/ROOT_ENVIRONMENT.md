@@ -1,5 +1,10 @@
 # Root Environment Reference
 
+> **What this is:** Root's browser environment from a plugin author's perspective — Chromium constraints, CSS variable system, gRPC overview, sub-app lifecycle, DOM structure.
+> **Read when:** Understanding the environment your plugin runs in; working with CSS variables; understanding Chromium limitations.
+> **Skip if:** You need Root's .NET internals → [ROOT_INTERNALS.md](../research/ROOT_INTERNALS.md). You need the full gRPC protocol → [GRPC_PROTOCOL.md](../research/GRPC_PROTOCOL.md).
+> **Does NOT cover:** Root .NET internals → [ROOT_INTERNALS.md](../research/ROOT_INTERNALS.md) | Full gRPC protocol → [GRPC_PROTOCOL.md](../research/GRPC_PROTOCOL.md)
+
 Runtime context for plugin developers. Understanding Root's Chromium environment is essential for writing plugins that work reliably.
 
 > **Related docs:** [Root Internals](../research/ROOT_INTERNALS.md) | [gRPC Protocol](../research/GRPC_PROTOCOL.md) | [Bridge Reference](BRIDGE_REFERENCE.md) | [Plugin API Reference](API_REFERENCE.md) | [TypeScript Reference](../framework/TYPESCRIPT_REFERENCE.md)
@@ -97,37 +102,15 @@ The different web contexts in Root have different capabilities. This table summa
 
 ## gRPC Backend Overview
 
-Every action a user takes in Root -- sending a message, joining a community, uploading a file, managing roles -- translates to a **gRPC-web** remote procedure call to Root's backend at `api.rootapp.com`. As a plugin author, you do not call gRPC directly. Instead, your plugin interacts with bridge methods (documented in [Bridge Reference](BRIDGE_REFERENCE.md)), and those bridge methods ultimately cause the .NET host or the WebRTC JavaScript layer to issue gRPC-web requests on your behalf. Understanding this plumbing is valuable for debugging, for knowing what data is available, and for anticipating the capabilities and limits of bridge calls.
+Root's backend communicates via gRPC-web over HTTPS to `api.rootapp.com`. Plugin authors rarely need to interact with this directly -- the bridge proxy intercepts calls at the JavaScript level. Your plugin uses bridge methods (documented in [Bridge Reference](BRIDGE_REFERENCE.md)), and those bridge methods cause the .NET host to issue gRPC-web requests on your behalf.
 
-### What gRPC-Web Means for Plugins
-
-Standard gRPC requires HTTP/2 with features that browsers cannot fully support. gRPC-web is an adaptation that works over standard HTTP/1.1 or HTTP/2 by encoding trailers in the response body instead of using HTTP/2 trailing headers. Root's embedded Chromium (DotNetBrowser) makes all backend calls using this protocol with `Content-Type: application/grpc-web+proto` and protobuf binary serialization.
-
-From the plugin perspective, the key implications are:
+Key implications for plugins:
 
 - **Bridge calls are not HTTP calls.** When you call a bridge method like `webRtcToNative.kickPeer()`, the .NET host translates that into a gRPC-web POST to the backend. You never see the HTTP request or the protobuf encoding from your plugin code.
-- **Fetch is available for direct calls.** Because Root runs Chromium with `--disable-web-security`, you can technically use `fetch()` to make your own gRPC-web calls to `api.rootapp.com` if you construct the proper framing and protobuf encoding. This is advanced usage and requires understanding the wire format.
-- **Responses are binary.** gRPC-web responses are length-prefixed protobuf frames, not JSON. If you intercept network traffic or attempt direct calls, you need a protobuf decoder to make sense of the data.
-- **Authentication is automatic.** The bearer token is attached to all gRPC-web requests by Root's networking layer. Plugins do not need to handle authentication for bridge calls. For direct `fetch()` calls, you would need to extract the token from the `initialize()` bridge call (see [Bridge Reference -- initialize](BRIDGE_REFERENCE.md)).
+- **Fetch is available for direct calls.** Because Root runs Chromium with `--disable-web-security`, you can technically use `fetch()` to make your own gRPC-web calls if you construct the proper framing and protobuf encoding. This is advanced usage.
+- **Authentication is automatic.** The bearer token is attached to all gRPC-web requests by Root's networking layer. For direct `fetch()` calls, you would need to extract the token from the `initialize()` bridge call (see [Bridge Reference -- initialize](BRIDGE_REFERENCE.md)).
 
-### Service Categories
-
-Root's backend exposes 27 gRPC services with 163 total methods. These group into several broad categories relevant to plugin development:
-
-| Category | Key Services | What They Cover |
-|----------|-------------|-----------------|
-| **Users & Auth** | `UserGrpcService` (31 methods) | Profile management, settings, blocking, friend lists, authentication |
-| **Messaging** | `v2.MessageGrpcService` (15 methods), `DirectMessageGrpcService` (6 methods) | Send/receive messages, reactions, pins, search, direct messages |
-| **Communities** | `CommunityGrpcService` (11 methods), `CommunityMemberGrpcService` (6 methods), `CommunityRoleGrpcService` (6 methods) | Community CRUD, membership, roles, invitations, bans |
-| **Channels** | `ChannelGrpcService` (6 methods), `ChannelGroupGrpcService` (6 methods), `AccessRuleGrpcService` (7 methods) | Channel management, grouping, access control |
-| **Files & Assets** | `FileGrpcService` (9 methods), `AssetGrpcService` (3 methods) | File upload, download, search, asset management |
-| **Voice/Video** | `WebRtcGrpcService` (12 methods) | Session management, track signaling, media control |
-| **Sub-Apps** | `CommunityAppGrpcService` (14 methods), `AppStoreGrpcService` (6 methods) | Sub-app installation, configuration, app store browsing |
-| **Notifications** | `NotificationGrpcService` (7 methods) | Push notifications, read state, preferences |
-
-Not all 163 methods are implemented on the backend. Active testing found 32 actually-implemented endpoints. The remaining methods return gRPC status 12 (UNIMPLEMENTED), meaning the client stubs exist but the server-side logic has not been deployed yet.
-
-For the full protocol specification -- including wire format, protobuf encoding, UUID format, and per-method documentation -- see [gRPC Protocol](../research/GRPC_PROTOCOL.md).
+For the full gRPC protocol reference including service catalog (27 services, 163 methods), protobuf encoding, wire format, UUID format, and per-method documentation, see [gRPC Protocol](../research/GRPC_PROTOCOL.md).
 
 ---
 
@@ -600,3 +583,9 @@ This table tracks which Uprooted versions have been tested against which Root Co
 2. Verify the bridge objects are still being proxied (`window.__nativeToWebRtc` should be a Proxy)
 3. Check `nativeLog` output for startup errors
 4. If CSS looks wrong, Root may have changed variable names -- compare against the variable table above
+
+---
+
+**Canonical for:** Chromium constraints (`--incognito`, no DevTools), CSS variable system (25 `--rootsdk-*` vars), sub-app lifecycle, DOM structure, plugin environment overview
+**Not canonical for:** Root .NET internals → [ROOT_INTERNALS.md](../research/ROOT_INTERNALS.md) | gRPC protocol → [GRPC_PROTOCOL.md](../research/GRPC_PROTOCOL.md) | theme engine → [THEME_ENGINE_DEEP_DIVE.md](../framework/THEME_ENGINE_DEEP_DIVE.md)
+*Root environment reference. Last updated 2026-02-19.*

@@ -1,5 +1,7 @@
 # Link Embeds
 
+> **What this is:** Link embed plugin reference — Avalonia-native URL preview cards with OG/oEmbed, animated images, video embeds.
+
 Discord-style rich link previews for URLs. Fetches OpenGraph metadata and renders embed cards inline. YouTube URLs get special treatment with thumbnail and play button embeds that open in your browser.
 
 > **Source:** [`src/plugins/link-embeds/`](../../../src/plugins/link-embeds/) -- `index.ts`, `providers.ts`, `embeds.ts`
@@ -109,3 +111,8 @@ The plugin walks up from the anchor to find the nearest block-level parent (`dis
 - **Video embeds show placeholder** -- direct `.mp4`/`.webm`/`.mov` URLs show a dark 16:9 placeholder with play button (no first-frame extraction — SkiaSharp cannot decode video codecs); clicking opens in default browser
 - **Trimming constraints** -- `Regex.Replace` with lambdas and `ReadAsStringAsync` are trimmed in Root's binary; all JSON decoding and HTTP body reading uses manual loops and `ReadAsStreamAsync` instead
 - **Verbose logging** -- detailed HTTP step logs available via `UPROOTED_VERBOSE=1` environment variable
+
+---
+
+**Canonical for:** link embed plugin behavior, OG/oEmbed fetching, provider-specific handling, animated image playback
+*Link embeds plugin reference. Last updated 2026-02-19.*

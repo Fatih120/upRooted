@@ -1,5 +1,10 @@
 # gRPC-Web Protocol Reference
 
+> **What this is:** Complete gRPC-web protocol reference — frame format, protobuf encoding, UUID binary format, authentication, service catalog, permission system, rate limiting, error handling.
+> **Read when:** Making gRPC calls to Root's backend; understanding wire format; building new pentesting scripts; decoding protobuf responses.
+> **Skip if:** You just need the Python library API → [GRPC_LIB_REFERENCE.md](GRPC_LIB_REFERENCE.md).
+> **Does NOT cover:** Python library function signatures → [GRPC_LIB_REFERENCE.md](GRPC_LIB_REFERENCE.md) | Root's internal architecture → [ROOT_INTERNALS.md](ROOT_INTERNALS.md)
+
 > **Related docs:** [Root Internals](ROOT_INTERNALS.md) | [gRPC Library Reference](GRPC_LIB_REFERENCE.md) | [Security Research](SECURITY_RESEARCH.md) | [Reverse Engineering](REVERSE_ENGINEERING.md)
 
 Complete reference for the gRPC-web protocol as used by Root Communications
@@ -710,3 +715,9 @@ EVERYONE_ROLE  = "0024c0c2-9400-800b-8000-000000000001"  # @everyone (universal)
 
 Source: `research/pentesting/grpc_lib.py`, lines 25-39;
 `research/pentesting/exploits/role_escalate.py`, lines 14-18.
+
+---
+
+**Canonical for:** gRPC-web frame format, endpoint URL pattern, protobuf encoding/decoding, UUID binary format (canonical source), authentication header format, service catalog (10 services), request/response patterns, permission system, rate limiting, error handling (status codes), endpoint discovery
+**Not canonical for:** Python library API → [GRPC_LIB_REFERENCE.md](GRPC_LIB_REFERENCE.md) | Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | security findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md)
+*gRPC protocol reference. Last updated 2026-02-19.*

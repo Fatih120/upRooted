@@ -1,5 +1,10 @@
 # ILSpy Dump Index
 
+> **What this is:** Master index for 219 decompiled ILSpy files from Root v0.9.92 — file inventory with analysis status, line counts, and links to curated docs.
+> **Read when:** Looking for a specific decompiled source file; checking which files have been analyzed; finding raw ILSpy dumps.
+> **Skip if:** You need the curated findings → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) or [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md).
+> **Does NOT cover:** Curated control reference → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) | Theme key values → [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md)
+
 > Master index for all decompiled files in `research/ilspy-dumps/`.
 > Source: ILSpy decompilation of Root v0.9.92 and its Avalonia dependencies.
 > Each file preserves original ILSpy comments (assembly version, full namespace path).
@@ -602,3 +607,9 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 ---
 
 *Last updated: 2026-02-19 — 219 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Full inventory: Views (31), ViewModels (33), VM Factories (29), Custom Controls (30), Markdown (18), Settings (6), Data Store (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infrastructure (7), Interfaces (3), Avalonia Framework (4), AvaloniaEdit (3), Resources (2), XAML Infrastructure (9).*
+
+---
+
+**Canonical for:** ILSpy dump file inventory (219 files, 145K lines), analysis status tracking, source assembly mapping
+**Not canonical for:** curated control reference → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) | theme key values → [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md)
+*ILSpy dump index. Last updated 2026-02-19.*

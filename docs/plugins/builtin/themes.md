@@ -1,5 +1,7 @@
 # Themes
 
+> **What this is:** Themes plugin reference — CSS variable theme engine, color math, custom theme generation.
+
 Built-in theme engine that overrides Root's CSS variable color system. Supports preset themes and custom accent + background color generation.
 
 > **Source:** [`src/plugins/themes/index.ts`](../../../src/plugins/themes/index.ts), [`src/plugins/themes/themes.json`](../../../src/plugins/themes/themes.json)
@@ -97,3 +99,9 @@ Custom colors (`customAccent`, `customBackground`) are stored in settings but ma
 - **Session-only** -- theme changes via the settings panel don't persist to disk. The installer writes initial theme settings; runtime changes reset on restart.
 - **Variable names are hardcoded** -- if Root adds new `--rootsdk-*` variables, the plugin won't override them
 - **No transition animation** -- theme switches are instant CSS variable updates with no transition
+
+---
+
+**Canonical for:** CSS theme plugin behavior, variable overrides, color math, custom theme generation
+**Not canonical for:** native Avalonia theme engine → [THEME_ENGINE_DEEP_DIVE.md](../../framework/THEME_ENGINE_DEEP_DIVE.md)
+*Themes plugin reference. Last updated 2026-02-19.*

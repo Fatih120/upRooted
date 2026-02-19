@@ -1,5 +1,8 @@
 # Built-in Plugins
 
+> **What this is:** Built-in plugin overview — what ships with Uprooted, load order, C# vs TypeScript runtime differences.
+> **Read when:** Understanding what plugins are included; checking load order; understanding the two plugin runtimes.
+
 Uprooted ships seven built-in plugins across two runtime layers. All are registered automatically at startup and appear in the Plugin Settings page.
 
 > **Related docs:** [Plugin API Reference](../API_REFERENCE.md) | [Root Environment](../ROOT_ENVIRONMENT.md) | [TypeScript Reference](../../framework/TYPESCRIPT_REFERENCE.md)
@@ -80,3 +83,8 @@ These run inside Root's .NET process via the CLR profiler. Key characteristics:
 | `window.__UPROOTED_SETTINGS__` | `UprootedSettings` | Settings loaded from `uprooted-settings.json` by the installer/patcher |
 | `window.__UPROOTED_LOADER__` | `PluginLoader` | Plugin lifecycle manager (used by settings-panel) |
 | `window.__UPROOTED_VERSION__` | `string` | Version string (e.g. `"0.4.0"`) |
+
+---
+
+**Canonical for:** built-in plugin inventory, load order, C# vs TypeScript runtime layer differences
+*Built-in plugins index. Last updated 2026-02-19.*

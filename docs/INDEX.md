@@ -183,6 +183,7 @@ For setting up a development environment.
 
 | Topic                         | Document                                                                | Section                     |
 | ----------------------------- | ----------------------------------------------------------------------- | --------------------------- |
+| Critical rules                | [Architecture](framework/ARCHITECTURE.md)                               | Critical Rules              |
 | AddHandler routing strategies | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)                     | Pitfalls                    |
 | Auto-update (.uprpkg)         | [Build Guide](install/BUILD.md)                                         | Auto-Update Package         |
 | Auto-updater                  | [Hook Reference](framework/HOOK_REFERENCE.md)                           | AutoUpdater deep dive       |
@@ -242,13 +243,18 @@ For setting up a development environment.
 | Security findings             | [Security Research](research/SECURITY_RESEARCH.md)                      | --                          |
 | Sidebar injection             | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Sidebar injection           |
 | Startup phases                | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Startup phases              |
+| Silent Typing                 | [Hook Reference](framework/HOOK_REFERENCE.md)                           | SilentTypingEngine          |
 | Technical debt                | [Planning Reference](dev/PLANNING_REFERENCE.md)                         | Concerns and Technical Debt |
+| Test infrastructure           | [Testing Guide](dev/TESTING.md)                                         | --                          |
+| Token format / auth           | [Root Internals](research/ROOT_INTERNALS.md)                            | Authentication and Tokens   |
 | Sentry blocker                | [Sentry Blocker](plugins/builtin/sentry-blocker.md)                     | --                          |
 | Theme engine (browser)        | [Themes](plugins/builtin/themes.md)                                     | --                          |
 | Theme engine                  | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)               | Theme engine                |
 | Root theme resource keys      | [Root Theme System Findings](../research/ROOT_THEME_SYSTEM_FINDINGS.md) | --                          |
 | Theme system (Root)           | [Root Environment](plugins/ROOT_ENVIRONMENT.md)                         | Theme system                |
 | Link embeds                   | [Link Embeds](plugins/builtin/link-embeds.md)                           | --                          |
+| Message logger                | [Message Logger](plugins/builtin/message-logger.md)                     | --                          |
 | Message send interception     | [Hook Reference](framework/HOOK_REFERENCE.md)                           | ClearUrlsEngine             |
+| Mitigation countermeasures    | [Mitigation Countermeasures](research/MITIGATION_COUNTERMEASURES.md)     | --                          |
 | Settings panel (browser)      | [Settings Panel](plugins/builtin/settings-panel.md)                     | --                          |
 | Built-in plugins              | [Built-in Plugins Index](plugins/builtin/INDEX.md)                      | --                          |

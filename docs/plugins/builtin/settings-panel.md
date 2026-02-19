@@ -1,5 +1,7 @@
 # Settings Panel
 
+> **What this is:** Settings panel plugin reference — browser-side settings UI injection via DOM discovery and MutationObserver.
+
 Injects an "UPROOTED" section into Root's settings sidebar with three pages: Uprooted (about), Plugins (management), and Themes (customization).
 
 > **Source:** [`src/plugins/settings-panel/`](../../../src/plugins/settings-panel/) -- `index.ts`, `panel.ts`, `components.ts`
@@ -107,3 +109,8 @@ None. The settings-panel itself has no user-configurable options. It renders set
 - **Private Map access** -- `getRegisteredPlugins()` casts `loader` to `any` to access the private `plugins` Map
 - **Settings don't persist** -- runtime changes (plugin toggles, theme switches) are session-only
 - **Debug overlay always enabled** -- `DEBUG = true` is hardcoded, showing a green-on-black log overlay at the bottom of the page
+
+---
+
+**Canonical for:** settings panel plugin behavior, DOM discovery algorithm, sidebar injection, content page building
+*Settings panel plugin reference. Last updated 2026-02-19.*

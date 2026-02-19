@@ -1,5 +1,9 @@
 # API Reference
 
+> **What this is:** Plugin API surface reference — interface contracts, method signatures, lifecycle hooks, error handling, settings schema.
+> **Read when:** Looking up plugin interface details; understanding method signatures; checking settings field types.
+> **Skip if:** You need a tutorial → [GETTING_STARTED.md](GETTING_STARTED.md). You need bridge methods → [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md).
+
 Complete reference for the Uprooted plugin API. All types are defined in `src/types/plugin.ts` and the API modules under `src/api/`.
 
 > **Related Docs:**
@@ -773,3 +777,9 @@ const isThemesActive = activePlugins.has("themes");
 ```
 
 **Warning:** This accesses private properties of the loader. The internal API is not stable and may change between versions. Use defensively.
+
+---
+
+**Canonical for:** plugin interface contracts (`UprootedPlugin`, `Patch`, `SettingField`, `Author`), method signatures, lifecycle hooks, error handling, settings schema
+**Not canonical for:** tutorial → [GETTING_STARTED.md](GETTING_STARTED.md) | bridge methods → [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) | Root environment → [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md)
+*Plugin API reference. Last updated 2026-02-19.*

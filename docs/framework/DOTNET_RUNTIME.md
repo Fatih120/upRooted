@@ -1,5 +1,10 @@
 # .NET Runtime Concepts for Uprooted
 
+> **What this is:** .NET runtime concepts that make Uprooted's injection possible — CLR profiler API overview, IL injection theory, single-file app challenges, assembly scanning, startup hooks, reflection caching, GC rooting, debugging.
+> **Read when:** Understanding WHY certain patterns exist; learning .NET internals behind the injection; debugging assembly loading or GC issues.
+> **Skip if:** You need the actual profiler C code → [CLR_PROFILER.md](CLR_PROFILER.md). You need managed hook implementation → [HOOK_REFERENCE.md](HOOK_REFERENCE.md).
+> **Does NOT cover:** Profiler C source code → [CLR_PROFILER.md](CLR_PROFILER.md) | Managed hook implementation → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia-specific reflection → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md)
+
 > **Related docs:** [CLR Profiler](CLR_PROFILER.md) | [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md)
 
 ---
@@ -89,21 +94,7 @@ The profiler code is structurally identical; only OS-level APIs differ (see
 
 ### Environment Variables
 
-The runtime discovers the profiler via environment variables set before the process
-starts:
-
-| Variable | Value | Purpose |
-|----------|-------|---------|
-| `CORECLR_ENABLE_PROFILING` | `1` | Master switch -- tells CoreCLR to look for a profiler |
-| `CORECLR_PROFILER` | `{D1A6F5A0-1234-4567-89AB-CDEF01234567}` | CLSID the runtime passes to `DllGetClassObject` |
-| `CORECLR_PROFILER_PATH` | Path to DLL/SO | Filesystem path loaded via `LoadLibrary` / `dlopen` |
-| `DOTNET_ReadyToRun` | `0` | Disables precompiled native images (see [IL Injection](#il-injection)) |
-
-The legacy `COR_PROFILER` / `COR_ENABLE_PROFILING` variables are for .NET Framework.
-CoreCLR (.NET 5+) recognizes both `CORECLR_` and `DOTNET_` prefixes for profiler
-variables. The `DOTNET_` prefix is the primary/canonical form for .NET 10+; the `CORECLR_`
-prefix is retained for backward compatibility with .NET 8/9. The Uprooted installer sets
-both prefixes to ensure the profiler loads regardless of the .NET runtime version.
+> For profiler environment variables, GUID, and dual-prefix deployment details, see [CLR_PROFILER.md §GUID and Environment Variables](CLR_PROFILER.md#guid-and-environment-variables) and [INSTALLER.md §Environment Variables](INSTALLER.md#environment-variables-dual-prefix).
 
 ### Loading Sequence
 
@@ -578,3 +569,9 @@ On Windows, the installer sets machine-wide environment variables via the regist
 unit overrides. In both cases, the variables must be set before Root.exe launches --
 the profiler cannot be loaded on-demand, so a process restart is required after
 installation.
+
+---
+
+**Canonical for:** .NET runtime concepts (CLR profiler API overview, IL injection theory, single-file app challenges, assembly scanning patterns, startup hook mechanism, reflection caching strategy, GC rooting patterns, debugging workflows, platform differences overview)
+**Not canonical for:** profiler C source code → [CLR_PROFILER.md](CLR_PROFILER.md) | profiler env vars → [CLR_PROFILER.md §2](CLR_PROFILER.md#guid-and-environment-variables) | managed hook implementation → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | env var deployment → [INSTALLER.md](INSTALLER.md)
+*Runtime concepts reference for Uprooted v0.4.0. Last updated 2026-02-19.*

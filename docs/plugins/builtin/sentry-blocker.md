@@ -1,5 +1,7 @@
 # Sentry Blocker
 
+> **What this is:** Sentry blocker plugin reference — blocks Sentry telemetry via fetch/XHR/sendBeacon interception.
+
 Privacy plugin that intercepts all network requests to Sentry's telemetry servers and blocks them before they leave the browser.
 
 > **Source:** [`src/plugins/sentry-blocker/index.ts`](../../../src/plugins/sentry-blocker/index.ts)
@@ -57,3 +59,8 @@ None. The plugin is either enabled or disabled -- there is no configuration.
 - **Substring detection** -- `url.includes("sentry.io")` is simple but could match unrelated domains containing that substring
 - **XHR redirect** -- blocked XHR requests are redirected to `about:blank`, which causes browser warnings in the console
 - **No visibility into blocked data** -- the plugin counts blocked requests but does not log what was being sent
+
+---
+
+**Canonical for:** sentry blocker behavior, telemetry blocking strategy, network API interception
+*Sentry blocker plugin reference. Last updated 2026-02-19.*

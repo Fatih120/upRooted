@@ -1,5 +1,9 @@
 # Testing Guide
 
+> **What this is:** Test infrastructure reference — C# unit test suite, Docker sandbox, test stubs, patterns for new tests, coverage tracking.
+> **Read when:** Running tests; writing new tests; understanding test infrastructure; setting up Docker sandbox.
+> **Skip if:** You need the build pipeline → [BUILD.md](../install/BUILD.md). You need technical onboarding → [CONTRIBUTING_TECHNICAL.md](CONTRIBUTING_TECHNICAL.md).
+
 > **Related docs:** [Contributing Technical](CONTRIBUTING_TECHNICAL.md) | [Build Guide](../install/BUILD.md) | [Architecture](../framework/ARCHITECTURE.md)
 
 This document covers the C# unit test suite, Docker sandboxes, test stubs, and patterns for adding new tests.
@@ -240,3 +244,9 @@ Current coverage is unmeasured per-line, but by module:
 | `MessageStore.LoadAll/Truncate` | 18 | All 4 record types, URI encode/decode, malformed skip, blank/comment skip, truncate boundary |
 
 Untested (requires Avalonia or Root runtime): `ClearUrlsEngine.Initialize/DiscoverAndHook`, `UprootedSettings` cache TTL via real 10s sleep, `MessageStore` timer flush concurrency.
+
+---
+
+**Canonical for:** test infrastructure, C# unit test suite, Docker sandbox, test stub patterns, test coverage tracking, patterns for writing new tests
+**Not canonical for:** build pipeline → [BUILD.md](../install/BUILD.md) | technical onboarding → [CONTRIBUTING_TECHNICAL.md](CONTRIBUTING_TECHNICAL.md) | architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
+*Testing guide for Uprooted. Last updated 2026-02-19.*

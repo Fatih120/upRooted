@@ -50,6 +50,8 @@ The hook spawns a background thread named `Uprooted-Injector` (never blocks Root
 
 If any phase times out, the hook logs the failure and stops. Root keeps running normally.
 
+> For full implementation detail, see [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md) and [ARCHITECTURE.md](docs/framework/ARCHITECTURE.md).
+
 ### sidebar injection
 
 A 200ms timer polls the visual tree for a `TextBlock` with the text `"APP SETTINGS"`. When the user opens Root's settings page, the timer finds this anchor and runs a 6-step visual tree walk to discover the layout structure: the nav container (StackPanel with 8+ children), the content area (Grid with 2+ columns), the ListBox, and the back button.
@@ -230,3 +232,9 @@ these rules exist to protect the project and its users. if you want to share upr
 ## license
 
 [uprooted license v1.0](LICENSE) - use pieces with credit, don't redistribute the whole thing
+
+---
+
+**Canonical for:** repository landing page, project overview, feature list, quick-start install
+**Not canonical for:** architecture detail → [ARCHITECTURE.md](docs/framework/ARCHITECTURE.md) | implementation → [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md) | full install guide → [INSTALLATION.md](docs/install/INSTALLATION.md)
+*Repository landing page for Uprooted v0.4.0. Last updated 2026-02-19.*

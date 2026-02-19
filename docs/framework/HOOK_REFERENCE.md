@@ -1,5 +1,10 @@
 # Hook Reference
 
+> **What this is:** Implementation-level reference for all 24 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
+> **Read when:** Modifying or extending any C# hook feature; understanding startup sequence detail; debugging hook behavior.
+> **Skip if:** You need the architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md). You need Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md).
+> **Does NOT cover:** Architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection specifics → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | TypeScript layer → [TYPESCRIPT_REFERENCE.md](TYPESCRIPT_REFERENCE.md)
+
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
 > [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) |
@@ -2332,3 +2337,9 @@ Returns:
 | `UprootedSettings.cs` | `PlatformPaths`, `Logger` | INI persistence |
 | `Logger.cs` | `PlatformPaths` | File path for log |
 | `PlatformPaths.cs` | (none) | Pure path resolution |
+
+---
+
+**Canonical for:** all 24 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter
+**Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
+*Hook reference for Uprooted v0.4.0. Last updated 2026-02-19.*

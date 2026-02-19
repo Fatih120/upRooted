@@ -1,5 +1,10 @@
 # Avalonia Patterns
 
+> **What this is:** Avalonia reflection patterns and pitfalls — property system, visual tree traversal, threading/DispatcherPriority, control creation, Expression.Lambda events, WindowImpl internals.
+> **Read when:** Writing C# code that creates or modifies Avalonia controls; debugging UI thread issues; understanding why reflection patterns are needed.
+> **Skip if:** You need the system architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md). You need per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md).
+> **Does NOT cover:** Architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Root's custom control types (detailed reference) → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | Theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
+
 > **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [.NET Runtime](DOTNET_RUNTIME.md) | [Root Control Reference](ROOT_CONTROL_REFERENCE.md)
 
 ---
@@ -700,6 +705,8 @@ SolidColorBrushType.GetProperty("Color")?.SetValue(brush, color);
 
 ## Pitfalls
 
+> These pitfalls implement the [Critical Rules from ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules). Code examples below show the reflection-level detail.
+
 Real bugs encountered during development. Each is a rule in `ARCHITECTURE.md`.
 
 ### Never Use Type.GetType() for Avalonia Types
@@ -804,4 +811,6 @@ The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentCo
 
 ---
 
-*Last updated: 2026-02-19*
+**Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s_instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
+**Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
+*Avalonia patterns reference for Uprooted v0.4.0. Last updated 2026-02-19.*

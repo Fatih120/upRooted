@@ -1,5 +1,10 @@
 # Build Pipeline Guide
 
+> **What this is:** Complete build pipeline — prerequisites, per-component build commands, artifact inventory, full installer pipeline, version management.
+> **Read when:** Building any component; setting up the dev environment; creating a release; understanding the artifact pipeline.
+> **Skip if:** You need end-user install instructions → [INSTALLATION.md](INSTALLATION.md). You need the installer internals → [INSTALLER.md](../framework/INSTALLER.md).
+> **Does NOT cover:** End-user installation → [INSTALLATION.md](INSTALLATION.md) | Installer Rust internals → [INSTALLER.md](../framework/INSTALLER.md) | CI/CD → not yet implemented
+
 > **Related docs:**
 > [Index](../INDEX.md) | [Architecture](../framework/ARCHITECTURE.md) | [Installation Guide](INSTALLATION.md) | [Contributing](../../CONTRIBUTING.md)
 
@@ -715,3 +720,9 @@ grep 'Version.*=' scripts/install-hook.ps1
 
 See [Installation Guide](INSTALLATION.md) for deploying built artifacts
 to a Root installation.
+
+---
+
+**Canonical for:** build pipeline, prerequisites, per-component build commands (TS, C#, profiler, installer), artifact inventory, full installer pipeline, version management
+**Not canonical for:** end-user install → [INSTALLATION.md](INSTALLATION.md) | installer internals → [INSTALLER.md](../framework/INSTALLER.md) | runtime hook behavior → [HOOK_REFERENCE.md](../framework/HOOK_REFERENCE.md)
+*Build pipeline guide for Uprooted v0.4.0. Last updated 2026-02-19.*

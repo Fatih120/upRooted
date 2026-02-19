@@ -1,5 +1,9 @@
 # Example Plugins
 
+> **What this is:** 11 working code examples — copy-paste plugin starters covering common patterns from basic to advanced.
+> **Read when:** Looking for a starting template; seeing concrete code for a specific pattern; learning by example.
+> **Skip if:** You need API docs → [API_REFERENCE.md](API_REFERENCE.md). You need step-by-step tutorial → [GETTING_STARTED.md](GETTING_STARTED.md).
+
 Copy-paste example plugins demonstrating common patterns. Each example is a complete, self-contained plugin.
 
 > **Related Docs:**
@@ -947,3 +951,9 @@ export default {
 ```
 
 **Key concepts:** Multiple theme preset definitions using `--rootsdk-*` variables, keyboard event handling with cleanup, bridge patch to detect when Root changes theme (so custom overrides don't conflict), CSS transition injection for smooth theme changes, full cleanup in `stop()`. See [Root Environment -- CSS Variable System](ROOT_ENVIRONMENT.md#css-variable-system) for how the variable override system works.
+
+---
+
+**Canonical for:** 11 working code examples, copy-paste plugin starters, pattern demonstrations
+**Not canonical for:** API contracts → [API_REFERENCE.md](API_REFERENCE.md) | tutorial → [GETTING_STARTED.md](GETTING_STARTED.md) | advanced patterns → [ADVANCED_DEVELOPMENT.md](ADVANCED_DEVELOPMENT.md)
+*Plugin examples. Last updated 2026-02-19.*

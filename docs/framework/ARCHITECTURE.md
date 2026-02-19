@@ -1,5 +1,10 @@
 # Architecture Reference
 
+> **What this is:** Authoritative architecture reference — system design, layer boundaries, startup phases, threading, error handling, critical rules, and AI contributor guide.
+> **Read when:** Starting any task; understanding how the system fits together; checking critical rules before writing C# or TypeScript code.
+> **Skip if:** You need implementation-level detail for a specific class → [HOOK_REFERENCE.md](HOOK_REFERENCE.md). You need Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md).
+> **Does NOT cover:** Per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection specifics → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | Native profiler internals → [CLR_PROFILER.md](CLR_PROFILER.md)
+
 Authoritative architecture reference for the Uprooted client modification framework. This document describes the system design, layer boundaries, component roles, data flow, conventions, and constraints. For the narrative walkthrough of how it was built, see [How It Works](../HOW_IT_WORKS.md).
 
 > **Related docs:**
@@ -884,4 +889,6 @@ These are the fragile integration points that must be checked when Root releases
 
 ---
 
-*Architecture reference for Uprooted v0.4.0. Last updated 2026-02-18.*
+**Canonical for:** system design, layer boundaries, 12 critical rules, threading model, error handling patterns, startup phase overview, known limitations, security considerations, AI contributor guide
+**Not canonical for:** per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | native profiler → [CLR_PROFILER.md](CLR_PROFILER.md)
+*Architecture reference for Uprooted v0.4.0. Last updated 2026-02-19.*

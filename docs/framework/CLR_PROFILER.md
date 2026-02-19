@@ -1,5 +1,10 @@
 # CLR Profiler Reference
 
+> **What this is:** Native C profiler implementation — COM vtable, IL injection bytecode, GUID, environment variables, process guard, Windows vs Linux differences, build commands, debugging.
+> **Read when:** Debugging profiler loading issues; modifying IL injection; understanding the native→managed bootstrap; building the profiler DLL/SO.
+> **Skip if:** You need the managed C# hook that runs after the profiler → [HOOK_REFERENCE.md](HOOK_REFERENCE.md). You need .NET runtime theory → [DOTNET_RUNTIME.md](DOTNET_RUNTIME.md).
+> **Does NOT cover:** Managed hook implementation → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | .NET runtime concepts → [DOTNET_RUNTIME.md](DOTNET_RUNTIME.md) | Architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md)
+
 > **Related docs:**
 > [Architecture](ARCHITECTURE.md) |
 > [Hook Reference](HOOK_REFERENCE.md) |
@@ -563,3 +568,9 @@ These indices from `corprof.idl` and `cor.h` must match the runtime version:
 
 If profiler behavior changes after a .NET runtime update, verify these indices have
 not shifted in the new runtime's header files.
+
+---
+
+**Canonical for:** native C profiler implementation, COM vtable setup, IL injection bytecode sequence (26-byte payload), GUID `{D1A6F5A0-...}`, profiler environment variables, process guard, Windows vs Linux platform differences, build commands, profiler.log debugging, vtable index reference
+**Not canonical for:** .NET runtime concepts → [DOTNET_RUNTIME.md](DOTNET_RUNTIME.md) | managed hook → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | env var deployment → [INSTALLER.md](INSTALLER.md)
+*CLR profiler reference for Uprooted v0.4.0. Last updated 2026-02-19.*

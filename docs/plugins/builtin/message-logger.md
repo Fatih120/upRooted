@@ -1,5 +1,7 @@
 # Message Logger
 
+> **What this is:** Message logger plugin reference — edit/delete detection, visual indicators, persistence, channel switch heuristics.
+
 Logs deleted and edited messages. Deleted messages appear with red styling; edited messages show the previous content with an amber edit indicator.
 
 > **Status:** Shipped WIP (v0.4.0) — deletion detection + edit detection + edit indicators working
@@ -116,3 +118,8 @@ Settings are managed through `UprootedSettings` (INI-based, 10s TTL cache).
 ## Diagnostics
 
 Enable `DIAG-INJ` / `DIAG-FLUSH` logging by checking the hook log. The analysis script `scripts/analyze-msglogger.ps1` parses hook log output for `MsgLogger` and `DIAG` entries and summarizes deletion events, poller outcomes, and injection counts.
+
+---
+
+**Canonical for:** message logger behavior, edit/delete detection, visual indicators, flat-file persistence, deletion poller design
+*Message logger plugin reference. Last updated 2026-02-19.*

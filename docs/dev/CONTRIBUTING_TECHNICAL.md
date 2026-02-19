@@ -1,5 +1,10 @@
 # Technical Onboarding Guide
 
+> **What this is:** Technical onboarding for new contributors — dev environment setup, project layout orientation, debugging workflows, failure mode table, scripts reference, verification checklists.
+> **Read when:** Setting up your dev environment; learning the debugging workflow; understanding common failure modes; finding the right script.
+> **Skip if:** You need the build pipeline details → [BUILD.md](../install/BUILD.md). You need branch/PR rules → [CONTRIBUTING.md](../../CONTRIBUTING.md). You need architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md).
+> **Does NOT cover:** Build pipeline detail → [BUILD.md](../install/BUILD.md) | Branch/PR rules → [CONTRIBUTING.md](../../CONTRIBUTING.md) | Architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
+
 > **Related docs:** [Contributing](../../CONTRIBUTING.md) | [Build Guide](../install/BUILD.md) | [Architecture](../framework/ARCHITECTURE.md) | [Hook Reference](../framework/HOOK_REFERENCE.md)
 
 This document covers the technical setup, build process, debugging workflows,
@@ -191,6 +196,8 @@ binary via `include_bytes!()`.
 ---
 
 ## Build Verification
+
+> For the full build pipeline with prerequisites and advanced options, see [BUILD.md](../install/BUILD.md).
 
 After setting up your environment, verify each layer builds cleanly.
 
@@ -582,6 +589,8 @@ Run through this before submitting a pull request.
 
 ### Code Quality
 
+> These checks enforce the [Critical Rules from ARCHITECTURE.md](../framework/ARCHITECTURE.md#9-critical-rules).
+
 - [ ] No use of `Type.GetType()` for Avalonia types (use `AvaloniaReflection`)
 - [ ] No use of `System.Text.Json` in hook code
 - [ ] No direct `ContentControl.Content` modification
@@ -776,4 +785,6 @@ running. The hook reads settings once during Phase 3.5 of startup.
 
 ---
 
-*Last updated: 2026-02-16*
+**Canonical for:** dev environment setup, project layout orientation, debugging workflows (both layers), failure mode table, scripts reference, verification checklists, log file locations
+**Not canonical for:** build pipeline → [BUILD.md](../install/BUILD.md) | branch/PR rules → [CONTRIBUTING.md](../../CONTRIBUTING.md) | critical rules (full) → [ARCHITECTURE.md §9](../framework/ARCHITECTURE.md#9-critical-rules) | architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
+*Technical onboarding guide for Uprooted. Last updated 2026-02-19.*

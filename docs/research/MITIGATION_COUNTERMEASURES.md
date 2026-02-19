@@ -1,5 +1,10 @@
 # Mitigation Countermeasures
 
+> **What this is:** Pre-emptive analysis of 5 mitigations Root may implement against Uprooted, with specific counter-strategies grounded in working code.
+> **Read when:** Assessing Uprooted's resilience to Root updates; planning defensive features; understanding the cat-and-mouse dynamics.
+> **Skip if:** You need the security findings themselves → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md).
+> **Does NOT cover:** Security findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) | Current Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md)
+
 > **Related docs:** [Security Research](SECURITY_RESEARCH.md) | [Reverse Engineering](REVERSE_ENGINEERING.md) | [Research Index](RESEARCH_INDEX.md) | [Root Internals](ROOT_INTERNALS.md)
 
 Pre-emptive technical analysis of the five mitigations Root Communications may implement against
@@ -397,3 +402,9 @@ These counters have different production-readiness levels:
 | `hook/HtmlPatchVerifier.cs` | C7 | In-process FileSystemWatcher; debounce 1s (line 146), cooldown 2s (line 21) |
 | `hook/NativeEntry.cs` | C2 | CLR hosting entry point `Initialize(IntPtr, int)` at line 13 |
 | `installer/src-tauri/src/hook.rs` | C1, C6 | Windows registry writes (line 111-148); Linux env mechanisms (line 232-359) |
+
+---
+
+**Canonical for:** mitigation analysis (5 potential Root countermeasures), counter-strategies, resilience assessment, structural weakness analysis
+**Not canonical for:** security findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) | Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | RE methodology → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md)
+*Mitigation countermeasures. Last updated 2026-02-19.*

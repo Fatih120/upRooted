@@ -1,5 +1,9 @@
 # Contributing a Plugin to Uprooted
 
+> **What this is:** Plugin PR workflow — quality checklist, code review expectations, naming conventions, testing requirements.
+> **Read when:** Submitting a plugin for inclusion; reviewing a plugin PR; understanding quality expectations.
+> **Skip if:** You need to write a plugin first → [GETTING_STARTED.md](GETTING_STARTED.md). You need the main contributing guide → [CONTRIBUTING.md](../../CONTRIBUTING.md).
+
 A step-by-step guide for contributing your plugin to the Uprooted project. Whether you've built something small and useful or an ambitious new feature, this guide walks you through the entire process -- from forking the repo to opening your pull request.
 
 > **Related docs:** [Getting Started](GETTING_STARTED.md) | [API Reference](API_REFERENCE.md) | [Examples](EXAMPLES.md) | [Advanced Development](ADVANCED_DEVELOPMENT.md) | [Root Environment](ROOT_ENVIRONMENT.md) | [Build Guide](../install/BUILD.md) | [Contributing](../../CONTRIBUTING.md) | [Contributing Technical](../dev/CONTRIBUTING_TECHNICAL.md)
@@ -566,4 +570,6 @@ These documents cover specific aspects of plugin development in more depth:
 
 ---
 
-*Last updated: 2026-02-16*
+**Canonical for:** plugin PR workflow, quality checklist, reviewer expectations, naming conventions, plugin testing
+**Not canonical for:** general contributing → [CONTRIBUTING.md](../../CONTRIBUTING.md) | plugin API → [API_REFERENCE.md](API_REFERENCE.md) | plugin tutorial → [GETTING_STARTED.md](GETTING_STARTED.md)
+*Plugin contribution guide. Last updated 2026-02-19.*

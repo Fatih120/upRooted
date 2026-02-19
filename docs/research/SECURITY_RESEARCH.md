@@ -1,5 +1,10 @@
 # Security Research Summary
 
+> **What this is:** Structured summary of 105 security findings from the Root Communications v0.9.86 security assessment — organized by category with severity ratings and source links.
+> **Read when:** Understanding Root's security posture; planning security-aware features; reviewing what attack surfaces exist.
+> **Skip if:** You need the RE methodology narrative → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md). You need mitigation strategies → [MITIGATION_COUNTERMEASURES.md](MITIGATION_COUNTERMEASURES.md).
+> **Does NOT cover:** RE methodology → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | Counter-strategies → [MITIGATION_COUNTERMEASURES.md](MITIGATION_COUNTERMEASURES.md) | Root's architecture → [ROOT_INTERNALS.md](ROOT_INTERNALS.md)
+
 > **Related docs:** [Root Internals](ROOT_INTERNALS.md) | [gRPC Protocol](GRPC_PROTOCOL.md) | [Reverse Engineering](REVERSE_ENGINEERING.md) | [Research Index](RESEARCH_INDEX.md)
 
 Structured summary of 105 security findings from the Root Communications v0.9.86
@@ -806,3 +811,9 @@ For completeness, the following security controls were found to be properly impl
 *End of Security Research Summary*
 
 *Raw data: `research/docs/findings/` | Exploit code: `research/pentesting/` | Reports: `research/docs/reports/`*
+
+---
+
+**Canonical for:** 105 security findings (authentication, authorization, data exposure, injection, privacy, infrastructure), severity ratings, evidence links, attack surface summary
+**Not canonical for:** RE methodology → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md) | mitigation strategies → [MITIGATION_COUNTERMEASURES.md](MITIGATION_COUNTERMEASURES.md) | gRPC protocol → [GRPC_PROTOCOL.md](GRPC_PROTOCOL.md)
+*Security research summary. Last updated 2026-02-19.*

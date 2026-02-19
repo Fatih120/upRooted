@@ -1,5 +1,10 @@
 # Contributing to Uprooted
 
+> **What this is:** Contribution guidelines — branch rules, code style, PR workflow, commit format, critical rules summary, bug/feature reporting.
+> **Read when:** Before opening a PR; understanding the contribution process; checking code style expectations.
+> **Skip if:** You need the technical dev environment setup → [CONTRIBUTING_TECHNICAL.md](docs/dev/CONTRIBUTING_TECHNICAL.md). You need architecture understanding → [ARCHITECTURE.md](docs/framework/ARCHITECTURE.md).
+> **Does NOT cover:** Technical onboarding → [CONTRIBUTING_TECHNICAL.md](docs/dev/CONTRIBUTING_TECHNICAL.md) | Architecture → [ARCHITECTURE.md](docs/framework/ARCHITECTURE.md) | Plugin contribution → [CONTRIBUTING_PLUGINS.md](docs/plugins/CONTRIBUTING_PLUGINS.md)
+
 Guidelines for contributing to the Uprooted framework. Read this before opening a pull request.
 
 > **Related docs:** [Documentation Index](docs/INDEX.md) | [Build Guide](docs/install/BUILD.md) | [Architecture](docs/framework/ARCHITECTURE.md)
@@ -224,3 +229,9 @@ Include:
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [Uprooted License v1.0](LICENSE).
+
+---
+
+**Canonical for:** contribution guidelines, branch rules, code style, PR workflow, commit format, bug/feature reporting
+**Not canonical for:** critical rules (full) → [ARCHITECTURE.md §9](docs/framework/ARCHITECTURE.md#9-critical-rules) | technical onboarding → [CONTRIBUTING_TECHNICAL.md](docs/dev/CONTRIBUTING_TECHNICAL.md) | plugin contribution → [CONTRIBUTING_PLUGINS.md](docs/plugins/CONTRIBUTING_PLUGINS.md)
+*Contributing guide for Uprooted v0.4.0. Last updated 2026-02-19.*
