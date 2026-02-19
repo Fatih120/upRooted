@@ -18,7 +18,7 @@ internal class SidebarInjector
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
-    private readonly UprootedSettings _settings;
+    private UprootedSettings _settings;
     private readonly ThemeEngine _themeEngine;
     private Timer? _timer;
     private readonly object _window;
@@ -747,6 +747,9 @@ internal class SidebarInjector
     {
         try
         {
+            // Reload settings so page builds reflect runtime changes (e.g. channel switch)
+            _settings = UprootedSettings.Load();
+
             Logger.Log("Injector", $"Nav item clicked: {pageName}");
             if (_activePage == pageName) return;
 
