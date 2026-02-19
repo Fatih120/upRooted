@@ -383,17 +383,67 @@ internal class StartupHook
                 Logger.Log("Startup", "Phase 4.5e: Profile badge skipped (not on developer channel)");
             }
 
-            // Phase 5: DotNetBrowser discovery (always) + NSFW filter (conditional)
-            // DotNetBrowser is needed for video thumbnail extraction (LinkEmbedEngine)
-            // and optionally for the NSFW content filter.
-            var phase5Settings = UprootedSettings.Load();
-            var wantNsfw = phase5Settings.NsfwFilterEnabled && !string.IsNullOrEmpty(phase5Settings.NsfwApiKey);
+            // Phase 4.5f: Silent typing (HttpClient handler injection)
+            var stSettings = UprootedSettings.Load();
+            var wantSilentTyping = stSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled;
+            if (wantSilentTyping)
+            {
+                var stWindow = mainWindow!;
+                var stResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(12_000); // Wait for Root's gRPC clients to initialize
+                        Logger.Log("Startup", "Phase 4.5f: Starting silent typing engine...");
+                        var engine = new SilentTypingEngine(stResolver, stWindow);
+                        engine.Initialize();
+                        Logger.Log("Startup", "Phase 4.5f OK: Silent typing engine started");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5f error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5f: Silent typing disabled, skipping");
+            }
 
+            // Phase 4.5g: NSFW content filter (Avalonia-native visual tree scan)
+            var nsfwSettings = UprootedSettings.Load();
+            var wantNsfw = nsfwSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(nsfwSettings.NsfwApiKey);
+            if (wantNsfw)
+            {
+                var nsfwWindow   = mainWindow!;
+                var nsfwResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(20_000); // Wait for chat to populate
+                        Logger.Log("Startup", "Phase 4.5g: Starting NSFW content filter...");
+                        var filter = new NsfwFilter(nsfwResolver, nsfwSettings, nsfwWindow);
+                        ContentPages.NsfwFilterInstance = filter;
+                        filter.Initialize();
+                        Logger.Log("Startup", "Phase 4.5g OK: NSFW filter active (Avalonia-native)");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5g error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5g: NSFW filter disabled or no API key, skipping");
+            }
+
+            // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
             {
                 var capturedWindow = mainWindow!;
                 var capturedResolver = resolver;
-                var capturedWantNsfw = wantNsfw;
-                var capturedPhase5Settings = phase5Settings;
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try
@@ -447,7 +497,6 @@ internal class StartupHook
                         // ViewModel/ApplicationLifetime properties require UI thread access.
                         // Retry with delays since Root may not have created the IBrowser yet.
                         DotNetBrowserReflection.SharedInstance = browserReflection;
-                        var capturedBrowserReflection = browserReflection;
                         object? browser = null;
                         for (int attempt = 1; attempt <= 6; attempt++)
                         {
@@ -455,7 +504,7 @@ internal class StartupHook
                             object? result = null;
                             capturedResolver.RunOnUIThread(() =>
                             {
-                                try { result = capturedBrowserReflection.FindBrowserDirect(); }
+                                try { result = browserReflection.FindBrowserDirect(); }
                                 catch (Exception ex) { Logger.Log("Startup", $"Phase 5: FindBrowserDirect UI error: {ex.Message}"); }
                                 found.Set();
                             });
@@ -478,23 +527,6 @@ internal class StartupHook
                             Logger.Log("Startup", "Phase 5: IBrowser not found after 6 attempts, video thumbnails unavailable");
                         }
 
-                        // NSFW filter (conditional)
-                        if (capturedWantNsfw)
-                        {
-                            Logger.Log("Startup", "Phase 5: Starting NSFW content filter...");
-                            var nsfwFilter = new NsfwFilter(capturedResolver, browserReflection,
-                                capturedPhase5Settings, capturedWindow);
-                            ContentPages.NsfwFilterInstance = nsfwFilter;
-
-                            if (nsfwFilter.Initialize())
-                                Logger.Log("Startup", "Phase 5 OK: NSFW content filter active");
-                            else
-                                Logger.Log("Startup", "Phase 5: NSFW filter init returned false (will retry via timer)");
-                        }
-                        else
-                        {
-                            Logger.Log("Startup", "Phase 5: NSFW filter disabled or no API key, skipping");
-                        }
                     }
                     catch (Exception ex)
                     {

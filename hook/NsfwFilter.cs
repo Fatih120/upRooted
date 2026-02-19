@@ -1,305 +1,473 @@
+using System.Net;
+using System.Runtime.CompilerServices;
+using System.Text;
+
 namespace Uprooted;
 
 /// <summary>
-/// Orchestrates the NSFW content filter lifecycle:
-/// 1. Waits for DotNetBrowser BrowserView in the Avalonia visual tree
-/// 2. Gets IBrowser -> IFrame references via DotNetBrowserReflection
-/// 3. Injects config + filter JavaScript into the main browser frame
-/// 4. Periodically re-checks injection (handles page navigation)
-///
-/// All Google Vision API calls happen in JavaScript (not C#) because
-/// --disable-web-security eliminates CORS restrictions in DotNetBrowser.
+/// Avalonia-native NSFW content filter.
+/// Scans the visual tree every 500ms for Image controls, classifies them via the
+/// Google Vision SAFE_SEARCH_DETECTION API in C#, and injects a native Avalonia
+/// overlay to block NSFW content. No DotNetBrowser dependency.
 /// </summary>
 internal class NsfwFilter : IDisposable
 {
-    private const int ReinjectionIntervalMs = 30_000; // 30s re-check
-    private const string ConfigGlobalName = "__UPROOTED_NSFW_CONFIG__";
-    private const string ActiveGuardName = "__UPROOTED_NSFW_ACTIVE__";
+    private const int ScanIntervalMs = 500;
+    private const int MinImagePixels = 100;       // skip avatars below 100×100
+    private const int MaxConcurrentApiCalls = 3;
 
-    private readonly AvaloniaReflection _avaloniaReflection;
-    private readonly DotNetBrowserReflection _browserReflection;
+    private readonly AvaloniaReflection _r;
     private readonly UprootedSettings _settings;
     private readonly object _mainWindow;
 
-    private Timer? _reinjectionTimer;
-    private object? _lastBrowserView;
-    private object? _lastFrame;
-    private string? _filterScript; // Cached JS file contents
+    private readonly SemaphoreSlim _apiSemaphore = new(MaxConcurrentApiCalls, MaxConcurrentApiCalls);
+
+    // imageId (object identity) → bitmapId — deduplicates per-bitmap API calls
+    private readonly Dictionary<int, int> _seenImages = new();
+
+    // overlay control → (parent panel, hidden image) — for reveal-all cleanup
+    private readonly Dictionary<object, (object panel, object imageControl)> _overlayControls = new();
+
+    private readonly object _lock = new();
+    private Timer? _scanTimer;
+    private int _scanPosted;  // Interlocked: 1 if a scan is already queued on the UI thread
     private bool _disposed;
 
-    internal NsfwFilter(AvaloniaReflection avaloniaReflection,
-        DotNetBrowserReflection browserReflection,
-        UprootedSettings settings,
-        object mainWindow)
+    internal NsfwFilter(AvaloniaReflection r, UprootedSettings settings, object mainWindow)
     {
-        _avaloniaReflection = avaloniaReflection;
-        _browserReflection = browserReflection;
+        _r = r;
         _settings = settings;
         _mainWindow = mainWindow;
     }
 
     /// <summary>
-    /// Initialize the filter: find BrowserView, inject config + script.
-    /// Call from a background thread (Phase 5).
+    /// Start the scan timer. Call from a background thread.
     /// </summary>
-    internal bool Initialize()
+    internal void Initialize()
     {
-        try
-        {
-            // Load the JS filter script from disk
-            _filterScript = LoadFilterScript();
-            if (_filterScript == null)
-            {
-                Logger.Log("NsfwFilter", "Filter script not found, aborting");
-                return false;
-            }
-
-            // Find BrowserView in the visual tree (must run on UI thread)
-            bool injected = false;
-            _avaloniaReflection.RunOnUIThread(() =>
-            {
-                injected = TryInject();
-            });
-
-            // Wait a moment for the UI thread dispatch to complete
-            Thread.Sleep(2000);
-
-            // Start periodic re-injection timer
-            _reinjectionTimer = new Timer(OnReinjectionTick, null, ReinjectionIntervalMs, ReinjectionIntervalMs);
-            Logger.Log("NsfwFilter", "Re-injection timer started (30s interval)");
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("NsfwFilter", $"Initialize error: {ex}");
-            return false;
-        }
+        _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
+        Logger.Log("NsfwFilter", "Scan timer started (500ms interval)");
     }
 
-    private bool TryInject()
-    {
-        try
-        {
-            object? browser = null;
-
-            // Strategy 1: Find BrowserView in visual tree → get IBrowser from it
-            var browserView = _browserReflection.FindBrowserView(_avaloniaReflection, _mainWindow);
-            if (browserView != null)
-            {
-                _lastBrowserView = browserView;
-                Logger.Log("NsfwFilter", $"BrowserView found: {browserView.GetType().FullName}");
-                browser = _browserReflection.GetBrowser(browserView);
-                if (browser == null)
-                    Logger.Log("NsfwFilter", "IBrowser not available from BrowserView, trying direct discovery");
-            }
-            else
-            {
-                Logger.Log("NsfwFilter", "BrowserView not found in visual tree, trying direct discovery");
-            }
-
-            // Strategy 2: Direct IBrowser discovery (scan Root's assemblies)
-            if (browser == null)
-            {
-                browser = _browserReflection.FindBrowserDirect();
-                if (browser == null)
-                {
-                    Logger.Log("NsfwFilter", "IBrowser not found via any discovery method");
-                    return false;
-                }
-                Logger.Log("NsfwFilter", $"IBrowser found via direct discovery: {browser.GetType().FullName}");
-            }
-            else
-            {
-                Logger.Log("NsfwFilter", $"IBrowser acquired: {browser.GetType().FullName}");
-            }
-
-            // Get MainFrame from IBrowser
-            var frame = _browserReflection.GetMainFrame(browser);
-            if (frame == null)
-            {
-                Logger.Log("NsfwFilter", "MainFrame not available from IBrowser");
-                return false;
-            }
-            _lastFrame = frame;
-            Logger.Log("NsfwFilter", $"MainFrame acquired: {frame.GetType().FullName}");
-
-            // Inject config
-            var configJson = BuildConfigJson();
-            var configScript = $"window.{ConfigGlobalName}={configJson};";
-            if (!_browserReflection.ExecuteJavaScript(frame, configScript))
-            {
-                Logger.Log("NsfwFilter", "Failed to inject config");
-                return false;
-            }
-            Logger.Log("NsfwFilter", "Config injected");
-
-            // Inject filter script
-            if (!_browserReflection.ExecuteJavaScript(frame, _filterScript!))
-            {
-                Logger.Log("NsfwFilter", "Failed to inject filter script");
-                return false;
-            }
-            Logger.Log("NsfwFilter", "Filter script injected successfully");
-
-            return true;
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("NsfwFilter", $"TryInject error: {ex.Message}");
-            return false;
-        }
-    }
-
-    private void OnReinjectionTick(object? state)
+    private void OnScanTick(object? state)
     {
         if (_disposed) return;
         if (!_settings.NsfwFilterEnabled || string.IsNullOrEmpty(_settings.NsfwApiKey)) return;
 
+        // Only queue one scan at a time — avoids UI thread backlog if scan is slow
+        if (Interlocked.CompareExchange(ref _scanPosted, 1, 0) != 0) return;
+
         try
         {
-            _avaloniaReflection.RunOnUIThread(() =>
+            _r.RunOnUIThread(() =>
             {
-                try
-                {
-                    // Check if filter is still active in the frame
-                    // If the page navigated, __UPROOTED_NSFW_ACTIVE__ will be gone
-                    // We re-inject to handle this case
-                    if (_lastFrame != null)
-                    {
-                        // Try to check if already active by re-injecting
-                        // The script self-guards against double injection
-                        var configJson = BuildConfigJson();
-                        var configScript = $"window.{ConfigGlobalName}={configJson};";
-                        _browserReflection.ExecuteJavaScript(_lastFrame, configScript);
-                        if (_filterScript != null)
-                            _browserReflection.ExecuteJavaScript(_lastFrame, _filterScript);
-                    }
-                    else
-                    {
-                        // Lost frame reference -- try full re-discovery
-                        TryInject();
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log("NsfwFilter", $"Re-injection error: {ex.Message}");
-                    // Frame may be stale -- try full re-discovery next time
-                    _lastFrame = null;
-                }
+                try { ScanForImages(); }
+                finally { Interlocked.Exchange(ref _scanPosted, 0); }
             });
         }
         catch (Exception ex)
         {
-            Logger.Log("NsfwFilter", $"OnReinjectionTick error: {ex.Message}");
+            Interlocked.Exchange(ref _scanPosted, 0);
+            Logger.Log("NsfwFilter", $"OnScanTick error: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// Re-inject config when settings change (e.g., user updates threshold from settings UI).
+    /// DFS walk from mainWindow; classify each unprocessed Image control.
+    /// Must run on the UI thread.
+    /// </summary>
+    private void ScanForImages()
+    {
+        try
+        {
+            if (_r.ImageType == null) return;
+            var walker = new VisualTreeWalker(_r);
+
+            foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+            {
+                if (node.GetType() != _r.ImageType) continue;
+
+                // Skip controls already tagged by us
+                var tag = _r.GetTag(node);
+                if (tag != null && tag.StartsWith("uprooted-nsfw-")) continue;
+
+                // Get Image.Source (the Bitmap)
+                var source = node.GetType().GetProperty("Source")?.GetValue(node);
+                if (source == null) continue;
+
+                // Skip tiny images (avatars, icons)
+                if (!IsLargeEnough(source)) continue;
+
+                int imageId  = RuntimeHelpers.GetHashCode(node);
+                int bitmapId = RuntimeHelpers.GetHashCode(source);
+
+                // Skip if we already processed this exact bitmap on this control
+                lock (_lock)
+                {
+                    if (_seenImages.TryGetValue(imageId, out int lastBitmapId) && lastBitmapId == bitmapId)
+                        continue;
+                    _seenImages[imageId] = bitmapId;
+                }
+
+                // Mark as in-progress so the next scan tick skips it
+                _r.SetTag(node, "uprooted-nsfw-checking");
+
+                var capturedNode   = node;
+                var capturedSource = source;
+                ThreadPool.QueueUserWorkItem(_ => ClassifyAndAct(capturedNode, capturedSource));
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("NsfwFilter", $"ScanForImages error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Returns true if the bitmap's PixelSize is at least MinImagePixels × MinImagePixels.
+    /// Defaults to true if PixelSize cannot be read (conservative — classify unknown sizes).
+    /// </summary>
+    private static bool IsLargeEnough(object bitmap)
+    {
+        try
+        {
+            var psVal = bitmap.GetType().GetProperty("PixelSize")?.GetValue(bitmap);
+            if (psVal == null) return true;
+            var w = psVal.GetType().GetProperty("Width")?.GetValue(psVal)  as int? ?? 0;
+            var h = psVal.GetType().GetProperty("Height")?.GetValue(psVal) as int? ?? 0;
+            return w >= MinImagePixels && h >= MinImagePixels;
+        }
+        catch { return true; }
+    }
+
+    /// <summary>
+    /// Background thread: encode bitmap → call Vision API → inject overlay or tag clean.
+    /// </summary>
+    private void ClassifyAndAct(object imageControl, object bitmap)
+    {
+        _apiSemaphore.Wait();
+        try
+        {
+            byte[]? png = GetBitmapBytes(bitmap);
+            if (png == null || png.Length == 0)
+            {
+                // Encoding failed — untag so it can be retried
+                _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
+                lock (_lock) { _seenImages.Remove(RuntimeHelpers.GetHashCode(imageControl)); }
+                return;
+            }
+
+            string requestJson = BuildVisionRequest(png);
+            string? response   = PostVisionApi(requestJson);
+
+            if (response == null)
+            {
+                // API error — untag and remove from seen so it's retried next scan
+                _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
+                lock (_lock) { _seenImages.Remove(RuntimeHelpers.GetHashCode(imageControl)); }
+                return;
+            }
+
+            bool nsfw = IsNsfw(response, _settings.NsfwThreshold);
+            Logger.Log("NsfwFilter", $"Classified image (id={RuntimeHelpers.GetHashCode(imageControl)}): nsfw={nsfw}");
+
+            _r.RunOnUIThread(() =>
+            {
+                if (nsfw)
+                    InjectOverlay(imageControl);
+                else
+                    _r.SetTag(imageControl, "uprooted-nsfw-clean");
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("NsfwFilter", $"ClassifyAndAct error: {ex.Message}");
+            _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
+        }
+        finally
+        {
+            _apiSemaphore.Release();
+        }
+    }
+
+    /// <summary>
+    /// Encode an Avalonia Bitmap to PNG bytes via Bitmap.Save(Stream).
+    /// </summary>
+    private static byte[]? GetBitmapBytes(object bitmap)
+    {
+        try
+        {
+            var saveMethod = bitmap.GetType().GetMethod("Save", new[] { typeof(Stream) });
+            if (saveMethod == null)
+            {
+                Logger.Log("NsfwFilter", "Bitmap.Save(Stream) not found");
+                return null;
+            }
+            using var ms = new MemoryStream();
+            saveMethod.Invoke(bitmap, new object[] { ms });
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("NsfwFilter", $"GetBitmapBytes error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Build the Google Vision API SAFE_SEARCH_DETECTION request JSON.
+    /// Manual construction — no System.Text.Json.
+    /// </summary>
+    private static string BuildVisionRequest(byte[] png)
+    {
+        var b64 = Convert.ToBase64String(png);
+        return $"{{\"requests\":[{{\"image\":{{\"content\":\"{b64}\"}},\"features\":[{{\"type\":\"SAFE_SEARCH_DETECTION\"}}]}}]}}";
+    }
+
+    /// <summary>
+    /// POST to Vision API and return the raw response body, or null on error.
+    /// </summary>
+    private string? PostVisionApi(string requestJson)
+    {
+        try
+        {
+            // Strip quotes from EscapeJsonString output to get the raw key
+            var rawKey = EscapeJsonString(_settings.NsfwApiKey).Trim('"');
+            var url    = $"https://vision.googleapis.com/v1/images:annotate?key={rawKey}";
+
+            var req = (HttpWebRequest)WebRequest.Create(url);
+            req.Method      = "POST";
+            req.ContentType = "application/json";
+            req.Timeout     = 30_000;
+
+            var body = Encoding.UTF8.GetBytes(requestJson);
+            req.ContentLength = body.Length;
+
+            using (var stream = req.GetRequestStream())
+                stream.Write(body, 0, body.Length);
+
+            using var resp   = (HttpWebResponse)req.GetResponse();
+            using var reader = new System.IO.StreamReader(resp.GetResponseStream());
+            return reader.ReadToEnd();
+        }
+        catch (WebException ex)
+        {
+            Logger.Log("NsfwFilter", $"Vision API error: {ex.Status} — {ex.Message}");
+            return null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("NsfwFilter", $"PostVisionApi error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Map threshold (0.0–1.0) to Vision API likelihood scale (1–5) and test adult/racy scores.
+    /// </summary>
+    private static bool IsNsfw(string response, double threshold)
+    {
+        int threshInt = (int)Math.Round(threshold * 5);
+        if (threshInt < 1) threshInt = 1;
+        if (threshInt > 5) threshInt = 5;
+
+        int adult = ParseLikelihood(response, "adult");
+        int racy  = ParseLikelihood(response, "racy");
+
+        return adult >= threshInt || racy >= threshInt;
+    }
+
+    /// <summary>
+    /// Extract a Vision API likelihood string from the response JSON without a JSON parser.
+    /// Handles both "field":"VALUE" and "field": "VALUE" formatting.
+    /// Returns 0 if the field is not found or unrecognised.
+    /// </summary>
+    private static int ParseLikelihood(string response, string field)
+    {
+        string? value = null;
+
+        // Try compact form first, then with a space after the colon
+        foreach (var key in new[] { $"\"{field}\":\"", $"\"{field}\": \"" })
+        {
+            int idx = response.IndexOf(key, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) continue;
+
+            idx += key.Length;
+            int end = response.IndexOf('"', idx);
+            if (end > idx)
+            {
+                value = response.Substring(idx, end - idx);
+                break;
+            }
+        }
+
+        return value?.ToUpperInvariant() switch
+        {
+            "VERY_UNLIKELY" => 1,
+            "UNLIKELY"      => 2,
+            "POSSIBLE"      => 3,
+            "LIKELY"        => 4,
+            "VERY_LIKELY"   => 5,
+            _               => 0
+        };
+    }
+
+    /// <summary>
+    /// Hide imageControl and inject a "⚠ NSFW — Click to reveal" overlay into the nearest Panel ancestor.
+    /// Must run on the UI thread.
+    /// </summary>
+    private void InjectOverlay(object imageControl)
+    {
+        // Walk up max 5 levels to find a Panel ancestor we can inject into
+        object? panel   = null;
+        var     current = _r.GetParent(imageControl);
+        for (int i = 0; i < 5 && current != null; i++)
+        {
+            if (_r.IsPanel(current))
+            {
+                panel = current;
+                break;
+            }
+            current = _r.GetParent(current);
+        }
+
+        // Hide the original image regardless of whether we find a panel
+        _r.SetIsVisible(imageControl, false);
+        _r.SetTag(imageControl, "uprooted-nsfw-blocked");
+
+        if (panel == null)
+        {
+            Logger.Log("NsfwFilter", "No Panel ancestor found — image hidden without overlay");
+            return;
+        }
+
+        // Build overlay UI: Border > StackPanel > [⚠ NSFW label + hint]
+        var label = _r.CreateTextBlock("⚠ NSFW", 16, "#FFFFFF", "Bold");
+        var hint  = _r.CreateTextBlock("Click to reveal", 12, "#CCCCCC");
+
+        var stack = _r.CreateStackPanel(vertical: true, spacing: 4);
+        if (label != null) _r.AddChild(stack, label);
+        if (hint  != null) _r.AddChild(stack, hint);
+        _r.SetHorizontalAlignment(stack, "Center");
+        _r.SetVerticalAlignment(stack, "Center");
+
+        var overlay = _r.CreateBorder("#CC000000", cornerRadius: 4, child: stack);
+        if (overlay == null)
+        {
+            Logger.Log("NsfwFilter", "Failed to create overlay Border");
+            return;
+        }
+
+        _r.SetTag(overlay, "uprooted-nsfw-overlay");
+        _r.SetPadding(overlay, 12, 8, 12, 8);
+        _r.SetHorizontalAlignment(overlay, "Center");
+        _r.SetVerticalAlignment(overlay, "Center");
+        _r.SetCursorHand(overlay);
+
+        // Mirror Grid.Row / Grid.Column from the image so the overlay lands in the same cell
+        if (_r.IsGrid(panel))
+        {
+            _r.SetGridColumn(overlay, _r.GetGridColumn(imageControl));
+            _r.SetGridRow(overlay,    _r.GetGridRow(imageControl));
+        }
+
+        _r.AddChild(panel, overlay);
+
+        // Click-to-reveal: restore image and remove the overlay
+        var capturedImage   = imageControl;
+        var capturedPanel   = panel;
+        var capturedOverlay = overlay;
+        _r.SubscribePointerEvent(overlay, "PointerPressed", (_, _) =>
+        {
+            _r.SetIsVisible(capturedImage, true);
+            _r.SetTag(capturedImage, "uprooted-nsfw-revealed");
+            _r.RemoveChild(capturedPanel, capturedOverlay);
+            lock (_lock) { _overlayControls.Remove(capturedOverlay); }
+            Logger.Log("NsfwFilter", "NSFW overlay dismissed by user click");
+        });
+
+        lock (_lock)
+        {
+            _overlayControls[overlay] = (panel, imageControl);
+        }
+
+        Logger.Log("NsfwFilter", "NSFW overlay injected");
+    }
+
+    /// <summary>
+    /// Called by ContentPages when NSFW settings change.
+    /// If the filter has been disabled, all current overlays are removed immediately.
+    /// If re-enabled, the scan timer auto-resumes on the next tick.
     /// </summary>
     internal void UpdateConfig()
     {
-        if (_lastFrame == null) return;
-
-        try
-        {
-            _avaloniaReflection.RunOnUIThread(() =>
-            {
-                try
-                {
-                    var configJson = BuildConfigJson();
-                    var configScript = $"window.{ConfigGlobalName}={configJson};";
-                    _browserReflection.ExecuteJavaScript(_lastFrame, configScript);
-
-                    if (_settings.NsfwFilterEnabled && !string.IsNullOrEmpty(_settings.NsfwApiKey))
-                    {
-                        // Re-inject script (self-guard prevents double init, but picks up new config)
-                        // Reset the active flag so the script re-reads config
-                        _browserReflection.ExecuteJavaScript(_lastFrame, $"window.{ActiveGuardName}=false;");
-                        if (_filterScript != null)
-                            _browserReflection.ExecuteJavaScript(_lastFrame, _filterScript);
-                    }
-
-                    Logger.Log("NsfwFilter", "Config updated via settings change");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log("NsfwFilter", $"UpdateConfig error: {ex.Message}");
-                }
-            });
-        }
-        catch { }
+        if (!_settings.NsfwFilterEnabled)
+            _r.RunOnUIThread(RevealAllBlocked);
     }
 
-    private string BuildConfigJson()
+    /// <summary>
+    /// Remove all active overlays and restore the hidden images. Runs on UI thread.
+    /// Clears _seenImages so images are re-classified if the filter is re-enabled.
+    /// </summary>
+    private void RevealAllBlocked()
     {
-        // Manual JSON building -- no System.Text.Json allowed in profiler context
-        var enabled = _settings.NsfwFilterEnabled ? "true" : "false";
-        var apiKey = EscapeJsonString(_settings.NsfwApiKey);
-        var threshold = _settings.NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        return $"{{\"enabled\":{enabled},\"apiKey\":{apiKey},\"threshold\":{threshold}}}";
+        List<(object overlay, object panel, object imageControl)> toReveal;
+
+        lock (_lock)
+        {
+            toReveal = _overlayControls
+                .Select(kv => (kv.Key, kv.Value.panel, kv.Value.imageControl))
+                .ToList();
+            _overlayControls.Clear();
+            _seenImages.Clear();
+        }
+
+        foreach (var (overlay, panel, imageControl) in toReveal)
+        {
+            try
+            {
+                _r.RemoveChild(panel, overlay);
+                _r.SetIsVisible(imageControl, true);
+                _r.SetTag(imageControl, "");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("NsfwFilter", $"RevealAllBlocked error: {ex.Message}");
+            }
+        }
+
+        Logger.Log("NsfwFilter", $"Revealed {toReveal.Count} blocked image(s)");
     }
 
+    /// <summary>
+    /// Escape a string for inclusion in a JSON string literal.
+    /// No System.Text.Json allowed in profiler context.
+    /// </summary>
     private static string EscapeJsonString(string s)
     {
         if (string.IsNullOrEmpty(s)) return "\"\"";
-        var sb = new System.Text.StringBuilder("\"", s.Length + 2);
+        var sb = new StringBuilder("\"", s.Length + 2);
         foreach (var c in s)
         {
             switch (c)
             {
                 case '"':  sb.Append("\\\""); break;
                 case '\\': sb.Append("\\\\"); break;
-                case '\n': sb.Append("\\n"); break;
-                case '\r': sb.Append("\\r"); break;
-                case '\t': sb.Append("\\t"); break;
-                default:   sb.Append(c); break;
+                case '\n': sb.Append("\\n");  break;
+                case '\r': sb.Append("\\r");  break;
+                case '\t': sb.Append("\\t");  break;
+                default:   sb.Append(c);      break;
             }
         }
         sb.Append('"');
         return sb.ToString();
     }
 
-    private static string? LoadFilterScript()
-    {
-        try
-        {
-            // Script is deployed alongside UprootedHook.dll
-            var hookDir = Path.GetDirectoryName(typeof(NsfwFilter).Assembly.Location);
-            if (hookDir != null)
-            {
-                var scriptPath = Path.Combine(hookDir, "nsfw-filter.js");
-                if (File.Exists(scriptPath))
-                {
-                    Logger.Log("NsfwFilter", $"Loading filter script from: {scriptPath}");
-                    return File.ReadAllText(scriptPath);
-                }
-            }
-
-            // Fallback: try Uprooted assets directory
-            var uprootedDir = PlatformPaths.GetUprootedDir();
-            var fallbackPath = Path.Combine(uprootedDir, "nsfw-filter.js");
-            if (File.Exists(fallbackPath))
-            {
-                Logger.Log("NsfwFilter", $"Loading filter script from fallback: {fallbackPath}");
-                return File.ReadAllText(fallbackPath);
-            }
-
-            Logger.Log("NsfwFilter", "Filter script not found in hook dir or uprooted dir");
-            return null;
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("NsfwFilter", $"LoadFilterScript error: {ex.Message}");
-            return null;
-        }
-    }
-
     public void Dispose()
     {
         _disposed = true;
-        _reinjectionTimer?.Dispose();
-        _reinjectionTimer = null;
+        _scanTimer?.Dispose();
+        _scanTimer = null;
+        _apiSemaphore.Dispose();
     }
 }
