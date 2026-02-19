@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("UprootedHook")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+15aaa0da55f23977dd5e90ee345f9a91ea238461")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+49e51a1db18244d948e6a3e61a58d85e1b83b865")]
 [assembly: System.Reflection.AssemblyProductAttribute("UprootedHook")]
 [assembly: System.Reflection.AssemblyTitleAttribute("UprootedHook")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
