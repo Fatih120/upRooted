@@ -19,14 +19,20 @@ namespace Uprooted;
 /// ## How interception works
 ///
 /// HttpClient inherits from HttpMessageInvoker, which stores its handler chain in the
-/// private field `_handler`. We locate Root's HttpClient instance(s) via two strategies:
+/// private field `_handler`. Root uses Grpc.Net.Client.GrpcChannel for gRPC calls,
+/// which stores an internal HttpMessageInvoker in `&lt;HttpInvoker&gt;k__BackingField`.
+/// We locate and patch handler chains via three strategies:
 ///
-///   1. Static fields: scan all loaded assemblies for static HttpClient fields on types
-///      whose names suggest gRPC/messaging involvement.
-///   2. Instance fields: walk Root's ViewModel chain from MainWindow.DataContext and
-///      inspect each reachable object's fields for HttpClient instances.
+///   1. Static fields: scan ALL types in non-framework assemblies for static
+///      HttpClient/HttpMessageHandler fields.
+///   2. Instance fields: walk Root's ViewModel chain from MainWindow.DataContext,
+///      recursing unconditionally into all non-framework types (up to depth 12)
+///      to find HttpClient, HttpMessageHandler, and GrpcChannel instances.
+///   3. GrpcChannel: when a GrpcChannel is found, extract its internal HttpInvoker
+///      and patch the `_handler` field directly — this is the critical path for
+///      intercepting SetTypingIndicator gRPC-web calls.
 ///
-/// Once found, we prepend a TypingBlockerHandler to each HttpClient's handler chain.
+/// Once found, we prepend a TypingBlockerHandler to each handler chain.
 /// The blocker intercepts any outbound request whose path contains "SetTypingIndicator"
 /// and short-circuits it with a synthetic 200 OK — the same response Root would expect
 /// for a successful (but silent) gRPC call.
@@ -41,26 +47,27 @@ internal class SilentTypingEngine
 {
     private const string Tag = "SilentTyping";
     private const int ScanIntervalMs = 5_000;
-    private const int MaxInstanceWalkDepth = 8;
-
-    // Keywords to identify candidate types during assembly scan
-    private static readonly string[] CandidateKeywords =
-        { "Typing", "Message", "Grpc", "Api", "Service", "Client", "Http", "Channel" };
+    private const int MaxInstanceWalkDepth = 12;
 
     private readonly AvaloniaReflection _r;
     private readonly object _mainWindow;
 
-    // Patched client set (by identity) to avoid double-wrapping
+    // Patched client/handler set (by identity) to avoid double-wrapping
     private readonly HashSet<int> _patched = new();
 
     private Timer? _scanTimer;
     private int _scanning; // Interlocked reentrancy guard
     private int _patchCount;
+    private bool _firstScanDone;
 
     // Cached reflection handles for HttpMessageInvoker._handler
     private static readonly FieldInfo? HandlerField =
         typeof(System.Net.Http.HttpMessageInvoker).GetField(
             "_handler", BindingFlags.NonPublic | BindingFlags.Instance);
+
+    // Lazily resolved: GrpcChannel.<HttpInvoker>k__BackingField
+    private static FieldInfo? _grpcInvokerField;
+    private static bool _grpcFieldResolved;
 
     internal SilentTypingEngine(AvaloniaReflection resolver, object mainWindow)
     {
@@ -108,6 +115,12 @@ internal class SilentTypingEngine
             });
             done.Wait(10_000);
 
+            if (!_firstScanDone)
+            {
+                _firstScanDone = true;
+                Logger.Log(Tag, $"First scan complete: {_patchCount} HttpClient/handler(s) patched");
+            }
+
             if (_patchCount > 0)
             {
                 // At least one client patched — slow the scan down; keep running in case
@@ -130,6 +143,8 @@ internal class SilentTypingEngine
 
     private void ScanStaticFields()
     {
+        int typesScanned = 0;
+
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             try
@@ -145,7 +160,7 @@ internal class SilentTypingEngine
 
                 foreach (var type in types)
                 {
-                    if (!NameMatchesCandidates(type.Name)) continue;
+                    typesScanned++;
 
                     try
                     {
@@ -154,12 +169,26 @@ internal class SilentTypingEngine
 
                         foreach (var field in staticFields)
                         {
-                            if (!IsHttpClientField(field.FieldType)) continue;
                             try
                             {
-                                var client = field.GetValue(null) as System.Net.Http.HttpClient;
-                                if (client != null)
-                                    TryPatch(client, $"{type.Name}.{field.Name} (static)");
+                                if (IsHttpClientField(field.FieldType))
+                                {
+                                    var client = field.GetValue(null) as System.Net.Http.HttpClient;
+                                    if (client != null)
+                                        TryPatch(client, $"{type.Name}.{field.Name} (static)");
+                                }
+                                else if (IsHandlerField(field.FieldType))
+                                {
+                                    var handler = field.GetValue(null) as System.Net.Http.HttpMessageHandler;
+                                    if (handler != null)
+                                        TryPatchHandler(handler, field, null, $"{type.Name}.{field.Name} (static handler)");
+                                }
+                                else if (IsGrpcChannelType(field.FieldType))
+                                {
+                                    var channel = field.GetValue(null);
+                                    if (channel != null)
+                                        TryPatchGrpcChannel(channel, $"{type.Name}.{field.Name} (static GrpcChannel)");
+                                }
                             }
                             catch { }
                         }
@@ -169,6 +198,9 @@ internal class SilentTypingEngine
             }
             catch { }
         }
+
+        if (!_firstScanDone)
+            Logger.Log(Tag, $"Static scan: {typesScanned} types scanned");
     }
 
     // ===== Strategy 2: instance fields via ViewModel chain =====
@@ -199,6 +231,15 @@ internal class SilentTypingEngine
         if (!visited.Add(id)) return;
 
         var type = obj.GetType();
+
+        // GrpcChannel special case: it's not a framework type but stores its
+        // HttpMessageInvoker internally — we need to patch that invoker's _handler
+        if (IsGrpcChannelType(type))
+        {
+            TryPatchGrpcChannel(obj, $"{type.Name} (instance, depth={depth})");
+            return; // Don't recurse further into GrpcChannel internals
+        }
+
         if (IsFrameworkType(type)) return;
 
         var fields = type.GetFields(
@@ -219,17 +260,39 @@ internal class SilentTypingEngine
                     continue;
                 }
 
+                // Direct HttpMessageHandler match
+                if (IsHandlerField(fieldType))
+                {
+                    var handler = field.GetValue(obj) as System.Net.Http.HttpMessageHandler;
+                    if (handler != null)
+                        TryPatchHandler(handler, field, obj, $"{type.Name}.{field.Name} (instance handler, depth={depth})");
+                    continue;
+                }
+
                 // Skip primitives, strings, enums, BCL types
                 if (fieldType.IsPrimitive || fieldType == typeof(string) || fieldType.IsEnum) continue;
+
+                // Allow recursion into GrpcChannel fields even though they're "framework-ish"
+                if (IsGrpcChannelType(fieldType))
+                {
+                    var channel = field.GetValue(obj);
+                    if (channel != null)
+                    {
+                        int chId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(channel);
+                        if (visited.Add(chId))
+                            TryPatchGrpcChannel(channel, $"{type.Name}.{field.Name} (GrpcChannel, depth={depth})");
+                    }
+                    continue;
+                }
+
                 if (IsFrameworkType(fieldType)) continue;
 
-                // Recurse into Root's own types
-                if (NameMatchesCandidates(type.Name) || NameMatchesCandidates(fieldType.Name))
-                {
-                    var child = field.GetValue(obj);
-                    if (child != null)
-                        WalkInstanceFields(child, depth + 1, visited);
-                }
+                // Recurse into all non-framework types unconditionally — the existing
+                // safeguards (IsFrameworkType, visited set, MaxInstanceWalkDepth,
+                // primitive/string/enum skip) prevent explosion
+                var child = field.GetValue(obj);
+                if (child != null)
+                    WalkInstanceFields(child, depth + 1, visited);
             }
             catch { }
         }
@@ -266,19 +329,103 @@ internal class SilentTypingEngine
         }
     }
 
+    /// <summary>
+    /// Wraps a raw HttpMessageHandler field with TypingBlockerHandler.
+    /// Used when Root holds handlers directly (e.g. gRPC transport) without HttpClient.
+    /// </summary>
+    private void TryPatchHandler(System.Net.Http.HttpMessageHandler handler, FieldInfo field, object? owner, string location)
+    {
+        int id = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(handler);
+        if (_patched.Contains(id)) return;
+
+        if (handler is TypingBlockerHandler)
+        {
+            _patched.Add(id);
+            return;
+        }
+
+        try
+        {
+            var blocker = new TypingBlockerHandler(handler);
+            field.SetValue(owner, blocker);
+            _patched.Add(id);
+            _patchCount++;
+
+            Logger.Log(Tag, $"Patched handler @ {location} (total patched: {_patchCount})");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"Handler patch failed @ {location}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Patches a GrpcChannel's internal HttpInvoker._handler with TypingBlockerHandler.
+    /// GrpcChannel stores an HttpMessageInvoker (not HttpClient) that handles all gRPC calls.
+    /// </summary>
+    private void TryPatchGrpcChannel(object channel, string location)
+    {
+        if (HandlerField == null) return;
+
+        try
+        {
+            // Lazy-resolve the GrpcChannel.<HttpInvoker>k__BackingField
+            if (!_grpcFieldResolved)
+            {
+                _grpcFieldResolved = true;
+                _grpcInvokerField = channel.GetType().GetField(
+                    "<HttpInvoker>k__BackingField",
+                    BindingFlags.Instance | BindingFlags.NonPublic);
+                if (_grpcInvokerField == null)
+                {
+                    Logger.Log(Tag, "GrpcChannel.<HttpInvoker>k__BackingField not found");
+                    return;
+                }
+            }
+
+            if (_grpcInvokerField == null) return;
+
+            // Get the HttpMessageInvoker from the channel
+            var invoker = _grpcInvokerField.GetValue(channel);
+            if (invoker == null) return;
+
+            // Patch the invoker's _handler field (same field as HttpClient uses)
+            int id = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(invoker);
+            if (_patched.Contains(id)) return;
+
+            var existing = HandlerField.GetValue(invoker) as System.Net.Http.HttpMessageHandler;
+            if (existing is TypingBlockerHandler)
+            {
+                _patched.Add(id);
+                return;
+            }
+
+            var blocker = new TypingBlockerHandler(existing!);
+            HandlerField.SetValue(invoker, blocker);
+            _patched.Add(id);
+            _patchCount++;
+
+            Logger.Log(Tag, $"Patched GrpcChannel invoker @ {location} (handler: {existing?.GetType().Name}, total patched: {_patchCount})");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"GrpcChannel patch failed @ {location}: {ex.Message}");
+        }
+    }
+
     // ===== Helpers =====
 
     private static bool IsHttpClientField(Type t) =>
         t == typeof(System.Net.Http.HttpClient) ||
         typeof(System.Net.Http.HttpClient).IsAssignableFrom(t);
 
-    private static bool NameMatchesCandidates(string name)
-    {
-        foreach (var kw in CandidateKeywords)
-            if (name.Contains(kw, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
-    }
+    private static bool IsHandlerField(Type t) =>
+        typeof(System.Net.Http.HttpMessageHandler).IsAssignableFrom(t) &&
+        t != typeof(TypingBlockerHandler);
+
+    private static bool IsGrpcChannelType(Type t) =>
+        t.FullName == "Grpc.Net.Client.GrpcChannel" ||
+        (t.Name == "GrpcChannel" && (t.Namespace ?? "").StartsWith("Grpc", StringComparison.Ordinal));
 
     private static bool IsFrameworkAssembly(string name)
     {
@@ -320,7 +467,7 @@ internal sealed class TypingBlockerHandler : System.Net.Http.DelegatingHandler
             if (settings.Plugins.TryGetValue("silent-typing", out var enabled) && enabled)
             {
                 var path = request.RequestUri?.AbsolutePath ?? "";
-                if (path.Contains("SetTypingIndicator", StringComparison.Ordinal))
+                if (path.Contains("SetTypingIndicator", StringComparison.OrdinalIgnoreCase))
                 {
                     Logger.Log("SilentTyping", "Blocked SetTypingIndicator");
                     return Task.FromResult(

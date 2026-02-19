@@ -8,8 +8,9 @@ namespace Uprooted;
 ///
 /// Deletion detection: Root's ObservableCollection is a WINDOWED/VIRTUALIZED data source.
 /// Remove events fire for BOTH genuine deletions AND buffer management (scroll-off,
-/// window shifts). We use the HasBeenDeleted property on the bridge target (Message model)
-/// as the primary signal — true means genuine deletion, false means buffer management.
+/// window shifts). We use the DeletedAt property on the bridge target (Message model)
+/// as the primary signal — non-null DateTimeOffset means genuine deletion, null means
+/// buffer management. Also subscribes to INotifyPropertyChanged for instant detection.
 ///
 /// Display: Deleted messages are re-injected into the chat as red-tinted inline panels
 /// (since Root removes them entirely). Right-click shows "Clear message history" to
@@ -20,7 +21,7 @@ namespace Uprooted;
 internal class MessageLogger
 {
     private const string Tag = "MsgLogger";
-    private const int ScanIntervalMs = 1500;
+    private const int ScanIntervalMs = 500;
     /// <summary>
     /// Seconds after a message's Add event during which Replace events are treated as
     /// send-completion content settling (not genuine edits). Genuine user edits arrive
@@ -53,8 +54,9 @@ internal class MessageLogger
         public PropertyInfo? Content;
         public PropertyInfo? AuthorId;
         public PropertyInfo? Timestamp;
-        public PropertyInfo? HasBeenDeleted;
-        public PropertyInfo? HasBeenEdited;
+        public PropertyInfo? DeletedAt;      // DateTimeOffset? — non-null means deleted
+        public PropertyInfo? EditedAt;       // DateTimeOffset? — non-null means edited
+        public PropertyInfo? SenderMember;   // Message.SenderMember (IMessageContainerMember)
     }
 
     // Collection subscription
@@ -81,7 +83,7 @@ internal class MessageLogger
         public string Content;
         public object? ViewModel;       // the ViewModel item (for re-reading bridge target)
         public object? BridgeTarget;    // captured bridge target (may become stale)
-        public TypeProps? Props;        // property accessor for HasBeenDeleted read
+        public TypeProps? Props;        // property accessor for DeletedAt read
         public int RemoveIndex;         // OldStartingIndex from the event args
     }
 
@@ -92,6 +94,10 @@ internal class MessageLogger
     // Used by HandleReplaced to gate Replace events — only messages in this dict past
     // EditGracePeriodSeconds are eligible. SnapshotMessages does NOT populate this.
     private readonly Dictionary<string, DateTime> _addedViaEvent = new();
+
+    // PropertyChanged subscriptions for instant deletion/edit detection
+    // Keyed by msgId → (bridgeTarget, handler) for cleanup on channel switch
+    private readonly Dictionary<string, (object target, Delegate handler)> _propertyChangedSubs = new();
 
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
@@ -258,7 +264,7 @@ internal class MessageLogger
                 try
                 {
                     _heartbeatCounter++;
-                    if (_heartbeatCounter % 20 == 0) // every ~30s
+                    if (_heartbeatCounter % 60 == 0) // every ~30s at 500ms interval
                     {
                         int srcCount = 0;
                         try
@@ -428,8 +434,8 @@ internal class MessageLogger
         var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
         var tp = new TypeProps
         {
-            HasBeenDeleted = FindProp(props, "HasBeenDeleted", "IsDeleted"),
-            HasBeenEdited = FindProp(props, "HasBeenEdited", "IsEdited")
+            DeletedAt = FindProp(props, "DeletedAt", "HasBeenDeleted", "IsDeleted"),
+            EditedAt = FindProp(props, "EditedAt", "HasBeenEdited", "IsEdited")
         };
 
         // Try direct resolution first
@@ -450,13 +456,13 @@ internal class MessageLogger
                 var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
                 if (TryResolveOnProps(nested, prop.PropertyType.Name, prop, tp))
                 {
-                    // HasBeenDeleted/HasBeenEdited may live on the bridge target, not the ViewModel
-                    if (tp.HasBeenDeleted == null)
-                        tp.HasBeenDeleted = FindProp(nested, "HasBeenDeleted", "IsDeleted");
-                    if (tp.HasBeenEdited == null)
-                        tp.HasBeenEdited = FindProp(nested, "HasBeenEdited", "IsEdited");
+                    // DeletedAt/EditedAt may live on the bridge target, not the ViewModel
+                    if (tp.DeletedAt == null)
+                        tp.DeletedAt = FindProp(nested, "DeletedAt", "HasBeenDeleted", "IsDeleted");
+                    if (tp.EditedAt == null)
+                        tp.EditedAt = FindProp(nested, "EditedAt", "HasBeenEdited", "IsEdited");
 
-                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name} (HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}, HasBeenEdited={tp.HasBeenEdited?.Name ?? "?"})");
+                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name} (DeletedAt={tp.DeletedAt?.Name ?? "?"}, EditedAt={tp.EditedAt?.Name ?? "?"})");
                     _typePropsCache[type] = tp;
                     _propertiesResolved = true;
                     _messageItemType = type;
@@ -491,9 +497,11 @@ internal class MessageLogger
         tp.AuthorId = FindProp(props, "SenderUserId", "AuthorId", "SenderId", "UserId");
         tp.Timestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt");
 
+        tp.SenderMember = FindProp(props, "SenderMember");
+
         Logger.Log(Tag, $"Props on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
             $"Id={id.Name}, Content={content.Name}, " +
-            $"HasBeenDeleted={tp.HasBeenDeleted?.Name ?? "?"}, HasBeenEdited={tp.HasBeenEdited?.Name ?? "?"}");
+            $"DeletedAt={tp.DeletedAt?.Name ?? "?"}, EditedAt={tp.EditedAt?.Name ?? "?"}, SenderMember={tp.SenderMember?.Name ?? "?"}");
         return true;
     }
 
@@ -516,11 +524,11 @@ internal class MessageLogger
             return;
         }
 
-        // Every ~5 ticks (7.5s), verify we're still tracking the ACTIVE RootMessageItemsControl.
-        // Root creates new control instances on channel switch; the old one may linger alive
-        // in the tree but with stale data.
+        // Every ~15 ticks (7.5s at 500ms interval), verify we're still tracking the ACTIVE
+        // RootMessageItemsControl. Root creates new control instances on channel switch;
+        // the old one may linger alive in the tree but with stale data.
         _freshnessCounter++;
-        if (_freshnessCounter >= 5)
+        if (_freshnessCounter >= 15)
         {
             _freshnessCounter = 0;
             var activeControl = FindActiveMessageControl();
@@ -760,6 +768,169 @@ internal class MessageLogger
         _subscribed = false;
     }
 
+    // ===== PropertyChanged Subscription for Instant Detection =====
+
+    /// <summary>
+    /// Subscribe to INotifyPropertyChanged on the Message bridge target for instant
+    /// DeletedAt/EditedAt detection. PropertyChanged is a standard CLR event (not a
+    /// RoutedEvent), so EventInfo.AddEventHandler is safe here.
+    /// </summary>
+    private void SubscribePropertyChanged(object item, string msgId)
+    {
+        if (_propertyChangedSubs.ContainsKey(msgId)) return;
+
+        var tp = GetTypeProps(item);
+        if (tp == null) return;
+
+        object? target = GetMessageTarget(item, tp);
+        if (target == null) return;
+
+        try
+        {
+            var pcEvent = target.GetType().GetEvent("PropertyChanged");
+            if (pcEvent == null) return;
+
+            // Build handler using Expression.Lambda to match the exact delegate type
+            // PropertyChanged uses PropertyChangedEventHandler(object, PropertyChangedEventArgs)
+            var handlerType = pcEvent.EventHandlerType;
+            if (handlerType == null) return;
+
+            var invokeMethod = handlerType.GetMethod("Invoke");
+            if (invokeMethod == null) return;
+
+            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+            if (paramTypes.Length != 2) return;
+
+            var capturedMsgId = msgId;
+            var capturedEpoch = _deletionEpoch;
+            var callback = new Action<object, object>((sender, args) =>
+            {
+                try
+                {
+                    // Abort if epoch changed (channel switch)
+                    if (_deletionEpoch != capturedEpoch) return;
+
+                    // Read PropertyName from the args
+                    var propNameProp = args.GetType().GetProperty("PropertyName");
+                    var propName = propNameProp?.GetValue(args) as string;
+                    if (propName == null) return;
+
+                    if (propName == "DeletedAt")
+                        OnDeletedAtChanged(capturedMsgId, sender);
+                    else if (propName == "EditedAt")
+                        OnEditedAtChanged(capturedMsgId, sender);
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"[INPC] handler error: {ex.Message}"); }
+            });
+
+            var sParam = Expression.Parameter(paramTypes[0], "sender");
+            var eParam = Expression.Parameter(paramTypes[1], "e");
+            var body = Expression.Invoke(
+                Expression.Constant(callback),
+                Expression.Convert(sParam, typeof(object)),
+                Expression.Convert(eParam, typeof(object)));
+            var handler = Expression.Lambda(handlerType, body, sParam, eParam).Compile();
+
+            pcEvent.AddEventHandler(target, handler);
+            _propertyChangedSubs[msgId] = (target, handler);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"[INPC] Subscribe error for {msgId}: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Called when DeletedAt changes on a subscribed message — instant deletion detection.
+    /// </summary>
+    private void OnDeletedAtChanged(string msgId, object sender)
+    {
+        Logger.Log(Tag, $"[INPC] DeletedAt changed: {msgId}");
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
+                {
+                    cached.IsDeleted = true;
+                    cached.DeletedAt = DateTime.UtcNow;
+                    _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
+                    Logger.Log(Tag, $"[INPC] MSG DEL (instant): {msgId} ({Truncate(cached.Content, 80)})");
+
+                    var settings = UprootedSettings.Load();
+                    InjectDeletedMessageCards(settings);
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"[INPC] OnDeletedAt error: {ex.Message}"); }
+        });
+    }
+
+    /// <summary>
+    /// Called when EditedAt changes on a subscribed message — instant edit detection.
+    /// </summary>
+    private void OnEditedAtChanged(string msgId, object sender)
+    {
+        Logger.Log(Tag, $"[INPC] EditedAt changed: {msgId}");
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                if (_messageCache.TryGetValue(msgId, out var cached))
+                {
+                    // Capture previous content from snapshot before it's updated
+                    _contentSnapshot.TryGetValue(msgId, out var prevContent);
+
+                    // Read current content from the message model
+                    string? currentContent = null;
+                    if (_propertyChangedSubs.TryGetValue(msgId, out var sub))
+                    {
+                        var tp = _typePropsCache.Values.FirstOrDefault(t => t.SenderMember != null) ??
+                                 _typePropsCache.Values.FirstOrDefault();
+                        if (tp?.Content != null)
+                        {
+                            try { currentContent = tp.Content.GetValue(sub.target) as string; }
+                            catch { }
+                        }
+                    }
+
+                    if (!string.IsNullOrEmpty(prevContent) &&
+                        !string.IsNullOrEmpty(currentContent) &&
+                        prevContent != currentContent)
+                    {
+                        cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prevContent });
+                        cached.Content = currentContent;
+                        _contentSnapshot[msgId] = currentContent;
+                        _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, prevContent);
+                        Logger.Log(Tag, $"[INPC] MSG EDIT (instant): {msgId}: \"{Truncate(prevContent, 40)}\" -> \"{Truncate(currentContent, 40)}\"");
+
+                        var settings = UprootedSettings.Load();
+                        InjectEditIndicators(settings);
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"[INPC] OnEditedAt error: {ex.Message}"); }
+        });
+    }
+
+    /// <summary>
+    /// Unsubscribe all PropertyChanged handlers. Called on channel switch / epoch change.
+    /// </summary>
+    private void UnsubscribeAllPropertyChanged()
+    {
+        foreach (var (msgId, sub) in _propertyChangedSubs)
+        {
+            try
+            {
+                var pcEvent = sub.target.GetType().GetEvent("PropertyChanged");
+                pcEvent?.RemoveEventHandler(sub.target, sub.handler);
+            }
+            catch { }
+        }
+        if (_propertyChangedSubs.Count > 0)
+            Logger.Log(Tag, $"[INPC] Unsubscribed {_propertyChangedSubs.Count} PropertyChanged handlers");
+        _propertyChangedSubs.Clear();
+    }
+
     private void SnapshotMessages(object collection)
     {
         if (!_propertiesResolved) return;
@@ -853,6 +1024,9 @@ internal class MessageLogger
             _addedViaEvent[msgId] = DateTime.UtcNow;
             CacheMessage(item, msgId);
 
+            // Subscribe to PropertyChanged on the bridge target for instant deletion/edit detection
+            SubscribePropertyChanged(item, msgId);
+
             // Apply any pending audit log deletion that arrived before this message was cached
             if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
             {
@@ -881,12 +1055,11 @@ internal class MessageLogger
 
     /// <summary>
     /// Called on CollectionChanged Replace (action=2). Updates snapshots and detects genuine
-    /// edits using two gates:
-    ///   1. The message must have arrived via an Add event (recorded in _addedViaEvent), not the
-    ///      initial SnapshotMessages. This filters messages whose full history is unknown.
-    ///   2. The Replace must arrive more than EditGracePeriodSeconds after the Add. Send-completion
-    ///      Replaces (content settling after optimistic send) arrive within 0.5-2s; genuine user
-    ///      edits arrive after the grace window.
+    /// edits using two strategies:
+    ///   1. Primary: Check if EditedAt is non-null on new item (confirms genuine edit regardless
+    ///      of timing). This bypasses the grace period entirely.
+    ///   2. Fallback: Grace-period gating — the message must have arrived via an Add event and
+    ///      the Replace must arrive more than EditGracePeriodSeconds after the Add.
     /// </summary>
     private void HandleReplaced(System.Collections.IList? oldItems, System.Collections.IList newItems)
     {
@@ -917,20 +1090,34 @@ internal class MessageLogger
             else
                 CacheMessage(newItem, msgId);
 
-            // Edit detection — gated by Add-event eligibility and grace period.
+            // Re-subscribe PropertyChanged on the new item (Replace swaps the ViewModel)
+            SubscribePropertyChanged(newItem, msgId);
+
+            // Edit detection — gated by Add-event eligibility.
             if (!settings.MessageLoggerLogEdits) continue;
-            if (!_addedViaEvent.TryGetValue(msgId, out var addTime)) continue;
-
-            double ageSeconds = (DateTime.UtcNow - addTime).TotalSeconds;
-            if (ageSeconds < EditGracePeriodSeconds)
-            {
-                Logger.Log(Tag, $"[edit-gate] {msgId}: age={ageSeconds:F1}s < grace ({EditGracePeriodSeconds}s), skipping (send-completion)");
-                continue;
-            }
-
             if (string.IsNullOrEmpty(oldContent) || oldContent == newContent) continue;
 
-            Logger.Log(Tag, $"[edit-detect] {msgId}: \"{Truncate(oldContent, 40)}\" -> \"{Truncate(newContent, 40)}\"");
+            // Strategy 1: EditedAt non-null on new item → confirmed edit (bypasses grace period)
+            bool? editedAtConfirmed = ReadHasBeenEdited(newItem);
+            bool confirmedByEditedAt = editedAtConfirmed == true;
+
+            // Strategy 2: Grace-period gating (fallback for items without EditedAt)
+            bool confirmedByGracePeriod = false;
+            if (!confirmedByEditedAt && _addedViaEvent.TryGetValue(msgId, out var addTime))
+            {
+                double ageSeconds = (DateTime.UtcNow - addTime).TotalSeconds;
+                if (ageSeconds < EditGracePeriodSeconds)
+                {
+                    Logger.Log(Tag, $"[edit-gate] {msgId}: age={ageSeconds:F1}s < grace ({EditGracePeriodSeconds}s), EditedAt={editedAtConfirmed}, skipping");
+                    continue;
+                }
+                confirmedByGracePeriod = true;
+            }
+
+            if (!confirmedByEditedAt && !confirmedByGracePeriod) continue;
+
+            var method = confirmedByEditedAt ? "EditedAt" : "grace-period";
+            Logger.Log(Tag, $"[edit-detect] {msgId} (via {method}): \"{Truncate(oldContent, 40)}\" -> \"{Truncate(newContent, 40)}\"");
             if (_messageCache.TryGetValue(msgId, out var cached))
             {
                 cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
@@ -944,7 +1131,7 @@ internal class MessageLogger
     /// Buffer removed items and spawn a fast async poller per item.
     ///
     /// Captures the ViewModel and bridge target references NOW (while alive).
-    /// Root sets HasBeenDeleted asynchronously after the Remove event, so we
+    /// Root sets DeletedAt asynchronously after the Remove event, so we
     /// poll the stored references every 300ms for up to 3s.
     /// The poller also re-reads the bridge from the ViewModel on each tick
     /// (in case Root replaces the bridge target object).
@@ -958,11 +1145,19 @@ internal class MessageLogger
             if (item == null) continue;
             var msgId = ReadMessageId(item);
             if (msgId == null) continue;
+
+            // Skip already-deleted messages — don't spawn pollers for them (prevents spam)
+            if (_messageCache.TryGetValue(msgId, out var alreadyCached) && alreadyCached.IsDeleted)
+            {
+                Logger.Log(Tag, $"[remove-event] skipped (already deleted): {msgId}");
+                continue;
+            }
+
             var content = ReadContent(item) ?? "";
 
             // Also check cache for richer content (sometimes ViewModel content is empty on removal)
-            if (string.IsNullOrEmpty(content) && _messageCache.TryGetValue(msgId, out var cached))
-                content = cached.Content;
+            if (string.IsNullOrEmpty(content) && alreadyCached != null)
+                content = alreadyCached.Content;
 
             // Capture ViewModel + bridge target references
             var tp = GetTypeProps(item);
@@ -998,16 +1193,20 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Async poller: checks HasBeenDeleted every 300ms for up to 3s.
+    /// Async poller: checks DeletedAt every 300ms for up to 3s.
     ///
     /// On each tick:
     ///   1. Check epoch — abort if channel switched
     ///   2. Re-read bridge target from ViewModel (catches bridge replacement)
-    ///   3. Read HasBeenDeleted from both captured and fresh bridge targets
-    ///   4. If True → mark as deleted + inject card on UI thread
+    ///   3. Read DeletedAt from both captured and fresh bridge targets
+    ///   4. If non-null → mark as deleted + inject card on UI thread
     ///
-    /// On first and last attempt for the first few removes, dumps ALL boolean
-    /// properties on the bridge target to discover the correct deletion signal.
+    /// Fallback: If DeletedAt stays null after 3s (Root doesn't set it for self-deletes),
+    /// check if the message is actually absent from the live collection. If gone, it's
+    /// a genuine deletion.
+    ///
+    /// On first and last attempt for the first few removes, dumps boolean +
+    /// DateTimeOffset? properties on the bridge target for diagnostics.
     /// </summary>
     private void StartDeletionPoller(BufferedRemove remove, int epochAtRemoval, bool dumpBoolProps)
     {
@@ -1030,7 +1229,7 @@ internal class MessageLogger
 
                 if (valCaptured == true || valFresh == true)
                 {
-                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: HasBeenDeleted=True at attempt {attempt} ({(attempt + 1) * 300}ms) captured={valCaptured} fresh={valFresh}");
+                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=non-null at attempt {attempt} ({(attempt + 1) * 300}ms) captured={valCaptured} fresh={valFresh}");
                     _r.RunOnUIThread(() =>
                     {
                         if (_deletionEpoch != epochAtRemoval) return;
@@ -1041,18 +1240,65 @@ internal class MessageLogger
                     return;
                 }
 
-                // Diagnostic: dump all boolean properties on first and last attempt
+                // Diagnostic: dump all boolean + DateTimeOffset? properties on first and last attempt
                 if (dumpBoolProps && (attempt == 0 || attempt == 9))
                     DumpBooleanProperties(remove, attempt);
             }
 
-            // After 3s, still False — buffer management
-            Logger.Log(Tag, $"[async-poll] {remove.MessageId}: still False after 3s, discarding (buffer management)");
+            // After 3s, DeletedAt still null. Root doesn't set it for self-initiated deletes.
+            // Fallback: check if the message is absent from the live collection — if gone, it's
+            // a genuine deletion (not buffer management, which re-adds at a different index).
+            if (_deletionEpoch != epochAtRemoval) return;
+
+            _r.RunOnUIThread(() =>
+            {
+                try
+                {
+                    if (_deletionEpoch != epochAtRemoval) return;
+
+                    // Check if the message ID is still in the live collection
+                    bool stillPresent = IsMessageInCollection(remove.MessageId);
+                    if (!stillPresent && !string.IsNullOrEmpty(remove.Content))
+                    {
+                        Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=null but ABSENT from collection — marking as deleted (self-delete fallback)");
+                        MarkAsDeleted(remove);
+                        var settings = UprootedSettings.Load();
+                        InjectDeletedMessageCards(settings);
+                    }
+                    else
+                    {
+                        Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=null, present={stillPresent} — buffer management");
+                    }
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"[async-poll] fallback error: {ex.Message}"); }
+            });
         });
     }
 
     /// <summary>
-    /// Re-read HasBeenDeleted from ViewModel by re-traversing the bridge.
+    /// Check if a message ID is currently present in the live collection.
+    /// Must be called on the UI thread.
+    /// </summary>
+    private bool IsMessageInCollection(string msgId)
+    {
+        if (_currentItemsSource == null) return false;
+        try
+        {
+            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
+            if (en == null) return false;
+            while (en.MoveNext())
+            {
+                if (en.Current == null) continue;
+                var id = ReadMessageId(en.Current);
+                if (id == msgId) return true;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// Re-read DeletedAt from ViewModel by re-traversing the bridge.
     /// Catches cases where Root replaces the bridge target object after removal.
     /// </summary>
     private static bool? ReadFreshHasBeenDeleted(object? viewModel, TypeProps? props)
@@ -1063,17 +1309,20 @@ internal class MessageLogger
             object? target = viewModel;
             if (props.Bridge != null)
                 target = props.Bridge.GetValue(viewModel);
-            if (target == null || props.HasBeenDeleted == null) return null;
-            var val = props.HasBeenDeleted.GetValue(target);
+            if (target == null || props.DeletedAt == null) return null;
+            var val = props.DeletedAt.GetValue(target);
+            // DateTimeOffset? — non-null means deleted; also handle legacy bool
             if (val is bool b) return b;
+            if (val is DateTimeOffset) return true;
+            if (props.DeletedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
             return null;
         }
         catch { return null; }
     }
 
     /// <summary>
-    /// Diagnostic: log all boolean properties on the bridge target.
-    /// Reveals which property Root uses for current-session deletion signaling.
+    /// Diagnostic: log boolean + DateTimeOffset? properties on the bridge target.
+    /// Reveals which property Root uses for deletion/edit signaling.
     /// </summary>
     private static void DumpBooleanProperties(BufferedRemove remove, int attempt)
     {
@@ -1081,18 +1330,33 @@ internal class MessageLogger
         {
             var target = remove.BridgeTarget;
             if (target == null) return;
-            var tag = attempt == 0 ? "bool-dump-t0" : "bool-dump-t3s";
+            var tag = attempt == 0 ? "prop-dump-t0" : "prop-dump-t3s";
             var props = target.GetType().GetProperties(
                 System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
             foreach (var p in props)
             {
-                if (p.PropertyType != typeof(bool) || !p.CanRead) continue;
-                try
+                if (!p.CanRead) continue;
+
+                // Dump bool properties
+                if (p.PropertyType == typeof(bool))
                 {
-                    var v = p.GetValue(target);
-                    Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
+                    try
+                    {
+                        var v = p.GetValue(target);
+                        Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
+                    }
+                    catch { }
                 }
-                catch { }
+                // Dump DateTimeOffset? and DateTimeOffset properties (DeletedAt, EditedAt, PinnedAt etc.)
+                else if (p.PropertyType == typeof(DateTimeOffset?) || p.PropertyType == typeof(DateTimeOffset))
+                {
+                    try
+                    {
+                        var v = p.GetValue(target);
+                        Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
+                    }
+                    catch { }
+                }
             }
         }
         catch { }
@@ -1840,6 +2104,8 @@ internal class MessageLogger
             catch { }
         }
         _injectedCards.Clear();
+        UnsubscribeAllPropertyChanged();
+        _boolDumpCount = 0; // reset so next epoch gets fresh diagnostic dumps
     }
 
     // ===== Message helpers =====
@@ -1857,17 +2123,22 @@ internal class MessageLogger
     }
 
     /// <summary>
-    /// Read HasBeenDeleted from a stored bridge target reference (deferred read).
+    /// Read DeletedAt from a stored bridge target reference (deferred read).
     /// Called at flush time, 1.5–3s after the Remove event, giving Root time to set the flag.
+    /// DeletedAt is DateTimeOffset? — non-null means deleted.
     /// Returns true/false/null. Handles disposed objects gracefully.
     /// </summary>
     private static bool? ReadDeferredHasBeenDeleted(object? bridgeTarget, TypeProps? props)
     {
-        if (bridgeTarget == null || props?.HasBeenDeleted == null) return null;
+        if (bridgeTarget == null || props?.DeletedAt == null) return null;
         try
         {
-            var val = props.HasBeenDeleted.GetValue(bridgeTarget);
+            var val = props.DeletedAt.GetValue(bridgeTarget);
+            // DateTimeOffset? — non-null means deleted; also handle legacy bool
             if (val is bool b) return b;
+            if (val is DateTimeOffset) return true;
+            // null DateTimeOffset? = not deleted
+            if (props.DeletedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
             return null;
         }
         catch { return null; }
@@ -1903,13 +2174,53 @@ internal class MessageLogger
     private bool? ReadHasBeenEdited(object item)
     {
         var tp = GetTypeProps(item);
-        if (tp?.HasBeenEdited == null) return null;
+        if (tp?.EditedAt == null) return null;
         var t = GetMessageTarget(item, tp);
         if (t == null) return null;
         try
         {
-            var val = tp.HasBeenEdited.GetValue(t);
+            var val = tp.EditedAt.GetValue(t);
+            // DateTimeOffset? — non-null means edited; also handle legacy bool
             if (val is bool b) return b;
+            if (val is DateTimeOffset) return true;
+            if (tp.EditedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
+            return null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Resolve author display name via the deep chain: Message.SenderMember.GlobalUser.UserName.
+    /// Falls back to SenderMember.GlobalUser.ToString() if UserName is missing.
+    /// </summary>
+    private static string? ReadAuthorName(object messageTarget, TypeProps tp)
+    {
+        if (tp.SenderMember == null) return null;
+        try
+        {
+            var sender = tp.SenderMember.GetValue(messageTarget);
+            if (sender == null) return null;
+
+            var globalUserProp = sender.GetType().GetProperty("GlobalUser",
+                BindingFlags.Public | BindingFlags.Instance);
+            var globalUser = globalUserProp?.GetValue(sender);
+            if (globalUser == null) return null;
+
+            // Try UserName first, then DisplayName, then Name
+            var userNameProp = globalUser.GetType().GetProperty("UserName",
+                BindingFlags.Public | BindingFlags.Instance)
+                ?? globalUser.GetType().GetProperty("DisplayName",
+                    BindingFlags.Public | BindingFlags.Instance)
+                ?? globalUser.GetType().GetProperty("Name",
+                    BindingFlags.Public | BindingFlags.Instance);
+
+            var name = userNameProp?.GetValue(globalUser) as string;
+            if (!string.IsNullOrEmpty(name)) return name;
+
+            // Fallback: ToString on GlobalUser
+            var str = globalUser.ToString();
+            if (!string.IsNullOrEmpty(str) && str != globalUser.GetType().FullName) return str;
+
             return null;
         }
         catch { return null; }
@@ -1930,12 +2241,16 @@ internal class MessageLogger
                 if (v is DateTimeOffset dto) ts = dto.UtcDateTime;
                 else if (v is DateTime dt) ts = dt;
             }
+            // Resolve author: direct AuthorId prop, or deep chain SenderMember.GlobalUser.UserName
+            string authorId = tp.AuthorId != null ? (tp.AuthorId.GetValue(t)?.ToString() ?? "") : "";
+            string authorName = ReadAuthorName(t, tp) ?? "Unknown";
+
             return new CachedMessage
             {
                 MessageId = msgId,
                 ChannelId = _currentChannelId,
-                AuthorId = tp.AuthorId != null ? (tp.AuthorId.GetValue(t)?.ToString() ?? "") : "",
-                AuthorName = "Unknown",
+                AuthorId = authorId,
+                AuthorName = authorName,
                 Timestamp = ts,
                 Content = ReadContent(item) ?? ""
             };

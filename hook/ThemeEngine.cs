@@ -549,14 +549,14 @@ internal class ThemeEngine
         Logger.Log("Theme", "ThemeDictionaries: " + count + " keys overridden");
     }
 
+    // Keys stored as Color (not brush) in Root's ThemeDictionaries
+    private static readonly HashSet<string> ColorTypeKeys = new(StringComparer.OrdinalIgnoreCase) { "DropShadow" };
+
     private void SetThemeDictValue(string key, string hex)
     {
         if (_activeVariantDict == null) return;
 
-        bool isBrush = key.Contains("Brush") || key.EndsWith("Fill");
-        bool isGradient = key == "ScrollShadow"; // special case
-
-        if (isGradient)
+        if (key == "ScrollShadow")
         {
             // ScrollShadow is a LinearGradientBrush
             var brush = _r.CreateLinearGradientBrush(0, 0, 0, 1, new[]
@@ -567,17 +567,19 @@ internal class ThemeEngine
             if (brush != null)
                 _r.AddResource(_activeVariantDict, key, brush);
         }
-        else if (isBrush)
+        else if (ColorTypeKeys.Contains(key))
         {
-            var brush = _r.CreateBrush(hex);
-            if (brush != null)
-                _r.AddResource(_activeVariantDict, key, brush);
-        }
-        else
-        {
+            // DropShadow is stored as Color in Root's ThemeDictionaries
             var color = _r.ParseColor(hex);
             if (color != null)
                 _r.AddResource(_activeVariantDict, key, color);
+        }
+        else
+        {
+            // All other Root keys are ImmutableSolidColorBrush — store as SolidColorBrush
+            var brush = _r.CreateBrush(hex);
+            if (brush != null)
+                _r.AddResource(_activeVariantDict, key, brush);
         }
     }
 
@@ -782,9 +784,11 @@ internal class ThemeEngine
         palette["RoleMention"]            = "#669B59B6";
         palette["RoleMentionBackground"]  = "#269B59B6";
         palette["RoleMentionBorder"]      = "#4D9B59B6";
+        palette["RoleMentionText"]        = "#9B59B6";
         palette["ChannelMention"]           = ColorUtils.WithAlpha(palette["Warning"], 0x66);
         palette["ChannelMentionBackground"] = ColorUtils.WithAlpha(palette["Warning"], 0x26);
         palette["ChannelMentionBorder"]     = ColorUtils.WithAlpha(palette["Warning"], 0x4D);
+        palette["ChannelMentionText"]       = palette["Warning"];
 
         // --- ScrollShadow (bg-colored gradient) ---
         palette["ScrollShadow"] = palette["BackgroundPrimary"];
@@ -800,10 +804,9 @@ internal class ThemeEngine
     /// </summary>
     private static Dictionary<string, string> DeriveSimpleThemeKeys(string accentHex, string bgHex)
     {
+        var (bL, bC, bH) = ColorUtils.HexToOklch(bgHex);
         var bgSecondary = ColorUtils.OklchToHex(
-            Math.Clamp(ColorUtils.HexToOklch(bgHex).L + 0.02, 0.05, 0.25),
-            ColorUtils.HexToOklch(bgHex).C,
-            ColorUtils.HexToOklch(bgHex).H);
+            Math.Clamp(bL + 0.02, 0.05, 0.25), bC, bH);
 
         return new Dictionary<string, string>
         {
@@ -1188,9 +1191,11 @@ internal class ThemeEngine
                 ["RoleMention"]             = "#669B59B6",
                 ["RoleMentionBackground"]   = "#269B59B6",
                 ["RoleMentionBorder"]       = "#4D9B59B6",
+                ["RoleMentionText"]         = "#9B59B6",
                 ["ChannelMention"]            = "#66F0AD4E",
                 ["ChannelMentionBackground"]  = "#26F0AD4E",
                 ["ChannelMentionBorder"]      = "#4DF0AD4E",
+                ["ChannelMentionText"]        = "#F0AD4E",
 
                 // Shadow
                 ["ScrollShadow"] = "#241414",
@@ -1254,9 +1259,11 @@ internal class ThemeEngine
                 ["RoleMention"]             = "#669B59B6",
                 ["RoleMentionBackground"]   = "#269B59B6",
                 ["RoleMentionBorder"]       = "#4D9B59B6",
+                ["RoleMentionText"]         = "#9B59B6",
                 ["ChannelMention"]            = "#66F0AD4E",
                 ["ChannelMentionBackground"]  = "#26F0AD4E",
                 ["ChannelMentionBorder"]      = "#4DF0AD4E",
+                ["ChannelMentionText"]        = "#F0AD4E",
 
                 // Shadow
                 ["ScrollShadow"] = "#0A041E",
@@ -1320,9 +1327,11 @@ internal class ThemeEngine
                 ["RoleMention"]             = "#669B59B6",
                 ["RoleMentionBackground"]   = "#269B59B6",
                 ["RoleMentionBorder"]       = "#4D9B59B6",
+                ["RoleMentionText"]         = "#9B59B6",
                 ["ChannelMention"]            = "#66F0AD4E",
                 ["ChannelMentionBackground"]  = "#26F0AD4E",
                 ["ChannelMentionBorder"]      = "#4DF0AD4E",
+                ["ChannelMentionText"]        = "#F0AD4E",
 
                 // Shadow
                 ["ScrollShadow"] = "#0F1210",

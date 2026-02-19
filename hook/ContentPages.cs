@@ -627,16 +627,16 @@ internal static class ContentPages
             KnownPlugins = new PluginInfo[]
             {
                 new() { Id = "sentry-blocker", DisplayName = "SentryBlocker", Version = "0.4.1",
-                    Description = "Stops Root from sending your data to Sentry's external error tracking servers \u2014 including your IP address, session replays, and login tokens.",
+                    Description = "Stops Root from sending your data to Sentry's external error tracking servers, including your IP address, session replays, and login tokens.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "Themes", Version = "0.4.1",
-                    Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly \u2014 no restart needed.",
+                    Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly, no restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.4.1",
                     Description = "Rich link previews right in chat. YouTube videos show a thumbnail with a play button that opens in your browser, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 2 },
                 new() { Id = "clear-urls", DisplayName = "ClearURLs", Version = "0.4.1",
-                    Description = "Automatically strips tracking parameters like utm_source, fbclid, and gclid from links you send. Over 30 trackers removed for cleaner URLs and better privacy \u2014 your links still work perfectly.",
+                    Description = "Automatically strips tracking parameters like utm_source, fbclid, and gclid from links you send. Over 30 trackers removed for cleaner URLs and better privacy. Your links still work perfectly.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
                 new() { Id = "message-logger", DisplayName = "MessageLogger", Version = "0.4.1",
                     Description = "Keeps a record of deleted messages so you can still see what was removed. Deleted messages appear highlighted in red directly in chat. Edit tracking is still in development.",
@@ -645,7 +645,7 @@ internal static class ContentPages
                     Description = "Prevents your typing indicator from being sent, so others won't see when you're composing a message. Contributed by Kurumi Nanase.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
                 new() { Id = "content-filter", DisplayName = "ContentFilter", Version = "0.4.1",
-                    Description = "Blurs images flagged as NSFW using Google Cloud Vision. Set up your API key in settings to get started \u2014 costs roughly $1.50 per 1,000 images checked.",
+                    Description = "Blurs images flagged as NSFW using Google Cloud Vision. Set up your API key in settings to get started. Costs roughly $1.50 per 1,000 images checked.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
