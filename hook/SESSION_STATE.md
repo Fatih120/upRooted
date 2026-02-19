@@ -125,12 +125,12 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Renamed: "Plugins" → "Plugin Settings", "Themes" → "Theme Settings"; added Cosmic Smoothie preset card; search box font/padding/centering fix |
 | `hook/ThemeEngine.cs` | Added "cosmic-smoothie" theme: TreeColorMap (26 color mappings) + Themes ResourceDictionary (full FluentTheme key set) |
 | `src/plugins/themes/themes.json` | Added "cosmic-smoothie" theme entry with CSS variables |
-| `hook/MessageLogger.cs` | Chat message logger (1795 lines) — per-item async deletion pollers (HasBeenDeleted probe every 300ms for 3s), epoch-based channel switch cancellation, per-type property cache, diagnostic instrumentation (DIAG-INJ/DIAG-FLUSH logging, boolean property dump), Discord-style deleted message rows; insertion-order tracking for correct injection position |
+| `hook/MessageLogger.cs` | Chat message logger (1624 lines) — per-item async deletion pollers (HasBeenDeleted probe every 300ms for 3s), epoch-based channel switch cancellation, per-type property cache, diagnostic instrumentation (DIAG-INJ/DIAG-FLUSH logging, boolean property dump), Discord-style deleted message rows |
 | `hook/MessageStore.cs` | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only: MSG\|DEL\|EDIT\|CLR records) |
 | `hook/StartupHook.cs` | Added Phase 4.5c message logger initialization (20s delay for chat population) |
 | `hook/UprootedSettings.cs` | Added MessageLogger.LogDeletes, LogEdits, IgnoreSelf, MaxMessages settings |
 | `hook/ContentPages.cs` | Added message-logger to KnownPlugins, settings lightbox with toggle UI, BuildChannelRow for update channel switching, restart banners (plugins + updates), state-aware plugin banner (hides on revert), Restart button (Process.Start + Environment.Exit), DIAGNOSTICS "Open" button (explorer /select) |
-| `hook/ProfileBadgeInjector.cs` | Profile popup detection via event-driven OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups, heuristic matching (avatar + username + roles), tree dump diagnostics, username TextBlock discovery (largest font size), badge gated to hardcoded developer usernames (`DeveloperUsernames` HashSet), vertical panel walk-up to insert badge below username (`IsVerticalPanel()` helper), "Uprooted Dev" badge (gold #8B6914 pill, font 10, centered). `IsProfilePopup` tightened: avatar min 40px, `StatusWords` HashSet, `textBlockCount`, strengthened conjunction to reject notification toasts |
+| `hook/ProfileBadgeInjector.cs` | Profile popup detection via event-driven OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups, heuristic matching (avatar + username + roles), tree dump diagnostics, username TextBlock discovery (largest font size), badge gated to hardcoded developer usernames (`DeveloperUsernames` HashSet), vertical panel walk-up to insert badge below username (`IsVerticalPanel()` helper), "Uprooted Dev" badge (gold #8B6914 pill, font 10, centered) |
 | `hook/StartupHook.cs` | Added Phase 4.5e profile badge injector (5s delay, developer channel only); `CurrentVersion` const + `ForceDisableOnUpgrade` dictionary + version migration block (between Phase 0 and Phase 1) |
 | `hook/UprootedSettings.cs` | Added `CustomPingColor` property (string, default empty), INI load/save |
 | `hook/ThemeEngine.cs` | Added `_customPingColor` field, `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()`, `RestoreThemeHighlightKeys()`, Phase 6 in `ApplyThemeInternal()`, re-apply in `UpdateCustomThemeLive()` |
@@ -151,12 +151,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
 | `hook/LinkEmbedEngine.cs` | Tenor: only `media.tenor.com` skipped (not bare `tenor.com`); video embeds respect "Show file names" toggle (`isFileOnlyEmbed` includes `VideoId=="direct"`) |
 | `hook/AnimatedImage.cs` | Persistent canvas bitmap for frame compositing — fixes black pixels and frame ordering in delta-encoded GIFs; removed per-frame `DecodeFrame` method |
-| `hook/ThemeEngine.cs` | Removed `ThemeAccentColor`/`ThemeAccentBrush` overrides from `ApplyPingColorOverride()` — global accent keys were bleeding the ping color into buttons and active-state UI; visual tree walk already paints the correct controls directly |
-| `hook/UprootedSettings.cs` | Added `LastPackageHash` property (SHA-256 of last applied .uprpkg); load/save via `AutoUpdate.LastPackageHash` INI key |
-| `hook/AutoUpdater.cs` | Hash-based same-version hotfix detection: compute SHA-256 of downloaded .uprpkg, compare to stored hash, skip if identical, apply and store new hash if different. `BackgroundUpdateApplied` static event fires when background timer applies an update (not on manual check). `_isManualCheck` flag distinguishes the two flows. `ComputeSha256Hex()` helper. |
-| `hook/ContentPages.cs` | `ShowUpdateNotification(r, version)` — dismissable overlay card shown when `BackgroundUpdateApplied` fires; `DismissUpdateNotification()` removes it. `CheckForUpdate(isManual: true)` wired to button. |
-| `hook/StartupHook.cs` | Subscribes to `AutoUpdater.BackgroundUpdateApplied` in Phase 4.5d; dispatches `ContentPages.ShowUpdateNotification()` to UI thread |
-| `hook/MessageLogger.cs` | Injection position fix: `_orderedIds` (List) + `_orderedIdIndex` (dict) track collection insertion order. `InjectDeletedMessageCards` now uses order-index comparison instead of timestamps to find the correct adjacent container. Cleared on channel switch / reset / bulk-flush. |
+| `hook/Logger.cs` | Dev-channel-only logging: `_enabled` flag + `Disable()` method (suppresses writes, deletes log file). `IsEnabled` property for external queries. All log methods (`Log`, `LogSeparator`, `LogException`) check `_enabled` first. |
+| `hook/StartupHook.cs` | Dev-channel log gate at top of `InjectorLoop()`: loads settings, checks `AutoUpdateChannel`, calls `Logger.Disable()` if not "developer". Safe fallback on settings load failure (keeps logging enabled). |
 
 ## MessageLogger Plugin (WIP — 2026-02-18)
 
@@ -175,6 +171,7 @@ The Avalonia-native link embed engine is broadly functional:
 
 ### Known Issues — Being Fixed
 - **HasBeenDeleted reliability**: The async poller approach depends on `HasBeenDeleted` being set to true by Root within the 3s polling window. Needs real-world validation — if Root sets it asynchronously after a longer delay, the timeout may need adjustment.
+- **Wrong injection position**: Deleted message cards always appear at the bottom of the chat panel instead of in-place near the original message position.
 
 ### Not Yet Working / Disabled
 - **Edit detection**: Disabled — `PollEdits` produces false positives from content changes during message send/render. `ApplyEditIndicators` injects TextBlocks that break Avalonia's message layout (greyed out messages, "(edited 12x)" on every message)
@@ -204,10 +201,12 @@ See `docs/dev/TESTING.md` for full reference.
 
 ## Next Steps
 
-1. **MessageLogger: validate async pollers** — Async deletion pollers (HasBeenDeleted, 300ms/3s) are deployed and injection position is fixed (order-based). Need real-world validation: test with actual message deletions to confirm HasBeenDeleted is set within the 3s window. Run `scripts/analyze-msglogger.ps1` to analyze diagnostic output.
-2. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
-3. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
-4. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+1. **MessageLogger: validate async pollers** — Async deletion pollers (HasBeenDeleted, 300ms/3s) are deployed. Need real-world validation: test with actual message deletions to confirm HasBeenDeleted is set within the 3s window. Run `scripts/analyze-msglogger.ps1` to analyze diagnostic output.
+2. **MessageLogger: fix injection position** — Deleted message cards always appear at the bottom of the chat panel instead of in-place near the original message position
+3. **Fix MessageLogger edit detection** — Need reliable edit detection that doesn't false-positive on content changes during send/render
+4. **Discord-style edit indicators** — Show OG content faded above new content with "(edited)" label
+5. **Avalonia-native NSFW filter** — Redesign to intercept image controls in visual tree
+6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
 
 ## ClearURLs Engine Notes
 
