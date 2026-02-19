@@ -37,7 +37,7 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 574 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
+| `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
 | `HtmlPatchVerifier.cs` | 429 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | 2030 | Reflection cache for ~80 Avalonia types (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
@@ -46,7 +46,7 @@ Two independent injection layers into one app:
 | `ThemeEngine.cs` | 2638 | ResourceDictionary overrides, live theme preview, custom ping color override (visual tree walk only — no global accent bleed) |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | 262 | HSL/RGB conversion, contrast calculation |
-| `UprootedSettings.cs` | 209 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |
+| `UprootedSettings.cs` | 210 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |
 | `DotNetBrowserReflection.cs` | 1913 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |

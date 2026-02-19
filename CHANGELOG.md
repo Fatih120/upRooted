@@ -45,7 +45,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **AutoUpdater: background update notification popup** — Background auto-updates (6-hour timer) no longer restart Root immediately. A dismissable overlay card ("Version X was installed. Restart Root to apply.") is shown via `BackgroundUpdateApplied` static event → `ContentPages.ShowUpdateNotification()` on UI thread. Manual check-for-updates still auto-restarts.
 - **Updates settings page** in native Avalonia UI — "Auto-check for updates", "Update notifications", and "Update channel" (stable/dev) controls; wired to `AutoUpdate.*` INI keys
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
-- **Version-gated plugin force-disable on upgrade** — `ForceDisableOnUpgrade` dictionary in `StartupHook` declares which plugins to force-disable when users upgrade to (or through) a given version; cumulative application for skipped versions; downgrade-safe (stamps version only); `CurrentVersion` const replaces hardcoded banner string
+- **Version-gated plugin force-disable on upgrade** — `ForceDisableOnUpgrade` dictionary in `StartupHook` declares which plugins to force-disable when users upgrade to (or through) a given version; cumulative application for skipped versions; downgrade-safe (stamps version only); `CurrentVersion` const replaces hardcoded banner string. Ships with MessageLogger and ContentFilter disabled for v0.4.0 (both unvalidated).
 - **Developer-channel-only logging** — hook log file (`uprooted-hook.log`) is only written when the update channel is set to "developer"; stable channel users produce no log file; `Logger.Disable()` suppresses all writes and deletes any brief log fragment from early startup
 - **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
@@ -69,6 +69,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Version migration never read Version from INI** — `UprootedSettings.Load()` had no `case "Version":` in its INI parser switch, so the `Version` property always retained the hardcoded default. Version migration (`ForceDisableOnUpgrade`) never detected upgrades because both sides of the comparison were the same default value. Added the missing case.
+  - File: `hook/UprootedSettings.cs`
+- **Force-disable on upgrade didn't affect ContentFilter** — ContentFilter's enabled state is read from `NsfwFilterEnabled`, not `Plugins["content-filter"]`. The migration loop only set `Plugins[pluginId] = false`, which the UI and engine ignored. Now also sets `NsfwFilterEnabled = false` when disabling `content-filter`.
+  - File: `hook/StartupHook.cs`
 - **About > Status plugin count** — enabled count was inflated by ghost entries in `settings.Plugins` (e.g. `settings-panel` from legacy migration). Now iterates `KnownPlugins` with the same enabled-check logic as the Plugins page, including the `content-filter` → `NsfwFilterEnabled` special case.
   - File: `hook/ContentPages.cs`
 - **Plugin restart banner disappears on tab switch** — restart banner was lost when navigating away from the Plugins tab and back because `initialPluginStates` was re-snapshotted from current settings on each page rebuild. Now persists as static `_launchPluginStates` (set once on first build), and the banner starts visible on rebuild if any plugin already diverges from launch state.

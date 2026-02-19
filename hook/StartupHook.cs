@@ -89,6 +89,9 @@ internal class StartupHook
                             foreach (var pluginId in disableList)
                             {
                                 migrationSettings.Plugins[pluginId] = false;
+                                // content-filter uses NsfwFilterEnabled as its canonical toggle
+                                if (pluginId == "content-filter")
+                                    migrationSettings.NsfwFilterEnabled = false;
                                 Logger.Log("Startup", $"  Force-disabled plugin '{pluginId}' (v{version} policy)");
                             }
                         }

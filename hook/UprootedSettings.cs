@@ -87,6 +87,7 @@ internal class UprootedSettings
                 {
                     case "ActiveTheme": settings.ActiveTheme = val; break;
                     case "Enabled": settings.Enabled = val == "true"; break;
+                    case "Version": settings.Version = val; break;
                     case "CustomCss": settings.CustomCss = val; break;
                     case "CustomAccent": settings.CustomAccent = val; break;
                     case "CustomBackground": settings.CustomBackground = val; break;
