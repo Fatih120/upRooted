@@ -49,7 +49,7 @@ internal class SidebarInjector
     // Save bar (freeze prevention for Revert button)
     private object? _saveBar;                            // Root's save bar container (hide when Uprooted pages active)
     private object? _revertButton;                       // Revert button inside save bar (PointerPressed interception)
-    private bool _saveBarWasVisible = true;              // Original save bar visibility before we hid it
+    private bool _saveBarWasVisible = false;              // Original save bar visibility before we hid it
 
     // Header state (back arrow hidden + title set when Uprooted pages active)
     private object? _backButton;                         // The back arrow RootSvgButton in header (left side)
@@ -139,7 +139,40 @@ internal class SidebarInjector
     /// </summary>
     private void OnLayoutUpdated()
     {
-        if (_injected) return;  // Already injected, nothing to detect
+        if (_injected)
+        {
+            // Catch Root's async save bar creation the instant it triggers a layout pass.
+            // When Root creates the SaveChangesView (~200ms after our ListBox deselection),
+            // this fires on the same frame — hiding it before a single painted frame.
+            if (_activePage != null)
+            {
+                if (_saveBar != null)
+                {
+                    if (_r.GetIsVisible(_saveBar))
+                        _r.SetIsVisible(_saveBar, false);
+                }
+                else if (_layoutContainer != null)
+                {
+                    var bar = _walker.FindSaveBar(_layoutContainer);
+                    if (bar != null)
+                    {
+                        _saveBar = bar;
+                        _r.SetIsVisible(bar, false);
+                        _revertButton = _walker.FindRevertButton(bar);
+                        if (_revertButton != null)
+                        {
+                            _r.SubscribeEvent(_revertButton, "Click", () =>
+                            {
+                                Logger.Log("Injector", "Revert button Click -- cleaning up injection BEFORE teardown");
+                                CleanupInjection();
+                            });
+                        }
+                        Logger.Log("Injector", "Save bar caught+hidden via LayoutUpdated intercept");
+                    }
+                }
+            }
+            return;
+        }
 
         // Throttle: at most one check per 32ms (~2 frames at 60fps)
         long now = Environment.TickCount64;
@@ -250,7 +283,13 @@ internal class SidebarInjector
             _nativeFontFamily = _r.GetFontFamily(layout.AppSettingsText);
 
             // Step 1: Handle save bar (freeze prevention for Revert button)
+            // Record visibility NOW, before any tab click triggers ListBox deselection
+            // (deselection makes Root think settings changed and show the save bar)
             _saveBar = layout.SaveBar;
+            if (_saveBar != null)
+            {
+                _saveBarWasVisible = _r.GetIsVisible(_saveBar);
+            }
             if (_saveBar != null)
             {
                 _revertButton = _walker.FindRevertButton(_saveBar);
@@ -446,7 +485,7 @@ internal class SidebarInjector
         _activeContentPage = null;
         _activePage = null;
         _hiddenContentChildren.Clear();
-        _saveBarWasVisible = true;
+        _saveBarWasVisible = false;
         _versionTextBlock = null;
         _versionContainer = null;
         _lastListBoxIdx = -1;
@@ -770,6 +809,14 @@ internal class SidebarInjector
                 _activeContentPage = page;
             }
 
+            // Snapshot save bar visibility BEFORE deselection — deselection triggers
+            // Root's change detection which shows the save bar asynchronously.
+            // We must capture the real state before our action contaminates it.
+            if (_saveBar == null && _layoutContainer != null)
+                _saveBar = _walker.FindSaveBar(_layoutContainer);
+            if (_saveBar != null)
+                _saveBarWasVisible = _r.GetIsVisible(_saveBar);
+
             // Deselect Root's ListBox items (triggers Root's "no tab" state with back arrow)
             if (_listBox != null)
             {
@@ -830,7 +877,11 @@ internal class SidebarInjector
         // Restore back button visibility
         RestoreBackButton();
 
-        // Restore save bar to its original visibility state
+        // Restore save bar to its original pre-deselection visibility state.
+        // Search for it if not yet found (handles race where user switches back
+        // before delayed check discovers the save bar Root created).
+        if (_saveBar == null && _layoutContainer != null)
+            _saveBar = _walker.FindSaveBar(_layoutContainer);
         if (_saveBar != null)
             _r.SetIsVisible(_saveBar, _saveBarWasVisible);
 
@@ -1169,7 +1220,9 @@ internal class SidebarInjector
         }
         if (_saveBar != null)
         {
-            _saveBarWasVisible = _r.GetIsVisible(_saveBar);
+            // Don't record _saveBarWasVisible here — it was captured before ListBox
+            // deselection. Recording now would capture Root's post-deselection state
+            // (always visible) instead of the real baseline.
             _r.SetIsVisible(_saveBar, false);
         }
     }
@@ -1181,8 +1234,8 @@ internal class SidebarInjector
     /// </summary>
     private void ScheduleDelayedSaveBarHide()
     {
-        if (_saveBar != null) return; // Already found, nothing to do
-
+        // Always schedule delayed checks: Root may show the save bar asynchronously
+        // after our ListBox deselection, even if we already found and hid it.
         System.Threading.ThreadPool.QueueUserWorkItem(_ =>
         {
             // Check at 200ms, 500ms, 1000ms after the nav click
@@ -1193,16 +1246,28 @@ internal class SidebarInjector
                 Thread.Sleep(sleepMs);
                 elapsed = checkAt;
 
-                if (_saveBar != null || _activePage == null) return;
+                if (_activePage == null) return;
 
                 _r.RunOnUIThread(() =>
                 {
                     try
                     {
-                        if (_saveBar != null || _activePage == null) return;
-                        FindAndHideSaveBar();
+                        if (_activePage == null) return;
+                        // Re-hide if Root showed the save bar after our last hide
                         if (_saveBar != null)
-                            Logger.Log("Injector", "Save bar found+hidden via delayed search (" + checkAt + "ms)");
+                        {
+                            if (_r.GetIsVisible(_saveBar))
+                            {
+                                _r.SetIsVisible(_saveBar, false);
+                                Logger.Log("Injector", $"Save bar re-hidden via delayed check ({checkAt}ms)");
+                            }
+                        }
+                        else
+                        {
+                            FindAndHideSaveBar();
+                            if (_saveBar != null)
+                                Logger.Log("Injector", $"Save bar found+hidden via delayed search ({checkAt}ms)");
+                        }
                     }
                     catch { }
                 });
