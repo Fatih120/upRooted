@@ -6,24 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [Unreleased] - 2026-02-18
-
-### Infrastructure
-
-- **Unit testing expanded to 170 tests** — 113 new xUnit tests covering three pure-logic C# modules:
-  - `ClearUrlsEngineTests.cs` (58 tests) — all 33 tracking params, fragments, case insensitivity, idempotency, prefix-safety edge cases
-  - `UprootedSettingsTests.cs` (22 tests) — INI parse, type coercion, cache/invalidation, save/load roundtrip, migration
-  - `MessageStoreTests.cs` (18 tests) — MSG/EDIT/DEL/CLR records, URI encoding roundtrip, malformed line tolerance, Truncate semantics
-  - Test stubs for `Logger`, `PlatformPaths`, `AvaloniaReflection`, `VisualTreeWalker` eliminate all disk I/O in tests; sequential collection fixture prevents static-state cross-contamination
-  - All 170 tests pass; zero bugs discovered in the three new modules
-- **Docker unit test sandbox** — `tests/Dockerfile.unittest` + `tests/run-docker-tests.sh`: builds a clean `mcr.microsoft.com/dotnet/sdk:10.0` container, runs all tests with XPlat code coverage, extracts results to `tests/coverage/`
-- **Linux installer Docker sandbox** — `tests/docker-installer/Dockerfile`: Ubuntu 24.04 container runs `install-uprooted-linux.sh` end-to-end (curl shim bypasses GitHub download, fake Root + profile dir provided), `verify.sh` checks 14 post-install conditions (env vars, wrapper script, HTML patch, artifact presence)
-
----
-
-## [0.3.6-rc] - 2026-02-18
+## [0.4.0] - 2026-02-18
 
 ### Added
+
+- **FontScale system** — modular font scaling for settings pages. `FontScale` record struct with `PageScale` (11/13/12/13) and `LightboxScale` (18/20/17/18) presets. Shared builders (`CreateSectionHeader`, `BuildSettingsToggle`) accept optional scale parameter, defaulting to `PageScale`. Plugin info/settings lightboxes pass `LightboxScale` for larger, more readable text in modal overlays. Main pages unaffected.
+  - File: `hook/ContentPages.cs`
 - **MessageLogger plugin** (WIP) — logs deleted messages in Avalonia-native chat with visual indicators
   - Per-item async deletion pollers: each removed item is polled for `HasBeenDeleted` every 300ms for 3s; true = genuine deletion, false = buffer management (discard)
   - Epoch-based channel switch cancellation: pollers check birth epoch against current and self-cancel when stale
@@ -49,26 +37,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **MessageLogger settings page** in native Avalonia UI — Log Deleted Messages, Log Edited Messages, Ignore Own Messages toggles; Max Messages retention limit input
 - **`BuildSettingsToggle` helper** in `ContentPages` — reusable pill-toggle + label + description component for any boolean plugin setting
 - **TUI installer interactive mode selector** — launching the installer with no flags now shows an arrow-key menu (Install / Uninstall / Repair) instead of defaulting to install
-- **ProfileBadgeInjector** — injects an "Uprooted Dev" badge into Root's profile popup overlay; active only when update channel is set to Developer; event-driven detection via OverlayLayer.Children CollectionChanged + 500ms fallback poll for TopLevel popups; badge gated to hardcoded developer usernames
-  - File: `hook/ProfileBadgeInjector.cs`
-- **ClearURLs engine** — strips tracking parameters from URLs in the compose editor before the message is sent
-  - Hooks `AvaloniaEdit.TextEditor`'s `TextArea` via `AddHandler(RoutedEvent, …, handledEventsToo: true)` with all routing strategies (Bubble|Tunnel|Direct) — required because AvaloniaEdit marks Enter as `Handled=true`
-  - 33 tracking params (utm_*, fbclid, gclid, etc.) in a case-insensitive `HashSet` for O(1) lookup; fragment-preserving; idempotent (no write if no params remain)
-  - Timer-based `TextArea` discovery (2s interval) via visual tree walk for `RootMessageTextboxView`
-  - File: `hook/ClearUrlsEngine.cs`
-- **Custom ping/reply highlight color** — standalone override for the mention/reply highlight color, independent of active theme
-  - "Ping Color" toggle inside the Custom Theme card (same box, separated by a divider line) — not a separate section
-  - ThemeEngine: `SetCustomPingColor()`, `ClearCustomPingColor()`, `ApplyPingColorOverride()` override `HighlightForegroundColor/Brush` and `TextSelectionHighlightColor` (0x60 alpha) in Styles[0].Resources + MergedDictionary
-  - Applied as Phase 6 after theme apply and live preview updates; restored to theme defaults on clear
-  - New setting: `CustomPingColor` in UprootedSettings (INI), applied at startup in Phase 3.5
-- **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
+- **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change
 - **Plugin Roadmap** (`docs/PLUGIN_ROADMAP.md`) — planned plugins with architectural notes: ClearURLs, MessageLogger (design reference), NoReplyPing, Translate
 - **Built-in plugin documentation** (`docs/plugins/builtin/`) — design doc for MessageLogger
-- **Video preview embeds** (.mp4, .webm, .mov) — direct video URLs show a dark 16:9 placeholder with centered play button overlay; clicking opens the URL in the default browser (same UX as YouTube embeds). Detected by file extension (`VideoUrlRegex`) or `video/*` Content-Type for extensionless URLs. No HTTP fetch needed for extension-matched URLs.
-- **LinkEmbeds "Show file names" toggle** — image-only embeds now hide the filename title by default; new `LinkEmbedsShowFilenames` setting with live toggle in LinkEmbeds plugin settings lightbox; `RefreshTitleVisibility()` updates all live cards instantly without re-fetching
-- **LinkEmbedEngine.Instance** static property — enables ContentPages to call `RefreshTitleVisibility()` on settings change
 
 ### Changed
+
 - **Settings page font sizes**: tuned to match Root's native settings page scale (section headers 11, labels 13, descriptions 12, page titles 15, lightbox titles 16; toggle pills 44×24, card width 560)
 - **ContentFilter API key textbox**: vertically centered text with padding (matches search box style)
 - **Log startup separator**: 3 blank lines before first `[Entry]` log on Root launch for clear visual separation
@@ -78,19 +52,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **LinkEmbeds**: testing status promoted from Alpha → Beta
 - **SidebarInjector**: UPROOTED nav section repositioned above "APP SETTINGS" (was appended at bottom); uses `FindAppSettingsInsertionPoint` to locate insertion index, falls back to append
 - Rust installer `detection.rs`: `get_root_exe_path()` updated with 7-strategy Root detection to match bash installer (exact paths → glob patterns → `.desktop` file scan → `/proc/*/exe` → PATH lookup → `locate` database → shallow `find`)
-- Version bumped to `0.3.6-rc` across all components (Cargo.toml, PKGBUILD, installer scripts)
 
 ### Fixed
-- Cargo.toml version format: `0.3.6-rc` → `0.3.6-rc` (bare version string caused `cargo build` to abort with exit code 101)
+
+- **Custom theme color swatches** — accent and background swatches in the custom theme section now display the correct color; ThemeEngine visual tree walker was recoloring them because they lacked the `uprooted-no-recolor` tag. Both swatches now tagged correctly in `ContentPages.cs`.
+- **Tenor embed bypass too aggressive** — `NativeEmbedDomainRegex` was skipping all `tenor.com` URLs, but Root only natively embeds `media.tenor.com` (direct CDN GIF URLs). Now only `media.tenor.com` is skipped; `tenor.com/view/` pages go through the OG pipeline, extracting `og:image` GIF URL and rendering as animated inline embed.
+- **Animated GIF frame compositing** — delta-encoded GIF frames had black pixels and wrong ordering because each frame was decoded into a fresh zeroed bitmap while `PriorFrame` told SKCodec the buffer already contained previous frame data. Now uses a persistent canvas bitmap that accumulates frame data across all frames.
+- **Video embed filename toggle** — direct video embeds (`.mp4`, `.webm`, `.mov`) now respect the "Show file names" LinkEmbeds setting; `isImageOnlyEmbed` check previously excluded `VideoId="direct"`.
+- **TypeScript layer code quality** (7 fixes) — `after` patch callback now invoked by PluginLoader; `deepMerge` for settings (fixes nested-object overwrite); theme var names derived from `generateCustomVariables` keys; MutationObserver skips own `[data-uprooted]` mutations; sidebar click listener removed in cleanup (no more accumulation); `Object.freeze` on settings global; sentry-blocker `!` assertions replaced with null-check fallbacks.
+  - Files: `src/core/pluginLoader.ts`, `src/core/settings.ts`, `src/plugins/themes/index.ts`, `src/plugins/settings-panel/panel.ts`, `src/core/preload.ts`, `src/plugins/sentry-blocker/index.ts`
+- **SidebarInjector**: phantom "Unsaved Changes" save bar no longer flashes when switching to Uprooted settings tabs — Root creates a `SaveChangesView` ~200ms after ListBox deselection; `LayoutUpdated` intercept now catches it on the same render frame (zero visible flash). Save bar visibility snapshotted before deselection and defaults to false.
+  - File: `hook/SidebarInjector.cs`
+- **SidebarInjector**: save bar restore now only triggers when leaving Uprooted tabs, not on Root-to-Root tab switches — prevents suppressing the legitimate "Unsaved Changes" bar when users actually change Root settings
+- **SidebarInjector**: save bar restoration uses `ClearValue("IsVisibleProperty")` instead of `SetIsVisible()` — `SetIsVisible(false)` created a local value override that permanently sat above Root's ViewModel data binding, preventing the save bar from ever appearing for legitimate changes. `ClearValue` removes the override entirely, letting Root's `HasUnsavedChanges` binding take control.
 - **SidebarInjector**: UPROOTED section header spacing now matches Root's native section categories (16px top margin on container, -4px bottom margin on header wrapper)
 - **SidebarInjector**: switching from Uprooted tabs back to Root tabs is now instant (subscribed `ListBox.SelectionChanged` instead of waiting for 200ms timer poll)
+- **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
+- **ThemeEngine**: eliminated theme flash when opening settings or switching tabs — walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) triggered after injection completes, on ListBox selection changes, and on Uprooted tab switches; added 50ms rapid follow-up to catch async-loaded content faster
 - **ProfileBadgeInjector**: fixed `double?` to `double` implicit conversion error in username font size comparison
 - **ProfileBadgeInjector**: badge was appearing beside the username (inside the horizontal name row) instead of below it — fixed by walking up the visual tree to find the first vertical StackPanel (`Orientation == Vertical`), then inserting at the username row's index+1; added `IsVerticalPanel()` helper (checks `Orientation` property for StackPanels, falls back to Y-bounds delta comparison for Grid/DockPanel)
 - **ProfileBadgeInjector**: badge made smaller and centered (font 12→10, padding 10,4→7,2, dot 8×8→6×6, `HorizontalAlignment=Center`)
 - **ProfileBadgeInjector**: badge was appearing on every profile popup indiscriminately — now gated to hardcoded developer usernames (`DeveloperUsernames` HashSet, case-insensitive). Detection switched from 500ms-only polling to event-driven via `OverlayLayer.Children.CollectionChanged` (instant) + 500ms fallback poll for TopLevel popups. Startup delay reduced from 25s to 5s.
 - **Deploy script**: `deploy-hook.ps1` now relaunches Root via `UprootedLauncher.exe` (sets CLR profiler env vars) instead of bare `Root.exe`
-- **SidebarInjector**: eliminated visible pop-in delay when opening settings — now uses `LayoutUpdated` event on MainWindow for same-frame detection instead of relying solely on 200ms timer poll; diagnostics (`DumpVersionRecon`) moved to run after injection so first-open UI is not blocked
-- **ThemeEngine**: eliminated theme flash when opening settings or switching tabs — walk bursts (immediate + 50ms/200ms/500ms/1s follow-ups) triggered after injection completes, on ListBox selection changes, and on Uprooted tab switches; added 50ms rapid follow-up to catch async-loaded content faster
 - **MessageLogger**: restored missing `_initialSnapshotIds` and `_lastSubscriptionTime` field declarations (build fix)
 - **LinkEmbedEngine**: image embed borders now round all 4 corners (set `HorizontalAlignment("Left")` on imgBorder so it shrink-wraps the image instead of stretching to fill the StackPanel)
 - **LinkEmbedEngine**: `HttpGetBytes` now validates HTTP status code (rejects non-2xx) and Content-Type (rejects non-`image/*`) — catches Cloudflare challenge pages and other non-image responses that previously failed silently
@@ -103,7 +86,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **AutoUpdater**: post-update "Restart" button (was "OK" — required manual relaunch); `AutoUpdater.Instance` set immediately at Phase 4.5d startup so ContentPages restart button always has a reference
 - **AutoUpdater**: DLL update now uses rename-then-copy (rename existing to `.old`, copy new, delete `.old`) to avoid file-locked copy failures on Windows
 - **AutoUpdater** (dev channel): pre-releases now detected via `/releases?per_page=1` instead of `/releases/latest` (which skips pre-releases)
-
 - **Build scripts portability**: all `tools/*.cmd` scripts (`_build_profiler.cmd`, `_build.bat`, `build_all.cmd`, `build_proxy.cmd`, `build_uiohook_proxy.cmd`, `launch_hooked.cmd`) replaced hardcoded `C:\Users\bash\...` paths with `%~dp0` relative paths and `vswhere.exe` auto-detection
 - **test-hook.ps1**: updated from deprecated `CORECLR_*` env vars to `DOTNET_*` (required for .NET 10+)
 - **diagnose.ps1**: now checks `DOTNET_*` profiler env vars (primary) and warns if legacy `CORECLR_*` vars are detected
@@ -112,17 +94,52 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **build-installer.ps1**: renamed from `build_installer.ps1`; updated from Tauri to console TUI installer build; profiling disable now handles both `DOTNET_*` and `CORECLR_*` vars; fixed `cl.exe` stderr banner crash (`$ErrorActionPreference` temporarily set to `Continue` around `2>&1`)
 - **deploy-hook.ps1**: JS files now warn when missing instead of silently skipping
 
+### Removed
+
+- **About Themes card** — removed informational "ABOUT THEMES" card from the bottom of the Themes settings page.
+
+### Infrastructure
+
+- **CI: dynamic version** — build workflows no longer hardcode the version; read from `package.json` by default, accepts optional `version` input on `workflow_dispatch`. Releases only publish when triggered manually — push builds run full pipeline and upload CI artifacts only.
+- **CI: prerelease flag** — `workflow_dispatch` now accepts a `prerelease` boolean input (defaults `true`) to control whether the GitHub release is marked as a pre-release.
+- **Unit testing expanded to 170 tests** — 113 new xUnit tests covering three pure-logic C# modules:
+  - `ClearUrlsEngineTests.cs` (58 tests) — all 33 tracking params, fragments, case insensitivity, idempotency, prefix-safety edge cases
+  - `UprootedSettingsTests.cs` (22 tests) — INI parse, type coercion, cache/invalidation, save/load roundtrip, migration
+  - `MessageStoreTests.cs` (18 tests) — MSG/EDIT/DEL/CLR records, URI encoding roundtrip, malformed line tolerance, Truncate semantics
+  - Test stubs for `Logger`, `PlatformPaths`, `AvaloniaReflection`, `VisualTreeWalker` eliminate all disk I/O in tests; sequential collection fixture prevents static-state cross-contamination
+  - All 170 tests pass; zero bugs discovered in the three new modules
+- **Docker unit test sandbox** — `tests/Dockerfile.unittest` + `tests/run-docker-tests.sh`: builds a clean `mcr.microsoft.com/dotnet/sdk:10.0` container, runs all tests with XPlat code coverage, extracts results to `tests/coverage/`
+- **Linux installer Docker sandbox** — `tests/docker-installer/Dockerfile`: Ubuntu 24.04 container runs `install-uprooted-linux.sh` end-to-end (curl shim bypasses GitHub download, fake Root + profile dir provided), `verify.sh` checks 14 post-install conditions (env vars, wrapper script, HTML patch, artifact presence)
+
 ### Documentation
+
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins
 - Added `docs/plugins/builtin/message-logger.md` — MessageLogger design reference
-- Updated `ARCHITECTURE.md`, `HOOK_REFERENCE.md`, `INSTALLER.md`, `AVALONIA_PATTERNS.md`, `THEME_ENGINE_DEEP_DIVE.md` for v0.3.6-rc state
-- Updated `TASKS.md`, `NEW-SESSION.md`, `NEXT-RELEASE.md` with v0.3.6-rc tracking
+- Updated `ARCHITECTURE.md`, `HOOK_REFERENCE.md`, `INSTALLER.md`, `AVALONIA_PATTERNS.md`, `THEME_ENGINE_DEEP_DIVE.md` for current state
+
+---
+
+## [0.3.6-rc] - 2026-02-18
+
+### Added
+
+- **All plugins disabled by default** on new installs — existing users' settings preserved via INI migration (`PluginDefaults.Migrated` flag)
+- **Silent Typing plugin** — suppresses typing indicators by intercepting `SetTypingIndicator` calls (contributed by Kurumi Nanase)
+  - File: `src/plugins/silent-typing/index.ts`
+- **Reddit link embeds** — dedicated handler with `old.reddit.com` OG fetch, subreddit provider label (e.g. "r/programming"), Reddit orange (`#FF4500`) accent color; falls through to generic OG if no title found
+- **Video preview embeds** (.mp4, .webm, .mov) — direct video URLs show a dark 16:9 placeholder with centered play button overlay; clicking opens the URL in the default browser. Detected by file extension (`VideoUrlRegex`) or `video/*` Content-Type for extensionless URLs.
+- **LinkEmbeds "Show file names" toggle** — image-only embeds now hide the filename title by default; new `LinkEmbedsShowFilenames` setting with live toggle in LinkEmbeds plugin settings lightbox
+- **Custom ping/reply highlight color** — standalone override for the mention/reply highlight color, independent of active theme; "Ping Color" toggle inside the Custom Theme card
+- **Plugin toggle functionality** — enable/disable individual plugins from settings; state-aware restart banner (hides when user reverts); Restart button launches new Root process
+- **ProfileBadgeInjector** — "Uprooted Dev" badge on profile popups (developer channel only, hardcoded dev usernames)
+- **Message deletion pollers** — per-item async pollers check `HasBeenDeleted` every 300ms for 3s with epoch-based channel switch cancellation and diagnostic instrumentation
 
 ---
 
 ## [0.3.5] - 2026-02-18
 
 ### Added
+
 - ClearURLs plugin — strips tracking parameters (utm_source, fbclid, gclid, si, etc.) from URLs in the compose editor when the user presses Enter to send (`hook/ClearUrlsEngine.cs`). Hooks AvaloniaEdit.TextEditor's TextArea via Avalonia routed events with `handledEventsToo=true` (all routing strategies required). 33 tracking params, idempotent, fragment-preserving.
 - Animated image embeds — `.gif` and `.webp` URLs play inline with frame-accurate timing via SkiaSharp `SKCodec` reflection (`hook/AnimatedImage.cs`), with per-embed animation timers and automatic cleanup on card removal; graceful fallback to static first frame if SkiaSharp frame APIs are unavailable
 - Link embeds: direct image URL fast path — `.jpg`, `.png`, `.gif`, `.webp`, `.bmp`, `.svg` URLs render instantly with zero network
@@ -135,6 +152,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Settings cache: 10-second TTL cache on `UprootedSettings.Load()` to avoid disk I/O on every 500ms timer tick
 
 ### Changed
+
 - Link embeds: Chrome-like User-Agent replaces bot UA (`Uprooted/0.2`) for better site compatibility
 - Link embeds: per-request bot UA for Twitter/X and embed-fixer domains (vxtwitter, fxtwitter, fixupx) that serve OG only to crawlers
 - Link embeds: embed-fixer domain normalization — fixupx/fxtwitter/fixvx URLs normalized to vxtwitter.com for richer OG metadata with images
@@ -153,6 +171,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - Deploy script: launch Root.exe directly instead of UprootedLauncher.exe
 
 ### Fixed
+
 - Settings crash: clicking the back arrow on Uprooted tabs no longer freezes Root — back arrow hidden by position detection, `DetachedFromVisualTree` safety net clears ScrollViewer before recursive detach, Button events use `Click` instead of `PointerPressed`
 - Settings header: Uprooted tabs now show page title and preserve X close button, matching Root's native `TabName [spacer] X` format
 - Settings section header: "UPROOTED" sidebar section now uses 40px wrapper matching native ListBoxItem height for consistent vertical spacing
@@ -162,15 +181,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.3.2] - 2026-02-17
 
 ### Changed
+
 - Installer auto-closes Root before install, repair, and uninstall operations
 - Wait for Root process exit before deploying files
 
 ### Fixed
+
 - Link embed text readability improvements
 
 ## [0.3.0] - 2026-02-17
 
 ### Added
+
 - Console TUI installer replacing Tauri GUI (~600KB vs ~100MB)
 - `--debug` CLI mode with live installation diagnostics
 - Link embeds plugin (Discord-style OpenGraph + YouTube previews)
@@ -181,10 +203,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - KDE Plasma environment variable propagation for profiler loading
 
 ### Changed
+
 - Anti-reverse-engineering hardening: stripped symbols, LTO, no PDBs
 - Hook log now read from profile directory instead of deploy directory
 
 ### Fixed
+
 - `MYGUID` uses unsigned long (8 bytes on Linux x64), fixing all GUID comparisons on Linux
 - `Assembly.CreateInstance` replaced with `GetType` + `Activator.CreateInstance`
 - Link embeds registered in C# KnownPlugins array
@@ -194,6 +218,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.2.3] - 2026-02-16
 
 ### Fixed
+
 - `TypeLoadException` in profiler context by replacing `ValueTuple` with plain class
 - `file://` URL handling on Linux
 - CRLF enforcement for cross-platform compatibility
@@ -201,6 +226,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.2.2] - 2026-02-16
 
 ### Fixed
+
 - Wayland blank window on Linux (disabled GPU compositing)
 - `file://` URL resolution on Linux
 - Bash installer improvements
@@ -208,6 +234,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 ## [0.2.1] - 2026-02-16
 
 ### Fixed
+
 - Click-handler crash on Uprooted settings pages
 - Release artifact naming consistency
 
@@ -216,6 +243,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 First stable baseline. Consolidates all prior development (v0.1.x series) into a versioned release with conventional commit history.
 
 ### Added
+
 - **C# .NET hook** with multi-phase startup (Phase 0--5), Avalonia reflection cache (~80 types), sidebar injection, native settings pages
 - **TypeScript browser injection** with plugin runtime, bridge proxies, CSS theme engine
 - **Tauri/Rust installer** with Root auto-detection, HTML patching, file deployment, environment variable management
@@ -234,6 +262,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0
 [0.3.6-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.5...v0.3.6-rc
 [0.3.5]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.5
 [0.3.2]: https://github.com/watchthelight/uprooted-private/compare/v0.3.0...v0.3.2
