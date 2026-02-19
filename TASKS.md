@@ -42,42 +42,30 @@ Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The r
 
 ### Analyze existing dumps (marked "N" — not yet distilled into docs)
 
-**Style files:**
-- [ ] **Analyze Style_DropDownButton.cs** (136 lines) — DropDownButton: BackgroundTertiary bg, Border border
-- [ ] **Analyze Style_DragTabItem.cs** (54 lines) — DragTabItem: draggable tab styling
-- [ ] **Analyze Style_FlyoutPresenter.cs** (55 lines) — FlyoutPresenter: popup container
-- [ ] **Analyze Style_MenuFlyoutPresenter.cs** (71 lines) — MenuFlyoutPresenter: context menu container. Relevant to Translate plugin (right-click context menu).
-- [ ] **Analyze Style_RootColorPicker.cs** (106 lines) — RootColorPicker: color picker control
-- [ ] **Analyze Style_RootImageLoader.cs** (76 lines) — RootImageLoader: image loading/placeholder
-- [ ] **Analyze Style_BorderlessTextbox.cs** (75 lines) — BorderlessTextbox: no-border text input
-- [ ] **Analyze Style_TextButton.cs** (73 lines) — TextButton: text-only button variant
-- [ ] **Analyze Style_ToolTip.cs** (71 lines) — ToolTip: tooltip popup styling
-- [ ] **Analyze Style_TabsControl.cs** (48 lines) — TabsControl: tab container
-- [ ] **Analyze Style_TabsTheme.cs** (53 lines) — TabsTheme: tab visual theme
-- [ ] **Analyze StylesAll.cs** (5,228 lines) — Aggregate of all 27 style registrations; useful for understanding load order
-
-**Newly split — high priority (unblocks active work):**
-- [ ] **Analyze RootSettingsContainer.cs** (990 lines) — Settings page host: save bar, page switching, revert. Fixes save bar collapse hack in SidebarInjector.
-- [ ] **Analyze MainViewModel.cs** (400 lines) — Top-level VM: DataContext chain root, navigation, DI. Improves DotNetBrowser discovery.
-- [ ] **Analyze RootMessageItemsControl.cs** (378 lines) — Virtualized message list. Critical for MessageLogger: reveals recycling strategy.
-- [ ] **Analyze RootMenuFlyout.cs** (97 lines) — Context menu. Prerequisite for Translate plugin.
-- [ ] **Analyze MainWindow.cs** (317 lines) — Top-level window: title bar, tray, close/minimize.
-- [ ] **Analyze MainView.cs** (259 lines) — Main content shell: hosts RootSplitView, navigation.
-- [ ] **Analyze ILocalDataStore.cs** (13 lines) + **LocalDataStore.cs** (271 lines) + **LocalDataStoreExtensions.cs** (232 lines) — Settings persistence: full API surface for per-user settings.
+**Style files (line counts updated after re-split):**
+- [ ] **Analyze Style_DropDownButton.cs** (121 lines) — DropDownButton: BackgroundTertiary bg, Border border
+- [ ] **Analyze Style_DragTabItem.cs** (37 lines) — DragTabItem: draggable tab styling
+- [ ] **Analyze Style_FlyoutPresenter.cs** (34 lines) — FlyoutPresenter: popup container
+- [ ] **Analyze Style_MenuFlyoutPresenter.cs** (51 lines) — MenuFlyoutPresenter: context menu container. Relevant to Translate plugin (right-click context menu).
+- [ ] **Analyze Style_RootColorPicker.cs** (83 lines) — RootColorPicker: color picker control
+- [ ] **Analyze Style_BorderlessTextbox.cs** (50 lines) — BorderlessTextbox: no-border text input
+- [ ] **Analyze Style_TextButton.cs** (58 lines) — TextButton: text-only button variant
+- [ ] **Analyze Style_ToolTip.cs** (49 lines) — ToolTip: tooltip popup styling
+- [ ] **Analyze Style_TabsControl.cs** (32 lines) — TabsControl: tab container
+- [ ] **Analyze Style_TabsTheme.cs** (33 lines) — TabsTheme: tab visual theme
 
 **Newly split — medium priority (useful context):**
 - [ ] **Analyze RootTextbox.cs** (996 lines) — Custom textbox with validation, character limit, helper text
 - [ ] **Analyze RootConfirmationControl.cs** (901 lines) — Confirmation dialog (delete/leave/ban flows)
 - [ ] **Analyze RootMessageScrollViewer.cs** (645 lines) — Message list scroll container, load-more behavior
 - [ ] **Analyze RootScrollViewer.cs** (431 lines) — Custom scroll viewer
-- [ ] **Analyze SaveChangesView.cs** (396 lines) — Settings save/revert bar UI
 - [ ] **Analyze RootMultiCheckBox.cs** (478 lines) — Multi-option checkbox group
 - [ ] **Analyze RootMemberVisibilitySwitch.cs** (747 lines) — Member visibility toggle
-- [ ] **Analyze MenuItemPageContainerView.cs** (281 lines) + **MenuItemPageContainerViewModel.cs** (135 lines) — Settings page container
+- [ ] **Analyze MenuItemPageContainerView.cs** (281 lines) — Settings page container view
 - [ ] **Analyze RootSvgImage.cs** (144 lines) — SVG image with per-theme path binding
 - [ ] **Analyze RootImageLoader.cs** (178 lines) — Image loading control
 - [ ] **Analyze RootFlyout.cs** (172 lines) — Flyout popup base
-- [ ] **Analyze SecureStorageImplementation.cs** (86 lines) — Encrypted credential storage
+- [ ] **Analyze HomeViewModel.cs** (883 lines) — Main view after login: tab management, navigation, DM calls
 
 ### Complete partial analysis
 
@@ -94,14 +82,8 @@ Tasks from [`research/ilspy_dump_index.md`](research/ilspy_dump_index.md). The r
 
 ### Decompile new classes (not yet in ilspy-dumps/)
 
-Remaining targets after batch split (Controls, Settings, UI.Main, Domain.Helpers.Store now done):
-
-- [ ] **Decompile IRootSessionAccessor** — Session/user info service. Needed for per-user features.
-- [ ] **Decompile profile popup views** — Profile popup structure. Would refine ProfileBadgeInjector's `IsProfilePopup` heuristic.
 - [ ] **Decompile channel list / DM list views** — Channel sidebar. Low priority until channel-related plugins are planned.
 - [ ] **Decompile navigation service** — How Root switches between pages. Would enable programmatic navigation.
-- [ ] **Decompile MembersViewModel / CommunityLogViewModel / CommunityTabViewModel** — Referenced in XamlIlTrampolines, not yet extracted.
-- [ ] **Decompile CTextBlock / CSpan / CHyperlink / CRun / CCode** — Markdown internals (sub-types of RootMarkdownTextBlock). Unlocks message content manipulation.
 
 ## Ideas / Backlog
 
@@ -118,6 +100,13 @@ Items not yet committed to but worth tracking.
 ## Done
 
 Move completed items here with the date.
+
+- [x] **ILSpy batch split + analysis session** (2026-02-19) — Split 10 grouped namespace dumps into 156 individual files (66 → 219 total, 145k lines). Analyzed 29 files into ROOT_CONTROL_REFERENCE.md. Fixed Style_ file split boundaries (27 files). Tagged 3 oversized files with -GREPONLY suffix. Audited and corrected all 3 Root findings docs.
+- [x] Analyze RootSettingsContainer, MainViewModel, RootMessageItemsControl, RootMenuFlyout, MainWindow, MainView, ILocalDataStore + LocalDataStore + LocalDataStoreExtensions, SaveChangesView, IPage, MenuItemPageContainerViewModel, SecureStorageImplementation (2026-02-19)
+- [x] Analyze Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService (2026-02-19)
+- [x] Analyze CTextBlock, CSpan, CHyperlink, CInline, CRun, CCode, CImage — markdown rendering system (2026-02-19)
+- [x] Analyze MemberProfileView, MemberProfileViewModel, ViewFactory (236 VM→View mappings) (2026-02-19)
+- [x] Decompile IRootSessionAccessor, profile popup views, MembersViewModel/CommunityLogViewModel/CommunityTabViewModel, CTextBlock/CSpan/CHyperlink/CRun/CCode (2026-02-19)
 
 ---
 
