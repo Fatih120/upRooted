@@ -68,3 +68,12 @@ media/Screenshot 2026-02-16 165432.png
 media/tmpq9qrI2.webp
 .gitignore
 media/Screenshot 2026-02-16 172755.png
+_release_artifacts/UprootedHook.dll
+_release_artifacts/UprootedHook.deps.json
+_release_artifacts/uprooted.css
+_release_artifacts/uprooted-preload.js
+_release_artifacts/nsfw-filter.js
+.gitignore
+_release_artifacts/auto-update.uprpkg
+.gitignore
+_release_artifacts/link-embeds.js
