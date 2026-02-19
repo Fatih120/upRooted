@@ -603,7 +603,8 @@ Each theme's 32 color keys (BrandPrimary, TextPrimary, etc.) live inside the `Bu
 ```csharp
 app.Styles.Add(new SimpleTheme());           // Avalonia minimal base
 app.Styles.Add(new MediaFluentTheme());      // NOT standard FluentTheme!
-// + TextBox/Button focus adorner removal
+app.Styles.Add(TextBox FocusAdorner = null);  // Inline style: removes focus adorner
+app.Styles.Add(Button FocusAdorner = null);   // Inline style: removes focus adorner
 app.Styles.Add(AvaloniaEdit.axaml);          // Code editor theme
 app.Styles.Add(RootColorPicker.axaml);       // Custom color picker
 app.Styles.Add(BorderlessTextbox.axaml);
@@ -632,7 +633,7 @@ app.Styles.Add(ToolTip.axaml);
 app.Styles.Add(Slider.axaml);
 ```
 
-**Root uses `MediaFluentTheme`** (NOT standard `FluentTheme`). This is why our current ThemeEngine targeting FluentTheme resource keys (`SystemAccentColor`, `TextFillColorPrimary`) doesn't work — Root's controls are styled by MediaFluentTheme + 26 custom style overrides that reference Root's own 32 resource keys.
+**Root uses `MediaFluentTheme`** (NOT standard `FluentTheme`). This is why our current ThemeEngine targeting FluentTheme resource keys (`SystemAccentColor`, `TextFillColorPrimary`) doesn't work — Root's controls are styled by MediaFluentTheme + 25 custom style files (loaded as 30 total `Styles.Add` calls: 2 base themes + 2 inline focus adorner removal + 1 AvaloniaEdit + 25 Root axaml) that reference Root's own 32 resource keys.
 
 ### Initialize Order
 
@@ -730,15 +731,16 @@ Neither is theme-relevant.
 
 | File | Lines | What it styles |
 |------|-------|----------------|
-| `Style_MessageMarkdown.cs` | 1070 | **All markdown rendering** — mentions, links, code blocks, blockquotes |
-| `Style_RootSplitView.cs` | 609 | Main layout (sidebar + content split) |
-| `Style_ComboBox.cs` | 504 | Dropdown selects with full state machine |
-| `Style_BorderButton.cs` | 339 | Primary action buttons |
-| `Style_SvgButton.cs` | 324 | Icon buttons with hover/pressed states |
-| `Style_ComboBoxItem.cs` | 296 | Dropdown items with selection states |
-| `Style_Slider.cs` | 221 | Volume/setting sliders |
-| `Style_CheckBox.cs` | 203 | Custom checkbox with `.ToggleSwitch` class variant |
-| `Style_TransparentButton.cs` | 210 | Ghost buttons (transparent bg) |
+| `Style_MessageMarkdown.cs` | 1,074 | **All markdown rendering** — mentions, links, code blocks, blockquotes |
+| `Style_RootSplitView.cs` | 614 | Main layout (sidebar + content split) |
+| `Style_ComboBox.cs` | 505 | Dropdown selects with full state machine |
+| `Style_BorderButton.cs` | 348 | Primary action buttons |
+| `Style_SvgButton.cs` | 329 | Icon buttons with hover/pressed states |
+| `Style_ComboBoxItem.cs` | 305 | Dropdown items with selection states |
+| `Style_TransparentButton.cs` | 227 | Ghost buttons (transparent bg) |
+| `Style_ScrollViewer.cs` | 227 | Scroll containers |
+| `Style_Slider.cs` | 218 | Volume/setting sliders |
+| `Style_CheckBox.cs` | 212 | Custom checkbox with `.ToggleSwitch` class variant |
 
 ---
 
@@ -838,7 +840,7 @@ ChatViewModel shows per-user settings via `ILocalDataStore.TryGetWithPath([userI
 
 ## Raw Decompilation Sources
 
-ILSpy dumps stored in `research/ilspy-dumps/` (gitignored):
+ILSpy dumps stored in `research/ilspy-dumps/` (219 files committed to repo, 145,733 lines total):
 
 | File | Contents |
 |------|----------|
@@ -851,10 +853,10 @@ ILSpy dumps stored in `research/ilspy-dumps/` (gitignored):
 | `ChangeThemeViewModel.cs` | Theme picker ViewModel (ObservableProperty, OnThemeChanged) |
 | `ChangeThemeViewModelFactory.cs` | Factory for ChangeThemeViewModel (DI) |
 | `ChangeThemeView.cs` | Theme picker view (4 RadioButtons, DynamicResource for all colors) |
-| `-AvaloniaResources.cs` | Full CompiledAvaloniaXaml (3MB) — all Populate/Build methods |
+| `-AvaloniaResources-GREPONLY.cs` | Full CompiledAvaloniaXaml (55k lines) — all Populate/Build methods. Grep-only, never read in full. |
 | `XamlDynamicSetters.cs` | Dynamic property setters for compiled XAML |
 | `XamlIlContext.cs` | XAML IL compilation context |
-| `XamlIlHelpers.cs` | XAML IL helper methods (3MB) |
+| `XamlIlHelpers-GREPONLY.cs` | XAML IL helper methods (33k lines). Grep-only, never read in full. |
 | `XamlIlTrampolines.cs` | XAML IL trampoline stubs |
 | `Application.cs` | Avalonia.Application base class (resource resolution order) |
 | `AppBuilder.cs` | Avalonia.AppBuilder (app setup chain) |
@@ -877,34 +879,34 @@ ILSpy dumps stored in `research/ilspy-dumps/` (gitignored):
 | `SimpleTheme.cs` | Avalonia.Themes.Simple (1022 lines) — base theme with ThemeDictionaries (Default+Dark), accent colors |
 | `ChatView.cs` | Chat settings view — DynamicResource pattern, RootBorder cards, ToggleSwitch checkboxes |
 | `ChatViewModel.cs` | Chat settings VM — AutoConvertEmojis, TapToReply (per-user ILocalDataStore) |
-| `StylesAll.cs` | Combined 27 style Populate methods (5228 lines) — split into Style_*.cs below |
-| `Style_MessageMarkdown.cs` | **1070 lines** — all mention types, links, code blocks, blockquotes |
-| `Style_RootSplitView.cs` | 609 lines — main layout sidebar + content split |
-| `Style_ComboBox.cs` | 504 lines — dropdown with full state machine |
-| `Style_BorderButton.cs` | 339 lines — primary action buttons |
-| `Style_SvgButton.cs` | 324 lines — icon buttons |
-| `Style_ComboBoxItem.cs` | 296 lines — dropdown items |
-| `Style_Slider.cs` | 221 lines — sliders |
-| `Style_TransparentButton.cs` | 210 lines — ghost buttons |
-| `Style_CheckBox.cs` | 203 lines — checkbox + .ToggleSwitch variant |
-| `Style_MenuItem.cs` | 176 lines — context menu items |
-| `Style_DropDownButton.cs` | 119 lines — dropdown trigger buttons |
-| `Style_ScrollViewer.cs` | 225 lines — scroll containers |
-| `Style_ListBoxItem.cs` | 94 lines — list items |
-| `Style_RootColorPicker.cs` | 89 lines — color picker styles |
-| `Style_TabItem.cs` | 86 lines — tab items |
-| `Style_LinkButton.cs` | 68 lines — link-styled buttons |
-| `Style_Separator.cs` | 66 lines — separators |
+| `StylesAll-GREPONLY.cs` | Combined 27 style Populate methods (5,228 lines) — split into Style_*.cs below |
+| `Style_MessageMarkdown.cs` | **1,074 lines** — all mention types, links, code blocks, blockquotes |
+| `Style_RootSplitView.cs` | 614 lines — main layout sidebar + content split |
+| `Style_ComboBox.cs` | 505 lines — dropdown with full state machine |
+| `Style_BorderButton.cs` | 348 lines — primary action buttons |
+| `Style_SvgButton.cs` | 329 lines — icon buttons |
+| `Style_ComboBoxItem.cs` | 305 lines — dropdown items |
+| `Style_TransparentButton.cs` | 227 lines — ghost buttons |
+| `Style_ScrollViewer.cs` | 227 lines — scroll containers |
+| `Style_Slider.cs` | 218 lines — sliders |
+| `Style_CheckBox.cs` | 212 lines — checkbox + .ToggleSwitch variant |
+| `Style_MenuItem.cs` | 177 lines — context menu items |
+| `Style_DropDownButton.cs` | 121 lines — dropdown trigger buttons |
+| `Style_ListBoxItem.cs` | 96 lines — list items |
+| `Style_TabItem.cs` | 92 lines — tab items |
+| `Style_RootColorPicker.cs` | 83 lines — color picker styles |
+| `Style_LinkButton.cs` | 72 lines — link-styled buttons |
+| `Style_Separator.cs` | 68 lines — separators |
 | `Style_ListBox.cs` | 63 lines — list containers |
-| `Style_RootImageLoader.cs` | 59 lines — image loader |
-| `Style_BorderlessTextbox.cs` | 58 lines — textbox without borders |
-| `Style_TextButton.cs` | 56 lines — text-only buttons |
-| `Style_ToolTip.cs` | 54 lines — tooltips |
-| `Style_MenuFlyoutPresenter.cs` | 54 lines — flyout menu presenters |
-| `Style_FlyoutPresenter.cs` | 38 lines — generic flyout presenters |
+| `Style_TextButton.cs` | 58 lines — text-only buttons |
+| `Style_RootImageLoader.cs` | 53 lines — image loader |
+| `Style_MenuFlyoutPresenter.cs` | 51 lines — flyout menu presenters |
+| `Style_BorderlessTextbox.cs` | 50 lines — textbox without borders |
+| `Style_ToolTip.cs` | 49 lines — tooltips |
 | `Style_DragTabItem.cs` | 37 lines — draggable tab items |
-| `Style_TabsTheme.cs` | 36 lines — tab theme |
-| `Style_TabsControl.cs` | 31 lines — tab control container |
+| `Style_FlyoutPresenter.cs` | 34 lines — generic flyout presenters |
+| `Style_TabsTheme.cs` | 33 lines — tab theme |
+| `Style_TabsControl.cs` | 32 lines — tab control container |
 | `NamespaceInfo_Themes_Base.cs` | AvaloniaEdit XML namespace registrations |
 | `NamespaceInfo_Themes_Simple.cs` | AvaloniaEdit Simple theme namespace registrations |
 | `NamespaceInfo_Themes_Fluent.cs` | AvaloniaEdit Fluent theme namespace registrations |

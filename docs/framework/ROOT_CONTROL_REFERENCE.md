@@ -1279,7 +1279,7 @@ Commands: `SendMessage` (opens DM), `SendFriendRequest` (async), `Call` (opens D
 
 ### ViewFactory (1,725 lines, static class)
 
-Single method: `CreateView(IViewModelBase) -> Control` -- a massive type-switch (`is` chain) mapping **237 ViewModel types** to their View counterparts.
+Single method: `CreateView(IViewModelBase) -> Control` -- a massive type-switch (`is` chain) mapping **236 ViewModel types** to their View counterparts.
 
 Pattern:
 ```csharp
@@ -1303,7 +1303,7 @@ This is Root's entire VM-to-View registry. Used by `ViewLocator.Build(object dat
 | `ChatViewModel` | `ChatView` |
 | `MembersViewModel` | `MembersView` |
 
-**237 total mappings** -- every ViewModel in Root has an entry. New VMs added to the app require a corresponding entry here. The method is pure pattern-matching with no reflection or dictionary lookup.
+**236 total mappings** -- every ViewModel in Root has an entry. New VMs added to the app require a corresponding entry here. The method is pure pattern-matching with no reflection or dictionary lookup.
 
 ---
 

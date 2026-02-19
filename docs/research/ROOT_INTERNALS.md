@@ -44,7 +44,7 @@ Uprooted is a client modification framework that injects custom UI, plugin infra
 
 ### Scope of This Document
 
-This document covers Root's architecture as observed through reverse engineering of version 0.9.86 and surrounding versions. All findings come from static analysis of the binary, source map extraction, runtime observation, and network traffic analysis. Nothing here is based on Root's internal documentation or source code access.
+This document covers Root's architecture as observed through reverse engineering of versions 0.9.86 through 0.9.92. Early sections come from static analysis of the binary, source map extraction, runtime observation, and network traffic analysis. Later sections (DotNetBrowser discovery chain, chat-is-Avalonia-native finding) are confirmed by ILSpy decompilation of v0.9.92. Nothing here is based on Root's internal documentation or source code access.
 
 This is the **native/.NET/system-level view** aimed at Uprooted framework contributors who need to understand the host application deeply. Plugin authors who only need to work within the Chromium context should start with [Root Environment](../plugins/ROOT_ENVIRONMENT.md) instead.
 
@@ -62,7 +62,7 @@ All 11 EXE/DLL files carry valid Authenticode signatures (see Appendix). However
 
 ### Avalonia UI Framework
 
-Root uses **Avalonia 11.3.10** as its UI framework. Avalonia is a cross-platform .NET UI framework comparable to WPF but not dependent on Windows. Key Avalonia concepts relevant to Uprooted:
+Root uses **Avalonia 11.3.12** as its UI framework. Avalonia is a cross-platform .NET UI framework comparable to WPF but not dependent on Windows. Key Avalonia concepts relevant to Uprooted:
 
 | Concept | Relevance to Uprooted |
 |---------|----------------------|
@@ -127,7 +127,20 @@ The .NET host creates JavaScript bridge objects that are injected into the Chrom
 
 ### How Root Embeds Chromium
 
-Root accesses DotNetBrowser programmatically through its ViewModel chain, NOT through a `BrowserView` Avalonia control. Root does not ship `DotNetBrowser.AvaloniaUi` (the package that provides `BrowserView`). No browser-like controls exist in the Avalonia visual tree (confirmed: 1647+ nodes scanned, 0 browser controls found). The browser engine is accessed via: `MainWindow.DataContext` (MainViewModel) → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values` (ConcurrentDictionary).
+Root accesses DotNetBrowser programmatically through its ViewModel chain, NOT through a `BrowserView` Avalonia control. Root does not ship `DotNetBrowser.AvaloniaUi` (the package that provides `BrowserView`). No browser-like controls exist in the Avalonia visual tree (confirmed: 1647+ nodes scanned, 0 browser controls found). The browser engine is accessed via a multi-step ViewModel chain (confirmed by ILSpy decompilation of v0.9.92):
+
+```
+MainWindow.DataContext (MainViewModel)
+  → _memberProfileViewModelFactory (MemberProfileViewModelFactory)
+    → DirectMessageOpenerService (constructor param P_2)
+      → BrowserService (constructor param P_2)
+        → _engineManager (BrowserEngineManager)
+          → .Engine (IEngine)
+            → .Profiles[0].Browsers.__values (ConcurrentDictionary)
+              → IBrowser (BrowserRpcService)
+```
+
+Note: `MainViewModel` does NOT have a direct `BrowserService` field — two intermediate factory/service objects must be traversed. See [ROOT_CONTROL_REFERENCE.md §DirectMessageOpenerService](../framework/ROOT_CONTROL_REFERENCE.md#directmessageopenerservice-109-lines-helpersnavigation) for the full ILSpy-confirmed analysis.
 
 The embedded Chromium engine runs as a set of child processes managed by the DotNetBrowser runtime:
 
