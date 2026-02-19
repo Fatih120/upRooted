@@ -350,9 +350,9 @@ separate frontend build step.
 ### Output
 
 - **Windows:** `installer/src-tauri/target/release/uprooted.exe`
-  (renamed to `Uprooted-0.3.6-rc-Setup.exe` for distribution)
+  (renamed to `Uprooted-0.4.0-Setup.exe` for distribution)
 - **Linux:** `installer/src-tauri/target/release/uprooted`
-  (renamed to `Uprooted-0.3.6-rc-linux-amd64` for distribution)
+  (renamed to `Uprooted-0.4.0-linux-amd64` for distribution)
 
 ---
 
@@ -680,10 +680,10 @@ The version string appears in multiple locations and must be kept in sync.
 
 | Location                                    | Current  | Format     | Used By                              |
 | ------------------------------------------- | -------- | ---------- | ------------------------------------ |
-| `package.json` (`version`)                  | `0.3.6-rc` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
-| `installer/src-tauri/Cargo.toml` (`version`)| `0.3.6-rc` | semver     | Rust crate version, CI rename        |
-| `hook/UprootedSettings.cs` (`Version`)      | `0.3.6-rc` | string     | Default version in settings INI file |
-| `scripts/install-hook.ps1` (settings write) | `0.3.6-rc` | string     | Written to `uprooted-settings.ini`   |
+| `package.json` (`version`)                  | `0.4.0` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
+| `installer/src-tauri/Cargo.toml` (`version`)| `0.4.0` | semver     | Rust crate version, CI rename        |
+| `hook/UprootedSettings.cs` (`Version`)      | `0.4.0` | string     | Default version in settings INI file |
+| `scripts/install-hook.ps1` (settings write) | `0.4.0` | string     | Written to `uprooted-settings.ini`   |
 
 ### How Versions Propagate
 
@@ -692,7 +692,7 @@ The version string appears in multiple locations and must be kept in sync.
    as `window.__UPROOTED_VERSION__` in the browser context.
 
 2. **C# hook:** `UprootedSettings.cs` has a hardcoded default
-   (`Version = "0.3.6-rc"`) that gets written to `uprooted-settings.ini`.
+   (`Version = "0.4.0"`) that gets written to `uprooted-settings.ini`.
    The settings page displays this version as a badge via `ContentPages.cs`,
    and the sidebar injector adds it to the version info box.
 

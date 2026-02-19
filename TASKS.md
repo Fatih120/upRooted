@@ -22,6 +22,9 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
 
+- [ ] **Custom theme: Root settings controls don't recolor instantly** — Toggling Root's native selectors and switches while a custom theme is active doesn't immediately update their accent color. Colors correct themselves after changing tabs and reloading the page. Likely the visual tree walk doesn't re-trigger on control state changes (checked→unchecked, etc.).
+  - Files: `hook/ThemeEngine.cs`
+
 ## Testing
 
 - [ ] **Set up Vitest** — Install Vitest, add `test`/`test:watch`/`test:coverage` scripts, co-locate test files as `.test.ts`.

@@ -29,8 +29,8 @@ The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
-**NSFW filter needs Avalonia-native redesign**
-The NSFW filter still uses the old DotNetBrowser JS injection approach and cannot affect Avalonia-native chat content. Needs full redesign with visual tree image interception.
+**NSFW filter unvalidated**
+The NSFW filter was redesigned in v0.4.0 to use Avalonia-native visual tree scanning (Phase 4.5g) instead of DotNetBrowser JS injection. The redesign is deployed but has not been validated end-to-end with the Google Vision API in production.
 - Files: `hook/NsfwFilter.cs`
 
 **Settings page text-based detection fragile**
@@ -62,11 +62,11 @@ Runtime changes made via the browser-side settings panel only update the in-memo
 
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
-### Complete MessageLogger plugin
-MessageLogger (shipped WIP in v0.4.0) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch). Still needed:
-- **Validate async deletion pollers**: Needs real-world confirmation that `HasBeenDeleted` is set within the 3s window.
-- **Edit detection**: Currently disabled due to false positives from content changes during message send/render.
-- **Discord-style edit indicators**: Show original content faded above the new content with an "(edited)" label.
+### Validate MessageLogger plugin
+MessageLogger (shipped WIP in v0.4.0) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch) and event-driven edit detection (`HandleReplaced` with 5s grace period). Both features are deployed but need real-world validation:
+- **Validate async deletion pollers**: Confirm `HasBeenDeleted` is set within the 3s window for genuine deletions.
+- **Validate edit detection**: Confirm grace period filters send-completion Replaces while catching genuine user edits. Check for false positives.
+- **Validate edit indicators**: Amber-tinted inline cards deployed — verify layout doesn't break in different message contexts.
 - Files: `hook/MessageLogger.cs`
 
 ---

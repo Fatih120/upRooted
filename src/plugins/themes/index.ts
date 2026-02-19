@@ -89,7 +89,7 @@ export function generateCustomVariables(accent: string, bg: string): Record<stri
 export default {
   name: "themes",
   description: "Built-in theme engine for Root Communications",
-  version: "0.3.6-rc",
+  version: "0.4.0",
   authors: [{ name: "Uprooted" }],
 
   settings: {

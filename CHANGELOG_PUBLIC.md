@@ -49,6 +49,16 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 - Auto-updater now shows a "Restart" button after applying updates instead of a generic "OK"
 - Removed the "About Themes" info card from the bottom of the Themes page
 
+### Known Issues
+
+- **Message logger: edit detection may be unreliable** — Edited message indicators (amber cards) are deployed but may produce false positives or miss some edits. We're still validating this in real-world use.
+- **Message logger: deletion detection may miss some deletions** — If a message is deleted with a longer server delay, the 3-second detection window may not catch it.
+- **Profile badge may appear on the wrong popup** — The "Uprooted Dev" badge (developer channel only) may occasionally appear on non-profile popups.
+- **Theme colors may flicker after switching themes** — Some controls may briefly show the wrong color after a theme switch. Reopening settings resolves it.
+- **Custom themes: Root settings controls don't recolor instantly** — Selectors and switches in Root's native settings may not immediately pick up the custom theme accent when toggled. Colors update after changing tabs.
+- **NSFW filter not yet validated** — The content filter has been redesigned but not yet tested end-to-end. It may not function correctly.
+- **Silent Typing not yet validated** — The typing indicator blocker has been rebuilt but not yet confirmed working with two accounts.
+
 ### Linux
 
 - Installer now uses 7 detection strategies to find Root, matching the bash installer

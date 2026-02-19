@@ -137,6 +137,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Docker unit test sandbox** — `tests/Dockerfile.unittest` + `tests/run-docker-tests.sh`: builds a clean `mcr.microsoft.com/dotnet/sdk:10.0` container, runs all tests with XPlat code coverage, extracts results to `tests/coverage/`
 - **Linux installer Docker sandbox** — `tests/docker-installer/Dockerfile`: Ubuntu 24.04 container runs `install-uprooted-linux.sh` end-to-end (curl shim bypasses GitHub download, fake Root + profile dir provided), `verify.sh` checks 14 post-install conditions (env vars, wrapper script, HTML patch, artifact presence)
 
+### Known Issues
+
+- **MessageLogger: edit detection needs validation** — Edit detection (CollectionChanged Replace events with 5s grace period) is deployed but not yet validated in real-world use. False positives from content changes during send/render may still occur. Edit indicator cards may break message layout in some cases.
+- **MessageLogger: deletion pollers need validation** — Async deletion pollers (`HasBeenDeleted` probe every 300ms for 3s) are deployed but unvalidated. If Root sets `HasBeenDeleted` asynchronously after a longer delay, the 3s timeout may be insufficient.
+- **ProfileBadgeInjector: false positives on non-profile popups** — The `IsProfilePopup` heuristic (avatar + username + roles/status/text count) may incorrectly identify non-profile popups as profile popups and inject the dev badge.
+- **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. tab text appears brighter than intended). Self-corrects when the settings screen is reopened. Likely a stale recolor or priority issue in the visual tree walk.
+- **Custom theme: Root settings controls don't recolor instantly** — Toggling Root's native selectors and switches while a custom theme is active does not immediately update their accent color. Colors correct themselves after changing tabs and reloading the page. The visual tree walk does not re-trigger on control state changes.
+- **NSFW filter: unvalidated** — Avalonia-native redesign (Phase 4.5g) is deployed but has not been tested with the Google Vision API in production. Image classification, blur overlay, and click-to-reveal may not function correctly.
+- **SilentTyping: unvalidated** — C# `TypingBlockerHandler` (Phase 4.5f) is deployed but has not been validated with two accounts. The `HttpClient` discovery (static field scan + ViewModel chain walk) may not find all relevant instances.
+
 ### Documentation
 
 - Added `docs/PLUGIN_ROADMAP.md` with implementation strategies for 4 planned plugins

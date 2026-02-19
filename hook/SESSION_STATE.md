@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-18)
 
-## Release: v0.3.6-rc
+## Release: v0.4.0
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
@@ -82,7 +82,7 @@ Key details:
 | 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution (video thumbnails for LinkEmbedEngine) |
 
-## Link Embed Engine (v0.3.3–0.3.6-rc)
+## Link Embed Engine (v0.3.3–0.4.0)
 
 The Avalonia-native link embed engine is broadly functional:
 
