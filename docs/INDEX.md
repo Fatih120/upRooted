@@ -34,6 +34,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Plugin Examples            | [`docs/plugins/EXAMPLES.md`](plugins/EXAMPLES.md)                                       | Annotated example plugins covering common patterns                                                                           | Plugin authors                         |
 | Theme Engine Deep Dive     | [`docs/framework/THEME_ENGINE_DEEP_DIVE.md`](framework/THEME_ENGINE_DEEP_DIVE.md)       | ThemeEngine algorithm deep dive (live preview, color audit, revert)                                                          | Framework contributors                 |
 | Avalonia Patterns          | [`docs/framework/AVALONIA_PATTERNS.md`](framework/AVALONIA_PATTERNS.md)                 | Avalonia UI concepts through Uprooted's reflection-only lens                                                                 | Framework contributors                 |
+| Root Control Reference     | [`docs/framework/ROOT_CONTROL_REFERENCE.md`](framework/ROOT_CONTROL_REFERENCE.md)       | Root's custom controls, style classes, message view structure, theme mechanics, DataStore keys — from ILSpy decompilation    | Framework contributors                 |
 | .NET Runtime               | [`docs/framework/DOTNET_RUNTIME.md`](framework/DOTNET_RUNTIME.md)                       | CLR profiler, IL injection, assembly scanning, startup hooks                                                                 | Framework contributors                 |
 | Root Internals             | [`docs/research/ROOT_INTERNALS.md`](research/ROOT_INTERNALS.md)                         | Root's native architecture from reverse engineering                                                                          | Framework contributors                 |
 | gRPC Protocol              | [`docs/research/GRPC_PROTOCOL.md`](research/GRPC_PROTOCOL.md)                           | Complete gRPC-web protocol reference (27 services)                                                                           | Security researchers                   |
@@ -186,6 +187,13 @@ For setting up a development environment.
 | Research files                | [Research Index](research/RESEARCH_INDEX.md)                            | --                          |
 | Reverse engineering           | [Reverse Engineering](research/REVERSE_ENGINEERING.md)                  | --                          |
 | Root architecture             | [Root Internals](research/ROOT_INTERNALS.md)                            | --                          |
+| Root custom controls          | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Custom Controls             |
+| Root style classes            | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Style Class System          |
+| Root message view             | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Message View Internals      |
+| Root mention system           | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Mention and Markdown System |
+| Root settings page pattern    | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Settings Page Pattern       |
+| Ping color / mention highlight| [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Ping Color                  |
+| Root DataStore keys           | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | DataStore Keys              |
 | Root detection                | [Installer Reference](framework/INSTALLER.md)                           | Root detection              |
 | Security findings             | [Security Research](research/SECURITY_RESEARCH.md)                      | --                          |
 | Sidebar injection             | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Sidebar injection           |

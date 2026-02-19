@@ -1,28 +1,29 @@
 # Theme Engine Deep Dive
 
-> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | [Root Control Reference](ROOT_CONTROL_REFERENCE.md)
 
 For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 
-> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 has identified Root's actual 32 color resource keys and the correct override path (`Application.Resources.ThemeDictionaries[variant]`). Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard `FluentTheme`), and all views bind to Root's 32 custom keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via `DynamicResourceExtension`. The current implementation documented below targets FluentTheme/SimpleTheme keys as a compatibility layer, and a resource-first migration to target Root's actual keys is planned. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full 32-key catalog, three-theme color comparison, and the definitive override strategy.
+> **Research Complete (2026-02-19):** ILSpy decompilation of Root v0.9.92 has fully mapped Root's color system. Root uses its own 32 custom resource keys (`BrandPrimary`, `TextPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]` — NOT FluentTheme or SimpleTheme keys. All Root views and control styles bind to these 32 keys via `DynamicResourceExtension`, meaning overriding them propagates instantly to all bound controls with zero visual tree walking. Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard FluentTheme). The existing ThemeEngine targets the wrong keys; a resource-first migration is the correct fix for the known theme inconsistency bugs. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full 32-key catalog and color values, and [`docs/framework/ROOT_CONTROL_REFERENCE.md`](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) for the implementation guide.
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Resource Dictionary Injection](#resource-dictionary-injection)
-3. [Theme Palette Format](#theme-palette-format)
-4. [Live Preview System](#live-preview-system)
-5. [Tree Fingerprinting](#tree-fingerprinting)
-6. [Color Audit Algorithm](#color-audit-algorithm)
-7. [Custom Theme Generation](#custom-theme-generation)
-8. [Custom Ping Color Override](#custom-ping-color-override)
-9. [Revert Mechanics](#revert-mechanics)
-10. [CSS Variable Bridge](#css-variable-bridge)
-11. [Error Handling](#error-handling)
-12. [Key Data Structures](#key-data-structures)
-13. [Performance Considerations](#performance-considerations)
+2. [Resource-First Migration Plan](#resource-first-migration-plan)
+3. [Resource Dictionary Injection](#resource-dictionary-injection)
+4. [Theme Palette Format](#theme-palette-format)
+5. [Live Preview System](#live-preview-system)
+6. [Tree Fingerprinting](#tree-fingerprinting)
+7. [Color Audit Algorithm](#color-audit-algorithm)
+8. [Custom Theme Generation](#custom-theme-generation)
+9. [Custom Ping Color Override](#custom-ping-color-override)
+10. [Revert Mechanics](#revert-mechanics)
+11. [CSS Variable Bridge](#css-variable-bridge)
+12. [Error Handling](#error-handling)
+13. [Key Data Structures](#key-data-structures)
+14. [Performance Considerations](#performance-considerations)
 
 ---
 
@@ -75,11 +76,118 @@ Theme application proceeds through six phases in `ApplyThemeInternal`
 
 ---
 
+## Resource-First Migration Plan
+
+This section documents the planned migration from the current tree-walk approach to a resource-first approach that directly targets Root's 32 color keys. This will fix the known theme inconsistency bugs.
+
+### Why the Current Approach Has Bugs
+
+The current ThemeEngine has two phases of resource overrides (Phases 1–2) that target FluentTheme/SimpleTheme keys. Root's views do NOT bind to these keys — they bind to Root's own 32 keys (`BrandPrimary`, `TextPrimary`, etc.). So the resource overrides are nearly inert. The visual tree walk (Phase 4) compensates by brute-forcing brush replacement on live controls, but:
+
+1. Controls created/recycled after the walk (VirtualizingStackPanel recycling, new popups) show wrong colors until the next 500ms timer tick
+2. Controls that create new visuals on state change (toggle switch checking, combobox item hovering) resolve fresh resource values — which haven't been overridden
+3. Settings tabs show stale colors until controls are rebuilt on tab switch
+
+All of these are **fixed** by overriding Root's actual 32 keys in `ThemeDictionaries`.
+
+### The Correct Override Path
+
+```csharp
+// Step 1: Get the theme dict for the active (or target) variant
+// Application.Current.Resources is a ResourceDictionary
+// Its ThemeDictionaries is IDictionary<ThemeVariant, IThemeVariantProvider>
+
+var appType = Application.Current.GetType().BaseType; // Avalonia.Application
+var resourcesProp = appType.GetProperty("Resources");
+var resources = resourcesProp.GetValue(Application.Current);
+
+// resources is ResourceDictionary — get ThemeDictionaries
+var themeDictProp = resources.GetType().GetProperty("ThemeDictionaries");
+// IDictionary<ThemeVariant, IThemeVariantProvider>
+var themeDict = themeDictProp.GetValue(resources) as System.Collections.IDictionary;
+
+// Step 2: Get the wrapper dict for the target variant (e.g. ThemeVariant.Dark)
+// Each wrapper is a ResourceDictionary with its colors in MergedDictionaries[0]
+// But we add directly to the wrapper dict — direct entries beat MergedDictionaries
+
+// Step 3: Set keys directly on the wrapper ResourceDictionary
+// ResourceDictionary implements IDictionary<object, object>
+var variantWrapper = themeDict[ThemeVariant.Dark] as System.Collections.IDictionary;
+variantWrapper["BrandPrimary"] = CreateImmutableBrush(accentHex);
+variantWrapper["TextPrimary"] = CreateImmutableBrush("#F2F2F2");
+// ... all 32 keys
+
+// Step 4: Subscribe to ActualThemeVariantChanged to re-apply on native theme switch
+// (when user switches from Dark → Light in Root's settings, re-apply to Light dict)
+```
+
+**Creating brushes:** Use `ImmutableSolidColorBrush` (matching Root's type) or `SolidColorBrush` (both implement `IBrush`). `SolidColorBrush` is easier via reflection. `ImmutableSolidColorBrush(uint argb)` takes a `uint` ARGB — can cast from `Color.ToUint32()`.
+
+### What No Longer Needs Tree Walk
+
+Once Root's 32 keys are overridden correctly:
+- All `DynamicResource`-bound controls update instantly (no 500ms timer needed)
+- Toggle switches checked state (uses `BrandPrimary`) works immediately
+- ComboBox selected state (uses `HighlightStrong`) works immediately
+- MessageMarkdown mention colors (uses all mention keys) work immediately
+- Tab/nav item colors (uses `TextPrimary`) work immediately
+
+**What still needs tree walk (edge cases):**
+- `RootSplitView.PaneBackground` — uses `ThemeControlHighlightLowBrush` from SimpleTheme, not Root's 32 keys (override separately in `Styles[0].Resources`)
+- Controls set via `Application.Current.FindResource(ActualThemeVariant, key)` imperatively (like MessageView's hover state) — already DynamicResource-compatible once key is in dict
+- Any hardcoded ARGB values — near-zero in Root (only role colors and transparent placeholders)
+
+### The 32-Key Mapping for Custom Themes
+
+For a theme with accent color A and background color B, all 32 keys derive as:
+
+| Key | Derivation |
+|-----|-----------|
+| `BrandPrimary` | Accent A directly |
+| `BrandSecondary` | Accent complementary or lighter |
+| `BrandTertiary` | Accent analogous |
+| `TextPrimary` | `#F2F2F2` (dark) or `#131313` (light) |
+| `TextSecondary` | TextPrimary at 64% alpha |
+| `TextTertiary` | TextPrimary at 40% alpha |
+| `TextWhite` | `#F2F2F2` always (used for text on branded bg) |
+| `BackgroundPrimary` | Background B |
+| `BackgroundSecondary` | B slightly lighter |
+| `BackgroundTertiary` | B slightly darker |
+| `Input` | B, darkest variant |
+| `Border` | B desaturated + lightened |
+| `HighlightLight` | White at 4% alpha (`#0AFFFFFF`) |
+| `HighlightNormal` | White at 10% alpha (`#19FFFFFF`) |
+| `HighlightStrong` | White at 19% alpha (`#30FFFFFF`) |
+| `Info` | `#F0F250` (keep or use accent) |
+| `Warning` | `#E88F3D` (keep) |
+| `Error` | `#F03F36` (keep — used for notification badges and message ping border) |
+| `Muted` | B with raised lightness |
+| `Link` | Accent lighter variant |
+| `SelfMention` | Accent at 40% alpha (message row highlight) |
+| `SelfMentionBackground` | Accent at 15% alpha (inline mention pill bg) |
+| `SelfMentionBorder` | Accent at 30% alpha (inline mention pill border) |
+| `OtherMention*` | Link-based at matching alphas |
+| `RoleMention*` | Accent secondary at matching alphas |
+| `ChannelMention*` | Warning-based at matching alphas |
+| `ScrollShadow` | `LinearGradientBrush` (keep) |
+| `DropShadow` | `#80000000` (keep) |
+| `PopupBoxShadow` | `BoxShadows` (keep) |
+
+### Ping Color Fix
+
+Currently the custom ping color feature targets wrong keys. The correct keys:
+- `SelfMention` — message row background wash (what the user sees as the "ping highlight")
+- `SelfMentionBackground` + `SelfMentionBorder` — inline @mention pill in message text
+
+Do NOT override `Error` for ping color — it also controls notification badge background, failed send indicator, and retry button color.
+
+---
+
 ## Resource Dictionary Injection
 
 ### Where Root Stores Its Colors
 
-> **Note:** The resource locations described below are what the current ThemeEngine implementation targets. Research has confirmed that Root's actual 32 color keys live in `Application.Resources.ThemeDictionaries[variant]`, and Root's views bind to those keys (not the FluentTheme/SimpleTheme keys below). See the Research Update at the top of this document.
+> **Note:** The resource locations described below are what the **current** ThemeEngine implementation targets. These are NOT Root's actual theme keys. See [Resource-First Migration Plan](#resource-first-migration-plan) above for the correct approach. Research has confirmed that Root's actual 32 color keys live in `Application.Resources.ThemeDictionaries[variant]`, and Root's views bind to those keys (not the FluentTheme/SimpleTheme keys below). See the Research Update at the top of this document.
 
 Root's Avalonia application uses two resource locations that the current engine targets:
 

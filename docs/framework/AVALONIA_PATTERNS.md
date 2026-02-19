@@ -1,6 +1,6 @@
 # Avalonia Patterns
 
-> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [.NET Runtime](DOTNET_RUNTIME.md)
+> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Theme Engine Deep Dive](THEME_ENGINE_DEEP_DIVE.md) | [.NET Runtime](DOTNET_RUNTIME.md) | [Root Control Reference](ROOT_CONTROL_REFERENCE.md)
 
 ---
 
@@ -12,10 +12,11 @@
 4. [Styling System](#styling-system)
 5. [Threading Model](#threading-model)
 6. [Control Hierarchy](#control-hierarchy)
-7. [Layout System](#layout-system)
-8. [Advanced Patterns](#advanced-patterns)
-9. [Common Reflection Patterns](#common-reflection-patterns)
-10. [Pitfalls](#pitfalls)
+7. [Root Custom Control Types](#root-custom-control-types)
+8. [Layout System](#layout-system)
+9. [Advanced Patterns](#advanced-patterns)
+10. [Common Reflection Patterns](#common-reflection-patterns)
+11. [Pitfalls](#pitfalls)
 
 ---
 
@@ -408,6 +409,69 @@ for the full Enter key interception technique.
 
 ---
 
+## Root Custom Control Types
+
+Root defines custom controls that appear in the visual tree. When walking the tree, you'll encounter these type names. See [Root Control Reference](ROOT_CONTROL_REFERENCE.md) for full details.
+
+| Type | Base | Key Properties | Notes |
+|------|------|---------------|-------|
+| `RootBorder` | `Border` | `DynamicBorderThicknessProperty` | `StyleKeyOverride=typeof(Border)` — uses Border styles |
+| `RootSvgImage` | (control) | `SvgPathProperty` | SVG renderer, path from DynamicResource key |
+| `RootSvgButton` | (button) | `SvgOpacityProperty`, `SvgBorderOpacityProperty` | Icon button, multiple CSS class variants |
+| `RootSvgCheckBox` | `CheckBox` | `SvgOpacityProperty`, `SvgBorderOpacityProperty` | Checkbox with SVG checkmark |
+| `RootScrollViewer` | `ScrollViewer` | — | Transparent background scroll container |
+| `RootScrollBarThumb` | (thumb) | — | 4px wide, TextPrimary color at low opacity |
+| `RootMarkdownTextBlock` | (control) | `Document` property | Markdown renderer — **not a TextBlock** |
+| `RootLinkButton` | (button) | `ForegroundProperty` | Username link in MessageView |
+| `RootMenuFlyout` | (menu) | — | Context menu flyout |
+| `RootMessageScrollViewer` | `ScrollViewer` | — | Message list scroll container |
+| `RootSplitView` | `SplitView` | — | PaneBackground=ThemeControlHighlightLowBrush (SimpleTheme) |
+| `RootPercentageSlider` | `Slider` | — | FG=BrandPrimary, BG=Border |
+| `CTextBlock` | (control) | `SelectionBrushProperty`, `FontSizeProperty`, `ForegroundProperty` | Markdown text |
+| `CInline`, `CRun`, `CHyperlink`, `CSpan`, `CCode` | — | border/bg/fg props | Markdown inline elements |
+
+### Imperative DynamicResource Binding
+
+Root's code-behind uses a special Avalonia syntax to set a DynamicResource binding imperatively:
+
+```csharp
+// Root's updateBackgroundColor() pattern:
+MessageBackgroundBorder[!TemplatedControl.BorderBrushProperty] = new DynamicResourceExtension("Error");
+MessageBackgroundHighlightBorder[!TemplatedControl.BackgroundProperty] = new DynamicResourceExtension("SelfMention");
+
+// Equivalent to XAML:
+// <Border BorderBrush="{DynamicResource Error}" />
+```
+
+This creates a live DynamicResource binding — if the resource changes (e.g., theme switch or our ThemeEngine override), the property auto-updates.
+
+To replicate this in Uprooted via reflection:
+```csharp
+// Find DynamicResourceExtension type from Avalonia.Markup.Xaml assembly
+// Call ProvideValue() on it with the correct IServiceProvider context
+// Or use AvaloniaObjectExtensions.Bind() with the binding
+```
+
+Alternatively, use direct `SetValue` for one-time application (not reactive to resource changes).
+
+### ActualThemeVariantChanged
+
+Root's own views subscribe to `Application.Current.ActualThemeVariantChanged` to re-apply code-behind colors when the user switches themes natively:
+
+```csharp
+// In MessageView.Hook():
+Application.Current.ActualThemeVariantChanged += onActualThemeVariantChanged;
+// Handler re-applies member role colors
+
+// In Uprooted, subscribe to re-apply ThemeEngine overrides after a native theme switch:
+var eventInfo = app.GetType().GetEvent("ActualThemeVariantChanged");
+// Use SubscribeEvent with an Action<object, EventArgs>
+```
+
+Note: `RequestedThemeVariant` changes trigger `ActualThemeVariantChanged`. When Root's user picks a different theme via the settings panel, our ThemeEngine needs to re-apply to the new variant's dictionary.
+
+---
+
 ## Layout System
 
 Avalonia uses a two-pass layout (Measure then Arrange). Uprooted does not call
@@ -710,6 +774,34 @@ first. See [Hook Reference: Compose Input Interception](HOOK_REFERENCE.md#clearu
 
 Root runs Chromium with `--incognito`. `localStorage` is not persisted.
 
+### ImmutableSolidColorBrush(16777215u) Means Transparent
+
+`0x00FFFFFF` = fully transparent (alpha=0, white RGB). Root uses this pattern pervasively to "clear" backgrounds and borders:
+
+```csharp
+setter.Value = new ImmutableSolidColorBrush(16777215u);  // = #00FFFFFF = transparent
+```
+
+You'll see this in ListBox, ListBoxItem, TransparentButton, RootScrollViewer, MenuBorderButton, etc. It is **not** white — it's invisible. When you see this in a dump, the control intentionally has no background/border for that state.
+
+### ListBoxItem Has Fully Transparent Selection Styles
+
+**All** ListBoxItem states — including `:selected`, `:selected:focus`, `:selected:pointerover` — set `ContentPresenter.Background = #00FFFFFF` (transparent). Root's sidebar navigation does NOT use Avalonia's built-in selection highlighting from the ListBoxItem style system.
+
+**Implication:** To find selection highlights in nav items, look inside the item's own data template, not the ListBoxItem template. The selection visual (e.g., left border highlight, background wash) is custom-built into each nav item template.
+
+### RootSplitView Pane Background Is Not in Root's 32 Keys
+
+`RootSplitView.PaneBackgroundProperty` resolves from `ThemeControlHighlightLowBrush` — a SimpleTheme key, NOT one of Root's 32 custom keys. To theme the sidebar/pane background color, override this key in `Styles[0].Resources` (SimpleTheme), not in the ThemeDictionaries.
+
+### Win32 Popups Appear in Separate Win32 Windows
+
+`AppBuilder.With(new Win32PlatformOptions { OverlayPopups = false })` means context menus, dropdowns, and flyouts open in their own Win32 windows. They are NOT in the main window's OverlayLayer. To find/inject into a popup, use `WindowImpl.s_instances` (see AvaloniaReflection) rather than traversing the main visual tree.
+
+### ThemeEngine Currently Targets Wrong Keys
+
+The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentColor`, `TextFillColorPrimary`, etc.) which Root's controls do NOT reference. Root's views exclusively bind to Root's own 32 keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via `DynamicResourceExtension`. This is why some controls remain unthemed after theme application and why toggling a switch mid-theme shows the wrong accent color — the style-level brush still comes from the unmodified root 32 keys. The correct fix is to override Root's 32 keys in `Application.Resources.ThemeDictionaries[variant]`. See [Root Control Reference: Theme System Mechanics](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) and [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
+
 ---
 
-*Last updated: 2026-02-18*
+*Last updated: 2026-02-19*
