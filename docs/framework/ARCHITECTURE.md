@@ -107,7 +107,7 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
        |   +-- VisualTreeWalker (layout discovery)
        |
   Phase 3.5: ThemeEngine init
-       |   (ResourceDictionary + Styles[0].Resources)
+       |   (ResourceDictionary overrides: ThemeDictionaries + visual tree walk)
        |
   Phase 4: SidebarInjector.StartMonitoring()
        |   200ms timer poll
@@ -441,7 +441,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 
 - **Thread:** UI thread (dispatched via `RunOnUIThread()`)
 - **File:** `hook/ThemeEngine.cs`
-- **Action:** Creates `ThemeEngine` instance, loads settings from `uprooted-settings.ini`, applies saved theme (named theme or custom accent/background) by overriding `Application.Styles[0].Resources` and injecting into `Application.Resources.MergedDictionaries`.
+- **Action:** Creates `ThemeEngine` instance, loads settings from `uprooted-settings.ini`, applies saved theme (named theme or custom accent/background). The current implementation overrides `Application.Styles[0].Resources` and injects into `Application.Resources.MergedDictionaries` as a compatibility layer. Root's actual theme keys live in `Application.Resources.ThemeDictionaries[variant]` (32 custom keys like `BrandPrimary`, `TextPrimary`, etc.) — see [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
 - **Failure mode:** Non-fatal. Theme errors are caught and logged; startup continues.
 
 ### Phase 4: Settings Page Monitoring
@@ -684,6 +684,8 @@ Root's settings page uses exact styling values. The C# `ContentPages` class repl
 | Body text | FontSize=13, Normal, `#a3f2f2f2` |
 | Accent green | `#2D7D46` (Uprooted brand) |
 | Accent blue | `#3b6af8` (Root brand) |
+
+*Note: Card background (`#081408`) and border (`#19ffffff`) are Uprooted-specific values. Root's own settings cards use its resource keys: `BackgroundSecondary` for card backgrounds, `Border` for borders, `TextPrimary`/`TextSecondary` for text. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for Root's actual key-color mappings.*
 
 ---
 

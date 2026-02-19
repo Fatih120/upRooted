@@ -1,8 +1,10 @@
 # Theme Engine Deep Dive
 
-> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md)
+> **Related docs:** [Hook Reference](HOOK_REFERENCE.md) | [Architecture](ARCHITECTURE.md) | [Avalonia Patterns](AVALONIA_PATTERNS.md) | [TypeScript Reference](TYPESCRIPT_REFERENCE.md) | [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
 
 For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
+
+> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 has identified Root's actual 32 color resource keys and the correct override path (`Application.Resources.ThemeDictionaries[variant]`). Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard `FluentTheme`), and all views bind to Root's 32 custom keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via `DynamicResourceExtension`. The current implementation documented below targets FluentTheme/SimpleTheme keys as a compatibility layer, and a resource-first migration to target Root's actual keys is planned. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full 32-key catalog, three-theme color comparison, and the definitive override strategy.
 
 ---
 
@@ -32,18 +34,21 @@ The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at
 runtime, without patching any files on disk and without restarting the application.
 
-Root is an Avalonia 11 desktop app. Avalonia distributes colors through two mechanisms:
+Root is an Avalonia 11 desktop app. Root's actual color system uses:
 
-1. **Resource dictionaries** -- named `Color` and `SolidColorBrush` values resolved at
-   render time by controls that use `DynamicResource` bindings (e.g.,
-   `{DynamicResource ThemeAccentBrush}`).
-2. **Hardcoded ARGB values** -- controls created in C# or XAML with literal brush values
-   that do not participate in the resource system (e.g., `Background="#0D1521"`).
+1. **32 custom resource keys** -- `ImmutableSolidColorBrush` values (`BrandPrimary`,
+   `TextPrimary`, `BackgroundPrimary`, etc.) stored in `Application.Resources.ThemeDictionaries[variant]`.
+   Every Root view binds to these keys via `DynamicResourceExtension`. This is the
+   primary color mechanism — hardcoded ARGB values are nearly nonexistent (only server-defined
+   role colors and transparent placeholders).
+2. **FluentTheme/SimpleTheme keys** -- standard Avalonia theme keys (`SystemAccentColor`,
+   `ThemeAccentBrush`, etc.) from `SimpleTheme` + `MediaFluentTheme`. Root's custom views
+   do NOT bind to these keys; only a handful of base control states reference them.
 
-The theme engine must defeat both mechanisms. For resource-bound controls, it overrides
-the dictionaries so that existing `DynamicResource` bindings resolve to new colors.
-For hardcoded controls, it walks the live visual tree and physically replaces brush
-objects on each node.
+The current theme engine targets mechanism (2) via resource overrides, and compensates for
+the mismatch with mechanism (1) by walking the visual tree to physically replace brush
+objects. A planned migration will target Root's actual 32 keys directly, allowing
+DynamicResource bindings to propagate automatically.
 
 ### Role in the Dual-Layer Architecture
 
@@ -74,17 +79,19 @@ Theme application proceeds through six phases in `ApplyThemeInternal`
 
 ### Where Root Stores Its Colors
 
-Root's Avalonia application uses two resource locations:
+> **Note:** The resource locations described below are what the current ThemeEngine implementation targets. Research has confirmed that Root's actual 32 color keys live in `Application.Resources.ThemeDictionaries[variant]`, and Root's views bind to those keys (not the FluentTheme/SimpleTheme keys below). See the Research Update at the top of this document.
 
-- **`Application.Styles[0].Resources`** -- Root's custom theme keys. This is where
-  keys like `ThemeAccentColor`, `ThemeAccentBrush`, `ThemeForegroundLowColor`, and
-  `HighlightForegroundColor` live. These are the keys that Root's own controls bind
-  to via `DynamicResource`. They are NOT overridden by `MergedDictionaries` -- they
-  must be written directly.
+Root's Avalonia application uses two resource locations that the current engine targets:
+
+- **`Application.Styles[0].Resources`** -- SimpleTheme keys like `ThemeAccentColor`,
+  `ThemeAccentBrush`, `ThemeForegroundLowColor`, and `HighlightForegroundColor`.
+  These are SimpleTheme keys, not Root's actual theme keys. Root's views bind to
+  32 custom keys (`BrandPrimary`, `TextPrimary`, etc.) in `ThemeDictionaries` instead.
 
 - **`Application.Resources.MergedDictionaries`** -- Standard Avalonia FluentTheme keys
   like `SystemAccentColor`, `TextFillColorPrimary`, `ControlFillColorDefault`, etc.
-  Adding a `ResourceDictionary` here overrides these system-level defaults.
+  Root uses `MediaFluentTheme` (not standard `FluentTheme`), and its controls do not
+  bind to these keys.
 
 ### Phase 1: Styles[0] Override Algorithm
 
@@ -159,6 +166,8 @@ color strings. The two presets are defined in the static `Themes` dictionary
 **Loki** (`hook/ThemeEngine.cs:2130-2215`): 55 keys, accent `#2A5A40` (moss green)
 
 ### Key Categories
+
+> **Note:** The 55 keys below are FluentTheme/SimpleTheme-oriented. Root's views actually bind to 32 custom keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) stored in `ThemeDictionaries`. A mapping from these 55 keys to Root's 32 actual keys is the planned migration path. See the proposed mapping table in [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#impact-on-uprooteds-themeengine).
 
 The 55+ keys fall into these categories:
 
@@ -639,6 +648,8 @@ independently from the active theme. The override persists across theme switches
 applying a new theme will change everything except the highlight color.
 
 ### Target Resource Keys
+
+> **Note:** The correct target keys for mention/ping highlighting are Root's `SelfMentionBackground`, `SelfMentionBorder`, and `SelfMention` in `ThemeDictionaries`. The current implementation targets `HighlightForegroundColor` (a SimpleTheme key that Root's views don't bind to), which is why the tree walk is needed to propagate the ping color.
 
 | Key | Location | Override Value |
 |-----|----------|---------------|

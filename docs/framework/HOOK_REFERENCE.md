@@ -1744,14 +1744,19 @@ injection and visual tree color walking.
 
 Theme application has 6 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586`):
 
-1. **Phase 1: Override Styles[0].Resources** -- Root's custom theme keys
-   (`ThemeAccentColor`, `ThemeAccentBrush`, etc.) live in
-   `Application.Styles[0].Resources`. These are directly overwritten. Original values
-   are saved in `_savedOriginals` for revert.
+1. **Phase 1: Override Styles[0].Resources** -- SimpleTheme keys
+   (`ThemeAccentColor`, `ThemeAccentBrush`, etc.) in `Application.Styles[0].Resources`
+   are directly overwritten. Original values are saved in `_savedOriginals` for revert.
+   *(Note: These are SimpleTheme keys, not Root's actual theme keys. Root's views bind to
+   32 custom keys (`BrandPrimary`, `TextPrimary`, etc.) in `ThemeDictionaries`.)*
 
-2. **Phase 2: Add MergedDictionary** -- Standard FluentTheme keys are injected via a
+2. **Phase 2: Add MergedDictionary** -- FluentTheme keys are injected via a
    new `ResourceDictionary` added to `Application.Resources.MergedDictionaries`. For
    every Color key, a corresponding Brush variant is auto-generated.
+   *(Note: Root uses `MediaFluentTheme`, not standard `FluentTheme`. Its controls do not
+   bind to these keys (`SystemAccentColor`, etc.). See
+   [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+   for the correct target keys.)*
 
 3. **Phase 3: Visual Tree Color Maps** -- Builds a mapping of original ARGB colors to
    replacement colors. Also cross-maps from previous themes and stale colors via
@@ -1768,6 +1773,12 @@ Theme application has 6 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586
    `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (with `0x60` alpha)
    in both `Styles[0].Resources` and the injected `MergedDictionary`. This runs last
    so the override persists across theme switches.
+   *(Note: Root's actual mention highlight keys are `SelfMentionBackground`,
+   `SelfMentionBorder`, `OtherMentionBackground`, etc. in `ThemeDictionaries`. The
+   current `HighlightForegroundColor` target is a SimpleTheme key that may not affect
+   Root's mention rendering. See
+   [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+   for the correct mention color keys.)*
 
 ### Resource Dictionary Injection
 

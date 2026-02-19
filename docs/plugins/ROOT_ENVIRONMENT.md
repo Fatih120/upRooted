@@ -282,7 +282,7 @@ Uprooted does not currently provide an API for interacting with the Effects SDK 
 
 ## CSS Variable System
 
-Root's entire color system is driven by CSS custom properties. There are two layers:
+Root's **web-side** color system is driven by CSS custom properties. The native Avalonia UI uses a separate system of 32 resource dictionary keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) — see [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md). The CSS variables described below control only the DotNetBrowser/Chromium contexts. There are two layers:
 
 ### Base Variables (`--color-*`)
 
@@ -343,7 +343,7 @@ See the [themes.json](../../src/plugins/themes/themes.json) file for the exact o
 
 ## Theme CSS Variable Architecture
 
-This section explains how Root's CSS variable system works end-to-end and how Uprooted's theme plugin interacts with it.
+This section explains how Root's CSS variable system works end-to-end and how Uprooted's theme plugin interacts with it. These CSS variables control only the DotNetBrowser/Chromium contexts. Root's native Avalonia chat and settings UI are themed via Avalonia ResourceDictionary keys (`BrandPrimary`, `TextPrimary`, etc.) — a parallel system with no direct CSS bridge.
 
 ### How Root Sets Theme Variables
 

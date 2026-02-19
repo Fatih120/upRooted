@@ -8,7 +8,9 @@ Built-in theme engine that overrides Root's CSS variable color system. Supports 
 
 ## What it does
 
-Root's entire color system is driven by `--rootsdk-*` CSS variables on `document.documentElement`. This plugin overrides those variables to apply custom color schemes across the whole UI.
+Root's **web-side** color system is driven by `--rootsdk-*` CSS variables on `document.documentElement`. This plugin overrides those variables to apply custom color schemes across the Chromium/web UI. The native Avalonia UI (chat, sidebar, settings) uses a separate 32-key resource dictionary system managed by the C# ThemeEngine (`hook/ThemeEngine.cs`).
+
+> **Dual-Layer Architecture:** This plugin controls the Chromium/web layer only. The C# ThemeEngine independently controls the native Avalonia layer by overriding resource dictionary keys. Both systems coordinate through `ContentPages.UpdateLiveColors()` to keep the web and native sides in sync when the user changes themes.
 
 Three modes:
 - **Default** -- no overrides, Root's built-in dark theme
@@ -91,6 +93,7 @@ Custom colors (`customAccent`, `customBackground`) are stored in settings but ma
 
 ## Known Limitations
 
+- **Web layer only** -- this plugin only themes the Chromium/web layer (WebRTC, sub-apps). Native Avalonia UI (chat, sidebar, settings) is themed by the C# ThemeEngine independently.
 - **Session-only** -- theme changes via the settings panel don't persist to disk. The installer writes initial theme settings; runtime changes reset on restart.
 - **Variable names are hardcoded** -- if Root adds new `--rootsdk-*` variables, the plugin won't override them
 - **No transition animation** -- theme switches are instant CSS variable updates with no transition

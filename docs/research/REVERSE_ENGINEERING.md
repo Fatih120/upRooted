@@ -686,14 +686,22 @@ Compiled Avalonia XAML themes were found at specific binary offsets:
 | Dark.axaml | `0x19EF3FB0` | UTF-16LE | ~21.5 KB |
 | PureDark.axaml | `0x19EF93D8` | UTF-16LE | ~196 B |
 
-A key discovery: the native Avalonia AXAML themes contain no color brush resources. All UI
-colors come from CSS variables injected into the Chromium webview. The AXAML themes serve
-purely as icon theme packs, mapping approximately 72 SVG resource keys to Light/Dark icon
-variants.
+An initial discovery from binary string scanning: the extracted AXAML theme files contain no
+color brush resources as text strings. The AXAML themes appeared to be purely icon theme
+packs, mapping approximately 72 SVG resource keys to Light/Dark icon variants.
 
-This meant theming the web UI requires only CSS variable overrides (straightforward), while
-theming the native Avalonia UI would require patching hardcoded hex colors in IL bytecode
-(which we ultimately accomplished through the hook's `ThemeEngine.cs`).
+> **Correction (2026-02-19):** ILSpy decompilation later revealed that Root's AXAML themes
+> DO contain 32 color resource keys — but the colors exist as `uint32` ARGB literals in
+> compiled IL deferred factories (`XamlClosure_53/54/55.Build_N`), not as hex strings in the
+> AXAML text. Binary string scanning missed them entirely. Root's native Avalonia UI binds to
+> these 32 keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via
+> `DynamicResourceExtension`. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+> for the full catalog.
+
+The web UI is themed through CSS variable overrides (straightforward). The native Avalonia
+UI is themed by the hook's `ThemeEngine.cs`, which currently targets FluentTheme/SimpleTheme
+keys as a compatibility layer (with visual tree walking to catch hardcoded colors). A
+migration to target Root's actual 32 ThemeDictionary keys is planned.
 
 ---
 

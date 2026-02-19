@@ -316,34 +316,63 @@ Uprooted's bridge proxy intercepts the `initialize()` call, meaning the token pa
 
 Root uses two independent theme systems that operate in parallel, targeting different rendering layers:
 
-**1. CSS Variables (Chromium/Web Side)**
+**1. Avalonia Resource Dictionaries (Native/.NET Side)**
 
-25 CSS custom properties per theme variant, controlling all web UI colors. Applied via the `data-theme` attribute on the `<html>` element. Three variants: `dark`, `light`, and `pure-dark`.
+Root defines **32 color resource keys** as `ImmutableSolidColorBrush` values in `Application.Resources.ThemeDictionaries`, one dictionary per theme variant (Dark, Light, PureDark). Every native Avalonia view (`MessageView`, `DirectMessageTabView`, `ChangeThemeView`, etc.) binds to these keys via `DynamicResourceExtension`. This is the primary color system for Root's native UI — chat messages, sidebar, settings, and all community views.
 
-**2. AXAML Resources (Avalonia/.NET Side)**
+In addition, each theme dictionary contains ~220 SVG asset path references (theme-specific icon variants) and metadata keys (`ThemeName`, `DisplayName`).
 
-Compiled Avalonia XAML themes embedded in the Root.exe binary. These primarily contain SVG asset path references (theme-specific icon variants), not color definitions. Three compiled themes:
+**2. CSS Variables (Chromium/Web Side)**
 
-| Theme | Binary Offset | Encoding | Size |
-|-------|---------------|----------|------|
-| `Light.axaml` | `0x19EED01F` | UTF-16LE | ~28.5 KB |
-| `Dark.axaml` | `0x19EF3FB0` | UTF-16LE | ~21.5 KB |
-| `PureDark.axaml` | `0x19EF93D8` | UTF-16LE | ~196 B |
+25 CSS custom properties per theme variant, controlling the DotNetBrowser/Chromium web UI (WebRTC, sub-apps). Applied via the `data-theme` attribute on the `<html>` element. Three variants: `dark`, `light`, and `pure-dark`. These CSS variables have no effect on the native Avalonia UI.
 
-### Key Discovery: Color Lives in CSS
+### Key Discovery: Full 32-Key Native Color System
 
-The critical finding from binary analysis: **native Avalonia AXAML contains no color brush resources**. All UI colors are delivered via CSS variables to the Chromium webview. The native Avalonia side uses hardcoded hex colors in code, not theme-switchable resources.
+> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 revealed that Root's native Avalonia themes define a complete 32-key color system. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full catalog with hex values for all three themes.
 
-Each AXAML theme defines only three header properties plus ~72 SVG resource key mappings:
+The native Avalonia side has a full color resource system, not hardcoded hex colors. The 32 keys include:
 
-| Property | Light | Dark | Pure Dark |
-|----------|-------|------|-----------|
-| `ThemeName` | Light Theme | Dark Theme | Pure Dark Theme |
-| `ThemeMargin` | `0 0 12 0` | `0 0 12 0` | `0 0 12 0` |
-| `ScrollShadow` | `#19000000` (10% black) | `#80000000` (50% black) | `#000000` (pure black) |
-| `LoadingSpinner` | `LoadingSpinnerLight.json` | `LoadingSpinnerDark.json` | (inherits Dark) |
+| Category | Keys |
+|----------|------|
+| Brand | `BrandPrimary`, `BrandSecondary`, `BrandTertiary` |
+| Text | `TextPrimary`, `TextSecondary`, `TextTertiary`, `TextWhite` |
+| Backgrounds | `BackgroundPrimary`, `BackgroundSecondary`, `BackgroundTertiary`, `Input` |
+| UI Elements | `Border`, `HighlightLight`, `HighlightNormal`, `HighlightStrong` |
+| Status | `Info`, `Warning`, `Error`, `Muted`, `Link` |
+| Mentions | `SelfMention*`, `OtherMention*`, `RoleMention*`, `ChannelMention*` (10 keys) |
+| Effects | `ScrollShadow`, `DropShadow`, `PopupBoxShadow` |
 
-PureDark is minimal (196 bytes) and inherits all SVG references from Dark. It only overrides the header properties.
+These colors exist as `uint32` ARGB literals in compiled IL (deferred factories via `XamlClosure_53/54/55.Build_N`), which is why binary string scanning did not find them — the colors are not present as hex strings in the binary.
+
+**DynamicResource usage is universal.** `MessageView` (232KB, the most complex view) uses 33 `DynamicResourceExtension` calls exclusively targeting Root's 32 keys, with only 4 hardcoded color instances (server-defined role colors and transparent placeholders). Every view examined follows this pattern.
+
+### AXAML Resource Structure
+
+The compiled AXAML themes live in `Application.Resources.ThemeDictionaries`:
+
+```
+Application.Resources (ResourceDictionary)
+├── ThemeDictionaries
+│   ├── ThemeVariant.Light    → ResourceDictionary { MergedDictionaries: [Build_Light()] }
+│   ├── ThemeVariant.Dark     → ResourceDictionary { MergedDictionaries: [Build_Dark()] }
+│   └── ThemeMapper.PureDark  → ResourceDictionary { MergedDictionaries: [Build_PureDark()] }
+├── MergedDictionaries: [Fonts.axaml, Sounds.axaml]
+└── 26 deferred converters
+```
+
+Each theme's `Build_*()` ResourceDictionary contains the 32 color keys + ~220 SVG paths + metadata.
+
+### Style Stack
+
+Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard `FluentTheme`) plus 26 custom style files:
+
+```
+app.Styles[0] = SimpleTheme       // Avalonia minimal base
+app.Styles[1] = MediaFluentTheme  // NOT standard FluentTheme
+app.Styles[2..28] = 26 custom styles (CheckBox, ComboBox, MessageMarkdown, etc.)
+```
+
+The 27 custom style files reference Root's 32 keys via `DynamicResource` (69 usages of 22 unique keys). Only 4 `SimpleTheme` keys are referenced: `ThemeControlHighlightLowBrush`, `ThemeControlLowColor`, `ThemeDisabledOpacity`, `ThemeBorderThickness`.
 
 ### CSS Variable System
 
@@ -365,25 +394,27 @@ Brand primary (`#3B6AF8`) is consistent across all themes. Brand secondary shift
 
 ### Theme Switching Flow
 
-1. User selects a theme in Root's settings
-2. The .NET host calls `window.__rootSdkBridgeNativeToWeb.setTheme(theme)` on the Chromium side
-3. Root's JavaScript sets `data-theme` on the `<html>` element
-4. CSS attribute selectors activate the corresponding variable set
-5. On the native side, Root swaps the compiled AXAML resource dictionary
+1. User selects a theme in Root's settings (4 options: Dark, Light, PureDark, System)
+2. `ThemeService.SetTheme()` calls `Application.Current.RequestedThemeVariant = variant` — this is the **entire switch** on the native side. Avalonia's built-in `ThemeVariant` system selects the correct `ThemeDictionaries` entry automatically, and all `DynamicResource` bindings re-resolve.
+3. PureDark inherits from Dark: `new ThemeVariant("PureDark", ThemeVariant.Dark)` — missing keys fall back to Dark.
+4. Theme is persisted as `int` in `ILocalDataStore` via `DataStoreKeys.Theme` (global, not per-user). Default: Dark.
+5. On the Chromium side, the .NET host calls `window.__rootSdkBridgeNativeToWeb.setTheme(theme)`, Root's JavaScript sets `data-theme` on `<html>`, and CSS attribute selectors activate the corresponding variable set.
 
 Uprooted intercepts this flow at two levels:
 
-- **C# ThemeEngine**: Injects override values into Avalonia's `ResourceDictionary` and `Styles[0].Resources`, allowing native UI color changes. Also manipulates the DWM title bar color via Windows API.
+- **C# ThemeEngine**: Currently overrides `Styles[0].Resources` and injects into `Application.Resources.MergedDictionaries` with FluentTheme keys as a compatibility layer. Research has identified the correct override path: setting keys directly on `Application.Resources.ThemeDictionaries[variant]`, which would allow DynamicResource bindings to propagate automatically. Also manipulates the DWM title bar color via Windows API.
 - **TypeScript theme plugin**: Sets `--rootsdk-*` CSS variables on `document.documentElement`, overriding the web UI colors.
 
 ### How Uprooted Hooks Into Themes
 
-The C# `ThemeEngine` (2,218 lines) uses reflection to:
+The C# `ThemeEngine` (~2,510 lines) uses reflection to:
 
 1. Access `Application.Current.Resources` (the global Avalonia resource dictionary)
-2. Inject `SolidColorBrush` overrides for native controls
-3. Monitor `Styles[0].Resources` for theme-specific resource keys
+2. Override keys in `Styles[0].Resources` (SimpleTheme keys) and inject a `ResourceDictionary` into `Application.Resources.MergedDictionaries` (FluentTheme keys)
+3. Walk the visual tree to physically replace brush objects on controls with hardcoded ARGB values
 4. Apply DWM title bar coloring via `DwmSetWindowAttribute` on Windows
+
+> **Note:** The current ThemeEngine targets FluentTheme/SimpleTheme keys that Root's views don't bind to. The visual tree walk compensates for this by brute-forcing color replacement. Research has confirmed the correct override path is `Application.Resources.ThemeDictionaries[variant]` — setting Root's 32 actual keys there would let DynamicResource bindings propagate automatically, potentially eliminating most of the tree walk. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete override strategy.
 
 The TypeScript theme plugin overrides CSS variables using the `--rootsdk-*` mechanism, which was designed for this exact purpose. Setting inline styles on `:root` takes precedence over stylesheet defaults via CSS specificity rules.
 

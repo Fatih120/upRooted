@@ -349,19 +349,13 @@ Root uses two separate theme systems simultaneously:
 }
 ```
 
-**2. AXAML resources (Avalonia/.NET side)**
+**2. Avalonia Resource Dictionaries (Native/.NET side)**
 
-Compiled Avalonia XAML themes embedded in the binary:
+Root has a **dual color system**: the 25 CSS variables above control the Chromium/web side, while the native Avalonia UI uses a separate system of **32 resource dictionary keys** (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) stored in `Application.Resources.ThemeDictionaries`. Every Root view binds to these keys via `DynamicResourceExtension` — hardcoded colors are nearly nonexistent.
 
-```
-Light.axaml:    Offset 0x19EED01F  (UTF-16LE, ~28.5 KB)
-Dark.axaml:     Offset 0x19EF3FB0  (UTF-16LE, ~21.5 KB)
-PureDark.axaml: Offset 0x19EF93D8  (UTF-16LE, ~196 B)
-```
+> **Research Update (2026-02-19):** ILSpy decompilation of Root v0.9.92 revealed the full 32-key color system. The colors exist as `uint32` ARGB literals in compiled IL deferred factories, which is why binary string scanning missed them. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete catalog with hex values for all three themes.
 
-The key discovery: **native Avalonia AXAML contains no color brush resources**. All UI colors come from CSS variables injected into the Chromium webview. The native side is styled with hardcoded hex colors in the code, not theme resources.
-
-This means to theme the native Avalonia UI, we'd need to patch binary color values — but to theme the web UI, we just override CSS variables. Much easier.
+To theme the web UI, we override CSS variables. To theme the native Avalonia UI, we override the resource dictionary keys — DynamicResource bindings propagate the changes automatically to all bound controls.
 
 ---
 
@@ -588,15 +582,19 @@ The TypeScript layer can retheme Root's web UI by overriding `--rootsdk-*` CSS v
 
 We needed to theme the native Avalonia layer from C# at runtime.
 
-### The approach: resource dictionary injection
+### The approach: resource dictionary injection + visual tree walk
 
-The discovery from Section 8 -- that Root's AXAML themes contain no color brush resources and instead use hardcoded hex colors in code -- meant we couldn't just swap a resource dictionary and call it done. The theme engine takes a two-pronged approach:
+The theme engine takes a multi-pronged approach:
 
-1. **Direct resource override**: Root's `Application.Styles[0].Resources` contains the active `SimpleTheme` resources (`ThemeAccentColor`, `ThemeAccentBrush`, etc.). The theme engine saves the original values, then writes replacement colors directly into this dictionary. These resources aren't overridden by `MergedDictionaries`, so direct writes are the only way.
+1. **Direct resource override**: Root's `Application.Styles[0].Resources` contains `SimpleTheme` resources (`ThemeAccentColor`, `ThemeAccentBrush`, etc.). The theme engine saves the original values, then writes replacement colors directly into this dictionary.
 
-2. **Injected ResourceDictionary**: For standard Fluent theme keys that Root doesn't override, the engine creates a new `ResourceDictionary` and adds it to `Application.Resources.MergedDictionaries`. This covers controls styled by Avalonia's built-in theme rather than Root's custom resources.
+2. **Injected ResourceDictionary**: For standard Fluent theme keys, the engine creates a new `ResourceDictionary` and adds it to `Application.Resources.MergedDictionaries`.
 
-3. **Title bar**: On Windows 11, the engine calls `DwmSetWindowAttribute(DWMWA_CAPTION_COLOR)` via P/Invoke to match the title bar to the active theme's background color.
+3. **Visual tree walk**: A continuous 500ms timer walks the visual tree and physically replaces brush objects on controls with hardcoded ARGB values.
+
+4. **Title bar**: On Windows 11, the engine calls `DwmSetWindowAttribute(DWMWA_CAPTION_COLOR)` via P/Invoke to match the title bar to the active theme's background color.
+
+> **Research Update (2026-02-19):** ILSpy decompilation revealed that Root's controls bind to 32 custom resource keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]` — not the FluentTheme/SimpleTheme keys the current engine targets. Root uses `SimpleTheme` + `MediaFluentTheme` (not standard `FluentTheme`), which is why our resource overrides hit keys that nothing references. The visual tree walk compensates for this. The correct override path — setting keys directly on `ThemeDictionaries[variant]` — would let DynamicResource bindings propagate automatically, potentially eliminating most of the tree walk. This migration is planned. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](research/ROOT_THEME_SYSTEM_FINDINGS.md).
 
 The engine maintains a persistent map from any theme replacement color back to Root's original, so switching themes or reverting doesn't lose track of what the original colors were -- even after multiple theme changes.
 

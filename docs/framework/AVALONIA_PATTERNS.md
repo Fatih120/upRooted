@@ -209,8 +209,9 @@ across the entire native UI.
 
 Key-value stores for reusable values (colors, brushes). They exist at multiple levels:
 
-- `Application.Resources` -- App-wide
-- `Application.Styles[n].Resources` -- Per-style (Root's theme colors live in `Styles[0]`)
+- `Application.Resources` -- App-wide (includes `ThemeDictionaries` for per-variant resources)
+- `Application.Resources.ThemeDictionaries[variant]` -- Per-theme-variant (Root's 32 color keys live here)
+- `Application.Styles[n].Resources` -- Per-style (SimpleTheme/MediaFluentTheme keys)
 - `Control.Resources` -- Per-control
 
 Accessing style resources (`hook/AvaloniaReflection.cs:1588-1616`):
@@ -223,7 +224,7 @@ var stylesProp = app.GetType().GetProperty("Styles");
 ### MergedDictionaries
 
 Uprooted injects a custom `ResourceDictionary` into `Application.Resources.MergedDictionaries`
-to override FluentTheme keys (`hook/AvaloniaReflection.cs:1642-1696`):
+(`hook/AvaloniaReflection.cs:1642-1696`):
 
 ```csharp
 var dict = Activator.CreateInstance(ResourceDictionaryType);
@@ -234,9 +235,14 @@ indexer.SetValue(dict, value, new object[] { key });
 GetMergedDictionaries(appResources)?.Add(dict);
 ```
 
-Root's theme colors (ThemeAccentColor, ThemeAccentBrush) live in
-`Styles[0].Resources` and are NOT overridden by MergedDictionaries. The ThemeEngine
-writes directly into `Styles[0].Resources` for those keys.
+> **Research Update (2026-02-19):** Root's actual theme colors (`BrandPrimary`, `TextPrimary`,
+> `BackgroundPrimary`, etc.) live in `Application.Resources.ThemeDictionaries[variant]` — not
+> in `Styles[0].Resources`. Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard
+> `FluentTheme`), so keys like `ThemeAccentColor` and `SystemAccentColor` are not referenced
+> by Root's views. The current ThemeEngine writes to both `Styles[0].Resources` and
+> `MergedDictionaries` as a compatibility layer; a migration to target `ThemeDictionaries`
+> directly is planned. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
+> for the correct 32-key catalog.
 
 ### BindingPriority
 

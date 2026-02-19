@@ -208,6 +208,14 @@ search binary for StartupHookProvider patterns.
 
 ---
 
+## Root Theme System Research
+
+| File | Purpose |
+|------|---------|
+| `ROOT_THEME_SYSTEM_FINDINGS.md` | Root's native Avalonia 32-key color system (ILSpy decompilation) — complete color tables for Dark/Light/PureDark, theme switching mechanism, resource hierarchy, App.cs wiring, style file analysis |
+
+---
+
 ## Documentation
 
 Research docs in `research/docs/`, organized into three areas:
