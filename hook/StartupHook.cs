@@ -39,6 +39,16 @@ internal class StartupHook
     {
         try
         {
+            // Gate logging to developer channel only — stable users get no log file.
+            // Must check before the startup banner to avoid creating a log on stable.
+            try
+            {
+                var channelSettings = UprootedSettings.Load();
+                if (!channelSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                    Logger.Disable();
+            }
+            catch { /* Settings load failed — keep logging enabled for diagnostics */ }
+
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"=== Uprooted Hook v{CurrentVersion} Loaded ===");
             Logger.Log("Startup", "========================================");
