@@ -30,7 +30,9 @@ This document is the authoritative reference for Root's custom controls, style c
 13. [App Startup Chain](#app-startup-chain)
 14. [Data Store and Persistence](#data-store-and-persistence)
 15. [Session and Identity](#session-and-identity)
-16. [DataStore Keys](#datastore-keys)
+16. [Member Profile Popup](#member-profile-popup)
+17. [ViewFactory (VM-to-View Registry)](#viewfactory-vm-to-view-registry)
+18. [DataStore Keys](#datastore-keys)
 
 ---
 
@@ -1192,6 +1194,119 @@ Used by MainViewModel's ViewModels stack. IsTopMostViewModel marks the currently
 
 ---
 
+## Member Profile Popup
+
+### MemberProfileView (1,582 lines, UI.Members)
+
+`UserControl` — the profile popup that appears when clicking a user's avatar or username. 305px wide panel with `ClipToBounds`.
+
+Named parts:
+- `MemberContextMenuButton` (RootSvgButton) — top-right "..." context menu
+- `OnlineBorder` (Border) — 10x10 online status dot (bottom-right of avatar)
+- `UsernameTextBlock` (TextBlock) — username (16px, FontWeight.Medium)
+- `NoteTextbox` (RootTextbox) — user notes input
+- `MessageTextbox` (RootTextbox) — quick message input (focused on load)
+
+```
+Panel (305px)
+├── RootSvgButton "MemberContextMenuButton" (top-right, EllipsisVerticalSVG, SvgDimmedButton class)
+│   └── UserContextMenuView flyout (Placement=RightEdgeAlignedTop)
+└── StackPanel (margin 24,28,24,20)
+    ├── Grid (centered) — avatar
+    │   ├── Border (60x60, CornerRadius 8, GeometryGroup clip with online cutout)
+    │   │   └── RootImageLoader (profile pic, 60x60, UniformToFill, BackgroundSecondary)
+    │   └── Border "OnlineBorder" (10x10, CornerRadius 10, bottom-right)
+    ├── StackPanel (horizontal, centered, margin-top 12) — identity row
+    │   ├── TextBlock "UsernameTextBlock" (16px, Medium, bound to GlobalUser.UserName)
+    │   ├── RootSvgImage (OwnerSVG, 15x15, visible if CommunityMember.IsOwner)
+    │   └── Border (App badge, BrandPrimary bg, 13px "App" text, visible if IsApp)
+    ├── RootBorder (badges, HighlightLight bg, Border brush, CornerRadius 6, padding 4)
+    │   │  Visible when: BadgeDisplays.Count > 0 (GreaterThanZeroToTrueConverter)
+    │   └── ItemsControl (BadgeDisplays, WrapPanel ItemsPanel with 4px spacing)
+    │       └── DataTemplate: RootSvgImage (24x24) with tooltip (36x36 icon + name + description)
+    ├── Grid (action buttons, visible if !IsSelf && !IsApp via AndConverter MultiBinding)
+    │   └── ItemsControl (WrapPanel, centered) — Send Message, Add Friend, Call buttons
+    ├── Roles area (ItemsControl bound to Roles, WrapPanel)
+    ├── RootTextbox "NoteTextbox" (notes)
+    └── RootTextbox "MessageTextbox" (message, Enter sends via SendMessageCommand)
+```
+
+**Online status colors:**
+
+| Status | Color Key | Avatar Cutout |
+|--------|-----------|---------------|
+| OnlineAndAttached / Active | `BrandSecondary` | No cutout |
+| Online | `BrandSecondary` | Yes (EllipseGeometry hole) |
+| AwayAndAttached / Inactive | `Warning` | No cutout |
+| Away | `Warning` | Yes |
+| Offline / Disconnected | `Muted` | No cutout |
+
+**Username coloring:** Uses `PrimaryRole.RoleColorHex`. If null/empty, uses `DynamicResource("TextPrimary")`. If default color, uses `ThemeService.GetInvertedDefaultColorHex()`. Otherwise uses `Color.Parse(hex)`.
+
+**For ProfileBadgeInjector:** The `UsernameTextBlock` is a named part -- find it directly. Badges are in the `ItemsControl` inside the `RootBorder` immediately below the username row StackPanel. Two injection approaches:
+1. **VM approach**: Get `MemberProfileViewModel.BadgeDisplays` (`ObservableCollection<MemberBadgeDisplay>`) from DataContext and add a custom badge
+2. **Visual tree approach**: Walk from `UsernameTextBlock` parent (StackPanel) to find the badges `RootBorder` > `ItemsControl` and inject a visual element
+
+### MemberProfileViewModel (408 lines, UI.Members)
+
+`ViewModelBase` subclass -- the DataContext for MemberProfileView.
+
+Key fields: `_closeProfileCallback` (Action), `_bitmapCache`, `_directMessageOpenerService`, `_rootSessionAccessor`, `_streamerModeService`, `_developerModeService`
+
+Properties:
+
+| Property | Type | Notes |
+|----------|------|-------|
+| `BadgeDisplays` | `ObservableCollection<MemberBadgeDisplay>` | Loaded from `BadgeSvgMapper.TryGetBadgeInfo(badge.Id)` |
+| `FriendRequestSent` | bool `[ObservableProperty]` | Friend request state |
+| `Note` | string `[ObservableProperty]` | User note text |
+| `ShouldHideNotes` | bool `[ObservableProperty]` | Notes visibility |
+| `MessageContainerMember` | `IMessageContainerMember` | DM container reference |
+| `CommunityMember` | `Member?` | Community member data (roles, owner) |
+| `IsSelf` | bool | `_rootSessionAccessor.Session.UserInfoService.SessionUser.Id == GlobalUser.Id` |
+| `ShowContextMenuButton` | bool | `(!IsSelf && !IsApp) \|\| (IsSelf && DeveloperModeEnabled)` |
+| `Roles` | `ReadOnlyObservableCollection<IViewModelBase>` | DynamicData reactive pipeline from `Member.Roles` |
+| `ProfilePictureAsyncBitmapWrapper` | async bitmap | `_bitmapCache.GetBitmapAsync(GlobalUser.ProfilePictureUri, null, 120)` |
+| `DeveloperModeEnabled` | bool | `_developerModeService.IsEnabled` |
+
+Commands: `SendMessage` (opens DM), `SendFriendRequest` (async), `Call` (opens DM with call), `CloseProfileCallback`, `Unloaded` (saves note)
+
+**Impact on DotNetBrowser discovery:** `_directMessageOpenerService` is the same field in the DotNetBrowser discovery chain (see [Main Window and View Stack](#main-window-and-view-stack) > MainViewModel).
+
+---
+
+## ViewFactory (VM-to-View Registry)
+
+### ViewFactory (1,725 lines, static class)
+
+Single method: `CreateView(IViewModelBase) -> Control` -- a massive type-switch (`is` chain) mapping **237 ViewModel types** to their View counterparts.
+
+Pattern:
+```csharp
+if (P_0 is FooViewModel dataContext) return new FooView { DataContext = dataContext };
+```
+
+This is Root's entire VM-to-View registry. Used by `ViewLocator.Build(object data)` which calls `ViewFactory.CreateView()` -- Avalonia's data template resolution for `ContentControl` bindings.
+
+**Key mappings for Uprooted:**
+
+| ViewModel | View |
+|-----------|------|
+| `MainViewModel` | `MainView` |
+| `HomeViewModel` | `HomeView` |
+| `MemberProfileViewModel` | `MemberProfileView` |
+| `CommunityTabViewModel` | `CommunityTabView` |
+| `DirectMessageTabViewModel` | `DirectMessageTabView` |
+| `MessageViewModel` | `MessageView` |
+| `LoginViewModel` | `LoginView` |
+| `ChangeThemeViewModel` | `ChangeThemeView` |
+| `ChatViewModel` | `ChatView` |
+| `MembersViewModel` | `MembersView` |
+
+**237 total mappings** -- every ViewModel in Root has an entry. New VMs added to the app require a corresponding entry here. The method is pure pattern-matching with no reflection or dictionary lookup.
+
+---
+
 ## DataStore Keys
 
 Complete `DataStoreKeys` enum (68 entries):
@@ -1260,7 +1375,7 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 
 ---
 
-**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, DirectMessageOpenerService (DotNetBrowser chain), message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, markdown rendering system (CInline/CRun/CSpan/CHyperlink/CCode/CImage/CTextBlock), mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), session and identity (IRootSessionAccessor/RootSession/IViewModelBase), DataStore keys, App startup chain
+**Canonical for:** Root custom control types, style class system (buttons/toggles/tabs), resource key per-control mapping, MainWindow/MainView/MainViewModel chain, DirectMessageOpenerService (DotNetBrowser chain), message view named controls + `updateBackgroundColor()` logic, RootMessageItemsControl internals, markdown rendering system (CInline/CRun/CSpan/CHyperlink/CCode/CImage/CTextBlock), mention/markdown system, settings infrastructure (RootSettingsContainer/SaveChangesView/Navigator), settings page layout pattern, data store persistence (LocalDataStore/SecureStorage), session and identity (IRootSessionAccessor/RootSession/IViewModelBase), member profile popup (MemberProfileView/MemberProfileViewModel, badge injection, online status), ViewFactory VM-to-View registry (237 mappings), DataStore keys, App startup chain
 **Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
 **For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
 *Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0*

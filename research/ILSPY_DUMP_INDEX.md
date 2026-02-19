@@ -4,7 +4,7 @@
 > Source: ILSpy decompilation of Root v0.9.92 and its Avalonia dependencies.
 > Each file preserves original ILSpy comments (assembly version, full namespace path).
 
-**Total:** 112 files, 122,174 lines, 7.7 MB
+**Total:** 115 files, 125,889 lines, 7.9 MB
 
 **Already analyzed into docs:** Files marked with a checkmark have been distilled into [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) or [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md). The raw dumps remain the authoritative source — the docs are curated summaries.
 
@@ -17,7 +17,7 @@
 | Assembly | Version | Files | Description |
 |----------|---------|-------|-------------|
 | `Root` | 0.9.92.0 | 1 | Root.exe entry point |
-| `RootApp.Client.Avalonia` | 0.9.92.0 | 99 | Main UI assembly — views, styles, themes, controls, settings |
+| `RootApp.Client.Avalonia` | 0.9.92.0 | 102 | Main UI assembly — views, styles, themes, controls, settings |
 | `RootApp.Client.Domain` | 0.9.92.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
 | `RootApp.Client.CoreDomain` | 0.9.92.0 | 3 | Core domain (IRootSessionAccessor, RootSessionAccessor, RootSession) |
 | `Avalonia.Controls` | 11.3.12.0 | 3 | Framework controls (Application, CheckBox, ToggleSwitch) |
@@ -41,6 +41,7 @@ RootApp.Client.Avalonia
 │       ├── Navigator                                → Navigator.cs
 │       └── DirectMessageOpenerService               → DirectMessageOpenerService.cs
 ├── IViewModelBase                                   → IViewModelBase.cs
+├── ViewFactory                                      → ViewFactory.cs (static, 237 VM→View mappings)
 ├── Controls
 │   ├── HexInputBorder                               → HexInputBorder.cs
 │   ├── MemberVisibilityOption                       → MemberVisibilityOption.cs
@@ -108,6 +109,9 @@ RootApp.Client.Avalonia
 │   │   ├── MainViewModel                            → MainViewModel.cs
 │   │   ├── MainViewModelFactory                     → MainViewModelFactory.cs
 │   │   └── MainWindow                               → MainWindow.cs
+│   ├── Members
+│   │   ├── MemberProfileView                        → MemberProfileView.cs
+│   │   └── MemberProfileViewModel                   → MemberProfileViewModel.cs
 │   └── Messages
 │       ├── ChannelStartMessageView                  → ChannelStartMessageView.cs
 │       ├── ChannelStartMessageViewModel             → ChannelStartMessageViewModel.cs
@@ -168,6 +172,7 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `MainView.cs` | 259 | `UI.Main.MainView` | Y | Main content shell — hosts RootSplitView, navigation |
 | `ConnectionBlockingView.cs` | 91 | `UI.Main.ConnectionBlockingView` | N | Connection blocked / offline banner |
 | `SaveChangesView.cs` | 396 | `Controls.SaveChangesView` | Y | Settings save/revert bar UI |
+| `MemberProfileView.cs` | 1,582 | `UI.Members.MemberProfileView` | Y | Member profile popup — avatar, badges, online status, notes, quick message, action buttons |
 | `StreamerModeBanner.cs` | 202 | `Controls.StreamerModeBanner` | N | Streamer mode notification banner |
 | `MenuItemPageContainerView.cs` | 281 | `Controls.Settings.MenuItemPageContainerView` | N | Settings page container with menu item navigation |
 
@@ -182,6 +187,7 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `ChannelStartMessageViewModel.cs` | 17 | `UI.Messages.ChannelStartMessageViewModel` | Y | Thin wrapper: exposes Message property |
 | `MainViewModel.cs` | 400 | `UI.Main.MainViewModel` | Y | Top-level VM — DataContext chain root, navigation, DI container |
 | `MainViewModelFactory.cs` | 24 | `UI.Main.MainViewModelFactory` | N | DI factory for MainViewModel |
+| `MemberProfileViewModel.cs` | 408 | `UI.Members.MemberProfileViewModel` | Y | Member profile VM — BadgeDisplays, IsSelf, Roles, SendMessage/SendFriendRequest/Call commands |
 | `ConnectionBlockingViewModel.cs` | 14 | `UI.Main.ConnectionBlockingViewModel` | N | Connection blocking state |
 | `ConnectionBlockingViewModelFactory.cs` | 12 | `UI.Main.ConnectionBlockingViewModelFactory` | N | DI factory for ConnectionBlockingViewModel |
 | `StreamerModeBannerViewModel.cs` | 67 | `Controls.StreamerModeBannerViewModel` | N | Streamer mode toggle state |
@@ -317,6 +323,7 @@ All from `RootApp.Client.Avalonia` / `CompiledAvaloniaXaml.!AvaloniaResources`.
 |------|------:|-----------|:--------:|-------------|
 | `Program.cs` | 65 | `Root.Program` | Y | Entry point: STA thread, Velopack, RootLauncher.Run(), BuildAvaloniaApp() |
 | `App.cs` | 635 | `RootApp.Client.Avalonia.App` | partial | App.Initialize(): XAML trampoline, theme init, menu delay |
+| `ViewFactory.cs` | 1,725 | `RootApp.Client.Avalonia.ViewFactory` | Y | Static VM-to-View registry — 237 ViewModel type-switch mappings, used by ViewLocator.Build() |
 | `DataStoreKeys.cs` | 69 | `RootApp.Client.Domain.Helpers.Store.DataStoreKeys` | Y | All 68 settings keys (theme, audio, overlay, analytics, streamer mode) |
 
 ### Avalonia Framework Internals
@@ -371,7 +378,6 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 - Members panel view(s) — `MembersViewModel` referenced
 - DM list view
 - Voice/call UI views
-- Profile popup views — would refine ProfileBadgeInjector heuristics
 - Community settings views — `CommunityLogViewModel` referenced
 - `CommunityTabViewModel` / view — community tab
 
@@ -389,10 +395,10 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 
 | Document | Source Dumps |
 |----------|-------------|
-| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService, **CInline, CRun, CSpan, CHyperlink, CCode, CImage, CTextBlock** |
+| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, Style_CheckBox, Style_ComboBoxItem, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService, CInline, CRun, CSpan, CHyperlink, CCode, CImage, CTextBlock, **MemberProfileView, MemberProfileViewModel, ViewFactory** |
 | [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md) | ThemesDarkAxaml, ThemesLightAxaml, ThemesPureDarkAxaml |
 | [THEME_ENGINE_DEEP_DIVE.md](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | ThemeService, ThemeMapper, SimpleTheme (partial) |
 
 ---
 
-*Last updated: 2026-02-19 — 112 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Batch split: Controls (32), Controls.Settings (4), UI.Main (7), Domain.Helpers.Store (5).*
+*Last updated: 2026-02-19 — 115 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Batch split: Controls (32), Controls.Settings (4), UI.Main (7), UI.Members (2), Domain.Helpers.Store (5).*
