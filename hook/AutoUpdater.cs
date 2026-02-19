@@ -442,25 +442,27 @@ internal class AutoUpdater
     }
 
     /// <summary>
-    /// Copy src to dst, using rename-then-copy if the destination is locked (e.g. loaded DLL).
-    /// On Windows, renaming a loaded DLL is permitted — the old handle stays valid.
+    /// Copy src to dst safely when dst may be a loaded CLR assembly.
+    /// Always uses rename-then-copy rather than direct overwrite:
+    ///   - Windows: process keeps old handle valid after rename, no access error.
+    ///   - Linux: CLR holds flock(LOCK_SH) on loaded assemblies; File.Copy with
+    ///     overwrite=true blocks indefinitely (flock never released while loaded).
+    ///     Rename moves the directory entry to a new path, bypassing the lock, then
+    ///     File.Copy writes a fresh inode at the original path.
     /// </summary>
     private static void CopyFileRobust(string src, string dst)
     {
-        try
+        if (!File.Exists(dst))
         {
-            File.Copy(src, dst, overwrite: true);
-        }
-        catch (IOException) when (File.Exists(dst))
-        {
-            // File is locked (e.g. UprootedHook.dll loaded in-process).
-            // Rename the old file out of the way first — Windows allows this even for loaded DLLs.
-            var old = dst + ".old";
-            try { File.Delete(old); } catch { /* stale .old from previous run, ignore */ }
-            File.Move(dst, old);
             File.Copy(src, dst);
-            try { File.Delete(old); } catch { /* non-fatal — cleaned up on next run */ }
+            return;
         }
+
+        var old = dst + ".old";
+        try { File.Delete(old); } catch { /* stale .old from previous run */ }
+        File.Move(dst, old);      // atomic rename: old inode moves to .old path
+        File.Copy(src, dst);      // new inode written at original path
+        try { File.Delete(old); } catch { /* non-fatal — cleaned up on next run */ }
     }
 
     /// <summary>
