@@ -146,7 +146,7 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/UprootedSettings.cs` | `LinkEmbedsShowFilenames` property (bool, default false), INI load/save for `LinkEmbeds.ShowFilenames` |
 | `hook/Logger.cs` | Added `LogSeparator()` method — writes blank lines to log for visual separation on startup |
 | `hook/Entry.cs` | Calls `LogSeparator()` before first `[Entry]` log in both ModuleInitializer and constructor |
-| `hook/ContentPages.cs` | Modular FontScale system: `PageScale` (11/13/12/13) for main pages, `LightboxScale` (18/20/17/18) for plugin info/settings lightboxes. `CreateSectionHeader` and `BuildSettingsToggle` accept optional `FontScale?` parameter. Lightbox callers pass `LightboxScale`; main page callers unchanged. |
+| `hook/ContentPages.cs` | Modular FontScale system: `PageScale` (15/11/13/12/13) for main pages, `LightboxScale` (24/20/20/17/18) for plugin info/settings lightboxes (Title/SectionHeader/Label/Description/Button). Lightbox titles, info box headers, helper text all wired to scale. All plugin descriptions and info box content rewritten for end users (no technical jargon). |
 | `scripts/watch-log.ps1` | `[Entry]` lines colored green; `fallback` messages stay yellow instead of red |
 | `hook/LinkEmbedEngine.cs` | Tenor: only `media.tenor.com` skipped (not bare `tenor.com`); video embeds respect "Show file names" toggle (`isFileOnlyEmbed` includes `VideoId=="direct"`) |
 | `hook/AnimatedImage.cs` | Persistent canvas bitmap for frame compositing — fixes black pixels and frame ordering in delta-encoded GIFs; removed per-frame `DecodeFrame` method |
