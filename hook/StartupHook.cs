@@ -14,7 +14,7 @@ internal class StartupHook
     // Omit a version entirely to leave all user plugin toggles untouched for that release.
     private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
     {
-        // { "0.4.0", new[] { "message-logger", "silent-typing" } },
+        { "0.4.0", new[] { "message-logger", "content-filter" } },
     };
 
     // Static reference keeps FileSystemWatcher alive for process lifetime
