@@ -51,11 +51,11 @@ Two independent injection layers into one app:
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
 | `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
-| `MessageLogger.cs` | 1809 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking; event-driven edit detection (`HandleReplaced`, Add-event gating + 5s grace period); Discord-style deleted message rows (red) + edit indicator rows (amber) |
+| `MessageLogger.cs` | 1876 | Message logger (WIP): per-item async deletion pollers (HasBeenDeleted probe, 300ms/3s), epoch-based channel switch cancellation, per-type property cache, insertion-order tracking; event-driven edit detection (`HandleReplaced`, Add-event gating + 5s grace period); Discord-style deleted message rows (red) + edit indicator rows (amber) |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection, persistent canvas compositing) |
 | `AutoUpdater.cs` | 909 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare, hash-based same-version hotfix detection, `BackgroundUpdateApplied` event) |
-| `ProfileBadgeInjector.cs` | 560 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
+| `ProfileBadgeInjector.cs` | 535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
 | `SilentTypingEngine.cs` | 335 | Silent typing: HttpClient handler injection, static field scan + ViewModel chain walk, TypingBlockerHandler drops SetTypingIndicator gRPC requests |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |

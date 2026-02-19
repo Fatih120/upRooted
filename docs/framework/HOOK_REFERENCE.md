@@ -61,11 +61,12 @@ The hook layer consists of 24 source files in the `hook/` directory:
 | `ClearUrlsEngine.cs` | 467 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
 | `LinkEmbedEngine.cs` | 1763 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
 | `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
-| `MessageLogger.cs` | 1185 | Message logger plugin: Phase 1 data model discovery, ObservableCollection subscription via Expression.Lambda, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup |
+| `MessageLogger.cs` | 1876 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
 | `AutoUpdater.cs` | ~810 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
 | `ProfileBadgeInjector.cs` | ~450 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
-| `NsfwFilter.cs` | 305 | NSFW filter JS injection (needs Avalonia-native redesign) |
+| `SilentTypingEngine.cs` | 335 | Blocks `SetTypingIndicator` gRPC calls at the .NET HttpClient layer. Scans assemblies + walks ViewModel chain to find Root's `HttpClient` instances; prepends `TypingBlockerHandler` (DelegatingHandler) that short-circuits the request with a synthetic `200 OK`. Phase 4.5f, 12s startup delay. |
+| `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
 | `UprootedSettings.cs` | 161 | INI-based settings persistence |
 | `Logger.cs` | 46 | Thread-safe file logging |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |

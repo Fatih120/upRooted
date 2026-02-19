@@ -13,9 +13,6 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **MessageLogger: validate async deletion pollers** — Per-item async pollers deployed (HasBeenDeleted probe every 300ms for 3s, epoch-based cancellation on channel switch). Injection position fixed (order-based, not timestamp). Needs real-world validation: trigger actual message deletions and run `scripts/analyze-msglogger.ps1` to confirm HasBeenDeleted is set within the 3s window.
   - Files: `hook/MessageLogger.cs`
 
-- [ ] **Avalonia-native NSFW filter** — Redesign NSFW filter to intercept image-bearing controls in the Avalonia visual tree instead of JS injection into DotNetBrowser.
-  - Files: `hook/NsfwFilter.cs`
-
 - [ ] **Theme switch color inconsistencies** — Some controls show incorrect color tints immediately after switching themes (e.g. "User Settings" tab text appears brighter than intended) but display correctly after reopening the settings screen. Likely a stale recolor or priority issue in the visual tree walk that self-corrects when controls are rebuilt.
   - Files: `hook/ThemeEngine.cs`
 
@@ -52,6 +49,9 @@ Items not yet committed to but worth tracking.
 ## Done
 
 Move completed items here with the date.
+
+- [x] **Avalonia-native NSFW filter** (2026-02-18) — Rewrote `NsfwFilter.cs` to scan the Avalonia visual tree for `Image` controls, classify via Google Vision SAFE_SEARCH_DETECTION API in C# (no DotNetBrowser), and inject a native overlay. 500ms scan timer, `SemaphoreSlim` limits to 3 concurrent API calls, bitmapId-based dedup, PixelSize guard skips avatars, click-to-reveal, `RevealAllBlocked()` on toggle-off. Moved from Phase 5 (DotNetBrowser-gated) → Phase 4.5g (standalone, 20s delay).
+  - Files: `hook/NsfwFilter.cs`, `hook/StartupHook.cs`
 
 - [x] **MessageLogger: edit detection + Discord-style edit indicators** (2026-02-18) — Event-driven via CollectionChanged Replace: `HandleReplaced()` records edits only for messages seen via Add events and only if the Replace arrives >5s after Add (`EditGracePeriodSeconds`), filtering send-completion content settling. `InjectEditIndicators()` injects amber-tinted inline cards below edited messages (previous content italic+faded, `(edited)`/`(edited Nx)` label, amber left accent). Tag-based dedup + re-injection on VSP scroll recycling. Same Grid row pattern as deleted message cards.
   - Files: `hook/MessageLogger.cs`

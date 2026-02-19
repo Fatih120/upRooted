@@ -55,6 +55,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **NSFW content filter: Avalonia-native redesign** — Replaced the DotNetBrowser JS injection approach with a C# visual tree scanner. The filter now DFS-walks the Avalonia tree every 500ms looking for `Image` controls, encodes each new bitmap to PNG via reflection (`Bitmap.Save(Stream)`), and POSTs to the Google Vision SAFE_SEARCH_DETECTION API directly in C#. NSFW images are hidden and replaced with a native `Border > StackPanel` overlay ("⚠ NSFW / Click to reveal"); clicking the overlay reveals the image. `SemaphoreSlim` caps concurrent API calls at 3; bitmapId-based dedup skips already-classified images; `PixelSize` guard skips avatars (<100×100). `RevealAllBlocked()` restores all hidden images when the filter is disabled. Moved from Phase 5 (DotNetBrowser-gated) → Phase 4.5g (standalone, 20s startup delay). No `DotNetBrowserReflection` dependency.
+  - Files: `hook/NsfwFilter.cs`, `hook/StartupHook.cs`
 - **Settings page font sizes**: tuned to match Root's native settings page scale (section headers 11, labels 13, descriptions 12, page titles 15, lightbox titles 16; toggle pills 44×24, card width 560)
 - **ContentFilter API key textbox**: vertically centered text with padding (matches search box style)
 - **Log startup separator**: 3 blank lines before first `[Entry]` log on Root launch for clear visual separation
