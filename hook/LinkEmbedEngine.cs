@@ -195,8 +195,10 @@ internal class LinkEmbedEngine
     private const string RedditAccentColor = "#FF4500"; // Reddit orange
 
     // Domains where Root renders embeds natively — skip to avoid double-embedding
+    // Note: only media.tenor.com is skipped (direct GIF CDN); tenor.com/view/ pages
+    // go through our OG pipeline to extract and render the animated GIF inline.
     private static readonly Regex NativeEmbedDomainRegex = new(
-        @"^https?://(?:(?:media\.)?tenor\.com|rootapp\.gg)/",
+        @"^https?://(?:media\.tenor\.com|rootapp\.gg)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
     internal static LinkEmbedEngine? Instance { get; set; }
@@ -1920,13 +1922,14 @@ internal class LinkEmbedEngine
                     _r.AddChild(content, authorText);
             }
 
-            // Title — hide for image-only embeds when filenames setting is off
-            bool isImageOnlyEmbed = data.Image == data.Url && data.VideoId == null;
+            // Title — hide for image/video-only embeds when filenames setting is off
+            bool isFileOnlyEmbed = (data.Image == data.Url && data.VideoId == null)
+                                || data.VideoId == "direct";
             var titleText = _r.CreateTextBlock(data.Title!, 13, titleColorHex, "SemiBold");
             if (titleText != null)
             {
                 _r.SetTextWrapping(titleText, "Wrap");
-                if (isImageOnlyEmbed)
+                if (isFileOnlyEmbed)
                 {
                     _r.SetTag(titleText, "uprooted-embed-img-title");
                     _r.SetIsVisible(titleText, UprootedSettings.Load().LinkEmbedsShowFilenames);

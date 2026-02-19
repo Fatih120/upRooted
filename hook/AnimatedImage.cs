@@ -239,23 +239,75 @@ internal class AnimatedImage
             return null;
         }
 
-        var frames = new List<(object, int)>(cappedCount);
-
-        for (int i = 0; i < cappedCount; i++)
+        // Create a persistent canvas bitmap for frame compositing.
+        // GIF frames are often delta-encoded: each frame only contains changed pixels
+        // and PriorFrame tells the codec the buffer already has the previous frame's data.
+        // Without a persistent canvas, each frame gets zeroed pixels → black holes.
+        var canvas = s_bitmapCtor!.Invoke(new[] { codecInfo });
+        if (canvas == null)
         {
-            try
-            {
-                var frameBitmap = DecodeFrame(codec, codecInfo, i);
-                if (frameBitmap == null)
-                {
-                    if (Verbose) Logger.Log("AnimatedImage", $"Frame {i}: DecodeFrame returned null");
-                    continue;
-                }
+            Logger.Log("AnimatedImage", "DecodeFrames: failed to create canvas bitmap");
+            return null;
+        }
 
+        try
+        {
+            var canvasPixels = s_bitmapGetPixels!.Invoke(canvas, null);
+            if (canvasPixels == null || canvasPixels.Equals(IntPtr.Zero))
+            {
+                Logger.Log("AnimatedImage", "DecodeFrames: canvas GetPixels returned null/zero");
+                return null;
+            }
+
+            var canvasInfo = s_bitmapInfo!.GetValue(canvas) ?? codecInfo;
+
+            // Get rowBytes once (needed for 4-param GetPixels overload)
+            int rowBytes = 0;
+            var rowBytesProp = canvas.GetType().GetProperty("RowBytes",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (rowBytesProp != null)
+                rowBytes = (int)rowBytesProp.GetValue(canvas)!;
+
+            var getPixelsParams = s_codecGetPixels!.GetParameters();
+            var frameIndexProp = s_skCodecOptionsType!.GetProperty("FrameIndex");
+            var priorFrameProp = s_skCodecOptionsType.GetProperty("PriorFrame");
+
+            var frames = new List<(object, int)>(cappedCount);
+
+            for (int i = 0; i < cappedCount; i++)
+            {
                 try
                 {
-                    // Convert SKBitmap → SKImage → Encode(PNG) → byte[] → Avalonia Bitmap
-                    var avBitmap = ConvertToAvBitmap(frameBitmap, resolver);
+                    // Create SKCodecOptions with FrameIndex and PriorFrame
+                    var options = Activator.CreateInstance(s_skCodecOptionsType!);
+                    if (options == null) continue;
+
+                    frameIndexProp?.SetValue(options, i);
+
+                    // PriorFrame tells the codec the canvas already has frame i-1's data,
+                    // so it can correctly apply delta encoding and disposal methods
+                    if (i > 0)
+                        priorFrameProp?.SetValue(options, i - 1);
+
+                    // Decode frame into the persistent canvas
+                    object? result;
+                    if (getPixelsParams.Length == 4)
+                        result = s_codecGetPixels.Invoke(codec, new[] { canvasInfo, canvasPixels, (object)rowBytes, options });
+                    else
+                        result = s_codecGetPixels.Invoke(codec, new[] { canvasInfo, canvasPixels, options });
+
+                    if (result != null)
+                    {
+                        var resultStr = result.ToString();
+                        if (resultStr != "Success" && resultStr != "IncompleteInput")
+                        {
+                            Logger.Log("AnimatedImage", $"GetPixels frame {i}: {resultStr}");
+                            continue;
+                        }
+                    }
+
+                    // Snapshot the canvas to an Avalonia Bitmap (SKImage.FromBitmap makes an immutable copy)
+                    var avBitmap = ConvertToAvBitmap(canvas, resolver);
                     if (avBitmap == null)
                     {
                         if (Verbose) Logger.Log("AnimatedImage", $"Frame {i}: ConvertToAvBitmap returned null");
@@ -283,106 +335,20 @@ internal class AnimatedImage
 
                     frames.Add((avBitmap, delayMs));
                 }
-                finally
+                catch (Exception ex)
                 {
-                    (frameBitmap as IDisposable)?.Dispose();
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("AnimatedImage", $"Frame {i} decode error: {ex.Message}");
-            }
-        }
-
-        if (frames.Count == 0) return null;
-
-        Logger.Log("AnimatedImage", $"Decoded {frames.Count} frames successfully");
-        return frames;
-    }
-
-    /// <summary>
-    /// Decode a single frame from the codec into an SKBitmap.
-    /// Uses SKCodec.GetPixels with SKCodecOptions.FrameIndex.
-    /// </summary>
-    private static object? DecodeFrame(object codec, object codecInfo, int frameIndex)
-    {
-        // Create SKBitmap with the codec's image info
-        var bitmap = s_bitmapCtor!.Invoke(new[] { codecInfo });
-        if (bitmap == null) return null;
-
-        try
-        {
-            // Get pixel buffer pointer
-            var pixels = s_bitmapGetPixels!.Invoke(bitmap, null);
-            if (pixels == null || pixels.Equals(IntPtr.Zero))
-            {
-                (bitmap as IDisposable)?.Dispose();
-                return null;
-            }
-
-            // Create SKCodecOptions with FrameIndex set
-            var options = Activator.CreateInstance(s_skCodecOptionsType!);
-            if (options == null)
-            {
-                (bitmap as IDisposable)?.Dispose();
-                return null;
-            }
-
-            // Set FrameIndex property
-            var frameIndexProp = s_skCodecOptionsType!.GetProperty("FrameIndex");
-            frameIndexProp?.SetValue(options, frameIndex);
-
-            // For frames after the first, set PriorFrame to previous frame
-            // This ensures proper rendering of frames that depend on previous frame state
-            if (frameIndex > 0)
-            {
-                var priorFrameProp = s_skCodecOptionsType.GetProperty("PriorFrame");
-                priorFrameProp?.SetValue(options, frameIndex - 1);
-            }
-
-            // Get the bitmap's info (may differ from codec info in some edge cases)
-            var bitmapInfo = s_bitmapInfo!.GetValue(bitmap);
-            if (bitmapInfo == null) bitmapInfo = codecInfo;
-
-            // SKCodec.GetPixels — signature varies by SkiaSharp version
-            // 3-param: GetPixels(SKImageInfo, IntPtr, SKCodecOptions)
-            // 4-param: GetPixels(SKImageInfo, IntPtr, int rowBytes, SKCodecOptions)
-            object? result;
-            var getPixelsParams = s_codecGetPixels!.GetParameters();
-            if (getPixelsParams.Length == 4)
-            {
-                // 4-param overload: need rowBytes — get from bitmap's RowBytes property
-                int rowBytes = 0;
-                var rowBytesProp = bitmap.GetType().GetProperty("RowBytes",
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (rowBytesProp != null)
-                    rowBytes = (int)rowBytesProp.GetValue(bitmap)!;
-
-                result = s_codecGetPixels.Invoke(codec, new[] { bitmapInfo, pixels, (object)rowBytes, options });
-            }
-            else
-            {
-                result = s_codecGetPixels.Invoke(codec, new[] { bitmapInfo, pixels, options });
-            }
-
-            // Result is SKCodecResult enum — Success = 0
-            if (result != null)
-            {
-                var resultStr = result.ToString();
-                if (resultStr != "Success" && resultStr != "IncompleteInput")
-                {
-                    Logger.Log("AnimatedImage", $"GetPixels frame {frameIndex}: {resultStr}");
-                    (bitmap as IDisposable)?.Dispose();
-                    return null;
+                    Logger.Log("AnimatedImage", $"Frame {i} decode error: {ex.Message}");
                 }
             }
 
-            return bitmap;
+            if (frames.Count == 0) return null;
+
+            Logger.Log("AnimatedImage", $"Decoded {frames.Count} frames successfully");
+            return frames;
         }
-        catch
+        finally
         {
-            (bitmap as IDisposable)?.Dispose();
-            throw;
+            (canvas as IDisposable)?.Dispose();
         }
     }
 

@@ -333,8 +333,9 @@ containing URLs, fetches OG/oEmbed metadata via reflection-based HttpClient, and
 native Avalonia embed cards. Supports YouTube (dedicated oEmbed), Twitter/X and
 embed-fixer domains (bot UA + oEmbed discovery), direct image URLs (zero-network fast
 path), animated GIF/WebP playback (via `AnimatedImage.cs` + SkiaSharp reflection), and
-generic sites via OpenGraph tags with Content-Type gating. Tenor URLs are skipped (Root
-renders them natively).
+generic sites via OpenGraph tags with Content-Type gating. Direct Tenor CDN URLs
+(`media.tenor.com`) are skipped (Root renders them natively); `tenor.com/view/` pages
+go through the OG pipeline to extract and render the animated GIF inline.
 
 ### Phase 5: DotNetBrowser Feature Loading
 
@@ -443,7 +444,7 @@ oEmbed spec defines four types. Image location varies by type:
 `FetchMetadata()` routes URLs through a priority chain:
 
 ```
-0. Native embed domain?    → skip (Tenor — Root handles natively)
+0. Native embed domain?    → skip (media.tenor.com, rootapp.gg — Root handles natively)
 1. Cache hit?              → return cached (animated images re-inject from byte cache)
 2. Image URL regex?        → SynthesizeImageEmbed (zero network)
 3. YouTube regex?          → FetchYouTubeMetadata (oEmbed + page scrape fallback)
@@ -480,7 +481,7 @@ Animated `.gif` and `.webp` URLs play inline using SkiaSharp's `SKCodec`, resolv
 - `SKCodec.Create(SKData)` preferred over `Create(SKStream)` — avoids stream lifecycle issues
 - `SKData.CreateCopy(byte[])` used to create independent data copies for codec input
 
-**Native embed domain skip:** Tenor URLs (`tenor.com`, `media.tenor.com`) are skipped in `FetchAndInject()` because Root renders Tenor embeds natively. Without this, animated GIFs from Tenor would double-embed.
+**Native embed domain skip:** Only direct Tenor CDN URLs (`media.tenor.com`) are skipped in `FetchAndInject()` because Root renders them natively. `tenor.com/view/` pages go through the generic OG pipeline — their `og:image` points to a `media.tenor.com` GIF URL, which our animated image support renders inline.
 
 **Graceful fallback:** If any SkiaSharp type or method is missing or trimmed, all `AnimatedImage` methods return null/false. The caller falls back to static first-frame rendering via `Bitmap(Stream)` — existing behavior, zero regression.
 
