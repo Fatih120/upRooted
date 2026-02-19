@@ -37,6 +37,14 @@ internal static class Logger
         catch { }
     }
 
+    /// <summary>
+    /// Re-enable logging (e.g. when switching to developer channel at runtime).
+    /// </summary>
+    internal static void Enable()
+    {
+        _enabled = true;
+    }
+
     internal static void Log(string message)
     {
         if (!_enabled) return;

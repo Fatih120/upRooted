@@ -106,7 +106,7 @@ Plugins share a single JavaScript execution context. Understanding coexistence i
 
 ### Plugin Load Order and Priority
 
-Plugins start in registration order (see `pluginLoader.ts:96`). Built-in plugins register first: `sentry-blocker`, `themes`, `settings-panel`, then your plugins. This order determines patch handler priority.
+Plugins start in registration order (see `pluginLoader.ts:96`). Built-in TypeScript plugins register first: `sentry-blocker`, `themes`, `settings-panel`, `link-embeds`, `silent-typing`, then your plugins. This order determines patch handler priority. C# hook plugins (`clear-urls`, `message-logger`, `content-filter`) run independently in the .NET process.
 
 ### Shared State Patterns
 
@@ -467,7 +467,7 @@ Combine CSS variables for default styling with a `setTheme` interceptor for mode
 
 | Field | Purpose | Guidelines |
 |-------|---------|------------|
-| `name` | Unique identifier | Lowercase, hyphenated. Must not conflict with built-ins (`sentry-blocker`, `themes`, `settings-panel`). |
+| `name` | Unique identifier | Lowercase, hyphenated. Must not conflict with built-ins (`sentry-blocker`, `themes`, `link-embeds`, `clear-urls`, `message-logger`, `silent-typing`, `content-filter`). |
 | `description` | Human-readable summary | One sentence, shown in the settings panel. |
 | `version` | Semver string | Follow semantic versioning. Bump on every release. |
 | `authors` | Attribution | At least one entry with a `name` field. |

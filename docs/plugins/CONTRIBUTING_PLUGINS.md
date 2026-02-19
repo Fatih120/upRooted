@@ -140,7 +140,7 @@ Choose a name that is:
 
 - **Lowercase and hyphenated**: `my-cool-plugin`, not `MyCoolPlugin` or `my_cool_plugin`
 - **Descriptive**: `voice-activity-overlay` tells you what it does; `vao` does not
-- **Unique**: Don't conflict with built-in names (`sentry-blocker`, `themes`, `settings-panel`, `link-embeds`)
+- **Unique**: Don't conflict with built-in names (`sentry-blocker`, `themes`, `link-embeds`, `clear-urls`, `message-logger`, `silent-typing`, `content-filter`)
 
 Your plugin name is used as:
 - The directory name under `src/plugins/`

@@ -245,8 +245,18 @@ internal static class ContentPages
 
             AddStatusField(r, cardContent, "Hook", "Loaded", AccentGreen, true, font);
             AddStatusField(r, cardContent, "Settings Injection", "Active", AccentGreen, false, font);
-            var enabledCount = settings.Plugins.Count(p => p.Value);
-            var totalCount = settings.Plugins.Count;
+            EnsureStaticInit();
+            var enabledCount = 0;
+            if (KnownPlugins != null)
+            {
+                foreach (var plugin in KnownPlugins)
+                {
+                    bool isEnabled = plugin.Id == "content-filter"
+                        ? settings.NsfwFilterEnabled
+                        : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
+                    if (isEnabled) enabledCount++;
+                }
+            }
             var pluginStatus = enabledCount > 0 ? $"{enabledCount} active" : "0 loaded";
             var pluginColor = enabledCount > 0 ? AccentGreen : TextDim;
             AddStatusField(r, cardContent, "Plugins", pluginStatus, pluginColor, false, font);
@@ -3123,12 +3133,13 @@ internal static class ContentPages
                 if (current == "developer")
                 {
                     // Switch back to Stable — no password needed
+                    Logger.Log("AutoUpdate", "Switched to Stable channel");
                     var s = UprootedSettings.Load();
                     s.AutoUpdateChannel = "stable";
                     s.Save();
+                    Logger.Disable();
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
-                    Logger.Log("AutoUpdate", "Switched to Stable channel");
                 }
                 else
                 {
@@ -3252,6 +3263,7 @@ internal static class ContentPages
                 var s = UprootedSettings.Load();
                 s.AutoUpdateChannel = "developer";
                 s.Save();
+                Logger.Enable();
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
                 r.SetBackground(badgeRef, "#8B6914");

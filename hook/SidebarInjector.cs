@@ -443,7 +443,7 @@ internal class SidebarInjector
             // Step 5: Restore back button and save bar visibility
             RestoreBackButton();
             if (_saveBar != null)
-                _r.ClearValue(_saveBar, "IsVisibleProperty");
+                _r.SetIsVisible(_saveBar, true);
 
             // Step 6: Remove our content from content Panel
             RemoveContentPage();
@@ -868,15 +868,9 @@ internal class SidebarInjector
         // Only restore save bar when transitioning away from an Uprooted page.
         // When switching between Root tabs, don't touch Root's save bar —
         // it may be legitimately visible due to real unsaved settings changes.
-        //
-        // Use ClearValue instead of SetIsVisible: our SetIsVisible(false) created a
-        // local value override that sits above Root's data binding in Avalonia's
-        // property priority system. SetIsVisible(true) would also be a local override,
-        // permanently disconnecting Root's binding. ClearValue removes the local
-        // override entirely, letting Root's ViewModel binding reassert control.
         if (wasOnUprootedPage && _saveBar != null)
         {
-            _r.ClearValue(_saveBar, "IsVisibleProperty");
+            _r.SetIsVisible(_saveBar, true);
         }
 
         UpdateNavHighlights();
