@@ -600,7 +600,16 @@ internal static class ContentPages
                 new() { Id = "content-filter", DisplayName = "ContentFilter", Version = "0.4.2",
                     Description = "Blurs images flagged as NSFW using Google Cloud Vision. Set up your API key in settings to get started. Costs roughly $1.50 per 1,000 images checked.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
+                new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.4.2",
+                    Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
             };
+            // Sort: Stable (3) first → Experimental (0) last, then A-Z by name
+            Array.Sort(KnownPlugins, (a, b) =>
+            {
+                var cmp = b.TestingStatus.CompareTo(a.TestingStatus);
+                return cmp != 0 ? cmp : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase);
+            });
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
         catch (Exception ex)
@@ -806,7 +815,7 @@ internal static class ContentPages
                 {
                     foreach (var kv in initialPluginStates)
                     {
-                        if (kv.Key == "themes") continue;
+                        if (kv.Key == "themes" || kv.Key == "rootcord") continue; // live-toggle plugins
                         bool currentVal = kv.Key == "content-filter"
                             ? settings.NsfwFilterEnabled
                             : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -1208,6 +1217,23 @@ internal static class ContentPages
                             NsfwFilterInstance?.UpdateConfig();
                         }
 
+                        // Rootcord: apply/revert live without restart
+                        if (pluginId == "rootcord")
+                        {
+                            try
+                            {
+                                var engine = RootcordEngine.Instance;
+                                if (engine != null)
+                                {
+                                    if (enabled)
+                                        engine.Apply();
+                                    else
+                                        engine.Revert();
+                                }
+                            }
+                            catch (Exception rex) { Logger.Log("Plugins", $"Rootcord toggle error: {rex.Message}"); }
+                        }
+
                         try { settings.Save(); }
                         catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
                         Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
@@ -1218,7 +1244,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes") continue;
+                                if (kv.Key == "themes" || kv.Key == "rootcord") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
