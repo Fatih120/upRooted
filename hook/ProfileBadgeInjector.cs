@@ -1,4 +1,5 @@
 using System.Linq;
+using System.Reflection;
 
 namespace Uprooted;
 
@@ -40,9 +41,16 @@ internal class ProfileBadgeInjector
     private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
 
     /// <summary>
+    /// Community ID where the Alpha User role lives. Used by the cross-community
+    /// membership check to resolve the user's alpha role when the profile is opened
+    /// from a different community context.
+    /// </summary>
+    private const string AlphaCommunityId = "002d082e-67d2-8e02-ae7d-8021acb2bc48";
+
+    /// <summary>
     /// Role ID that grants the Alpha User badge automatically (community context).
-    /// Any user with this role in community 002d082e-67d2-8e02-ae7d-8021acb2bc48
-    /// receives the badge without needing a UUID entry in AlphaUserIds.
+    /// Any user with this role in AlphaCommunityId receives the badge without needing
+    /// a UUID entry in AlphaUserIds.
     /// </summary>
     private const string AlphaRoleId = "002d0a32-ee9a-840b-8b91-d0bd98e8e693";
 
@@ -93,6 +101,12 @@ internal class ProfileBadgeInjector
     // (DMs, other communities) so badges appear globally, not just inside the alpha community.
     private readonly HashSet<string> _confirmedAlphaIds = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _confirmedDevIds   = new(StringComparer.OrdinalIgnoreCase);
+
+    // Cached alpha community object for cross-community membership checks.
+    // Resolved once via Session.CommunityService.GetCommunity(AlphaCommunityGuid).
+    // Null after resolution = viewer is not a member of the alpha community.
+    private bool _alphaCommunityResolved;
+    private object? _alphaCommunity;
 
     public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null)
     {
@@ -408,6 +422,18 @@ internal class ProfileBadgeInjector
         // globally on future opens (DMs, other communities) — not just inside the alpha community.
         bool alphaByRole = HasRoleId(dc, AlphaRoleId);
         if (alphaByRole && userId != null) _confirmedAlphaIds.Add(userId);
+
+        // Cross-community fallback: if the profile was opened from a different community,
+        // CommunityMember.Roles only has roles for that community — the alpha role won't appear.
+        // Walk Session.CommunityService → alpha community → member list → check Roles directly.
+        // Only fires when all faster checks miss; result is cached in _confirmedAlphaIds.
+        if (!alphaByRole && userId != null
+            && !AlphaUserIds.Contains(userId) && !_confirmedAlphaIds.Contains(userId))
+        {
+            if (HasAlphaRoleViaCrossContextCheck(dc, userId))
+                _confirmedAlphaIds.Add(userId);
+        }
+
         bool isAlphaUser = (userId != null && (AlphaUserIds.Contains(userId) || _confirmedAlphaIds.Contains(userId)))
                            || alphaByRole;
 
@@ -692,6 +718,178 @@ internal class ProfileBadgeInjector
             Logger.Log("ProfileBadge", $"TryInsertChild error: {ex.Message}");
             return false;
         }
+    }
+
+    // ===== Cross-community alpha membership check =====
+
+    /// <summary>
+    /// Checks whether a user holds AlphaRoleId in the alpha community by querying
+    /// Session.CommunityService directly. Used when the profile popup is opened from
+    /// a different community where CommunityMember.Roles only contains that community's roles.
+    ///
+    /// The alpha community object is resolved once and cached. If the viewing user is not
+    /// a member of the alpha community, resolution returns null and this check is skipped
+    /// on all subsequent calls.
+    /// </summary>
+    private bool HasAlphaRoleViaCrossContextCheck(object? dc, string userId)
+    {
+        if (dc == null) return false;
+        try
+        {
+            if (!_alphaCommunityResolved)
+            {
+                _alphaCommunity = ResolveAlphaCommunity(dc);
+                _alphaCommunityResolved = true;
+                Logger.Log("ProfileBadge", _alphaCommunity != null
+                    ? "Cross-context: alpha community resolved and cached"
+                    : "Cross-context: alpha community not accessible (viewer not a member?)");
+            }
+
+            if (_alphaCommunity == null) return false;
+
+            bool result = UserHasAlphaRoleInCommunity(_alphaCommunity, userId);
+            if (result) Logger.Log("ProfileBadge", $"Cross-context: confirmed alpha role for userId={userId}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"Cross-context alpha check error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Resolves the alpha community via reflection:
+    ///   DataContext._rootSessionAccessor → Session.CommunityService.GetCommunity(AlphaCommunityGuid)
+    /// Returns the Community object, or null if the viewing user is not a member of the
+    /// alpha community or if any reflection step fails.
+    /// </summary>
+    private object? ResolveAlphaCommunity(object dc)
+    {
+        // Walk type hierarchy to find _rootSessionAccessor (private field on MemberProfileViewModel)
+        object? rsa = null;
+        for (var t = dc.GetType(); t != null; t = t.BaseType)
+        {
+            var f = t.GetField("_rootSessionAccessor",
+                BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.DeclaredOnly);
+            if (f != null) { rsa = f.GetValue(dc); break; }
+        }
+        if (rsa == null)
+        {
+            Logger.Log("ProfileBadge", "Cross-context: _rootSessionAccessor not found on DataContext");
+            return null;
+        }
+
+        var session = rsa.GetType().GetProperty("Session")?.GetValue(rsa);
+        if (session == null)
+        {
+            Logger.Log("ProfileBadge", "Cross-context: Session is null");
+            return null;
+        }
+
+        var communityService = session.GetType().GetProperty("CommunityService")?.GetValue(session);
+        if (communityService == null)
+        {
+            Logger.Log("ProfileBadge", "Cross-context: CommunityService not found");
+            return null;
+        }
+
+        // Find GetCommunity(CommunityGuid) — single-parameter overload
+        var getCommunity = communityService.GetType().GetMethods()
+            .FirstOrDefault(m => m.Name == "GetCommunity" && m.GetParameters().Length == 1);
+        if (getCommunity == null)
+        {
+            Logger.Log("ProfileBadge", "Cross-context: GetCommunity method not found on CommunityService");
+            return null;
+        }
+
+        // Construct a CommunityGuid value from AlphaCommunityId string
+        var communityGuidType = getCommunity.GetParameters()[0].ParameterType;
+        var alphaCommunityGuid = CreateGuidTypeInstance(communityGuidType, AlphaCommunityId);
+        if (alphaCommunityGuid == null)
+        {
+            Logger.Log("ProfileBadge", $"Cross-context: could not construct {communityGuidType.Name} from AlphaCommunityId");
+            return null;
+        }
+
+        return getCommunity.Invoke(communityService, new[] { alphaCommunityGuid });
+    }
+
+    /// <summary>
+    /// Constructs an instance of a Guid-wrapper struct (CommunityGuid, UserGuid, etc.)
+    /// from a UUID string. Tries constructor(Guid) first, then implicit/explicit operators.
+    /// </summary>
+    private static object? CreateGuidTypeInstance(Type guidType, string uuidStr)
+    {
+        if (!Guid.TryParse(uuidStr, out var guid)) return null;
+
+        // Constructor(Guid) — most common pattern for Root's ID types
+        var ctor = guidType.GetConstructor(new[] { typeof(Guid) });
+        if (ctor != null) return ctor.Invoke(new object[] { guid });
+
+        // Implicit or explicit conversion operator from Guid
+        var op = guidType.GetMethod("op_Implicit", BindingFlags.Public | BindingFlags.Static,
+                     null, new[] { typeof(Guid) }, null)
+               ?? guidType.GetMethod("op_Explicit", BindingFlags.Public | BindingFlags.Static,
+                     null, new[] { typeof(Guid) }, null);
+        if (op != null) return op.Invoke(null, new object[] { guid });
+
+        return null;
+    }
+
+    /// <summary>
+    /// Checks whether a user identified by userId holds AlphaRoleId in the given community.
+    /// Accesses Community.Members.MembersXGroups.Items, finds the member by GlobalUser.Id,
+    /// then checks their Roles.Items for a role whose Id matches AlphaRoleId.
+    /// </summary>
+    private bool UserHasAlphaRoleInCommunity(object community, string userId)
+    {
+        try
+        {
+            var members = community.GetType().GetProperty("Members")?.GetValue(community);
+            if (members == null) return false;
+
+            var mxg = members.GetType().GetProperty("MembersXGroups")?.GetValue(members);
+            if (mxg == null) return false;
+
+            // DynamicData IObservableList/SourceList exposes Items; fall back to direct cast
+            var items = (mxg.GetType().GetProperty("Items")?.GetValue(mxg)
+                      ?? mxg) as System.Collections.IEnumerable;
+            if (items == null) return false;
+
+            foreach (var item in items)
+            {
+                if (item == null) continue;
+
+                // MembersXGroups contains both Member and MemberGroup objects — skip groups
+                var globalUser = item.GetType().GetProperty("GlobalUser")?.GetValue(item);
+                if (globalUser == null) continue;
+
+                var id = globalUser.GetType().GetProperty("Id")?.GetValue(globalUser)?.ToString();
+                if (!string.Equals(id, userId, StringComparison.OrdinalIgnoreCase)) continue;
+
+                // Found the target member — check their Roles collection
+                var roles = item.GetType().GetProperty("Roles")?.GetValue(item);
+                if (roles == null) break;
+
+                var roleItems = (roles.GetType().GetProperty("Items")?.GetValue(roles)
+                              ?? roles) as System.Collections.IEnumerable;
+                if (roleItems == null) break;
+
+                foreach (var role in roleItems)
+                {
+                    var roleId = role?.GetType().GetProperty("Id")?.GetValue(role)?.ToString();
+                    if (string.Equals(roleId, AlphaRoleId, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+                break; // found the member, role not present
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"UserHasAlphaRoleInCommunity error: {ex.Message}");
+        }
+        return false;
     }
 
     // ===== Presence icon (inline, horizontal StackPanel next to username) =====
