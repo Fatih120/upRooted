@@ -8,14 +8,19 @@ namespace Uprooted;
 ///
 /// Two badge types:
 /// - "Uprooted Dev" (gold): shown only on developer channel, gated to DeveloperUsernames (username) or DeveloperUserIds (UUID)
-/// - "Alpha User" (blue): shown on ALL channels, gated to AlphaUserIds (UUID match — stable across renames)
+/// - "Alpha User" (blue): shown on ALL channels. A user qualifies if:
+///     (a) their UUID is in AlphaUserIds, OR
+///     (b) they have AlphaRoleId in their Roles collection (community context only)
+///   Role-based detection works automatically for all current role holders without UUID management.
+///   UUID list supplements for cross-server / DM contexts where roles aren't visible.
 ///
 /// UUID is read from MemberProfileView.DataContext → MessageContainerMember.GlobalUser.Id.ToString().
-/// This is the canonical stable identifier Root uses internally (not affected by username changes).
+/// Roles read from MemberProfileView.DataContext → Roles (ReadOnlyObservableCollection&lt;IViewModelBase&gt;).
 ///
 /// Architecture:
 /// - Event-driven: subscribes to OverlayLayer.Children CollectionChanged for instant detection
-/// - Fallback: 500ms timer polls TopLevel windows for popups outside the overlay
+/// - Fallback: 200ms timer polls TopLevel windows for popups outside the overlay
+/// - On CollectionChanged: scan immediately + retry at 80ms and 200ms (DataContext set async)
 /// - Profile popups identified by presence of username TextBlock + avatar Image pattern
 /// - Username TextBlock found by largest font size in popup
 /// - Badges inserted at username's index+1 in its parent panel (centered, compact)
@@ -30,6 +35,18 @@ internal class ProfileBadgeInjector
     private const int FallbackPollMs = 200;
     private const string DevBadgeColor = "#8B6914";   // Gold/amber — developer channel
     private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
+
+    /// <summary>
+    /// Role ID that grants the Alpha User badge automatically (community context).
+    /// Any user with this role in community 002d082e-67d2-8e02-ae7d-8021acb2bc48
+    /// receives the badge without needing a UUID entry in AlphaUserIds.
+    /// </summary>
+    private const string AlphaRoleId = "002d0a32-ee9a-840b-8b91-d0bd98e8e693";
+
+    /// <summary>
+    /// Role ID that grants the Uprooted Dev badge automatically (community context, dev channel only).
+    /// </summary>
+    private const string DeveloperRoleId = "002d0850-916d-8f0b-9ed1-25bde2e91854";
 
     /// <summary>
     /// Known developer usernames who should display the "Uprooted Dev" badge.
@@ -51,69 +68,27 @@ internal class ProfileBadgeInjector
     };
 
     /// <summary>
-    /// UUIDs (UserGuid.ToString()) of alpha/experimental build participants.
-    /// UUID-based so the badge survives username changes.
-    /// Format: lowercase UUID string, e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    /// Per-UUID override list for alpha badge. Empty — badge is now fully role-based
+    /// via AlphaRoleId. Add individual UUIDs here only to cover DM or cross-server
+    /// contexts where the role isn't visible.
     /// </summary>
     private static readonly HashSet<string> AlphaUserIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        "002a38cb-bb10-8601-a1da-23b218d4ae15",
-        "002c3d33-6818-8a01-a97d-bed654f161a6",
-        "002cec0a-81d3-8c01-ad41-b4fa06bdcaab",
-        "002ce720-4be2-8701-96b8-cc3466f6f4b9",
-        "002ce787-7e77-8601-a2a2-61a4acca6a67",
-        "002ce9f4-1dca-8201-b6f9-44555f266188",
-        "002cea01-2575-8301-8cb9-bd4783ee77c4",
-        "002cea08-4244-8801-a6f2-cfd8b6ec4600",
-        "002cea96-e368-8801-82f6-af0350f9ed72",
-        "002cec7b-202d-8401-9123-f7ba22261d7a",
-        "002cefdb-8b30-8d01-8df5-736cd771096b",
-        "002cf11b-8ee6-8a01-96ed-c631439fca4b",
-        "002cf276-0f42-8901-9220-e9d5eb724e6d",
-        "002cf3b1-fc6d-8e01-b5cd-0f0f30961854",
-        "002cf5d0-b964-8e01-8589-90e376873f86",
-        "002cffd4-f23b-8501-ab4d-5b6c64563b5c",
-        "002d04eb-8161-8c01-9950-f74b8415c7bd",
-        "002d062b-e032-8401-9da4-daf8b70cf166",
-        "002cefdf-5e47-8f01-bdd9-815e8c9ef50e",
-        "002d0eee-40e7-8801-9202-5b5c676bb9e8",
-        "002ced8c-6828-8d01-b87a-a6a691b07323",
-        "002d0606-6469-8a01-96b4-2f6524c5ff91",
-        "002ce6ef-6d3a-8101-ab2d-77895a58c9ef",
-        "002c7dc3-c9ba-8101-b981-1564e838ddc2",
-        "002ceaf6-71e0-8701-b13a-ca678ca79787",
-        "002d1425-4ec6-8801-b38e-4c09c5ff0e6e",
-        "0029fae6-91e1-8a01-a6df-b38b1e9c0893",
-        "002d130c-27b2-8701-8a90-a63fc955e833",
-        "002d1057-5156-8201-9f6d-b76dda6cba0c",
-        "002ce7ed-fbe5-8801-bf3d-52a47ba31fc1",
-        "002cf06f-8bd8-8f01-8209-e4005ccbc67a",
-        "0029af3f-0b29-8601-88c7-e130cbecf963",
-        "002d0034-c6ea-8901-bb10-cff05e34b266",
-        "002cffc5-c637-8901-ba08-fb8806e937b9",
-        "002d1993-8ac5-8c01-8079-e2034f69f230",
-        "002d04f1-d744-8501-ae58-c19b7ad3e516",
-        "002d0e00-c2bd-8101-b328-8ac2effba2f6",
-        "002d0380-c0f9-8a01-af73-b51172fb1493",
-        "002cf301-7d02-8601-9a1e-348cabc6cf6b",
-        "002d0a06-8ba0-8501-9bb7-5766b44407e8",
-        "002c8d10-b651-8301-b062-39ebcbdb68bb",
+        // Role-based detection handles all cases — add individual UUIDs here only as needed
     };
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
     private readonly object _mainWindow;
-    private readonly bool _isDevChannel;
     private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
 
-    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, bool isDevChannel)
+    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow)
     {
         _r = resolver;
         _walker = new VisualTreeWalker(resolver);
         _mainWindow = mainWindow;
-        _isDevChannel = isDevChannel;
     }
 
     public void Initialize()
@@ -413,13 +388,14 @@ internal class ProfileBadgeInjector
             if (tag == AlphaBadgeTag) alphaBadgePresent = true;
         }
 
-        // Try to get the user's UUID from the DataContext for alpha badge check
-        var userId = TryGetUserIdFromPopup(popup);
-        bool isAlphaUser = userId != null && AlphaUserIds.Contains(userId);
+        // Get DataContext once — used for both UUID lookup and role check
+        var dc = FindProfileDataContext(popup);
+        var userId = TryGetUserIdFromDc(dc);
+        bool isAlphaUser = (userId != null && AlphaUserIds.Contains(userId)) || HasRoleId(dc, AlphaRoleId);
 
-        if (alphaBadgePresent && (!_isDevChannel || devBadgePresent))
+        if (alphaBadgePresent && devBadgePresent)
         {
-            Logger.Log("ProfileBadge", "All applicable badges already present, skipping injection");
+            Logger.Log("ProfileBadge", "All badges already present, skipping injection");
             return;
         }
 
@@ -457,7 +433,7 @@ internal class ProfileBadgeInjector
         var username = _r.GetText(usernameBlock) ?? "";
         Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
 
-        bool isDevUser = _isDevChannel && (DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)));
+        bool isDevUser = DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)) || HasRoleId(dc, DeveloperRoleId);
 
         if (!isDevUser && !isAlphaUser)
         {
@@ -517,61 +493,88 @@ internal class ProfileBadgeInjector
     }
 
     /// <summary>
-    /// Walk the popup's visual tree to find a MemberProfileView control, then read its
-    /// DataContext to extract the viewed user's UUID via:
-    ///   DataContext.MessageContainerMember.GlobalUser.Id.ToString()
-    ///
-    /// Returns the UUID string (lowercase) or null if not accessible.
-    /// This is the stable identifier — unaffected by username changes.
+    /// Finds MemberProfileView in the popup subtree and returns its DataContext,
+    /// or null if the view isn't found or DataContext isn't set yet.
+    /// Called once per injection attempt; result shared between UUID and role checks.
     /// </summary>
-    private string? TryGetUserIdFromPopup(object popup)
+    private object? FindProfileDataContext(object popup)
     {
         try
         {
-            // Find MemberProfileView anywhere in the subtree
             object? profileView = null;
             foreach (var node in _walker.DescendantsDepthFirst(popup))
             {
-                if (node.GetType().Name == "MemberProfileView")
-                {
-                    profileView = node;
-                    break;
-                }
+                if (node.GetType().Name == "MemberProfileView") { profileView = node; break; }
             }
-
-            // Also try the popup itself (sometimes the popup root IS the view)
             if (profileView == null && popup.GetType().Name == "MemberProfileView")
                 profileView = popup;
-
             if (profileView == null)
             {
-                Logger.Log("ProfileBadge", "TryGetUserIdFromPopup: MemberProfileView not found in subtree");
+                Logger.Log("ProfileBadge", "FindProfileDataContext: MemberProfileView not found (DataContext not ready yet — retries will catch it)");
                 return null;
             }
-
-            // Read DataContext
-            var dc = profileView.GetType().GetProperty("DataContext")?.GetValue(profileView);
-            if (dc == null) return null;
-
-            // DataContext.MessageContainerMember
-            var member = dc.GetType().GetProperty("MessageContainerMember")?.GetValue(dc);
-            if (member == null) return null;
-
-            // .GlobalUser
-            var globalUser = member.GetType().GetProperty("GlobalUser")?.GetValue(member);
-            if (globalUser == null) return null;
-
-            // .Id → UserGuid → .ToString()
-            var id = globalUser.GetType().GetProperty("Id")?.GetValue(globalUser);
-            if (id == null) return null;
-
-            return id.ToString()?.ToLowerInvariant();
+            return profileView.GetType().GetProperty("DataContext")?.GetValue(profileView);
         }
         catch (Exception ex)
         {
-            Logger.Log("ProfileBadge", $"TryGetUserIdFromPopup error: {ex.Message}");
+            Logger.Log("ProfileBadge", $"FindProfileDataContext error: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Reads the viewed user's UUID from a MemberProfileViewModel DataContext via:
+    ///   DataContext.MessageContainerMember.GlobalUser.Id.ToString()
+    /// Returns lowercase UUID string, or null if not accessible.
+    /// </summary>
+    private string? TryGetUserIdFromDc(object? dc)
+    {
+        if (dc == null) return null;
+        try
+        {
+            var member = dc.GetType().GetProperty("MessageContainerMember")?.GetValue(dc);
+            var globalUser = member?.GetType().GetProperty("GlobalUser")?.GetValue(member);
+            var id = globalUser?.GetType().GetProperty("Id")?.GetValue(globalUser);
+            return id?.ToString()?.ToLowerInvariant();
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Checks whether the viewed user holds a specific role by inspecting
+    /// MemberProfileViewModel.Roles (ReadOnlyObservableCollection&lt;IViewModelBase&gt;).
+    /// Only works in community context (CommunityMember is null in DMs).
+    /// Each role ViewModel is reflected for Id directly, or via a nested Role.Id property.
+    /// </summary>
+    private bool HasRoleId(object? dc, string roleId)
+    {
+        if (dc == null) return false;
+        try
+        {
+            var vmRoles = dc.GetType().GetProperty("Roles")?.GetValue(dc);
+            if (vmRoles is not System.Collections.IEnumerable roles) return false;
+            foreach (var roleVm in roles)
+            {
+                if (roleVm == null) continue;
+                // Try direct Id property on the ViewModel
+                var id = roleVm.GetType().GetProperty("Id")?.GetValue(roleVm)?.ToString();
+                if (id != null && id.Equals(roleId, StringComparison.OrdinalIgnoreCase))
+                    return true;
+                // Try via nested Role.Id (ViewModel wrapping a Role model)
+                var inner = roleVm.GetType().GetProperty("Role")?.GetValue(roleVm);
+                if (inner != null)
+                {
+                    id = inner.GetType().GetProperty("Id")?.GetValue(inner)?.ToString();
+                    if (id != null && id.Equals(roleId, StringComparison.OrdinalIgnoreCase))
+                        return true;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"HasRoleId error: {ex.Message}");
+        }
+        return false;
     }
 
     /// <summary>

@@ -377,10 +377,8 @@ internal class StartupHook
                 }
             });
 
-            // Phase 4.5e: Profile badge injector (all channels — alpha badge is global)
+            // Phase 4.5e: Profile badge injector (all channels — badges visible to everyone)
             {
-                var badgeSettings = UprootedSettings.Load();
-                var isDevChannel = badgeSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase);
                 var badgeWindow = mainWindow!;
                 var badgeResolver = resolver;
                 ThreadPool.QueueUserWorkItem(_ =>
@@ -388,8 +386,8 @@ internal class StartupHook
                     try
                     {
                         Thread.Sleep(5_000); // Wait 5s for app to settle
-                        Logger.Log("Startup", $"Phase 4.5e: Starting profile badge injector (devChannel={isDevChannel})...");
-                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow, isDevChannel);
+                        Logger.Log("Startup", "Phase 4.5e: Starting profile badge injector...");
+                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow);
                         badge.Initialize();
                         Logger.Log("Startup", "Phase 4.5e OK: Profile badge injector active");
                     }
