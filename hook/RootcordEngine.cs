@@ -1517,17 +1517,11 @@ internal class RootcordEngine
             string onlineColor = "#43b581";
             string statusLabel = GetCurrentStatusLabel();
 
-            // Floating card: elastic width (fits username), 12px rounded corners, cardBg background, elevated look
+            // Floating card: 240px wide, 12px rounded corners, cardBg background, elevated look
             _userBar = _r.CreateBorder(_cardBg, 12);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            // Elastic width: no fixed Width — card auto-sizes to fit full display name
-            try
-            {
-                _userBar.GetType().GetProperty("MinWidth")?.SetValue(_userBar, 200.0);
-                _userBar.GetType().GetProperty("MaxWidth")?.SetValue(_userBar, 380.0);
-            }
-            catch { }
+            _r.SetWidth(_userBar, 240);
             SetBorderStroke(_userBar, AdjustForHighlight(_cardBg, 22), 1.0);
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
@@ -1555,17 +1549,14 @@ internal class RootcordEngine
             var colDefs = _r.GetColumnDefinitions(contentGrid);
             if (colDefs?.Count >= 1)
                 _r.SetColumnDefinitionPixelWidth(colDefs[0], StripWidth); // 56px
-            if (colDefs?.Count >= 2 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            if (colDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
             {
                 try
                 {
                     var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
                     var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit)!;
-                    // Col 1: text column — Auto so card stretches to fit full display name
-                    colDefs[1]?.GetType().GetProperty("Width")?.SetValue(colDefs[1], autoLen);
-                    // Col 2: button tray — Auto so it sizes to button contents
-                    if (colDefs.Count >= 3)
-                        colDefs[2]?.GetType().GetProperty("Width")?.SetValue(colDefs[2], autoLen);
+                    var colDef2 = colDefs[2];
+                    colDef2?.GetType().GetProperty("Width")?.SetValue(colDef2, autoLen);
                 }
                 catch (Exception ex) { Logger.Log(Tag, $"UserBar: Auto col set error: {ex.Message}"); }
             }
@@ -1635,6 +1626,8 @@ internal class RootcordEngine
                     {
                         nameText.GetType().GetProperty("TextWrapping")?.SetValue(nameText,
                             Enum.Parse(nameText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
+                        nameText.GetType().GetProperty("TextTrimming")?.SetValue(nameText,
+                            Enum.Parse(nameText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
                     _r.AddChild(textPanel, nameText);
