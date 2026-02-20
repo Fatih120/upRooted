@@ -14,7 +14,7 @@ Read `docs/INDEX.md` for navigation, `docs/framework/ARCHITECTURE.md` for archit
 
 ### First Thing Every Session: Run `/hi`
 
-**At the start of every new session, run the `/hi` command.** It reads `NEW-SESSION.md`, `docs/INDEX.md`, and `.claude/UPROOT_CLAUDE_DEV.md` to orient you in the codebase -- architecture, critical rules, file map, current state, and available dev tools. Do this before any other work.
+**At the start of every new session, run the `/hi` command.** It reads `NEW-SESSION.md`, `docs/INDEX.md`, and `.claude/COMMAND_INDEX.md` to orient you in the codebase -- architecture, critical rules, file map, current state, and available dev tools. Do this before any other work.
 
 ## Collaboration
 

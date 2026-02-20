@@ -6,7 +6,7 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 
 ```
 .claude/
-├── UPROOT_CLAUDE_DEV.md        # This file
+├── COMMAND_INDEX.md            # This file
 ├── settings.json               # Claude Code settings
 ├── hooks.json                  # PreToolUse guard + Stop auto-review
 ├── commands/                   # Slash commands
