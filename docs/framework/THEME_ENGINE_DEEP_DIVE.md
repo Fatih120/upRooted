@@ -128,6 +128,31 @@ variantWrapper["TextPrimary"] = CreateImmutableBrush("#F2F2F2");
 
 **Creating brushes:** Use `ImmutableSolidColorBrush` (matching Root's type) or `SolidColorBrush` (both implement `IBrush`). `SolidColorBrush` is easier via reflection. `ImmutableSolidColorBrush(uint argb)` takes a `uint` ARGB — can cast from `Color.ToUint32()`.
 
+> **CRITICAL: Re-entrancy guard required.** Writing to a ThemeDictionaries variant wrapper via `AddResource`/indexer triggers `ActualThemeVariantChanged` on the same thread. If your `ActualThemeVariantChanged` handler calls `ApplyThemeDictionariesOverride` (which writes more resources), you get an **infinite loop that freezes the UI thread**. Root becomes unresponsive with no error — just a hung window. The fix is a boolean guard flag:
+>
+> ```csharp
+> private bool _applyingThemeDictOverrides;
+>
+> private int ApplyThemeDictionariesOverride(Dictionary<string, string> rootKeyValues)
+> {
+>     if (_applyingThemeDictOverrides) return 0; // prevent re-entrancy
+>     _applyingThemeDictOverrides = true;
+>     try
+>     {
+>         // ... write to ThemeDictionaries wrappers ...
+>     }
+>     finally { _applyingThemeDictOverrides = false; }
+> }
+>
+> private void OnActualThemeVariantChanged()
+> {
+>     if (_applyingThemeDictOverrides) return; // our own write triggered this
+>     // ... handle real variant change ...
+> }
+> ```
+>
+> This guard must wrap EVERY code path that writes to ThemeDictionaries: apply, revert, live preview, ping color override. Confirmed via live testing — without the guard, Root freezes on first theme application.
+
 ### What No Longer Needs Tree Walk
 
 Once Root's 32 keys are overridden correctly:

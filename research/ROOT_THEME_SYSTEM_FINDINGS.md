@@ -279,6 +279,8 @@ Override Root's 32 actual theme resource keys:
 3. **Keep a minimal tree walk** only for any controls with truly hardcoded ARGB values (may be a very small number now)
 4. **Target mention keys directly** — `SelfMentionBackground`, `SelfMentionBorder` for the custom ping color feature instead of overriding `HighlightForegroundColor`
 
+> **CRITICAL BUG (confirmed live):** Writing to a ThemeDictionaries variant wrapper (via indexer or `Add`) triggers `ActualThemeVariantChanged` **on the same UI thread, synchronously**. If your handler for that event writes more resources, you get an infinite loop → frozen UI, no error. **Every code path that writes to ThemeDictionaries must be wrapped in a boolean re-entrancy guard**, and the `ActualThemeVariantChanged` handler must bail out when the guard is set. This applies to: theme apply, revert, live preview, and ping color override. See [THEME_ENGINE_DEEP_DIVE.md §Resource-First Migration](../docs/framework/THEME_ENGINE_DEEP_DIVE.md#the-correct-override-path) for the guard pattern.
+
 ### Theme Palette Mapping (proposed)
 
 For a custom theme with accent `A` and background `B`:
