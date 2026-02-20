@@ -709,6 +709,9 @@ internal static class ContentPages
                 new() { Id = "recon-logger", DisplayName = "Recon Logger", Version = "0.4.2",
                     Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
+                new() { Id = "translate", DisplayName = "Translate", Version = "0.4.2",
+                    Description = "Translate received and sent messages. Click the translate button in the compose bar to configure language settings. Right-click the button to toggle AutoTranslate on or off.",
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
@@ -959,7 +962,7 @@ internal static class ContentPages
                 {
                     foreach (var kv in initialPluginStates)
                     {
-                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger") continue; // live-toggle plugins
+                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
                         bool currentVal = kv.Key == "content-filter"
                             ? settings.NsfwFilterEnabled
                             : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -1482,7 +1485,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger") continue; // live-toggle plugins
+                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);

@@ -544,6 +544,37 @@ internal class StartupHook
                 }
             }
 
+            // Phase 4.5j: Translate (compose bar button + auto-translate)
+            {
+                var translateSettings = UprootedSettings.Load();
+                var wantTranslate = translateSettings.Plugins.TryGetValue("translate", out var trEnabled) && trEnabled;
+                if (wantTranslate)
+                {
+                    var trWindow   = mainWindow!;
+                    var trResolver = resolver;
+                    ThreadPool.QueueUserWorkItem(_ =>
+                    {
+                        try
+                        {
+                            Thread.Sleep(5_000);
+                            Logger.Log("Startup", "Phase 4.5j: Starting translate engine...");
+                            var engine = new TranslateEngine(trResolver, trWindow, themeEngine);
+                            TranslateEngine.Instance = engine;
+                            engine.Initialize();
+                            Logger.Log("Startup", "Phase 4.5j OK: Translate engine active");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Startup", $"Phase 4.5j error: {ex.Message}");
+                        }
+                    });
+                }
+                else
+                {
+                    Logger.Log("Startup", "Phase 4.5j: Translate disabled, skipping");
+                }
+            }
+
             // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
             {
                 var capturedWindow = mainWindow!;
