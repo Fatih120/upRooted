@@ -6,6 +6,33 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.4.2] - 2026-02-19
+
+### Changed
+
+- **SilentTypingEngine: DiagnosticListener rewrite** (by Kurumi Nanase) — Replaced the 482-line HttpClient/GrpcChannel handler injection with ~90-line DiagnosticListener approach. Subscribes to .NET's built-in HTTP diagnostics (`DiagnosticListener.AllListeners`), intercepts `System.Net.Http.HttpRequestOut.Start` events, and redirects SetTypingIndicator requests to `localhost:0`. No discovery, no field walking, no handler patching.
+  - File: `hook/SilentTypingEngine.cs`
+- **Themes tab: Open button** — Replaced the Themes plugin toggle in Plugin Settings with an "Open" button that navigates directly to the Themes settings tab.
+  - File: `hook/ContentPages.cs`
+
+### Fixed
+
+- **ThemeEngine crash: InvalidCastException on startup** — Fixed ThemeEngine storing `Avalonia.Media.Color` objects in ThemeDictionaries where Root's converters expect `Avalonia.Media.IBrush`. Only `DropShadow` is stored as Color; all other keys now correctly stored as `SolidColorBrush` (or `LinearGradientBrush` for `ScrollShadow`).
+  - File: `hook/ThemeEngine.cs`
+- **Online status indicators recolored by themes** — ThemeEngine no longer overrides `BrandSecondary` in ThemeDictionaries. Root uses this key for online status dots (green `#A8FF5D`); overriding it caused all online indicators to show the theme accent color instead.
+  - File: `hook/ThemeEngine.cs`
+
+### Infrastructure
+
+- Pinned CI .NET SDK to 10.0.103 to match Root's runtime
+
+### Documentation
+
+- Documented ThemeDictionaries re-entrancy trap (confirmed live)
+- Updated docs for MessageLogger overhaul and SilentTyping rewrite
+
+---
+
 ## [0.4.1] - 2026-02-19
 
 ### Changed
@@ -331,6 +358,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.4.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0
 [0.3.6-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.5...v0.3.6-rc

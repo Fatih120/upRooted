@@ -813,4 +813,4 @@ The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentCo
 
 **Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s_instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
 **Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-*Avalonia patterns reference for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-19.*

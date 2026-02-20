@@ -26,7 +26,7 @@ The default mode renders a btop-inspired TUI with a centered bordered box, step
 indicators, animated spinners, and color-coded checkmarks/crosses. A `--plain` flag
 falls back to simple sequential ANSI output for scripts and CI environments.
 
-**Version:** 0.4.1
+**Version:** 0.4.2
 
 **Stack:**
 
@@ -108,7 +108,7 @@ indicators, and a footer message on completion.
 
 - **Border:** Cyan-colored box centered in the terminal, 60 columns wide.
 - **Title:** Operation name ("Install", "Uninstall", "Repair") in the border.
-- **Version:** `Uprooted v0.4.1` displayed at the top of the box.
+- **Version:** `Uprooted v0.4.2` displayed at the top of the box.
 - **Step indicators:**
   - `○` (dark gray) -- pending
   - Braille spinner `⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏` (yellow, animated) -- running
@@ -682,4 +682,4 @@ a minimal binary.
 
 **Canonical for:** Rust installer internals, TUI/CLI modes, detection algorithm (Windows + Linux 5-strategy), HTML patcher (markers, inject/strip/repair), hook deployment (8 artifacts), environment variable management (dual-prefix, Windows registry, Linux 5-mechanism), diagnostics mode, embedded artifacts, process management, settings JSON
 **Not canonical for:** end-user instructions → [INSTALLATION.md](../install/INSTALLATION.md) | build pipeline → [BUILD.md](../install/BUILD.md) | runtime hook behavior → [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
-*Installer reference for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Installer reference for Uprooted v0.4.2. Last updated 2026-02-19.*

@@ -477,7 +477,7 @@ Phase 0 is non-fatal: if it fails (missing directories, permission errors), the 
 
 ### Version migration: force-disable unstable plugins on upgrade
 
-Between Phase 0 and Phase 1 -- before any plugin launch decisions are made -- the hook runs a one-time version migration. It compares the `CurrentVersion` const baked into the build against the `Version` field persisted in the user's settings INI file. If the build is newer (an upgrade), it walks a compile-time dictionary called `ForceDisableOnUpgrade` and sets `Plugins[id] = false` for any plugins listed in versions between the old and current. This is cumulative: if a user skips from 0.3.6 to 0.5.0, entries for both 0.4.1 and 0.5.0 apply. On downgrade (rollback), it stamps the new version but leaves all plugin toggles alone. On a normal restart where versions match, this block is skipped entirely.
+Between Phase 0 and Phase 1 -- before any plugin launch decisions are made -- the hook runs a one-time version migration. It compares the `CurrentVersion` const baked into the build against the `Version` field persisted in the user's settings INI file. If the build is newer (an upgrade), it walks a compile-time dictionary called `ForceDisableOnUpgrade` and sets `Plugins[id] = false` for any plugins listed in versions between the old and current. This is cumulative: if a user skips from 0.3.6 to 0.5.0, entries for both 0.4.2 and 0.5.0 apply. On downgrade (rollback), it stamps the new version but leaves all plugin toggles alone. On a normal restart where versions match, this block is skipped entirely.
 
 Why this matters: some plugins ship in a testing state (e.g. MessageLogger). Without this gate, an auto-update would silently carry forward an enabled unstable plugin and surface bugs to users who didn't opt in. The migration ensures each release can declaratively reset specific plugins to off.
 
@@ -821,4 +821,4 @@ Two independent injection layers. Zero binary modifications. Full cleanup on uni
 
 **Canonical for:** reverse-engineering narrative, historical context (why binary patching was abandoned), discovery walkthrough, origin story
 **Not canonical for:** current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md) | implementation detail → [HOOK_REFERENCE.md](framework/HOOK_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](framework/THEME_ENGINE_DEEP_DIVE.md) | 32-key values → [ROOT_THEME_SYSTEM_FINDINGS.md](../research/ROOT_THEME_SYSTEM_FINDINGS.md)
-*Narrative walkthrough for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Narrative walkthrough for Uprooted v0.4.2. Last updated 2026-02-19.*

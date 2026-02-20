@@ -355,9 +355,9 @@ separate frontend build step.
 ### Output
 
 - **Windows:** `installer/src-tauri/target/release/uprooted.exe`
-  (renamed to `Uprooted-0.4.1-Setup.exe` for distribution)
+  (renamed to `Uprooted-0.4.2-Setup.exe` for distribution)
 - **Linux:** `installer/src-tauri/target/release/uprooted`
-  (renamed to `Uprooted-0.4.1-linux-amd64` for distribution)
+  (renamed to `Uprooted-0.4.2-linux-amd64` for distribution)
 
 ---
 
@@ -685,10 +685,10 @@ The version string appears in multiple locations and must be kept in sync.
 
 | Location                                    | Current  | Format     | Used By                              |
 | ------------------------------------------- | -------- | ---------- | ------------------------------------ |
-| `package.json` (`version`)                  | `0.4.1` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
-| `installer/src-tauri/Cargo.toml` (`version`)| `0.4.1` | semver     | Rust crate version, CI rename        |
-| `hook/UprootedSettings.cs` (`Version`)      | `0.4.1` | string     | Default version in settings INI file |
-| `scripts/install-hook.ps1` (settings write) | `0.4.1` | string     | Written to `uprooted-settings.ini`   |
+| `package.json` (`version`)                  | `0.4.2` | semver     | TypeScript build (`__UPROOTED_VERSION__`) |
+| `installer/src-tauri/Cargo.toml` (`version`)| `0.4.2` | semver     | Rust crate version, CI rename        |
+| `hook/UprootedSettings.cs` (`Version`)      | `0.4.2` | string     | Default version in settings INI file |
+| `scripts/install-hook.ps1` (settings write) | `0.4.2` | string     | Written to `uprooted-settings.ini`   |
 
 ### How Versions Propagate
 
@@ -697,7 +697,7 @@ The version string appears in multiple locations and must be kept in sync.
    as `window.__UPROOTED_VERSION__` in the browser context.
 
 2. **C# hook:** `UprootedSettings.cs` has a hardcoded default
-   (`Version = "0.4.1"`) that gets written to `uprooted-settings.ini`.
+   (`Version = "0.4.2"`) that gets written to `uprooted-settings.ini`.
    The settings page displays this version as a badge via `ContentPages.cs`,
    and the sidebar injector adds it to the version info box.
 
@@ -725,4 +725,4 @@ to a Root installation.
 
 **Canonical for:** build pipeline, prerequisites, per-component build commands (TS, C#, profiler, installer), artifact inventory, full installer pipeline, version management
 **Not canonical for:** end-user install → [INSTALLATION.md](INSTALLATION.md) | installer internals → [INSTALLER.md](../framework/INSTALLER.md) | runtime hook behavior → [HOOK_REFERENCE.md](../framework/HOOK_REFERENCE.md)
-*Build pipeline guide for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Build pipeline guide for Uprooted v0.4.2. Last updated 2026-02-19.*

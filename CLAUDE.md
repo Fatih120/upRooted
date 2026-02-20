@@ -61,6 +61,7 @@ uprooted-private/
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── MessageLogger.cs              # Message logger: edit/delete detection, visual indicators, collection subscription
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
+│   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception

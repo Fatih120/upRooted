@@ -39,7 +39,7 @@ New C# chat plugins should follow this pattern.
 
 ## Shipped Plugins
 
-### ~~MessageLogger~~ ✓ (shipped WIP in v0.4.1)
+### ~~MessageLogger~~ ✓ (shipped WIP in v0.4.2)
 
 See [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md) for the full design reference and [`hook/MessageLogger.cs`](../../hook/MessageLogger.cs) + [`hook/MessageStore.cs`](../../hook/MessageStore.cs) for the implementation.
 
@@ -47,7 +47,7 @@ See [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md
 
 ## Planned Plugins
 
-### ClearURLs (IMPLEMENTED - v0.4.1)
+### ClearURLs (IMPLEMENTED - v0.4.2)
 
 **Inspired by:** Vencord's ClearURLs plugin (which uses the [ClearURLs](https://docs.clearurls.xyz/latest/) browser extension rule database to strip tracking parameters from URLs).
 
@@ -187,7 +187,7 @@ Several capabilities need to exist before the planned plugins can reach their fu
 
 ClearURLs v1 ships without gRPC (uses compose-input interception instead), but future display-time cleaning of incoming messages and MessageLogger (deletion/edit detection) would benefit from gRPC interception. This would be a framework-level capability - not plugin-specific - that intercepts gRPC-web traffic between Root's UI and its backend. See [gRPC Protocol](research/GRPC_PROTOCOL.md) for the protocol reference.
 
-### ~~Plugin toggle functionality in native UI~~ ✓ (shipped in v0.4.1)
+### ~~Plugin toggle functionality in native UI~~ ✓ (shipped in v0.4.2)
 
 Plugin toggles are implemented in the native Avalonia Plugins page. Toggles save state to `UprootedSettings` and show a restart banner when plugin state diverges from initial load. Themes apply live (no restart needed).
 

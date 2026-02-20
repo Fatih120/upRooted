@@ -4,6 +4,20 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## [v0.4.2](https://github.com/watchthelight/uprooted/releases/tag/v0.4.2) — 2026-02-19
+
+### Improvements
+
+- **Silent Typing rewrite** — Completely rewritten from scratch using a cleaner, more reliable approach (contributed by Kurumi Nanase)
+- **Themes tab** — The Themes plugin now has an "Open" button in Plugin Settings that takes you directly to the Themes tab
+
+### Fixes
+
+- Fixed a crash on startup when a theme was active (InvalidCastException: Color/IBrush type mismatch)
+- Online status indicators (green dots next to usernames) no longer change color when using a custom theme
+
+---
+
 ## [v0.4.1](https://github.com/watchthelight/uprooted/releases/tag/v0.4.1) — 2026-02-19
 
 ### Improvements

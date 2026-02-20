@@ -22,7 +22,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.4.1. Target: Root v0.9.92+.
+Version: 0.4.2. Target: Root v0.9.92+.
 This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -116,7 +116,7 @@ Two independent injection layers into one app:
 
 **Source:** [`hook/SESSION_STATE.md`](hook/SESSION_STATE.md) (2026-02-18) — *this section is a static snapshot; SESSION_STATE.md is the live source*
 
-**Versions:** 0.4.1 | Target Root 0.9.92
+**Versions:** 0.4.2 | Target Root 0.9.92
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.
@@ -309,4 +309,4 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 
 **Canonical for:** AI session entry point, critical rules quick-reference (§3), common pitfalls (§10), abbreviated file map (§4), workflow dispatch table
 **Not canonical for:** full critical rules → [ARCHITECTURE.md §9](docs/framework/ARCHITECTURE.md#9-critical-rules) | full file map → [CLAUDE.md](CLAUDE.md) | implementation detail → [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md)
-*Quick-start reference for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Quick-start reference for Uprooted v0.4.2. Last updated 2026-02-19.*

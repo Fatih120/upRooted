@@ -574,4 +574,4 @@ installation.
 
 **Canonical for:** .NET runtime concepts (CLR profiler API overview, IL injection theory, single-file app challenges, assembly scanning patterns, startup hook mechanism, reflection caching strategy, GC rooting patterns, debugging workflows, platform differences overview)
 **Not canonical for:** profiler C source code → [CLR_PROFILER.md](CLR_PROFILER.md) | profiler env vars → [CLR_PROFILER.md §2](CLR_PROFILER.md#guid-and-environment-variables) | managed hook implementation → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | env var deployment → [INSTALLER.md](INSTALLER.md)
-*Runtime concepts reference for Uprooted v0.4.1. Last updated 2026-02-19.*
+*Runtime concepts reference for Uprooted v0.4.2. Last updated 2026-02-19.*
