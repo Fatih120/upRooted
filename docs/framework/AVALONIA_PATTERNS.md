@@ -777,9 +777,102 @@ addHandler.Invoke(target, new[] { routedEvent, handler, all, (object)true });
 Hook `TextArea` (not `TextEditor`) — it's the actual input surface and receives events
 first. See [Hook Reference: Compose Input Interception](HOOK_REFERENCE.md#clearurlsengine-compose-input-interception).
 
+### Color.ToString() Returns Named Colors
+
+Avalonia's `Color.ToString()` can return named color strings like `"White"` instead of `"#FFFFFFFF"`. This breaks `ColorUtils.ParseHex()` which expects `#RRGGBB`/`#AARRGGBB`. Always extract color values via the struct's `A`, `R`, `G`, `B` byte properties:
+
+```csharp
+var ct = color.GetType();
+var a = ct.GetProperty("A")?.GetValue(color) as byte?;
+var r = ct.GetProperty("R")?.GetValue(color) as byte?;
+var g = ct.GetProperty("G")?.GetValue(color) as byte?;
+var b = ct.GetProperty("B")?.GetValue(color) as byte?;
+if (a.HasValue && r.HasValue && g.HasValue && b.HasValue)
+    hex = $"#{a.Value:X2}{r.Value:X2}{g.Value:X2}{b.Value:X2}";
+```
+
+### ResourceDictionary Indexer Doesn't Resolve MergedDictionaries
+
+`dict["key"]` only returns direct entries. Root's 32 color keys are added via `AddDeferred` to variant wrapper dicts — the indexer may return the deferred wrapper, not the resolved brush. Use `Application.TryGetResource(key, ThemeVariant, out value)` for full resolution (MergedDictionaries + deferred factories + variant matching). This is the same path `DynamicResource` uses at runtime.
+
+### SVG Resources Are Direct Dict Entries
+
+Root's ~220 SVG path resources (keys ending in `SVG`) are added directly to ThemeDictionary variant wrappers via `IDictionary.Add`, NOT via `AddDeferred` like color brushes. They're plain `string` values. To enumerate them, iterate the variant wrapper dict itself, not `MergedDictionaries[0]`.
+
+### Transparent Backgrounds Break Pointer Hit-Testing
+
+A control with `Background="#00000000"` (fully transparent) does NOT receive pointer events. Child controls inside it will get events, but the transparent parent won't — causing `PointerEntered`/`PointerExited` gaps when the mouse moves between children. Fix: set `IsHitTestVisible=false` on overlay elements so events pass through to the parent.
+
+### Light Theme Text Colors Are Solid (Not Alpha Variants)
+
+Root's Dark theme uses alpha variants for text hierarchy: `TextSecondary=#A3F2F2F2` (64% alpha), `TextTertiary=#66F2F2F2` (40% alpha). Root's Light theme uses **solid opaque colors**: `TextSecondary=#282828`, `TextTertiary=#5E5E5E`. Never derive Light text colors by applying alpha to `TextPrimary` — always read the actual `TextSecondary`/`TextTertiary` resources.
+
 ### Never Use localStorage in TypeScript
 
 Root runs Chromium with `--incognito`. `localStorage` is not persisted.
+
+---
+
+## UI Standards for Injected Controls
+
+Patterns established for Uprooted's injected Avalonia controls (ContentPages cards, SidebarInjector nav items). These match Root's native settings UI conventions.
+
+### Card Border Highlights
+
+All cards use **constant border thickness** (`1.5px`) — never change thickness on hover/selection (causes layout shift as cards grow/shrink by a few pixels).
+
+- **Resting**: 15% contrast from `CardBg` via `AdjustForHighlight(CardBg, 15)`
+- **Hover (theme cards)**: Card border brightens to 35% contrast. Radio indicator border brightens to 50% contrast. Inner radio dot fills with 40% contrast highlight. No background change.
+- **Hover (plugin cards)**: No highlight — plugin cards are not clickable as a whole. Only the toggle/button inside is interactive.
+- **Selected**: Accent color border on the card + accent-filled inner radio dot.
+
+```csharp
+// Luminance-aware highlight: darkens on light bg, lightens on dark bg
+private static string AdjustForHighlight(string bg, double percent)
+    => ColorUtils.Luminance(bg) > 0.5
+        ? ColorUtils.Darken(bg, percent)
+        : ColorUtils.Lighten(bg, percent);
+```
+
+### Sidebar Nav Item Highlights
+
+Read highlight colors from Root's live ThemeDictionaries resources — these automatically adapt to Dark/Light/PureDark:
+
+- **Hover**: `HighlightLight` — white at 4% on Dark (`#0AFFFFFF`), black at 4% on Light (`#0A000000`)
+- **Selected**: `HighlightNormal` — white at 10% on Dark (`#19FFFFFF`), black at 10% on Light (`#19000000`)
+
+### Theme Selection Interaction
+
+- Use `PointerReleased` (not `PointerPressed`) for theme activation — matches Root's native theme selector
+- Radio inner dot shows highlight on hover as a preview of selection
+- Preview swatch has `IsHitTestVisible=false` so pointer events pass through to the card
+
+### ContentPages Color Derivation
+
+Colors come from `Application.TryGetResource` reading Root's live theme keys. This works for all variants and when Uprooted themes are active:
+
+| Static Field | Root Resource Key | Dark Value | Light Value |
+|---|---|---|---|
+| `TextWhite` | `TextPrimary` | `#FFF2F2F2` | `#FF131313` |
+| `TextMuted` | `TextSecondary` | `#A3F2F2F2` | `#FF282828` |
+| `TextDim` | `TextTertiary` | `#66F2F2F2` | `#FF5E5E5E` |
+| `CardBg` | `BackgroundSecondary` | `#FF121A26` | `#FFFFFFFF` |
+| `CardBorder` | `Border` | `#FF242C36` | `#FFDBDBDB` |
+| `AccentGreen` | `BrandPrimary` | `#FF3B6AF8` | `#FF3B6AF8` |
+
+Fallback: if `ReadLiveRootColors()` returns null, hardcoded Dark defaults are used.
+
+### Variant Change Re-injection
+
+When Root switches theme variant (Dark↔Light↔PureDark), the SidebarInjector must:
+
+1. **Unwrap ScrollViewer** (restores NavContainer to grid — critical for layout detection)
+2. **Remove injected controls** from nav panel
+3. **Remove content page** and **version text**
+4. **Null all state** (`_injected = false`)
+5. Do NOT try to restore Root's controls (SignOut, VersionBorder) — Root's own `DynamicResource` bindings handle them
+
+Next `LayoutUpdated` pass detects `_injected=false`, runs `CheckAndInject` → `InjectIntoSettings` with fresh native colors from the new variant.
 
 ### ImmutableSolidColorBrush(16777215u) Means Transparent
 

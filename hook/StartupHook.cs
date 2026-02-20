@@ -174,6 +174,10 @@ internal class StartupHook
                         Logger.Log("Startup", "Using default theme (no override)");
                     }
 
+                    // Subscribe to variant changes unconditionally — needed for sidebar
+                    // re-injection when Root switches Dark↔Light↔PureDark
+                    themeEngine.EnsureVariantChangeSubscribed();
+
                     // Apply saved custom ping color override (persists across theme switches)
                     if (!string.IsNullOrEmpty(savedSettings.CustomPingColor) && ColorUtils.IsValidHex(savedSettings.CustomPingColor))
                     {

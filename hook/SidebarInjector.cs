@@ -79,6 +79,51 @@ internal class SidebarInjector
         _themeEngine = themeEngine;
         _window = mainWindow;
 
+        // Re-inject sidebar when Root's theme variant changes (Dark↔Light↔PureDark)
+        // so nav items and content pages get fresh colors from the new variant.
+        _themeEngine.SetVariantChangedCallback(() =>
+        {
+            _r.RunOnUIThread(() =>
+            {
+                try
+                {
+                    if (_injected)
+                    {
+                        // Root updates DynamicResource-bound controls on variant change,
+                        // but our injected controls have hardcoded foreground/background.
+                        // Remove our controls from the tree, null state, let next
+                        // LayoutUpdated re-inject with fresh native colors.
+                        Logger.Log("Injector", "Root variant changed — removing injected controls for re-injection");
+
+                        // Unwrap ScrollViewer first (restores NavContainer to grid)
+                        UnwrapScrollViewer();
+
+                        // Remove our injected container from the nav panel
+                        var removalTarget = _insertionPanel ?? _navContainer;
+                        if (removalTarget != null)
+                        {
+                            foreach (var ctrl in _injectedControls)
+                            {
+                                try { _r.RemoveChild(removalTarget, ctrl); }
+                                catch { }
+                            }
+                        }
+
+                        // Remove content page
+                        RemoveContentPage();
+
+                        // Remove version text we injected (prevents duplicates on re-inject)
+                        RemoveVersionText();
+
+                        // Clear all state — don't try to restore version/signout
+                        // (Root's DynamicResource bindings handle its own controls)
+                        NullState();
+                    }
+                }
+                catch (Exception ex) { Logger.Log("Injector", "Variant re-inject error: " + ex.Message); }
+            });
+        });
+
         // Populate default plugin entries if not already set
         if (!_settings.Plugins.ContainsKey("sentry-blocker"))
             _settings.Plugins["sentry-blocker"] = true;
@@ -542,6 +587,11 @@ internal class SidebarInjector
             }
         }
 
+        // Sync ContentPages colors from Root's live visual tree.
+        // This captures whatever Root is actually rendering — Dark, Light, or PureDark.
+        // Reads foreground hex from a native nav TextBlock, background from the content panel.
+        SyncContentPagesFromNativeTree(layout, nativeNavForeground);
+
         // 1. UPROOTED section header (matching "APP SETTINGS" style)
         var sectionHeader = BuildSectionHeader("UPROOTED", headerFontSize, headerFontWeight, headerForeground, nativeFontFamily);
         if (sectionHeader != null)
@@ -668,6 +718,74 @@ internal class SidebarInjector
         return wrapper;
     }
 
+    /// <summary>
+    /// Read Root's live colors from the actual visual tree and sync to ContentPages statics.
+    /// This ensures Uprooted pages match Root's current Dark/Light/PureDark variant.
+    /// Called at injection time — before any page builds.
+    /// </summary>
+    private void SyncContentPagesFromNativeTree(SettingsLayout layout, object? nativeNavForeground)
+    {
+        try
+        {
+            // Extract foreground hex from the native nav TextBlock brush
+            string? fgHex = null;
+            if (nativeNavForeground != null)
+            {
+                var colorProp = nativeNavForeground.GetType().GetProperty("Color");
+                if (colorProp != null)
+                {
+                    var color = colorProp.GetValue(nativeNavForeground);
+                    fgHex = color?.ToString(); // "#AARRGGBB"
+                }
+            }
+
+            // Extract background hex from the content panel or sidebar grid
+            string? bgHex = null;
+            foreach (var source in new[] { layout.ContentArea, layout.SidebarGrid, layout.NavContainer })
+            {
+                if (source == null) continue;
+                var bgProp = source.GetType().GetProperty("Background");
+                if (bgProp == null) continue;
+                var bgBrush = bgProp.GetValue(source);
+                if (bgBrush == null) continue;
+                var colorProp = bgBrush.GetType().GetProperty("Color");
+                if (colorProp == null) continue;
+                var color = colorProp.GetValue(bgBrush);
+                if (color != null)
+                {
+                    bgHex = color.ToString();
+                    break;
+                }
+            }
+
+            // Sync to ContentPages statics
+            if (fgHex != null)
+            {
+                var h = fgHex.TrimStart('#');
+                if (h.Length == 6) h = "FF" + h;
+                var rgb = h.Length >= 8 ? h[2..] : h;
+                ContentPages.TextWhite = $"#FF{rgb}";
+                ContentPages.TextMuted = $"#A3{rgb}";
+                ContentPages.TextDim = $"#66{rgb}";
+            }
+
+            if (bgHex != null)
+            {
+                ContentPages.CardBg = bgHex;
+            }
+
+            // Read accent from ThemeEngine (which already has the correct value)
+            var accent = _themeEngine.GetAccentColor();
+            ContentPages.AccentGreen = accent;
+
+            Logger.Log("Injector", $"Native colors synced: fg={fgHex ?? "null"} bg={bgHex ?? "null"} accent={accent}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Injector", $"SyncContentPagesFromNativeTree error: {ex.Message}");
+        }
+    }
+
     private object? BuildNavItem(string label, string pageName, object? fontFamily,
         object? nativeForeground = null, object? nativeFontWeight = null)
     {
@@ -730,11 +848,15 @@ internal class SidebarInjector
 
             _r.AddChild(outerPanel, innerPanel);
 
+            // Hover highlight: read Root's HighlightLight resource for correct variant color.
+            // Dark = #0AFFFFFF (white 4%), Light = #0A000000 (black 4%)
+            var hoverColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
+
             // Hover events on the outer panel (captures full area)
             _r.SubscribeEvent(outerPanel, "PointerEntered", () =>
             {
                 if (_activePage != pageName && highlight != null)
-                    _r.SetBackground(highlight, "#0Dffffff");
+                    _r.SetBackground(highlight, hoverColor);
             });
 
             _r.SubscribeEvent(outerPanel, "PointerExited", () =>
@@ -793,7 +915,7 @@ internal class SidebarInjector
                 _themeEngine, rebuildCurrentPage, onNavigate: OnNavItemClicked);
             if (page == null)
             {
-                Logger.Log("Injector", $"Failed to build page: {pageName}");
+                Logger.Log("Injector", $"Failed to build page: {pageName} — page returned null");
                 return;
             }
 
@@ -1015,8 +1137,24 @@ internal class SidebarInjector
                 return;
             }
 
-            // Create "Uprooted 0.4.2" TextBlock matching existing style (FontSize=10, Fg=#66f2f2f2)
-            var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, "#66f2f2f2");
+            // Read foreground from Root's existing "Root Version" TextBlock for pixel-perfect match.
+            string versionFg = ContentPages.TextDim;
+            foreach (var child in _r.GetVisualChildren(versionStackPanel))
+            {
+                if (!_r.IsTextBlock(child)) continue;
+                var fg = _r.GetForeground(child);
+                if (fg != null)
+                {
+                    var colorProp = fg.GetType().GetProperty("Color");
+                    if (colorProp != null)
+                    {
+                        var color = colorProp.GetValue(fg);
+                        if (color != null) { versionFg = color.ToString()!; break; }
+                    }
+                }
+            }
+
+            var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, versionFg);
             if (versionText == null) return;
 
             _r.AddChild(versionStackPanel, versionText);
@@ -1027,30 +1165,8 @@ internal class SidebarInjector
             var versionButton = FindAncestorOfType(versionStackPanel, "Button");
             if (versionButton != null)
             {
-                _r.SubscribeEvent(versionButton, "Click", () =>
-                {
-                    try
-                    {
-                        var lines = new List<string>();
-                        foreach (var child in _r.GetVisualChildren(versionStackPanel))
-                        {
-                            if (_r.IsTextBlock(child))
-                            {
-                                var txt = _r.GetText(child);
-                                if (!string.IsNullOrEmpty(txt)) lines.Add(txt);
-                            }
-                        }
-                        if (lines.Count > 0)
-                        {
-                            _r.CopyToClipboard(_window, string.Join("\n", lines));
-                            Logger.Log("Injector", $"Version copy: overwrote clipboard with {lines.Count} lines");
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Injector", $"Version copy error: {ex.Message}");
-                    }
-                });
+                // TODO: version copy intercept — needs investigation to run AFTER Root's native handler
+                // _r.SubscribeEvent(versionButton, "Click", () => { ... });
                 Logger.Log("Injector", "Version copy: subscribed to Button.Click");
             }
 
@@ -1298,13 +1414,16 @@ internal class SidebarInjector
     {
         if (_navContainer == null) return;
 
+        // Use Root's HighlightNormal for selection — adapts to Dark (#19FFFFFF) / Light (#19000000)
+        var selectionColor = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? "#19ffffff";
+
         foreach (var node in _walker.DescendantsDepthFirst(_navContainer))
         {
             var tag = _r.GetTag(node);
             if (tag == null || !tag.StartsWith("uprooted-highlight-")) continue;
 
             var itemPage = tag["uprooted-highlight-".Length..];
-            _r.SetBackground(node, itemPage == _activePage ? "#19ffffff" : null);
+            _r.SetBackground(node, itemPage == _activePage ? selectionColor : null);
         }
     }
 

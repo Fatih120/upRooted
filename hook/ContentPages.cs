@@ -30,6 +30,21 @@ internal static class ContentPages
     internal static string TextDim = DefaultTextDim;
     internal static string AccentGreen = DefaultAccentGreen;
 
+    /// <summary>
+    /// Luminance-aware highlight: lightens on dark backgrounds, darkens on light backgrounds.
+    /// Replaces Lighten(CardBg, N) which fails on Light theme (lightening white = white).
+    /// </summary>
+    private static string AdjustForHighlight(string bg, double percent)
+    {
+        try
+        {
+            return ColorUtils.Luminance(bg) > 0.5
+                ? ColorUtils.Darken(bg, percent)
+                : ColorUtils.Lighten(bg, percent);
+        }
+        catch { return bg; }
+    }
+
     /// Font size presets for different UI contexts.
     /// PageScale matches Root's native settings; LightboxScale is larger for modal readability.
     private readonly record struct FontScale(
@@ -83,23 +98,28 @@ internal static class ContentPages
     /// </summary>
     private static void ApplyThemedColors(ThemeEngine? themeEngine)
     {
-        if (themeEngine?.ActiveThemeName == null || themeEngine.ActiveThemeName == "default-dark")
+        // Try live colors from Root's ThemeDictionaries first.
+        // Works for all variants (Dark/Light/PureDark) and when Uprooted themes are active.
+        var live = themeEngine?.ReadLiveRootColors();
+        if (live != null && live.Count > 0)
         {
-            // Reset to defaults
-            CardBg = DefaultCardBg;
-            CardBorder = DefaultCardBorder;
-            TextWhite = DefaultTextWhite;
-            TextMuted = DefaultTextMuted;
-            TextDim = DefaultTextDim;
-            AccentGreen = DefaultAccentGreen;
+            AccentGreen = live.GetValueOrDefault("BrandPrimary", DefaultAccentGreen);
+            CardBg = live.GetValueOrDefault("BackgroundSecondary", DefaultCardBg);
+            CardBorder = live.GetValueOrDefault("Border", DefaultCardBorder);
+
+            // Use Root's actual TextPrimary/Secondary/Tertiary — on Light these are solid
+            // colors (#282828, #5E5E5E), NOT alpha variants of TextPrimary.
+            TextWhite = live.GetValueOrDefault("TextPrimary", DefaultTextWhite);
+            TextMuted = live.GetValueOrDefault("TextSecondary", DefaultTextMuted);
+            TextDim = live.GetValueOrDefault("TextTertiary", DefaultTextDim);
         }
-        else
+        else if (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
         {
+            // Fallback: Uprooted theme active but live read failed — use palette
             var bg = themeEngine.GetBgPrimary();
             var accent = themeEngine.GetAccentColor();
             AccentGreen = accent;
 
-            // Use palette-derived colors for consistency with resource/tree updates
             var palette = themeEngine.GetPalette();
             if (palette != null &&
                 palette.TryGetValue("SolidBackgroundFillColorSecondary", out var palBg) &&
@@ -122,6 +142,16 @@ internal static class ContentPages
                 TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
                 TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
             }
+        }
+        else
+        {
+            // No theme engine / reflection failed — hardcoded Dark fallback
+            CardBg = DefaultCardBg;
+            CardBorder = DefaultCardBorder;
+            TextWhite = DefaultTextWhite;
+            TextMuted = DefaultTextMuted;
+            TextDim = DefaultTextDim;
+            AccentGreen = DefaultAccentGreen;
         }
 
         // Keep any live embed cards in sync with the updated palette
@@ -162,12 +192,8 @@ internal static class ContentPages
             return null;
         }
 
-        // Set background on the returned ScrollViewer so our page covers any
-        // stale colors from Root's content panel behind it
-        var bg = themeEngine?.ActiveThemeName != null &&
-                 themeEngine.ActiveThemeName != "default-dark"
-            ? themeEngine.GetBgPrimary()
-            : "#0D1521";
+        // Set background from live Root colors so it matches Dark/Light/PureDark
+        var bg = themeEngine?.ReadLiveRootColor("BackgroundPrimary") ?? themeEngine?.GetBgPrimary() ?? "#0D1521";
         r.SetBackground(page, bg);
         r.SetTag(page, "uprooted-content");
 
@@ -855,7 +881,7 @@ internal static class ContentPages
                     var center = Enum.Parse(r.VerticalAlignmentType, "Center");
                     searchBox.GetType().GetProperty("VerticalContentAlignment")?.SetValue(searchBox, center);
                 }
-                r.SetBackground(searchBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetBackground(searchBox, AdjustForHighlight(CardBg, 5));
                 r.SetForeground(searchBox, TextWhite);
                 ApplyFont(r, searchBox, font);
                 r.SetHorizontalAlignment(searchBox, "Stretch");
@@ -879,7 +905,7 @@ internal static class ContentPages
             // Filter button
             filterTextBlock = r.CreateTextBlock("Show All \u25BE", 13, TextMuted);
             ApplyFont(r, filterTextBlock, font);
-            var filterBtnBg = ColorUtils.Lighten(CardBg, 5);
+            var filterBtnBg = AdjustForHighlight(CardBg, 5);
             var filterBtn = r.CreateBorder(filterBtnBg, 8);
             if (filterBtn != null)
             {
@@ -1088,7 +1114,7 @@ internal static class ContentPages
         bool hasSettings = false, int testingStatus = -1,
         Action<string>? onNavigate = null)
     {
-        var card = CreateCard(r);
+        var card = CreateCard(r, withHoverHighlight: true);
         if (card == null) return null;
         r.SetTag(card, $"uprooted-item-{pluginId}");
 
@@ -1119,7 +1145,7 @@ internal static class ContentPages
                 // Gear icon - opens settings lightbox (only for plugins with settings)
                 if (hasSettings)
                 {
-                    var gearBtnBg = ColorUtils.Lighten(CardBg, 12);
+                    var gearBtnBg = AdjustForHighlight(CardBg, 12);
                     var gearBtn = r.CreateBorder(gearBtnBg, 11);
                     if (gearBtn != null)
                     {
@@ -1151,7 +1177,7 @@ internal static class ContentPages
 
                 // Info icon - opens lightbox with plugin details
                 {
-                    var infoBtnBg = ColorUtils.Lighten(CardBg, 12);
+                    var infoBtnBg = AdjustForHighlight(CardBg, 12);
                     var infoBtn = r.CreateBorder(infoBtnBg, 11);
                     if (infoBtn != null)
                     {
@@ -1186,7 +1212,7 @@ internal static class ContentPages
                 // Themes: show "Open" button instead of toggle (themes are a core feature, not a plugin toggle)
                 if (pluginId == "themes" && onNavigate != null)
                 {
-                    var openBtnBg = ColorUtils.Lighten(CardBg, 10);
+                    var openBtnBg = AdjustForHighlight(CardBg, 10);
                     var openBtn = r.CreateBorder(openBtnBg, 8);
                     if (openBtn != null)
                     {
@@ -1309,14 +1335,6 @@ internal static class ContentPages
         }
 
         r.SetBorderChild(card, cardContent);
-
-        // Card hover effect
-        var cardBgCurrent = CardBg;
-        r.SubscribeEvent(card, "PointerEntered", () =>
-            r.SetBackground(card, ColorUtils.Lighten(cardBgCurrent, 4)));
-        r.SubscribeEvent(card, "PointerExited", () =>
-            r.SetBackground(card, cardBgCurrent));
-
         return card;
     }
 
@@ -1384,7 +1402,7 @@ internal static class ContentPages
         foreach (var (label, mode) in filterOptions)
         {
             var isActive = filterMode[0] == mode;
-            var optBg = isActive ? ColorUtils.Lighten(CardBg, 8) : CardBg;
+            var optBg = isActive ? AdjustForHighlight(CardBg, 8) : CardBg;
             var optBorder = r.CreateBorder(optBg, 6);
             if (optBorder == null) continue;
             r.SetCursorHand(optBorder);
@@ -1416,7 +1434,7 @@ internal static class ContentPages
             });
 
             r.SubscribeEvent(optBorder, "PointerEntered", () =>
-                r.SetBackground(optBorderRef, ColorUtils.Lighten(CardBg, 10)));
+                r.SetBackground(optBorderRef, AdjustForHighlight(CardBg, 10)));
             r.SubscribeEvent(optBorder, "PointerExited", () =>
                 r.SetBackground(optBorderRef, optBgRef));
 
@@ -1509,7 +1527,7 @@ internal static class ContentPages
             r.AddChild(headerRow, titleText);
 
             // Close button
-            var closeBtnBg = ColorUtils.Lighten(CardBg, 12);
+            var closeBtnBg = AdjustForHighlight(CardBg, 12);
             var closeBtn = r.CreateBorder(closeBtnBg, 10);
             if (closeBtn != null)
             {
@@ -1733,7 +1751,7 @@ internal static class ContentPages
     /// </summary>
     private static object? BuildPrivacyInfoBox(AvaloniaReflection r, object? font)
     {
-        var infoBg = ColorUtils.Lighten(CardBg, 4);
+        var infoBg = AdjustForHighlight(CardBg, 4);
         var box = r.CreateBorder(infoBg, 8);
         if (box == null) return null;
         SetBorderStroke(r, box, "#15ffffff", 0.5);
@@ -1785,7 +1803,7 @@ internal static class ContentPages
     {
         bool state = initialState;
 
-        var dimColor = ColorUtils.Lighten(CardBg, 18);
+        var dimColor = AdjustForHighlight(CardBg, 18);
         var pillColor = state ? AccentGreen : dimColor;
 
         // Outer pill
@@ -1918,12 +1936,12 @@ internal static class ContentPages
         object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
     {
         bool isActive = settings.ActiveTheme == "custom";
-        var inactiveBorder = ColorUtils.Lighten(CardBg, 12);
-        var borderColor = isActive ? settings.CustomAccent : inactiveBorder;
+        var restingBorder = AdjustForHighlight(CardBg, 15);
+        var borderColor = isActive ? settings.CustomAccent : restingBorder;
 
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
+        SetBorderStroke(r, card, borderColor, CardBorderThickness);
 
         var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (outerContent == null) return card;
@@ -1941,7 +1959,7 @@ internal static class ContentPages
             {
                 r.SetWidth(radioOuter, 20);
                 r.SetHeight(radioOuter, 20);
-                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : ColorUtils.Lighten(CardBg, 25), 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : AdjustForHighlight(CardBg, 25), 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
                 if (isActive)
                 {
@@ -1974,7 +1992,7 @@ internal static class ContentPages
 
             // Click handler to activate custom theme
             r.SetCursorHand(headerRow);
-            r.SubscribeEvent(headerRow, "PointerPressed", () =>
+            r.SubscribeEvent(headerRow, "PointerReleased", () =>
             {
                 try
                 {
@@ -2291,7 +2309,7 @@ internal static class ContentPages
         {
             r.SetWidth(textBox, 120);
             textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
-            r.SetBackground(textBox, ColorUtils.Lighten(CardBg, 5));
+            r.SetBackground(textBox, AdjustForHighlight(CardBg, 5));
             r.SetForeground(textBox, TextWhite);
             ApplyFont(r, textBox, font);
             r.SetTag(textBox, "uprooted-color-input");
@@ -2355,10 +2373,11 @@ internal static class ContentPages
         bool isActive, object? font, ThemeEngine? themeEngine,
         UprootedSettings settings, Action? onThemeChanged)
     {
-        var borderColor = isActive ? accentColor : ColorUtils.Lighten(CardBg, 12);
+        var restingBorder = AdjustForHighlight(CardBg, 15);
+        var borderColor = isActive ? accentColor : restingBorder;
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, isActive ? 1.5 : 1.0);
+        SetBorderStroke(r, card, borderColor, CardBorderThickness);
         r.SetCursorHand(card);
         r.SetWidth(card, 200);
 
@@ -2372,35 +2391,40 @@ internal static class ContentPages
         if (preview != null)
         {
             r.SetHorizontalAlignment(preview, "Center");
+            r.SetIsHitTestVisible(preview, false); // Pointer events pass through to card
             r.AddChild(outerLayout, preview);
         }
 
         // Bottom row: radio indicator + name
+        object? radioOuter = null;
+        object? radioDot = null;
         var bottomRow = r.CreateStackPanel(vertical: false, spacing: 10);
         if (bottomRow != null)
         {
             r.SetMargin(bottomRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(bottomRow, "Center");
 
-            // Radio indicator
-            var radioOuter = r.CreateBorder(null, 4);
+            // Radio indicator — always has inner dot, transparent when inactive
+            radioOuter = r.CreateBorder(null, 4);
             if (radioOuter != null)
             {
                 r.SetWidth(radioOuter, 18);
                 r.SetHeight(radioOuter, 18);
-                SetBorderStroke(r, radioOuter, isActive ? accentColor : ColorUtils.Lighten(CardBg, 25), 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? accentColor : AdjustForHighlight(CardBg, 25), 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
-                if (isActive)
+
+                // Inner dot: filled when active, transparent when inactive (shown on hover)
+                var innerDot = r.CreateBorder(isActive ? accentColor : "#00000000", 2);
+                if (innerDot != null)
                 {
-                    var innerDot = r.CreateBorder(accentColor, 2);
-                    if (innerDot != null)
-                    {
-                        r.SetWidth(innerDot, 8);
-                        r.SetHeight(innerDot, 8);
-                        r.SetMargin(innerDot, 3, 3, 3, 3);
-                    }
-                    r.SetBorderChild(radioOuter, innerDot);
+                    r.SetWidth(innerDot, 8);
+                    r.SetHeight(innerDot, 8);
+                    r.SetMargin(innerDot, 3, 3, 3, 3);
+                    r.SetTag(innerDot, "uprooted-radio-dot");
                 }
+                r.SetBorderChild(radioOuter, innerDot);
+                radioDot = innerDot;
+
                 r.AddChild(bottomRow, radioOuter);
             }
 
@@ -2427,7 +2451,7 @@ internal static class ContentPages
         r.SetBorderChild(card, outerLayout);
 
         // Click handler for theme switching
-        r.SubscribeEvent(card, "PointerPressed", () =>
+        r.SubscribeEvent(card, "PointerReleased", () =>
         {
             try
             {
@@ -2465,17 +2489,34 @@ internal static class ContentPages
             }
         });
 
-        // Hover effect -- capture current CardBg for the closure
-        var cardBgCurrent = CardBg;
+        // Hover effect — card border + radio border + inner dot highlight (no bg change)
+        var hoverBorder = AdjustForHighlight(CardBg, 35);
+        var radioDimBorder = AdjustForHighlight(CardBg, 25);
+        var radioHoverBorder = AdjustForHighlight(CardBg, 50);
+        var dotHoverColor = AdjustForHighlight(CardBg, 40);
+        var radioRef = radioOuter;
+        var dotRef = radioDot;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
             if (!isActive)
-                r.SetBackground(card, ColorUtils.Lighten(cardBgCurrent, 5));
+            {
+                SetBorderStroke(r, card, hoverBorder, CardBorderThickness);
+                if (radioRef != null)
+                    SetBorderStroke(r, radioRef, radioHoverBorder, 2.0);
+                if (dotRef != null)
+                    r.SetBackground(dotRef, dotHoverColor);
+            }
         });
         r.SubscribeEvent(card, "PointerExited", () =>
         {
             if (!isActive)
-                r.SetBackground(card, cardBgCurrent);
+            {
+                SetBorderStroke(r, card, restingBorder, CardBorderThickness);
+                if (radioRef != null)
+                    SetBorderStroke(r, radioRef, radioDimBorder, 2.0);
+                if (dotRef != null)
+                    r.SetBackground(dotRef, "#00000000");
+            }
         });
 
         return card;
@@ -2617,7 +2658,7 @@ internal static class ContentPages
             r.AddChild(headerRow, titleText);
 
             // Close button
-            var closeBtnBg = ColorUtils.Lighten(CardBg, 12);
+            var closeBtnBg = AdjustForHighlight(CardBg, 12);
             var closeBtn = r.CreateBorder(closeBtnBg, 10);
             if (closeBtn != null)
             {
@@ -2702,7 +2743,7 @@ internal static class ContentPages
                 var center = Enum.Parse(r.VerticalAlignmentType, "Center");
                 apiTextBox.GetType().GetProperty("VerticalContentAlignment")?.SetValue(apiTextBox, center);
             }
-            r.SetBackground(apiTextBox, ColorUtils.Lighten(CardBg, 5));
+            r.SetBackground(apiTextBox, AdjustForHighlight(CardBg, 5));
             r.SetForeground(apiTextBox, TextWhite);
             ApplyFont(r, apiTextBox, font);
             r.SetMargin(apiTextBox, 0, 12, 0, 0);
@@ -2839,7 +2880,7 @@ internal static class ContentPages
                 r.SetWidth(radioOuter, 18);
                 r.SetHeight(radioOuter, 18);
                 SetBorderStroke(r, radioOuter,
-                    isActive ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                    isActive ? AccentGreen : AdjustForHighlight(CardBg, 25), 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
 
                 if (isActive)
@@ -2887,7 +2928,7 @@ internal static class ContentPages
                 {
                     bool selected = Math.Abs(th - capturedThreshold) < 0.01;
                     SetBorderStroke(r, outer,
-                        selected ? AccentGreen : ColorUtils.Lighten(CardBg, 25), 2.0);
+                        selected ? AccentGreen : AdjustForHighlight(CardBg, 25), 2.0);
                     if (selected)
                     {
                         var dot = r.CreateBorder(AccentGreen, 2);
@@ -3024,7 +3065,7 @@ internal static class ContentPages
                 maxBox.GetType().GetProperty("FontSize")?.SetValue(maxBox, 17.0);
                 r.SetWidth(maxBox, 80);
                 r.SetHeight(maxBox, 32);
-                r.SetBackground(maxBox, ColorUtils.Lighten(CardBg, 5));
+                r.SetBackground(maxBox, AdjustForHighlight(CardBg, 5));
                 r.SetForeground(maxBox, TextWhite);
                 ApplyFont(r, maxBox, font);
                 if (r.CornerRadiusType != null)
@@ -3117,7 +3158,7 @@ internal static class ContentPages
 
         // Right side: toggle pill
         bool[] state = { currentValue };
-        var toggleBg = currentValue ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
+        var toggleBg = currentValue ? AccentGreen : AdjustForHighlight(CardBg, 20);
         var pill = r.CreateBorder(toggleBg, 13);
         if (pill != null)
         {
@@ -3141,7 +3182,7 @@ internal static class ContentPages
                 r.SubscribeEvent(pill, "PointerPressed", () =>
                 {
                     state[0] = !state[0];
-                    r.SetBackground(pillRef, state[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20));
+                    r.SetBackground(pillRef, state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20));
                     r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
                     onChanged(state[0]);
                 });
@@ -3271,7 +3312,7 @@ internal static class ContentPages
         passBox.GetType().GetProperty("FontSize")?.SetValue(passBox, 17.0);
         r.SetWidth(passBox, 180);
         r.SetHeight(passBox, 32);
-        r.SetBackground(passBox, ColorUtils.Lighten(CardBg, 5));
+        r.SetBackground(passBox, AdjustForHighlight(CardBg, 5));
         r.SetForeground(passBox, TextWhite);
         ApplyFont(r, passBox, font);
         // Set PasswordChar to mask input
@@ -3390,7 +3431,7 @@ internal static class ContentPages
     /// </summary>
     private static object? BuildContentFilterInfoBox(AvaloniaReflection r, object? font)
     {
-        var infoBg = ColorUtils.Lighten(CardBg, 4);
+        var infoBg = AdjustForHighlight(CardBg, 4);
         var box = r.CreateBorder(infoBg, 8);
         if (box == null) return null;
         SetBorderStroke(r, box, "#15ffffff", 0.5);
@@ -3445,11 +3486,24 @@ internal static class ContentPages
     /// <summary>
     /// Create a card: BG=#0f1923, CornerRadius=12, BorderThickness=0.5
     /// </summary>
-    private static object? CreateCard(AvaloniaReflection r)
+    /// <summary>
+    /// Constant border thickness for all cards — prevents layout shift on hover/selection.
+    /// Color changes only, never thickness.
+    /// </summary>
+    private const double CardBorderThickness = 1.5;
+
+    private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)
     {
         var card = r.CreateBorder(CardBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, CardBorder, 0.5);
+
+        // Visible resting border — constant thickness, color changes on hover
+        var restingBorder = AdjustForHighlight(CardBg, 15);
+        SetBorderStroke(r, card, restingBorder, CardBorderThickness);
+
+        // No hover highlight on plugin cards — they're not clickable as a whole.
+        // Only the toggle/button inside is interactive.
+
         return card;
     }
 

@@ -82,6 +82,12 @@ Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The r
 - [ ] **Decompile channel list / DM list views** — Channel sidebar. Low priority until channel-related plugins are planned.
 - [ ] **Decompile navigation service** — How Root switches between pages. Would enable programmatic navigation.
 
+## Up Next (small)
+
+- [ ] **Version copy: include Uprooted version in clipboard** — The version info box at bottom-left of settings sidebar shows "Uprooted 0.4.1" but the copy button only copies Root's version. Need to intercept Root's native Button.Click handler and overwrite clipboard with all TextBlock lines (Root + Uprooted). Challenge: our handler runs before/concurrently with Root's async `SetTextAsync` — needs a delay or different interception approach.
+  - Files: `hook/SidebarInjector.cs` (InjectVersionText, ~line 1155)
+  - Current state: handler commented out with TODO marker
+
 ## Ideas / Backlog
 
 Items not yet committed to but worth tracking.

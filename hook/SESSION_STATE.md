@@ -2,6 +2,28 @@
 
 ## Release: v0.4.2
 
+## In-Progress: Light Theme Compatibility + Theme UX Refactor
+
+### Uncommitted changes (ready for testing)
+- **ThemeEngine**: `ReadLiveRootColors()` / `ReadLiveRootColor(key)` — reads Root's 29 color keys via `Application.TryGetResource`, returns proper `#AARRGGBB` hex (handles named colors like "White")
+- **ThemeEngine**: Auto-reverts Uprooted theme when Root variant changes (Dark↔Light↔PureDark)
+- **ThemeEngine**: `EnsureVariantChangeSubscribed()` called unconditionally from startup
+- **ThemeEngine**: SVG path swap (Light→Dark SVGs when Uprooted dark theme active on Light variant)
+- **ContentPages**: `ApplyThemedColors` reads live `TextPrimary`/`TextSecondary`/`TextTertiary`/`BackgroundSecondary`/`Border`/`BrandPrimary` from ThemeDictionaries — fixes Light theme colors
+- **ContentPages**: `AdjustForHighlight()` — luminance-aware highlight (darkens on light bg, lightens on dark bg). Replaced all 30 `Lighten(CardBg, N)` calls
+- **ContentPages**: Page background reads live `BackgroundPrimary`
+- **ContentPages**: Plugin cards have border+bg hover highlights
+- **ContentPages**: Themes plugin card shows "Open" button instead of toggle
+- **SidebarInjector**: Variant change callback removes injected controls + unwraps ScrollViewer + re-injects fresh
+- **SidebarInjector**: `SyncContentPagesFromNativeTree()` reads native fg/bg from visual tree at injection time
+- **SidebarInjector**: Nav hover uses live `HighlightLight`, selection uses live `HighlightNormal`
+- **SidebarInjector**: Version text color matches Root's native version TextBlock foreground
+
+### Known issues / TODOs
+- **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
+- **SVG swap** not yet confirmed working (user hasn't tested Light+Uprooted dark theme SVGs)
+- Debug logging still present in `ReadLiveRootColors` and `ApplyThemedColors` — strip before commit
+
 ## Critical Finding: Root's Chat is Avalonia-Native
 
 Root v0.9.92's chat UI is rendered **entirely in native Avalonia controls**, NOT in DotNetBrowser.

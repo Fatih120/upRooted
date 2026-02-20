@@ -1665,6 +1665,44 @@ internal class AvaloniaReflection
     }
 
     /// <summary>
+    /// Get a resource using Avalonia's full resolution chain: direct entries → MergedDictionaries → deferred values.
+    /// Uses TryGetResource(key, ThemeVariant, out value) which is the correct lookup for ResourceDictionary.
+    /// Falls back to indexer if TryGetResource isn't available.
+    /// </summary>
+    public object? GetResolvedResource(object? dict, string key, object? themeVariant = null)
+    {
+        if (dict == null) return null;
+        try
+        {
+            // Try TryGetResource(object key, ThemeVariant? theme, out object? value)
+            // This is the proper Avalonia resource lookup that resolves through MergedDictionaries and deferred values.
+            MethodInfo? tryGetMethod = null;
+            foreach (var m in dict.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (m.Name != "TryGetResource") continue;
+                var ps = m.GetParameters();
+                if (ps.Length == 3 && ps[2].IsOut)
+                {
+                    tryGetMethod = m;
+                    break;
+                }
+            }
+
+            if (tryGetMethod != null)
+            {
+                var args = new object?[] { key, themeVariant, null };
+                var found = tryGetMethod.Invoke(dict, args);
+                if (found is true)
+                    return args[2];
+            }
+        }
+        catch { }
+
+        // Fallback to indexer
+        return GetResource(dict, key);
+    }
+
+    /// <summary>
     /// Gets the MergedDictionaries collection from a resource dictionary object.
     /// </summary>
     public IList? GetMergedDictionaries(object? resources)

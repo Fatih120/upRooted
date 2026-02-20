@@ -46,12 +46,169 @@ internal class ThemeEngine
     // Whether we've subscribed to variant changes
     private bool _variantChangeSubscribed;
 
+    // Callback for SidebarInjector to re-inject on Root variant change
+    private Action? _onVariantChanged;
+
     public string? ActiveThemeName => _activeThemeName;
 
     public ThemeEngine(AvaloniaReflection r)
     {
         _r = r;
         Logger.Log("Theme", "ThemeEngine v2 initialized (resource-first + OKLCH)");
+    }
+
+    /// <summary>
+    /// Set a callback that fires when Root's theme variant changes (Dark/Light/PureDark).
+    /// SidebarInjector uses this to re-inject with fresh colors.
+    /// </summary>
+    public void SetVariantChangedCallback(Action? callback) => _onVariantChanged = callback;
+
+    /// <summary>
+    /// Subscribe to variant changes unconditionally — needed even when no Uprooted theme
+    /// is active so the sidebar re-injects with correct colors on Root variant change.
+    /// Call from StartupHook after theme engine init.
+    /// </summary>
+    public void EnsureVariantChangeSubscribed()
+    {
+        SubscribeToVariantChanges();
+    }
+
+    /// <summary>
+    /// Read the current resolved values for Root's theme keys from ThemeDictionaries.
+    /// If an Uprooted theme is active, returns our overridden values.
+    /// If no Uprooted theme, returns Root's native values.
+    /// Returns null on reflection failure.
+    /// </summary>
+    public Dictionary<string, string>? ReadLiveRootColors()
+    {
+        try
+        {
+            // Use Application-level TryGetResource — this is exactly how DynamicResource
+            // resolves at runtime. It checks ThemeDictionaries, MergedDictionaries,
+            // deferred factories, and respects the active variant. No manual variant
+            // lookup needed.
+            var app = _r.GetAppCurrent();
+            if (app == null) return null;
+
+            var variantKey = _r.GetActiveThemeVariant();
+
+            // Find Application.TryGetResource(object, ThemeVariant?, out object?)
+            System.Reflection.MethodInfo? tryGet = null;
+            foreach (var m in app.GetType().GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (m.Name != "TryGetResource") continue;
+                var ps = m.GetParameters();
+                if (ps.Length == 3 && ps[2].IsOut)
+                {
+                    tryGet = m;
+                    break;
+                }
+            }
+
+            if (tryGet == null)
+            {
+                Logger.Log("Theme", "ReadLiveRootColors: TryGetResource not found on Application");
+                return null;
+            }
+
+
+            var result = new Dictionary<string, string>();
+            string[] colorKeys = { "BrandPrimary", "BrandSecondary", "BrandTertiary",
+                "TextPrimary", "TextSecondary", "TextTertiary", "TextWhite",
+                "BackgroundPrimary", "BackgroundSecondary", "BackgroundTertiary", "Input",
+                "Border", "HighlightLight", "HighlightNormal", "HighlightStrong",
+                "Info", "Warning", "Error", "Muted", "Link" };
+
+            foreach (var k in colorKeys)
+            {
+                try
+                {
+                    var args = new object?[] { k, variantKey, null };
+                    var found = tryGet.Invoke(app, args);
+                    if (found is not true || args[2] == null) continue;
+
+                    var resource = args[2];
+                    // Use A/R/G/B properties — ToString() can return named colors like "White"
+                    var colorProp = resource.GetType().GetProperty("Color");
+                    if (colorProp != null)
+                    {
+                        var color = colorProp.GetValue(resource);
+                        if (color != null)
+                        {
+                            var ct = color.GetType();
+                            var a = ct.GetProperty("A")?.GetValue(color) as byte?;
+                            var rv = ct.GetProperty("R")?.GetValue(color) as byte?;
+                            var gv = ct.GetProperty("G")?.GetValue(color) as byte?;
+                            var bv = ct.GetProperty("B")?.GetValue(color) as byte?;
+                            if (a.HasValue && rv.HasValue && gv.HasValue && bv.HasValue)
+                                result[k] = $"#{a.Value:X2}{rv.Value:X2}{gv.Value:X2}{bv.Value:X2}";
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            if (result.Count > 0)
+                Logger.Log("Theme", $"ReadLiveRootColors: {result.Count} keys read (variant={variantKey})");
+
+            return result.Count > 0 ? result : null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Theme", $"ReadLiveRootColors error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Returns the current Root theme variant name (e.g. "Dark", "Light", "PureDark").
+    /// </summary>
+    /// <summary>
+    /// Read a single Root theme key from the live Application resources.
+    /// Returns #AARRGGBB hex or null.
+    /// </summary>
+    public string? ReadLiveRootColor(string key)
+    {
+        try
+        {
+            var app = _r.GetAppCurrent();
+            if (app == null) return null;
+            var variantKey = _r.GetActiveThemeVariant();
+
+            System.Reflection.MethodInfo? tryGet = null;
+            foreach (var m in app.GetType().GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+            {
+                if (m.Name != "TryGetResource") continue;
+                var ps = m.GetParameters();
+                if (ps.Length == 3 && ps[2].IsOut) { tryGet = m; break; }
+            }
+            if (tryGet == null) return null;
+
+            var args = new object?[] { key, variantKey, null };
+            var found = tryGet.Invoke(app, args);
+            if (found is not true || args[2] == null) return null;
+
+            var colorProp = args[2].GetType().GetProperty("Color");
+            if (colorProp == null) return null;
+            var color = colorProp.GetValue(args[2]);
+            if (color == null) return null;
+
+            var ct = color.GetType();
+            var a = ct.GetProperty("A")?.GetValue(color) as byte?;
+            var r = ct.GetProperty("R")?.GetValue(color) as byte?;
+            var g = ct.GetProperty("G")?.GetValue(color) as byte?;
+            var b = ct.GetProperty("B")?.GetValue(color) as byte?;
+            if (a.HasValue && r.HasValue && g.HasValue && b.HasValue)
+                return $"#{a.Value:X2}{r.Value:X2}{g.Value:X2}{b.Value:X2}";
+        }
+        catch { }
+        return null;
+    }
+
+    public string GetCurrentRootVariant()
+    {
+        var v = _r.GetActiveThemeVariant();
+        return v?.ToString() ?? "Dark";
     }
 
     // ===== DWM title bar color (Windows 11) =====
@@ -390,6 +547,10 @@ internal class ThemeEngine
         EnsureVariantDictResolved();
         OverrideThemeDictKeys(rootKeys);
 
+        // Phase 1b: Swap SVG asset paths if theme brightness doesn't match variant's SVG set
+        // E.g., Uprooted dark theme on Light variant → swap Light SVGs to Dark SVGs
+        SwapSvgPathsIfNeeded(rootKeys);
+
         // Phase 2: Override Styles[0].Resources with SimpleTheme keys
         var styleRes = _r.GetStyleResources(0);
         int styleOverrides = 0;
@@ -651,6 +812,87 @@ internal class ThemeEngine
         _overriddenThemeDictKeys.Remove(key);
     }
 
+    // ===== SVG Asset Path Swapping =====
+    // Root's ThemeDictionaries contain ~220 SVG path resources (keys ending in "SVG").
+    // Light variant uses "Light Theme/" folder (light-colored icons for light backgrounds).
+    // Dark/PureDark use "Dark Theme/" folder (light-colored icons for dark backgrounds).
+    // When an Uprooted theme overrides colors, we may need to swap SVG sets to match
+    // the theme's background brightness.
+
+    private const string DarkSvgFolder = "/Resources/Assets/SVGs/Dark Theme/";
+    private const string LightSvgFolder = "/Resources/Assets/SVGs/Light Theme/";
+
+    /// <summary>
+    /// Determines whether the theme needs Dark or Light SVG assets based on
+    /// BackgroundPrimary luminance. Dark backgrounds need Dark SVGs (light icons),
+    /// light backgrounds need Light SVGs (dark icons).
+    /// </summary>
+    private static bool ThemeNeedsDarkSvgs(Dictionary<string, string> rootKeys)
+    {
+        if (rootKeys.TryGetValue("BackgroundPrimary", out var bg) && ColorUtils.IsValidHex(bg))
+            return ColorUtils.Luminance(bg) <= 0.3;
+        return true; // Default to Dark SVGs
+    }
+
+    /// <summary>
+    /// Get the current SVG folder used by the active variant ("Dark Theme" or "Light Theme").
+    /// </summary>
+    private string GetCurrentVariantSvgFolder()
+    {
+        var variantName = _activeVariantKey?.ToString() ?? "Dark";
+        return variantName == "Light" ? LightSvgFolder : DarkSvgFolder;
+    }
+
+    /// <summary>
+    /// Swap SVG asset paths in ThemeDictionaries if the theme's required SVG set
+    /// differs from what the active Root variant provides.
+    /// E.g., Uprooted dark theme on Light variant → swap Light SVGs to Dark SVGs.
+    /// </summary>
+    private void SwapSvgPathsIfNeeded(Dictionary<string, string> rootKeys)
+    {
+        if (_activeVariantDict == null) return;
+
+        // Determine what SVG set Root is currently providing vs what our theme needs
+        var currentFolder = GetCurrentVariantSvgFolder();
+        bool needsDark = ThemeNeedsDarkSvgs(rootKeys);
+        var neededFolder = needsDark ? DarkSvgFolder : LightSvgFolder;
+
+        // If current variant already uses the right SVG set, nothing to do
+        if (currentFolder == neededFolder) return;
+
+        Logger.Log("Theme", $"SVG swap: {currentFolder} → {neededFolder} (variant={_activeVariantKey}, needsDark={needsDark})");
+
+        // SVG paths are direct entries on the variant dict (not in MergedDictionaries).
+        // Root adds them via IDictionary.Add, not AddDeferred.
+        // Enumerate the variant dict itself to find SVG keys and swap their paths.
+        int swapped = 0;
+
+        // Collect SVG entries first to avoid modifying dict during enumeration
+        var svgEntries = new List<(string key, string path)>();
+        _r.EnumerateResources(_activeVariantDict, (key, value) =>
+        {
+            if (!key.EndsWith("SVG")) return;
+            var path = value?.ToString();
+            if (path != null && path.Contains(currentFolder))
+                svgEntries.Add((key, path));
+        });
+
+        foreach (var (key, path) in svgEntries)
+        {
+            var newPath = path.Replace(currentFolder, neededFolder);
+            try
+            {
+                _r.AddResource(_activeVariantDict, key, newPath);
+                _overriddenThemeDictKeys.Add(key);
+                swapped++;
+            }
+            catch { }
+        }
+
+        Logger.Log("Theme", $"SVG swap: {swapped} paths overridden");
+    }
+
+
     /// <summary>Override SimpleTheme keys in Styles[0].Resources (for live updates).</summary>
     private void OverrideSimpleThemeKeys(Dictionary<string, string> simpleKeys)
     {
@@ -686,39 +928,20 @@ internal class ThemeEngine
 
         _r.SubscribeActualThemeVariantChanged(() =>
         {
-            if (_activeThemeName == null) return;
-            Logger.Log("Theme", "ActualThemeVariant changed — re-applying overrides");
+            var newVariant = GetCurrentRootVariant();
+            Logger.Log("Theme", $"ActualThemeVariant changed -> {newVariant}");
 
-            // Clear cached refs so they re-resolve to the new variant
-            _activeVariantDict = null;
-            _activeVariantKey = null;
-            _themeDicts = null;
-            _overriddenThemeDictKeys.Clear();
-
-            EnsureVariantDictResolved();
-
-            // Re-apply overrides to the new variant's dict
-            Dictionary<string, string> rootKeys;
-            Dictionary<string, string> simpleKeys;
-            if (_activeThemeName == "custom" && _customAccent != null && _customBg != null)
+            if (_activeThemeName != null)
             {
-                rootKeys = GenerateV2Palette(_customAccent, _customBg);
-                simpleKeys = DeriveSimpleThemeKeys(_customAccent, _customBg);
+                // User switched Root's native variant while Uprooted theme was active.
+                // Auto-revert: the user chose a Root theme, so respect that choice.
+                Logger.Log("Theme", $"Root variant changed while Uprooted theme '{_activeThemeName}' active — auto-reverting");
+                RevertTheme();
             }
-            else if (PresetThemes.TryGetValue(_activeThemeName, out var preset))
-            {
-                rootKeys = preset.RootKeys;
-                simpleKeys = preset.SimpleThemeKeys;
-            }
-            else return;
 
-            OverrideThemeDictKeys(rootKeys);
-            OverrideSimpleThemeKeys(simpleKeys);
-
-            if (!string.IsNullOrEmpty(_customPingColor))
-                ApplyPingColorToThemeDicts();
-
-            ScheduleDelayedWalk(500);
+            // Always notify sidebar — it needs to re-inject with correct colors
+            // regardless of whether an Uprooted theme is active
+            _onVariantChanged?.Invoke();
         });
         Logger.Log("Theme", "Subscribed to ActualThemeVariantChanged");
     }
