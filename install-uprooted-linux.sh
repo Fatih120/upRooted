@@ -25,6 +25,8 @@ PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
 VERSION="0.4.2"
 AUTO_DEPS=false
+ROOT_EXEC=""        # actual binary/AppRun to exec (may differ from ROOT_PATH)
+SQUASHFS_ROOT=""    # set when using an extracted AppImage
 
 # Colors
 RED='\033[0;31m'
@@ -608,6 +610,58 @@ find_root() {
     exit 1
 }
 
+# ── Resolve what we actually exec (handles extracted AppImages) ──
+#
+# On systems without FUSE, AppImages can't run directly.
+# Users extract them with: ./Root.AppImage --appimage-extract
+# This produces squashfs-root/ next to the .AppImage file.
+# We detect that and run the extracted binary with proper LD_LIBRARY_PATH.
+
+resolve_root_exec() {
+    # Not an AppImage — exec directly, no lib setup needed
+    if [[ "$ROOT_PATH" != *.AppImage && "$ROOT_PATH" != *.appimage ]]; then
+        ROOT_EXEC="$ROOT_PATH"
+        return 0
+    fi
+
+    # Look for an extracted AppImage adjacent to the .AppImage file
+    local appimage_dir
+    appimage_dir="$(dirname "$(realpath "$ROOT_PATH")")"
+
+    local squash_candidates=(
+        "$appimage_dir/squashfs-root"
+        "$HOME/Downloads/squashfs-root"
+    )
+
+    for squash in "${squash_candidates[@]}"; do
+        if [[ -f "$squash/usr/bin/Root" ]]; then
+            SQUASHFS_ROOT="$squash"
+            ROOT_EXEC="$squash/usr/bin/Root"
+            log "Extracted AppImage found — using: $squash"
+            return 0
+        fi
+    done
+
+    # No extracted version found — check FUSE availability
+    if [[ -c /dev/fuse ]]; then
+        # FUSE present: AppImage should run directly
+        ROOT_EXEC="$ROOT_PATH"
+        return 0
+    fi
+
+    # No FUSE, no extracted version — warn and suggest
+    echo ""
+    warn "AppImages cannot run on this system (no FUSE support)."
+    warn "Extract the AppImage first, then re-run the installer:"
+    warn "  cd $(dirname "$ROOT_PATH")"
+    warn "  chmod +x $(basename "$ROOT_PATH")"
+    warn "  ./$(basename "$ROOT_PATH") --appimage-extract"
+    warn "This creates squashfs-root/ in the same directory."
+    echo ""
+    # Fall back to the AppImage path anyway — let the user's system sort it
+    ROOT_EXEC="$ROOT_PATH"
+}
+
 # ── Dependency management (build from source) ──
 
 detect_pkg_manager() {
@@ -1016,23 +1070,33 @@ PROFILE
 
 create_wrapper() {
     local wrapper="$INSTALL_DIR/launch-root.sh"
-    cat > "$wrapper" << WRAPPER
-#!/bin/bash
-# Uprooted launcher - sets injection env vars for Root only
-# .NET 10+ (DOTNET_ prefix)
-export DOTNET_EnableDiagnostics=1
-export DOTNET_ENABLE_PROFILING=1
-export DOTNET_PROFILER='$PROFILER_GUID'
-export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
-# Legacy (.NET 8/9)
-export CORECLR_ENABLE_PROFILING=1
-export CORECLR_PROFILER='$PROFILER_GUID'
-export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-exec '$ROOT_PATH' "\$@"
-WRAPPER
+    {
+        echo '#!/bin/bash'
+        echo '# Uprooted launcher — sets CLR profiler env vars and launches Root'
+        if [[ -n "$SQUASHFS_ROOT" ]]; then
+            echo ''
+            echo '# Extracted AppImage — set up library paths'
+            echo "export LD_LIBRARY_PATH='$SQUASHFS_ROOT/usr/lib:\${LD_LIBRARY_PATH:-}'"
+            echo "export APPDIR='$SQUASHFS_ROOT'"
+        fi
+        echo ''
+        echo '# .NET 10+ (DOTNET_ prefix)'
+        echo 'export DOTNET_EnableDiagnostics=1'
+        echo 'export DOTNET_ENABLE_PROFILING=1'
+        echo "export DOTNET_PROFILER='$PROFILER_GUID'"
+        echo "export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'"
+        echo 'export DOTNET_ReadyToRun=0'
+        echo '# Legacy (.NET 8/9)'
+        echo 'export CORECLR_ENABLE_PROFILING=1'
+        echo "export CORECLR_PROFILER='$PROFILER_GUID'"
+        echo "export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'"
+        echo "exec '$ROOT_EXEC' \"\$@\""
+    } > "$wrapper"
     chmod +x "$wrapper"
     log "Wrapper script created: $wrapper"
+    if [[ -n "$SQUASHFS_ROOT" ]]; then
+        log "  (extracted AppImage mode — LD_LIBRARY_PATH configured for $SQUASHFS_ROOT)"
+    fi
 }
 
 # ── Create .desktop file (opt-in via --desktop) ──
@@ -1172,6 +1236,7 @@ run_repair() {
     echo ""
 
     find_root
+    resolve_root_exec
 
     # Re-deploy artifacts
     log "Re-deploying artifacts..."
@@ -1231,6 +1296,7 @@ echo "  ────────────────────────
 echo ""
 
 find_root
+resolve_root_exec
 deploy_artifacts
 set_env_vars
 create_wrapper
