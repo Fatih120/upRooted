@@ -58,6 +58,23 @@ internal class VisualTreeWalker
         return null;
     }
 
+    /// <summary>
+    /// Like FindFirstTextBlock but bails after maxNodes to prevent blocking on large views
+    /// (e.g. VC channels with DotNetBrowser subtrees). Safe for settings detection because
+    /// "APP SETTINGS" always appears within a few hundred nodes of the window root.
+    /// </summary>
+    public object? FindFirstTextBlockFast(object root, string exactText, int maxNodes = 1500)
+    {
+        int count = 0;
+        foreach (var node in DescendantsDepthFirst(root))
+        {
+            if (++count > maxNodes) return null;
+            if (_r.IsTextBlock(node) && _r.GetText(node) == exactText)
+                return node;
+        }
+        return null;
+    }
+
     public object? FindFirstTextBlockContaining(object root, string substring)
     {
         foreach (var node in DescendantsDepthFirst(root))
@@ -78,9 +95,10 @@ internal class VisualTreeWalker
     /// </summary>
     public SettingsLayout? FindSettingsLayout(object window)
     {
-        // Step 1: Find "APP SETTINGS" TextBlock
-        var appSettingsText = FindFirstTextBlock(window, "APP SETTINGS");
-        appSettingsText ??= FindFirstTextBlock(window, "App Settings");
+        // Step 1: Find "APP SETTINGS" TextBlock — use fast (node-limited) variant so large
+        // non-settings views (VC channels, DotNetBrowser panes) don't block the UI thread.
+        var appSettingsText = FindFirstTextBlockFast(window, "APP SETTINGS");
+        appSettingsText ??= FindFirstTextBlockFast(window, "App Settings");
         if (appSettingsText == null) return null;
 
         // Step 2: Find the nav items StackPanel (contains the section headers + items)

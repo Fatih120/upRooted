@@ -377,10 +377,10 @@ internal class StartupHook
                 }
             });
 
-            // Phase 4.5e: Profile badge injector (dev channel only)
-            var badgeSettings = UprootedSettings.Load();
-            if (badgeSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+            // Phase 4.5e: Profile badge injector (all channels — alpha badge is global)
             {
+                var badgeSettings = UprootedSettings.Load();
+                var isDevChannel = badgeSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase);
                 var badgeWindow = mainWindow!;
                 var badgeResolver = resolver;
                 ThreadPool.QueueUserWorkItem(_ =>
@@ -388,8 +388,8 @@ internal class StartupHook
                     try
                     {
                         Thread.Sleep(5_000); // Wait 5s for app to settle
-                        Logger.Log("Startup", "Phase 4.5e: Starting profile badge injector (dev channel)...");
-                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow);
+                        Logger.Log("Startup", $"Phase 4.5e: Starting profile badge injector (devChannel={isDevChannel})...");
+                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow, isDevChannel);
                         badge.Initialize();
                         Logger.Log("Startup", "Phase 4.5e OK: Profile badge injector active");
                     }
@@ -398,10 +398,6 @@ internal class StartupHook
                         Logger.Log("Startup", $"Phase 4.5e error: {ex.Message}");
                     }
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5e: Profile badge skipped (not on developer channel)");
             }
 
             // Phase 4.5f: Silent typing (HttpClient handler injection)

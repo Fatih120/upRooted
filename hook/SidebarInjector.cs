@@ -228,9 +228,11 @@ internal class SidebarInjector
             return;
         }
 
-        // Throttle: at most one check per 32ms (~2 frames at 60fps)
+        // Throttle: 500ms when not injected — prevents freezing on large views (e.g. VC channels)
+        // that trigger many rapid LayoutUpdated events. The 200ms safety-net timer provides
+        // adequate settings-detection latency; LayoutUpdated here is just an extra fast-path.
         long now = Environment.TickCount64;
-        if (now - _lastLayoutCheckMs < 32) return;
+        if (now - _lastLayoutCheckMs < 500) return;
         _lastLayoutCheckMs = now;
 
         // Shared re-entrancy guard with timer path

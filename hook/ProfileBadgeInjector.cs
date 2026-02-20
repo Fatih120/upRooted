@@ -3,29 +3,37 @@ using System.Linq;
 namespace Uprooted;
 
 /// <summary>
-/// Detects profile popups in Root's visual tree and injects a small "Uprooted Dev"
-/// badge directly below the username. Only active when AutoUpdateChannel == "developer".
-/// Badge only appears on profiles of known developer usernames, not all users.
+/// Detects profile popups in Root's visual tree and injects recognition badges
+/// directly below the username.
+///
+/// Two badge types:
+/// - "Uprooted Dev" (gold): shown only on developer channel, gated to DeveloperUsernames (username match)
+/// - "Alpha User" (blue): shown on ALL channels, gated to AlphaUserIds (UUID match — stable across renames)
+///
+/// UUID is read from MemberProfileView.DataContext → MessageContainerMember.GlobalUser.Id.ToString().
+/// This is the canonical stable identifier Root uses internally (not affected by username changes).
 ///
 /// Architecture:
 /// - Event-driven: subscribes to OverlayLayer.Children CollectionChanged for instant detection
 /// - Fallback: 500ms timer polls TopLevel windows for popups outside the overlay
 /// - Profile popups identified by presence of username TextBlock + avatar Image pattern
 /// - Username TextBlock found by largest font size in popup
-/// - Badge only injected if the username matches a known developer
-/// - Badge inserted at username's index+1 in its parent panel (centered, compact)
-/// - Badge injected once per popup instance (tagged to prevent duplicates)
+/// - Badges inserted at username's index+1 in its parent panel (centered, compact)
+/// - Badges injected once per popup instance (tagged to prevent duplicates)
 /// - Full tree dump logged on first popup detection for discovery/refinement
 /// </summary>
 internal class ProfileBadgeInjector
 {
     private const string ScannedTag = "uprooted-profile-scanned";
     private const string BadgeTag = "uprooted-dev-badge";
+    private const string AlphaBadgeTag = "uprooted-alpha-badge";
     private const int FallbackPollMs = 500;
-    private const string BadgeColor = "#8B6914"; // Gold/amber matching dev channel
+    private const string DevBadgeColor = "#8B6914";   // Gold/amber — developer channel
+    private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
 
     /// <summary>
     /// Known developer usernames who should display the "Uprooted Dev" badge.
+    /// Dev badge is username-based (developers don't change their usernames).
     /// </summary>
     private static readonly HashSet<string> DeveloperUsernames = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -34,17 +42,30 @@ internal class ProfileBadgeInjector
         "terrydavis",
     };
 
+    /// <summary>
+    /// UUIDs (UserGuid.ToString()) of alpha/experimental build participants.
+    /// UUID-based so the badge survives username changes.
+    /// Format: lowercase UUID string, e.g. "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+    /// </summary>
+    private static readonly HashSet<string> AlphaUserIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Add alpha participant UUIDs here
+    };
+
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
     private readonly object _mainWindow;
+    private readonly bool _isDevChannel;
     private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
-    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow)
+
+    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, bool isDevChannel)
     {
         _r = resolver;
         _walker = new VisualTreeWalker(resolver);
         _mainWindow = mainWindow;
+        _isDevChannel = isDevChannel;
     }
 
     public void Initialize()
@@ -308,19 +329,32 @@ internal class ProfileBadgeInjector
 
     /// <summary>
     /// Find the username TextBlock (largest font size in the popup, excluding known labels),
-    /// then insert a compact badge immediately after it in its parent panel.
-    /// Only injects if the username matches a known developer.
+    /// then insert recognition badges immediately after it in its parent panel.
+    ///
+    /// Two badge types are considered:
+    /// - Dev badge: injected if on developer channel AND username matches DeveloperUsernames
+    /// - Alpha badge: injected if UUID (from DataContext) matches AlphaUserIds (all channels)
     /// </summary>
     private void InjectBadgeUnderUsername(object popup)
     {
-        // Check if badge already exists anywhere in this popup
+        // Determine which badges are already present
+        bool devBadgePresent = false;
+        bool alphaBadgePresent = false;
         foreach (var node in _walker.DescendantsDepthFirst(popup))
         {
-            if (_r.GetTag(node) == BadgeTag)
-            {
-                Logger.Log("ProfileBadge", "Badge already present, skipping injection");
-                return;
-            }
+            var tag = _r.GetTag(node);
+            if (tag == BadgeTag) devBadgePresent = true;
+            if (tag == AlphaBadgeTag) alphaBadgePresent = true;
+        }
+
+        // Try to get the user's UUID from the DataContext for alpha badge check
+        var userId = TryGetUserIdFromPopup(popup);
+        bool isAlphaUser = userId != null && AlphaUserIds.Contains(userId);
+
+        if (alphaBadgePresent && (!_isDevChannel || devBadgePresent))
+        {
+            Logger.Log("ProfileBadge", "All applicable badges already present, skipping injection");
+            return;
         }
 
         // Find the username: largest-font TextBlock that isn't a label or action text
@@ -350,25 +384,24 @@ internal class ProfileBadgeInjector
 
         if (usernameBlock == null)
         {
-            Logger.Log("ProfileBadge", "Username TextBlock not found — badge not injected");
+            Logger.Log("ProfileBadge", "Username TextBlock not found — badges not injected");
             return;
         }
 
         var username = _r.GetText(usernameBlock) ?? "";
-        Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize})");
+        Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
 
-        // Gate: only inject badge for known developer usernames
-        if (!DeveloperUsernames.Contains(username))
+        bool isDevUser = _isDevChannel && DeveloperUsernames.Contains(username);
+
+        if (!isDevUser && !isAlphaUser)
         {
-            Logger.Log("ProfileBadge", $"User \"{username}\" is not a developer — badge not injected");
+            Logger.Log("ProfileBadge", $"User \"{username}\" has no badges to inject");
             return;
         }
 
-        Logger.Log("ProfileBadge", $"User \"{username}\" is a developer — injecting badge");
-
         // Walk up from the username looking for a VERTICAL panel to insert into.
         // The username sits in a horizontal row; we need the outer vertical container
-        // so the badge appears below the name, not beside it.
+        // so badges appear below the name, not beside it.
         var candidate = usernameBlock;
         for (int up = 0; up < 8; up++)
         {
@@ -383,14 +416,30 @@ internal class ProfileBadgeInjector
                     var idx = children.IndexOf(candidate);
                     if (idx >= 0)
                     {
-                        var badge = CreateBadgePill();
-                        if (badge == null) return;
+                        int insertOffset = 1;
 
-                        if (TryInsertChild(parent, badge, idx + 1))
+                        // Inject alpha badge first (appears directly below username)
+                        if (isAlphaUser && !alphaBadgePresent)
                         {
-                            Logger.Log("ProfileBadge", $"Badge inserted below username in {parent.GetType().Name} at index {idx + 1}");
-                            return;
+                            var alphaBadge = CreateAlphaBadgePill();
+                            if (alphaBadge != null && TryInsertChild(parent, alphaBadge, idx + insertOffset))
+                            {
+                                Logger.Log("ProfileBadge", $"Alpha badge inserted at index {idx + insertOffset}");
+                                insertOffset++;
+                            }
                         }
+
+                        // Inject dev badge below alpha badge (or directly below username if no alpha)
+                        if (isDevUser && !devBadgePresent)
+                        {
+                            var devBadge = CreateDevBadgePill();
+                            if (devBadge != null && TryInsertChild(parent, devBadge, idx + insertOffset))
+                            {
+                                Logger.Log("ProfileBadge", $"Dev badge inserted at index {idx + insertOffset}");
+                            }
+                        }
+
+                        return;
                     }
                 }
             }
@@ -398,7 +447,65 @@ internal class ProfileBadgeInjector
             candidate = parent;
         }
 
-        Logger.Log("ProfileBadge", "Could not find vertical panel above username — badge not injected");
+        Logger.Log("ProfileBadge", "Could not find vertical panel above username — badges not injected");
+    }
+
+    /// <summary>
+    /// Walk the popup's visual tree to find a MemberProfileView control, then read its
+    /// DataContext to extract the viewed user's UUID via:
+    ///   DataContext.MessageContainerMember.GlobalUser.Id.ToString()
+    ///
+    /// Returns the UUID string (lowercase) or null if not accessible.
+    /// This is the stable identifier — unaffected by username changes.
+    /// </summary>
+    private string? TryGetUserIdFromPopup(object popup)
+    {
+        try
+        {
+            // Find MemberProfileView anywhere in the subtree
+            object? profileView = null;
+            foreach (var node in _walker.DescendantsDepthFirst(popup))
+            {
+                if (node.GetType().Name == "MemberProfileView")
+                {
+                    profileView = node;
+                    break;
+                }
+            }
+
+            // Also try the popup itself (sometimes the popup root IS the view)
+            if (profileView == null && popup.GetType().Name == "MemberProfileView")
+                profileView = popup;
+
+            if (profileView == null)
+            {
+                Logger.Log("ProfileBadge", "TryGetUserIdFromPopup: MemberProfileView not found in subtree");
+                return null;
+            }
+
+            // Read DataContext
+            var dc = profileView.GetType().GetProperty("DataContext")?.GetValue(profileView);
+            if (dc == null) return null;
+
+            // DataContext.MessageContainerMember
+            var member = dc.GetType().GetProperty("MessageContainerMember")?.GetValue(dc);
+            if (member == null) return null;
+
+            // .GlobalUser
+            var globalUser = member.GetType().GetProperty("GlobalUser")?.GetValue(member);
+            if (globalUser == null) return null;
+
+            // .Id → UserGuid → .ToString()
+            var id = globalUser.GetType().GetProperty("Id")?.GetValue(globalUser);
+            if (id == null) return null;
+
+            return id.ToString()?.ToLowerInvariant();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"TryGetUserIdFromPopup error: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -476,47 +583,58 @@ internal class ProfileBadgeInjector
     }
 
     /// <summary>
-    /// Build the compact "Uprooted Dev" pill badge displayed below the username.
-    /// Smaller than the role pills: tighter padding, smaller font, centered horizontally.
-    /// Structure:
-    ///   Border (pill, CR=8, padding 7,2,7,2, bg=#8B691420, border=#8B691460, HAlign=Center)
-    ///     StackPanel (horizontal, spacing=4, VAlign=Center)
-    ///       Border (6x6, CR=3, bg=#8B6914) — color dot
-    ///       TextBlock ("Uprooted Dev", size=10, weight=500)
+    /// Build the compact "Uprooted Dev" pill badge (gold) displayed below the username.
+    /// Only injected when on the developer channel for known developer usernames.
     /// </summary>
-    private object? CreateBadgePill()
+    private object? CreateDevBadgePill() => CreateBadgePill("Uprooted Dev", DevBadgeColor, BadgeTag);
+
+    /// <summary>
+    /// Build the compact "Alpha User" pill badge (blue) displayed below the username.
+    /// Injected on all channels when the viewed user's UUID is in AlphaUserIds.
+    /// </summary>
+    private object? CreateAlphaBadgePill() => CreateBadgePill("Alpha User", AlphaBadgeColor, AlphaBadgeTag);
+
+    /// <summary>
+    /// Build a compact pill badge with the given label, color, and tag.
+    /// Structure:
+    ///   Border (pill, CR=8, padding 7,2,7,2, bg=color20, border=color60, HAlign=Center)
+    ///     StackPanel (horizontal, spacing=4, VAlign=Center)
+    ///       Border (6x6, CR=3, bg=color) — color dot
+    ///       TextBlock (label, size=10, weight=500)
+    /// </summary>
+    private object? CreateBadgePill(string label, string color, string tag)
     {
-        // Color dot (smaller: 6x6)
-        var dot = _r.CreateBorder(BadgeColor, cornerRadius: 3);
+        // Color dot (6x6)
+        var dot = _r.CreateBorder(color, cornerRadius: 3);
         if (dot == null) return null;
         _r.SetWidth(dot, 6);
         _r.SetHeight(dot, 6);
         _r.SetVerticalAlignment(dot, "Center");
 
-        // Label text (smaller: size 10)
-        var label = _r.CreateTextBlock("Uprooted Dev", fontSize: 10, foregroundHex: "#fff2f2f2");
-        if (label == null) return null;
-        _r.SetFontWeightNumeric(label, 500);
-        _r.SetVerticalAlignment(label, "Center");
+        // Label text
+        var text = _r.CreateTextBlock(label, fontSize: 10, foregroundHex: "#fff2f2f2");
+        if (text == null) return null;
+        _r.SetFontWeightNumeric(text, 500);
+        _r.SetVerticalAlignment(text, "Center");
 
-        // Inner StackPanel (horizontal: dot + label, tighter spacing)
+        // Inner StackPanel (horizontal: dot + label)
         var inner = _r.CreateStackPanel(vertical: false, spacing: 4);
         if (inner == null) return null;
         _r.SetVerticalAlignment(inner, "Center");
         _r.AddChild(inner, dot);
-        _r.AddChild(inner, label);
+        _r.AddChild(inner, text);
 
-        // Outer pill Border (smaller padding, centered)
-        var pill = _r.CreateBorder(bgHex: BadgeColor + "20", cornerRadius: 8, child: inner);
+        // Outer pill Border
+        var pill = _r.CreateBorder(bgHex: color + "20", cornerRadius: 8, child: inner);
         if (pill == null) return null;
         _r.SetPadding(pill, 7, 2, 7, 2);
-        _r.SetTag(pill, BadgeTag);
+        _r.SetTag(pill, tag);
         _r.SetHorizontalAlignment(pill, "Center");
 
         // Border stroke
         try
         {
-            var strokeBrush = _r.CreateBrush(BadgeColor + "60");
+            var strokeBrush = _r.CreateBrush(color + "60");
             if (strokeBrush != null)
                 pill.GetType().GetProperty("BorderBrush")?.SetValue(pill, strokeBrush);
 
