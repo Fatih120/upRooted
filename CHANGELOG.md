@@ -24,10 +24,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Themes "Open" button** — Sized to match toggle switches (44×24)
 - **Experimental banner** — Theme-aware toggle: theme colors when off, amber warning when on; 20px icon hidden when off
 - **Restart banners** — Title + subtitle layout, burnt orange tint (`#2A1D15`/`#D06818`), accent-format restart buttons
-- **Vector icons** — Plugin card gear/info icons use `PathIcon` with SVG path data instead of Unicode text
+- **Vector icons** — Plugin card gear/info icons use `Shapes.Path` with `Stretch.Uniform` (Material Design 24x24); replaced `PathIcon` which didn't scale
 - **Plugin card text** — Bold plugin names (was silently failing), Bold status badges with 1px border
 - **Cards-in-a-card layout** — Preset and custom theme sections use Root-native two-level card hierarchy (outer container + inner 2nd-order cards with lighter bg, thicker borders, Grid column layout)
-- **Radio indicators** — Neutral `TextWhite` only (no accent color), 16×16, 1px border, 10×10 inner dot
+- **DPI-aware borders** — `ThinBorder` (1px physical) and `ThickBorder` (next pixel boundary) computed from `RenderScaling`; always visually distinct at any DPI
+- **Radio indicators** — Grid overlay with sibling Borders (18×18 ring + 10×10 centered dot); `(18-10)*scale` always even for perfect centering at 100%/150%
+- **Toggle switch** — Thumb 18→16 for even centering gaps at all DPI scales
 - **Typography** — Page titles 20px Bold, section headers 14px Bold TextPrimary, About page → "About Uprooted"
 - **Button borders** — Accent buttons get `AdjustForHighlight(color, 30)` 1.5px borders with Bold text; Developer/Stable border updates on toggle
 - **Restart button** — Deeper burnt orange (`#D06818`)

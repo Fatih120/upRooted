@@ -28,6 +28,7 @@ internal class AvaloniaReflection
     public Type? EllipseType { get; private set; }
     public Type? CanvasType { get; private set; }
     public Type? PathIconType { get; private set; }  // Avalonia.Controls.PathIcon
+    public Type? PathShapeType { get; private set; } // Avalonia.Controls.Shapes.Path
     public Type? GeometryType { get; private set; }  // Avalonia.Media.Geometry
 
     // Image types
@@ -208,11 +209,14 @@ internal class AvaloniaReflection
         EllipseType = Find("Avalonia.Controls.Shapes.Ellipse");
 
         PathIconType = Find("Avalonia.Controls.PathIcon");
+        PathShapeType = Find("Avalonia.Controls.Shapes.Path");
         GeometryType = Find("Avalonia.Media.Geometry");
 
         // Fallback: search by name if namespace differs
         EllipseType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "Ellipse" && t.Namespace?.StartsWith("Avalonia") == true && !t.IsAbstract);
+        PathShapeType ??= typeMap.Values.FirstOrDefault(t =>
+            t.Name == "Path" && t.Namespace?.Contains("Shapes") == true && !t.IsAbstract);
 
         SolidColorBrushType = Find("Avalonia.Media.SolidColorBrush");
         LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
@@ -477,6 +481,22 @@ internal class AvaloniaReflection
     }
 
     /// <summary>
+    /// Returns the DPI scale factor from the main window (e.g. 1.0 for 100%, 1.5 for 150%).
+    /// Falls back to 1.0 if unavailable.
+    /// </summary>
+    public double GetRenderScaling()
+    {
+        try
+        {
+            var window = GetMainWindow();
+            var val = window?.GetType().GetProperty("RenderScaling")?.GetValue(window);
+            if (val is double d && d > 0) return d;
+        }
+        catch { }
+        return 1.0;
+    }
+
+    /// <summary>
     /// Returns all open windows (main + popups). Avalonia popups like user profile
     /// cards and context menus live in separate Window objects, not in MainWindow's tree.
     /// </summary>
@@ -705,12 +725,12 @@ internal class AvaloniaReflection
     }
 
     /// <summary>
-    /// Create a PathIcon from SVG path data string. Uses Geometry.Parse() for the path
-    /// and sets Foreground + Width/Height on the resulting PathIcon control.
+    /// Create an icon from SVG path data string. Prefers Avalonia.Controls.Shapes.Path
+    /// with Stretch.Uniform (scales any viewbox to fit), falls back to PathIcon.
     /// </summary>
     public object? CreatePathIcon(string pathData, double size, string? foregroundHex = null)
     {
-        if (PathIconType == null || GeometryType == null) return null;
+        if (GeometryType == null) return null;
         try
         {
             // Geometry.Parse(string) is a static method on Avalonia.Media.Geometry
@@ -720,23 +740,50 @@ internal class AvaloniaReflection
             var geometry = parseMethod.Invoke(null, new object[] { pathData });
             if (geometry == null) return null;
 
-            var icon = Activator.CreateInstance(PathIconType);
-            if (icon == null) return null;
-
-            // PathIcon.Data = geometry
-            PathIconType.GetProperty("Data")?.SetValue(icon, geometry);
-
-            // Set size
-            icon.GetType().GetProperty("Width")?.SetValue(icon, size);
-            icon.GetType().GetProperty("Height")?.SetValue(icon, size);
-
-            if (foregroundHex != null)
+            // Prefer Path shape — has explicit Stretch.Uniform to scale any viewbox
+            if (PathShapeType != null && StretchType != null)
             {
-                var brush = CreateBrush(foregroundHex);
-                if (brush != null) icon.GetType().GetProperty("Foreground")?.SetValue(icon, brush);
+                var path = Activator.CreateInstance(PathShapeType);
+                if (path != null)
+                {
+                    path.GetType().GetProperty("Data")?.SetValue(path, geometry);
+                    path.GetType().GetProperty("Width")?.SetValue(path, size);
+                    path.GetType().GetProperty("Height")?.SetValue(path, size);
+
+                    // Stretch.Uniform — scale geometry to fit size, preserving aspect ratio
+                    var uniform = Enum.Parse(StretchType, "Uniform");
+                    path.GetType().GetProperty("Stretch")?.SetValue(path, uniform);
+
+                    if (foregroundHex != null)
+                    {
+                        var brush = CreateBrush(foregroundHex);
+                        if (brush != null) path.GetType().GetProperty("Fill")?.SetValue(path, brush);
+                    }
+
+                    return path;
+                }
             }
 
-            return icon;
+            // Fallback: PathIcon (no Stretch — may clip if viewbox != size)
+            if (PathIconType != null)
+            {
+                var icon = Activator.CreateInstance(PathIconType);
+                if (icon == null) return null;
+
+                PathIconType.GetProperty("Data")?.SetValue(icon, geometry);
+                icon.GetType().GetProperty("Width")?.SetValue(icon, size);
+                icon.GetType().GetProperty("Height")?.SetValue(icon, size);
+
+                if (foregroundHex != null)
+                {
+                    var brush = CreateBrush(foregroundHex);
+                    if (brush != null) icon.GetType().GetProperty("Foreground")?.SetValue(icon, brush);
+                }
+
+                return icon;
+            }
+
+            return null;
         }
         catch (Exception ex)
         {
@@ -787,7 +834,8 @@ internal class AvaloniaReflection
         return border;
     }
 
-    public object? CreateEllipse(double width, double height, string? fillHex = null)
+    public object? CreateEllipse(double width, double height, string? fillHex = null,
+        string? strokeHex = null, double strokeThickness = 0)
     {
         if (EllipseType == null) return null;
         try
@@ -801,9 +849,25 @@ internal class AvaloniaReflection
                 if (brush != null)
                     ellipse?.GetType().GetProperty("Fill")?.SetValue(ellipse, brush);
             }
+            if (strokeHex != null && strokeThickness > 0)
+            {
+                var brush = CreateBrush(strokeHex);
+                if (brush != null)
+                    ellipse?.GetType().GetProperty("Stroke")?.SetValue(ellipse, brush);
+                ellipse?.GetType().GetProperty("StrokeThickness")?.SetValue(ellipse, strokeThickness);
+            }
             return ellipse;
         }
         catch { return null; }
+    }
+
+    /// <summary>Set the Fill brush on a Shape (Ellipse, Path, etc).</summary>
+    public void SetFill(object? shape, string? hex)
+    {
+        if (shape == null) return;
+        if (hex == null) { shape.GetType().GetProperty("Fill")?.SetValue(shape, null); return; }
+        var brush = CreateBrush(hex);
+        if (brush != null) shape.GetType().GetProperty("Fill")?.SetValue(shape, brush);
     }
 
     public object? CreateTextBox(string? watermark = null, string? text = null, int maxLength = 0)

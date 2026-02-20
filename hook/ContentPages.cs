@@ -22,13 +22,13 @@ internal static class ContentPages
     private const string DefaultTextDim = "#66f2f2f2";
     private const string DefaultAccentGreen = "#2A5A40";
 
-    // SVG path data for vector icons (20x20 viewbox)
-    // Gear/settings icon — Fluent UI style cog
+    // SVG path data for vector icons (24x24 viewbox)
+    // Gear/settings icon — Material Design cog
     private const string GearIconPath =
-        "M8.61 2.26a1.5 1.5 0 0 1 2.78 0l.28.67a1.5 1.5 0 0 0 1.83.83l.67-.28a1.5 1.5 0 0 1 1.97 1.96l-.28.68a1.5 1.5 0 0 0 .83 1.83l.67.28a1.5 1.5 0 0 1 0 2.78l-.67.28a1.5 1.5 0 0 0-.83 1.83l.28.67a1.5 1.5 0 0 1-1.96 1.97l-.68-.28a1.5 1.5 0 0 0-1.83.83l-.28.67a1.5 1.5 0 0 1-2.78 0l-.28-.67a1.5 1.5 0 0 0-1.83-.83l-.67.28a1.5 1.5 0 0 1-1.97-1.96l.28-.68a1.5 1.5 0 0 0-.83-1.83l-.67-.28a1.5 1.5 0 0 1 0-2.78l.67-.28a1.5 1.5 0 0 0 .83-1.83l-.28-.67A1.5 1.5 0 0 1 5.83 2.3l.68.28a1.5 1.5 0 0 0 1.83-.83l.28-.67ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
-    // Info circle icon — circle with "i" inside
+        "M12 15.5A3.5 3.5 0 0 1 8.5 12 3.5 3.5 0 0 1 12 8.5a3.5 3.5 0 0 1 3.5 3.5 3.5 3.5 0 0 1-3.5 3.5m7.43-2.53c.04-.32.07-.64.07-.97s-.03-.66-.07-1l2.11-1.63c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64L4.57 11c-.04.34-.07.67-.07 1s.03.65.07.97l-2.11 1.66c-.19.15-.25.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1.01c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1.01c.22.08.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64L19.43 12.97Z";
+    // Info circle icon — Material Design circle with "i"
     private const string InfoIconPath =
-        "M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 1a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm0 5.5a.75.75 0 0 1 .75.75v4a.75.75 0 0 1-1.5 0v-4A.75.75 0 0 1 10 8.5ZM10 7a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z";
+        "M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z";
 
     // Themed colors derived from the active theme engine (set per-build)
     internal static string CardBg = DefaultCardBg;
@@ -266,6 +266,7 @@ internal static class ContentPages
     private static object? BuildUprootedPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
     {
         ApplyThemedColors(themeEngine);
+        ComputeDpiAwareBorders(r);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -292,7 +293,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(logBtn, "Right");
                 r.SetVerticalAlignment(logBtn, "Center");
                 r.SetCursorHand(logBtn);
-                SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), 1.5);
+                SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
                 var logPath = Logger.GetLogPath();
                 r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
                 r.SubscribeEvent(logBtn, "PointerEntered", () =>
@@ -328,7 +329,7 @@ internal static class ContentPages
             r.BindToDynamicResource(versionBadge, "Background", "BrandPrimary");
             r.SetPadding(versionBadge, 8, 1, 8, 1);
             r.SetVerticalAlignment(versionBadge, "Center");
-            SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 30), 1.5);
+            SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 30), ThickBorder);
             r.AddChild(titleRow, versionBadge);
             r.AddChild(cardContent, titleRow);
 
@@ -494,7 +495,7 @@ internal static class ContentPages
                 r.SetMargin(btn, 0, 14, 0, 0);
                 r.SetHorizontalAlignment(btn, "Left");
                 r.SetCursorHand(btn);
-                SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 30), 1.5);
+                SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 30), ThickBorder);
 
                 if (!isChecking && !wasUpdated)
                 {
@@ -616,7 +617,7 @@ internal static class ContentPages
                     if (updateRestartBtn != null)
                     {
                         r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
-                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 30), 1.5);
+                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 30), ThickBorder);
                         r.SetHorizontalAlignment(updateRestartBtn, "Right");
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
@@ -741,6 +742,7 @@ internal static class ContentPages
     private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null, Action<string>? onNavigate = null)
     {
         ApplyThemedColors(themeEngine);
+        ComputeDpiAwareBorders(r);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -922,7 +924,7 @@ internal static class ContentPages
                 if (restartBtn != null)
                 {
                     r.SetPadding(restartBtn, 12, 5, 12, 5);
-                    SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 30), 1.5);
+                    SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 30), ThickBorder);
                     r.SetHorizontalAlignment(restartBtn, "Right");
                     r.SetVerticalAlignment(restartBtn, "Center");
                     r.SetCursorHand(restartBtn);
@@ -1042,7 +1044,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(filterBadge, "Right");
                 r.SetVerticalAlignment(filterBadge, "Center");
                 r.SetCursorHand(filterBadge);
-                SetBorderStroke(r, filterBadge, AdjustForHighlight(filterColors[filterMode[0]], 30), 1.5);
+                SetBorderStroke(r, filterBadge, AdjustForHighlight(filterColors[filterMode[0]], 30), ThickBorder);
                 r.SetTag(filterBadge, "uprooted-no-recolor");
 
                 var badgeRef = filterBadge;
@@ -1052,7 +1054,7 @@ internal static class ContentPages
                     filterMode[0] = (filterMode[0] + 1) % 3;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
                     r.SetBackground(badgeRef, filterColors[filterMode[0]]);
-                    SetBorderStroke(r, badgeRef, AdjustForHighlight(filterColors[filterMode[0]], 30), 1.5);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(filterColors[filterMode[0]], 30), ThickBorder);
                     rebuildGrid?.Invoke();
                 });
                 r.SubscribeEvent(filterBadge, "PointerEntered", () =>
@@ -1326,7 +1328,6 @@ internal static class ContentPages
                 r.SetVerticalAlignment(rightIcons, "Center");
 
                 // Gear icon - opens settings lightbox (only for plugins with settings)
-                // SVG path: Fluent UI Settings (20x20 viewbox)
                 if (hasSettings)
                 {
                     var gearBtnBg = AdjustForHighlight(CardBg, 12);
@@ -1362,7 +1363,6 @@ internal static class ContentPages
                 }
 
                 // Info icon - opens lightbox with plugin details
-                // SVG path: circle-i info icon (20x20 viewbox)
                 {
                     var infoBtnBg = AdjustForHighlight(CardBg, 12);
                     var infoBtn = r.CreateBorder(infoBtnBg, 11);
@@ -1890,15 +1890,16 @@ internal static class ContentPages
         r.SetCursorHand(pill);
         r.SetTag(pill, "uprooted-toggle-pill");
 
-        // Thumb (circle inside)
-        var thumb = r.CreateBorder("#FFFFFFFF", 9);
+        // Thumb (circle inside) — 16x16 in 24-high pill ensures even centering gaps
+        // at both 100% and 150% DPI: (24-16)*scale is always even
+        var thumb = r.CreateBorder("#FFFFFFFF", 8);
         if (thumb != null)
         {
-            r.SetWidth(thumb, 18);
-            r.SetHeight(thumb, 18);
+            r.SetWidth(thumb, 16);
+            r.SetHeight(thumb, 16);
             r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
             r.SetVerticalAlignment(thumb, "Center");
-            r.SetMargin(thumb, 3, 0, 3, 0);
+            r.SetMargin(thumb, 4, 0, 4, 0);
         }
         r.SetBorderChild(pill, thumb);
 
@@ -1937,6 +1938,7 @@ internal static class ContentPages
         object? font, ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
     {
         ApplyThemedColors(themeEngine);
+        ComputeDpiAwareBorders(r);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
         if (page == null) return null;
         r.SetMargin(page, 24, 24, 24, 0);
@@ -1953,7 +1955,7 @@ internal static class ContentPages
         var presetsContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (presetsContainer != null)
         {
-            SetBorderStroke(r, presetsContainer, CardBorder, CardBorderThickness);
+            SetBorderStroke(r, presetsContainer, CardBorder, ThinBorder);
             r.SetTag(presetsContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
             r.SetMargin(presetsContainer, 0, 20, 0, 0);
 
@@ -2013,7 +2015,7 @@ internal static class ContentPages
         var customContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (customContainer != null)
         {
-            SetBorderStroke(r, customContainer, CardBorder, CardBorderThickness);
+            SetBorderStroke(r, customContainer, CardBorder, ThinBorder);
             r.SetTag(customContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
             r.SetMargin(customContainer, 0, 16, 0, 0);
 
@@ -2068,7 +2070,7 @@ internal static class ContentPages
         var card = r.CreateBorder(islandBg, 12);
         if (card == null) return null;
         r.SetTag(card, "uprooted-no-recolor"); // Walker skips entire subtree
-        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, 1.5);
+        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, ThickBorder);
 
         var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (outerContent == null) return card;
@@ -2083,25 +2085,37 @@ internal static class ContentPages
             r.SetVerticalAlignment(headerRow, "Center");
             r.SetBackground(headerRow, "Transparent"); // Required for hit-testing
 
-            radioOuter = r.CreateBorder(null, 4);
-            if (radioOuter != null)
+            // Radio indicator — Grid overlay with two sibling Borders (rounded squares)
+            // 18x18 outer ensures (18-10)*scale is always even → perfect centering
+            var radioGrid = r.CreateGrid();
+            if (radioGrid != null)
             {
-                r.SetWidth(radioOuter, 16);
-                r.SetHeight(radioOuter, 16);
-                SetBorderStroke(r, radioOuter, islandText, 1.0);
-                r.SetVerticalAlignment(radioOuter, "Center");
+                r.SetWidth(radioGrid, 18);
+                r.SetHeight(radioGrid, 18);
+                r.SetVerticalAlignment(radioGrid, "Center");
 
-                var innerDot = r.CreateBorder(isActive ? islandText : "#00000000", 2);
-                if (innerDot != null)
+                // Ring: fills Grid, thin stroke, transparent center
+                var ring = r.CreateBorder(null, 4);
+                if (ring != null)
                 {
-                    r.SetWidth(innerDot, 10);
-                    r.SetHeight(innerDot, 10);
-                    r.SetMargin(innerDot, 1, 1, 1, 1);
+                    SetBorderStroke(r, ring, islandText, ThinBorder);
+                    r.AddChild(radioGrid, ring);
                 }
-                r.SetBorderChild(radioOuter, innerDot);
-                radioDot = innerDot;
 
-                r.AddChild(headerRow, radioOuter);
+                // Dot: centered independently in Grid, no nesting dependency
+                var dot = r.CreateBorder(isActive ? islandText : "#00000000", 2);
+                if (dot != null)
+                {
+                    r.SetWidth(dot, 10);
+                    r.SetHeight(dot, 10);
+                    r.SetHorizontalAlignment(dot, "Center");
+                    r.SetVerticalAlignment(dot, "Center");
+                    r.AddChild(radioGrid, dot);
+                }
+                radioOuter = radioGrid;
+                radioDot = dot;
+
+                r.AddChild(headerRow, radioGrid);
             }
 
             var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
@@ -2377,7 +2391,7 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, "#555577", 1.5);
+                SetBorderStroke(r, card, "#555577", ThickBorder);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#555577");
             }
@@ -2386,7 +2400,7 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, islandBorder, 1.5);
+                SetBorderStroke(r, card, islandBorder, ThickBorder);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }
@@ -2522,7 +2536,7 @@ internal static class ContentPages
         var borderColor = isActive ? accentColor : CardBorder;
         var card = r.CreateBorder(innerCardBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, 1.5);
+        SetBorderStroke(r, card, borderColor, ThickBorder);
         r.SetCursorHand(card);
 
         // Vertical layout: preview on top, radio + name below
@@ -2548,28 +2562,35 @@ internal static class ContentPages
             r.SetMargin(bottomRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(bottomRow, "Center");
 
-            // Radio indicator — neutral color (TextPrimary), unaffected by selection/accent
-            radioOuter = r.CreateBorder(null, 4);
-            if (radioOuter != null)
+            // Radio indicator — Grid overlay with two sibling Borders (rounded squares)
+            var radioGrid = r.CreateGrid();
+            if (radioGrid != null)
             {
-                r.SetWidth(radioOuter, 16);
-                r.SetHeight(radioOuter, 16);
-                SetBorderStroke(r, radioOuter, TextWhite, 1.0);
-                r.SetVerticalAlignment(radioOuter, "Center");
+                r.SetWidth(radioGrid, 18);
+                r.SetHeight(radioGrid, 18);
+                r.SetVerticalAlignment(radioGrid, "Center");
 
-                // Inner dot: filled with TextPrimary when active, transparent when inactive
-                var innerDot = r.CreateBorder(isActive ? TextWhite : "#00000000", 2);
-                if (innerDot != null)
+                var ring = r.CreateBorder(null, 4);
+                if (ring != null)
                 {
-                    r.SetWidth(innerDot, 10);
-                    r.SetHeight(innerDot, 10);
-                    r.SetMargin(innerDot, 1, 1, 1, 1);
-                    r.SetTag(innerDot, "uprooted-radio-dot");
+                    SetBorderStroke(r, ring, TextWhite, ThinBorder);
+                    r.AddChild(radioGrid, ring);
                 }
-                r.SetBorderChild(radioOuter, innerDot);
-                radioDot = innerDot;
 
-                r.AddChild(bottomRow, radioOuter);
+                var dot = r.CreateBorder(isActive ? TextWhite : "#00000000", 2);
+                if (dot != null)
+                {
+                    r.SetWidth(dot, 10);
+                    r.SetHeight(dot, 10);
+                    r.SetHorizontalAlignment(dot, "Center");
+                    r.SetVerticalAlignment(dot, "Center");
+                    r.SetTag(dot, "uprooted-radio-dot");
+                    r.AddChild(radioGrid, dot);
+                }
+                radioOuter = radioGrid;
+                radioDot = dot;
+
+                r.AddChild(bottomRow, radioGrid);
             }
 
             // Name + description
@@ -2642,7 +2663,7 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, hoverBorder, 1.5);
+                SetBorderStroke(r, card, hoverBorder, ThickBorder);
                 if (dotRef != null)
                     r.SetBackground(dotRef, dotHoverColor);
             }
@@ -2651,7 +2672,7 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, restBorder, 1.5);
+                SetBorderStroke(r, card, restBorder, ThickBorder);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }
@@ -3385,7 +3406,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
             r.SetTag(badge, "uprooted-no-recolor");
-            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 30), 1.5);
+            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 30), ThickBorder);
 
             var badgeRef = badge;
             var badgeTextRef = badgeText;
@@ -3406,7 +3427,7 @@ internal static class ContentPages
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
-                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 30), 1.5);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 30), ThickBorder);
                 }
                 else
                 {
@@ -3481,7 +3502,7 @@ internal static class ContentPages
             r.SetPadding(submitBtn, 12, 5, 12, 5);
             r.SetVerticalAlignment(submitBtn, "Center");
             r.SetCursorHand(submitBtn);
-            SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 30), 1.5);
+            SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 30), ThickBorder);
             r.AddChild(promptRow, submitBtn);
         }
 
@@ -3540,7 +3561,7 @@ internal static class ContentPages
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
                 r.SetBackground(badgeRef, "#8B6914");
-                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 30), 1.5);
+                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 30), ThickBorder);
                 r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
                 Logger.Log("AutoUpdate", "Switched to Developer channel");
 
@@ -3631,10 +3652,23 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Constant border thickness for all cards — matches Root's native divider lines.
-    /// Color changes only, never thickness.
+    /// DPI-aware border thicknesses — computed from RenderScaling so that thin and thick
+    /// borders always round to distinct physical pixel counts at any display scale.
+    /// Thin stays at 1.0 DIPs (standard). Thick is bumped to the next physical pixel
+    /// boundary above thin, guaranteeing visible distinction.
     /// </summary>
-    private const double CardBorderThickness = 1.0;
+    private static double ThinBorder = 1.0;   // outer container cards
+    private static double ThickBorder = 1.5;   // inner selectable cards, buttons
+
+    private static void ComputeDpiAwareBorders(AvaloniaReflection r)
+    {
+        var scale = r.GetRenderScaling();
+        ThinBorder = 1.0; // standard — DPI scaling handles physical size
+        // Find the physical pixel count thin rounds to, then target one pixel above
+        var thinPhysical = Math.Ceiling(1.0 * scale);
+        ThickBorder = (thinPhysical + 1) / scale;
+        Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} ({thinPhysical}px), ThickBorder={ThickBorder:F3} ({thinPhysical + 1}px)");
+    }
 
     private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)
     {
@@ -3642,7 +3676,7 @@ internal static class ContentPages
         if (card == null) return null;
 
         // Visible resting border — uses Root's Border resource for divider-matching color
-        SetBorderStroke(r, card, CardBorder, CardBorderThickness);
+        SetBorderStroke(r, card, CardBorder, ThinBorder);
 
         // Combine bg + border tags for live walker recoloring
         r.SetTag(card, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
