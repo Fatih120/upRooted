@@ -344,7 +344,11 @@ internal class StartupHook
             var notifyResolver = resolver;
             AutoUpdater.BackgroundUpdateApplied += (version) =>
             {
-                Logger.Log("Startup", $"Phase 4.5d: Background update applied (v{version}) — showing notification");
+                var s = UprootedSettings.Load();
+                if (!s.AutoUpdateNotify) return;
+
+                Logger.Log("Startup", $"Phase 4.5d: Background update applied (v{version}) — showing notifications");
+                DesktopNotification.Show("Uprooted", $"Updated to v{version} — restart Root to apply");
                 notifyResolver.RunOnUIThread(() =>
                 {
                     try { ContentPages.ShowUpdateNotification(notifyResolver, version); }

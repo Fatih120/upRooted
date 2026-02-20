@@ -25,7 +25,7 @@ internal class AutoUpdater
     private const string DevApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1";
     private const string DevDownloadBase = "https://github.com/The-Uprooted-Project/uprooted-private/releases/download";
 
-    private const int CheckIntervalHours = 6;
+    private const int CheckIntervalMinutes = 1;
     private const int HttpTimeoutSeconds = 30;
 
     // SHA-256 hash of the developer channel password
@@ -74,6 +74,7 @@ internal class AutoUpdater
     // State
     private string? _latestVersion;
     private string? _latestTag;
+    private string? _assetApiUrl; // GitHub API URL for the .uprpkg asset (private repo downloads)
     private bool _updateApplied;
     private string? _lastError;
     private int _checking; // 0 = idle, 1 = checking (atomic via Interlocked)
@@ -134,6 +135,13 @@ internal class AutoUpdater
         @"""tag_name""\s*:\s*""([^""]+)""",
         RegexOptions.Compiled);
 
+    // Regex to extract the API URL for auto-update.uprpkg from the assets array.
+    // Matches: "url":"https://api.github.com/.../releases/assets/12345" ... "name":"auto-update.uprpkg"
+    // (GitHub returns "url" before "name" in the assets objects)
+    private static readonly Regex AssetApiUrlRegex = new(
+        @"""url""\s*:\s*""(https://api\.github\.com/repos/[^""]+/releases/assets/\d+)""[^}]*?""name""\s*:\s*""auto-update\.uprpkg""",
+        RegexOptions.Compiled);
+
     /// <summary>
     /// Initialize the auto-updater. Starts a periodic check timer if enabled.
     /// Always callable for manual checks even if auto-check is disabled.
@@ -154,7 +162,7 @@ internal class AutoUpdater
                 Logger.Log("AutoUpdate", "Skipping initial check (throttled)");
             }
 
-            // Start periodic timer (check every 6 hours)
+            // Start periodic timer (check every minute)
             _periodicTimer = new Timer(_ =>
             {
                 try
@@ -167,7 +175,7 @@ internal class AutoUpdater
                 {
                     Logger.Log("AutoUpdate", $"Periodic check error: {ex.Message}");
                 }
-            }, null, TimeSpan.FromHours(CheckIntervalHours), TimeSpan.FromHours(CheckIntervalHours));
+            }, null, TimeSpan.FromMinutes(CheckIntervalMinutes), TimeSpan.FromMinutes(CheckIntervalMinutes));
         }
         else
         {
@@ -229,7 +237,7 @@ internal class AutoUpdater
         try
         {
             var last = DateTime.Parse(settings.LastUpdateCheck, null, System.Globalization.DateTimeStyles.RoundtripKind);
-            return (DateTime.UtcNow - last).TotalHours >= CheckIntervalHours;
+            return (DateTime.UtcNow - last).TotalMinutes >= CheckIntervalMinutes;
         }
         catch
         {
@@ -275,6 +283,22 @@ internal class AutoUpdater
             _latestTag = match.Groups[1].Value;
             _latestVersion = _latestTag.TrimStart('v');
             Logger.Log("AutoUpdate", $"Latest release: {_latestTag} (version: {_latestVersion})");
+
+            // For private repos, extract the API asset URL (browser download URLs return 404 with Bearer auth)
+            _assetApiUrl = null;
+            if (isDev)
+            {
+                var assetMatch = AssetApiUrlRegex.Match(json);
+                if (assetMatch.Success)
+                {
+                    _assetApiUrl = assetMatch.Groups[1].Value;
+                    Logger.Log("AutoUpdate", $"Asset API URL: {_assetApiUrl}");
+                }
+                else
+                {
+                    Logger.Log("AutoUpdate", "No asset API URL found in response, will use browser download URL");
+                }
+            }
 
             // Compare versions
             var currentVersion = settings.Version;
@@ -331,10 +355,16 @@ internal class AutoUpdater
             Directory.CreateDirectory(stagingDir);
 
             // Download single encrypted package
-            var pkgUrl = $"{downloadBase}/{_latestTag}/auto-update.uprpkg";
-            Logger.Log("AutoUpdate", $"Downloading {pkgUrl} (auth={authToken != null})...");
+            // For private repos, use the GitHub API asset URL with Accept: application/octet-stream
+            // (browser download URLs at github.com/.../releases/download/... return 404 with Bearer auth)
+            var browserUrl = $"{downloadBase}/{_latestTag}/auto-update.uprpkg";
+            var pkgUrl = _assetApiUrl ?? browserUrl;
+            var useApiDownload = _assetApiUrl != null;
+            Logger.Log("AutoUpdate", $"Downloading {pkgUrl} (auth={authToken != null}, api={useApiDownload})...");
 
-            var pkgBytes = HttpGetBytes(pkgUrl, authToken);
+            var pkgBytes = useApiDownload
+                ? HttpGetBytesViaApi(pkgUrl, authToken)
+                : HttpGetBytes(pkgUrl, authToken);
             if (pkgBytes == null || pkgBytes.Length == 0)
             {
                 _lastError = "Download failed (check log for HTTP status)";
@@ -892,6 +922,74 @@ internal class AutoUpdater
         {
             var inner = UnwrapException(ex);
             Logger.Log("AutoUpdate", $"HTTP GET bytes error for {url}: {inner.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Download bytes from a GitHub API asset URL using Accept: application/octet-stream.
+    /// This is the correct way to download release assets from private repos — the browser
+    /// download URL (github.com/.../releases/download/...) returns 404 with Bearer token auth.
+    /// GitHub responds with a 302 redirect to a signed CDN URL; HttpClient follows it automatically.
+    /// </summary>
+    private static byte[]? HttpGetBytesViaApi(string apiUrl, string? authToken)
+    {
+        EnsureHttpResolved();
+        if (s_httpClient == null || s_sendAsync == null || s_httpRequestMessageType == null || s_httpMethodGet == null)
+            return null;
+
+        try
+        {
+            var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(apiUrl));
+            if (request == null) return null;
+
+            // Set auth
+            SetRequestAuth(request, authToken);
+
+            // Set Accept: application/octet-stream (tells GitHub API to return the binary, not JSON metadata)
+            var headers = request.GetType().GetProperty("Headers")?.GetValue(request);
+            if (headers != null)
+            {
+                var tryAdd = headers.GetType().GetMethod("TryAddWithoutValidation",
+                    new[] { typeof(string), typeof(string) });
+                tryAdd?.Invoke(headers, new object[] { "Accept", "application/octet-stream" });
+            }
+
+            var sendParams = s_sendAsync.GetParameters();
+            object?[] args = sendParams.Length == 1
+                ? new[] { request }
+                : new object?[] { request, System.Threading.CancellationToken.None };
+
+            var task = s_sendAsync.Invoke(s_httpClient, args);
+            var response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            if (response == null) return null;
+
+            var statusCode = GetResponseStatusCode(response);
+            if (statusCode >= 0 && (statusCode < 200 || statusCode >= 300))
+            {
+                Logger.Log("AutoUpdate", $"HTTP {statusCode} downloading (API) {apiUrl}");
+                return null;
+            }
+
+            var content = response.GetType().GetProperty("Content")?.GetValue(response);
+            if (content == null) return null;
+
+            var readTask = content.GetType().GetMethod("ReadAsStreamAsync",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, Type.EmptyTypes, null)?.Invoke(content, null);
+            if (readTask == null) return null;
+
+            var stream = readTask.GetType().GetProperty("Result")?.GetValue(readTask) as Stream;
+            if (stream == null) return null;
+
+            using var ms = new MemoryStream();
+            stream.CopyTo(ms);
+            return ms.ToArray();
+        }
+        catch (Exception ex)
+        {
+            var inner = UnwrapException(ex);
+            Logger.Log("AutoUpdate", $"API download error for {apiUrl}: {inner.Message}");
             return null;
         }
     }

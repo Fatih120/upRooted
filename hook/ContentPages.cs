@@ -644,7 +644,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
                 new() { Id = "silent-typing", DisplayName = "SilentTyping", Version = "0.2.0",
                     Description = "Prevents your typing indicator from being sent, so others won't see when you're composing a message. Contributed by Kurumi Nanase.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
                 new() { Id = "content-filter", DisplayName = "ContentFilter", Version = "0.4.2",
                     Description = "Blurs images flagged as NSFW using Google Cloud Vision. Set up your API key in settings to get started. Costs roughly $1.50 per 1,000 images checked.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
@@ -769,10 +769,10 @@ internal static class ContentPages
                         });
                     }
 
-                    r.AddChild(expOuter, expPill);
                 }
 
                 if (expInner != null) r.AddChild(expOuter, expInner);
+                if (expPill != null) r.AddChild(expOuter, expPill);
                 r.SetMargin(expOuter, 0, 12, 0, 0);
                 r.AddChild(page, expOuter);
             }
