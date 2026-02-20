@@ -19,7 +19,7 @@
 
 ## what is this
 
-Uprooted is a client mod framework for Root Communications (like Vencord for Discord). It injects custom UI, themes, and plugins into Root's desktop app at runtime without modifying the binary. Two independent injection layers work together: a C# .NET hook for native Avalonia UI and a TypeScript layer for the embedded Chromium browser.
+Uprooted is a mod framework for Root Communications (like Vencord for Discord). It injects custom UI, themes, and plugins into Root's desktop app at runtime without modifying the binary. Two independent injection layers work together: a C# .NET hook for native Avalonia UI and a TypeScript layer for the embedded Chromium browser.
 
 Root is a 617 MB self-contained .NET 10 desktop app built on Avalonia UI 11 with an embedded DotNetBrowser (Chromium) for WebRTC, OAuth, and sub-applications. The main chat interface is rendered natively in Avalonia, not in the browser.
 
