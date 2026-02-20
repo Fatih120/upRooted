@@ -49,7 +49,30 @@ internal class ProfileBadgeInjector
     /// </summary>
     private static readonly HashSet<string> AlphaUserIds = new(StringComparer.OrdinalIgnoreCase)
     {
-        // Add alpha participant UUIDs here
+        "002a38cb-bb10-8601-a1da-23b218d4ae15",
+        "002c3d33-6818-8a01-a97d-bed654f161a6",
+        "002cec0a-81d3-8c01-ad41-b4fa06bdcaab",
+        "002ce720-4be2-8701-96b8-cc3466f6f4b9",
+        "002ce787-7e77-8601-a2a2-61a4acca6a67",
+        "002ce9f4-1dca-8201-b6f9-44555f266188",
+        "002cea01-2575-8301-8cb9-bd4783ee77c4",
+        "002cea08-4244-8801-a6f2-cfd8b6ec4600",
+        "002cea96-e368-8801-82f6-af0350f9ed72",
+        "002cec7b-202d-8401-9123-f7ba22261d7a",
+        "002cefdb-8b30-8d01-8df5-736cd771096b",
+        "002cf11b-8ee6-8a01-96ed-c631439fca4b",
+        "002cf276-0f42-8901-9220-e9d5eb724e6d",
+        "002cf3b1-fc6d-8e01-b5cd-0f0f30961854",
+        "002cf5d0-b964-8e01-8589-90e376873f86",
+        "002cffd4-f23b-8501-ab4d-5b6c64563b5c",
+        "002d04eb-8161-8c01-9950-f74b8415c7bd",
+        "002d062b-e032-8401-9da4-daf8b70cf166",
+        "002cefdf-5e47-8f01-bdd9-815e8c9ef50e",
+        "002d0eee-40e7-8801-9202-5b5c676bb9e8",
+        "002ced8c-6828-8d01-b87a-a6a691b07323",
+        "002d0606-6469-8a01-96b4-2f6524c5ff91",
+        "002ce6ef-6d3a-8101-ab2d-77895a58c9ef",
+        "002c7dc3-c9ba-8101-b981-1564e838ddc2",
     };
 
     private readonly AvaloniaReflection _r;
