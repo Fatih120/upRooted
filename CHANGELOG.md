@@ -6,6 +6,51 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Light/PureDark theme compatibility** — Uprooted's injected UI (settings pages, sidebar nav, cards, version text) now adapts to Root's active theme variant. Colors read live from Root's ThemeDictionaries via `Application.TryGetResource` at page build time. Previously hardcoded for Dark only — Light theme was completely unusable (white text on white background).
+  - `ThemeEngine.ReadLiveRootColors()` / `ReadLiveRootColor(key)` — reads Root's 20 color keys from live Application resources
+  - `ContentPages.AdjustForHighlight()` — luminance-aware highlight (darkens on light bg, lightens on dark bg)
+  - `SidebarInjector.SyncContentPagesFromNativeTree()` — captures native fg/bg from visual tree at injection time
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`, `hook/AvaloniaReflection.cs`
+- **SVG path swap for Uprooted themes** — When an Uprooted dark theme is active on Root's Light variant, ~220 SVG asset paths are swapped from `Light Theme/` to `Dark Theme/` folder. Determined automatically by background luminance. Prevents light-colored icons on dark backgrounds.
+  - File: `hook/ThemeEngine.cs`
+
+### Changed
+
+- **Sidebar re-injects on variant change** — When Root switches Dark↔Light↔PureDark, the sidebar removes its injected controls (UnwrapScrollViewer + remove nav items + RemoveVersionText + NullState) and lets the next LayoutUpdated pass re-inject with fresh native colors. Does not try to restore Root's controls (they use DynamicResource).
+  - File: `hook/SidebarInjector.cs`
+- **Auto-revert Uprooted theme on Root variant change** — If an Uprooted theme is active and the user switches Root's native variant, the Uprooted theme auto-reverts. Respects the user's choice of Root theme.
+  - File: `hook/ThemeEngine.cs`
+- **Variant change subscription unconditional** — `EnsureVariantChangeSubscribed()` called from startup, not just when applying a theme. Needed for sidebar re-injection even when no Uprooted theme is active.
+  - Files: `hook/ThemeEngine.cs`, `hook/StartupHook.cs`
+- **Card border highlights** — All cards use constant 1.5px border thickness (prevents layout shift). Plugin cards: visible resting border, no hover highlight (not clickable as whole card). Theme preset cards: resting border + radio dot/border highlight on hover + accent border when selected. Theme selection uses `PointerReleased` (matches Root's native selector).
+  - File: `hook/ContentPages.cs`
+- **Nav item highlights use Root resources** — Hover uses live `HighlightLight`, selection uses `HighlightNormal` from ThemeDictionaries. Automatically adapts to Dark (white alpha) / Light (black alpha).
+  - File: `hook/SidebarInjector.cs`
+- **Version text matches Root's native color** — Reads foreground from Root's existing "Root Version" TextBlock instead of hardcoded `#66f2f2f2`.
+  - File: `hook/SidebarInjector.cs`
+
+### Fixed
+
+- **Named color crash** — `Color.ToString()` returns `"White"` for `#FFFFFFFF` in Avalonia, crashing `ColorUtils.ParseHex()`. Now extracts via `Color.A`/`R`/`G`/`B` byte properties.
+  - File: `hook/ThemeEngine.cs`
+- **ResourceDictionary indexer miss** — `dict["key"]` only returns direct entries, not MergedDictionaries. Switched to `Application.TryGetResource` for full resolution chain.
+  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`
+- **Preview swatch breaks hover** — Transparent background on theme preview caused `PointerExited` when mouse moved over it. Fixed with `IsHitTestVisible=false`.
+  - File: `hook/ContentPages.cs`
+
+### Documentation
+
+- **AVALONIA_PATTERNS.md** — 6 new pitfalls + UI Standards section
+- **HOOK_REFERENCE.md** — ContentPages color theming rewritten, sidebar variant change sections
+- **ROOT_THEME_SYSTEM_FINDINGS.md** — Live-testing confirmations
+- **THEME_ENGINE_DEEP_DIVE.md** — ThemeDictionaries re-entrancy trap
+
+---
+
 ## [0.4.2] - 2026-02-19
 
 ### Changed
