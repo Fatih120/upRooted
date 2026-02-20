@@ -157,8 +157,8 @@ run_diagnose() {
     local plasma_env="$HOME/.config/plasma-workspace/env/uprooted.sh"
     if [[ -f "$plasma_env" ]]; then
         log "  plasma-workspace/env/uprooted.sh: exists (KDE Plasma)"
-    else
-        warn "  plasma-workspace/env/uprooted.sh: missing (KDE users need this)"
+    elif is_kde; then
+        warn "  plasma-workspace/env/uprooted.sh: missing (KDE detected — run repair)"
     fi
 
     if grep -q "DOTNET_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
@@ -770,14 +770,16 @@ check_prereqs() {
         fi
     fi
 
-    # Install pnpm via npm (npm should now be available)
+    # Install pnpm via npm into ~/.local (no sudo needed)
     if $need_pnpm && command -v npm &>/dev/null; then
-        log "Installing pnpm via npm..."
-        npm install -g pnpm || {
+        log "Installing pnpm to ~/.local (no sudo required)..."
+        npm install -g pnpm --prefix "$HOME/.local" 2>&1 || {
             warn "pnpm install failed. Falling back to pre-built artifacts."
             USE_PREBUILT=true
             return 0
         }
+        # Make sure ~/.local/bin is in PATH for the rest of this script
+        export PATH="$HOME/.local/bin:$PATH"
     fi
 
     # Final check — if anything is still missing, fall back
@@ -938,6 +940,14 @@ deploy_artifacts() {
     fi
 }
 
+# ── Desktop environment detection ──
+
+is_kde() {
+    [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]] \
+    || [[ "${KDE_SESSION_VERSION:-}" != "" ]] \
+    || [[ "${KDE_FULL_SESSION:-}" == "true" ]]
+}
+
 # ── Set session-wide env vars (systemd environment.d) ──
 
 set_env_vars() {
@@ -959,10 +969,11 @@ CORECLR_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
 ENVCONF
     log "Session env vars written to $env_dir/uprooted.conf"
 
-    # KDE Plasma env script -- sourced on Plasma session startup
-    local plasma_env_dir="$HOME/.config/plasma-workspace/env"
-    mkdir -p "$plasma_env_dir"
-    cat > "$plasma_env_dir/uprooted.sh" << PLASMAENV
+    # KDE Plasma env script -- only written when running under KDE
+    if is_kde; then
+        local plasma_env_dir="$HOME/.config/plasma-workspace/env"
+        mkdir -p "$plasma_env_dir"
+        cat > "$plasma_env_dir/uprooted.sh" << PLASMAENV
 #!/bin/sh
 # Uprooted -- remove this file or run the uninstaller to disable
 export DOTNET_EnableDiagnostics=1
@@ -974,8 +985,9 @@ export CORECLR_ENABLE_PROFILING=1
 export CORECLR_PROFILER='$PROFILER_GUID'
 export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
 PLASMAENV
-    chmod +x "$plasma_env_dir/uprooted.sh"
-    log "KDE Plasma env script written to $plasma_env_dir/uprooted.sh"
+        chmod +x "$plasma_env_dir/uprooted.sh"
+        log "KDE Plasma env script written to $plasma_env_dir/uprooted.sh"
+    fi
 
     # Also add to ~/.profile as fallback for non-systemd sessions (X11, login shells)
     if ! grep -q "DOTNET_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
