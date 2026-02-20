@@ -263,30 +263,41 @@ internal class TranslateEngine
     {
         try
         {
-            // Walk descendants looking for a StackPanel/Grid with ≥2 button-like children
+            // From visual tree analysis, the toolbar button container is:
+            //   RootMessageTextboxView > Panel > RootBorder > Grid > RootBorder > Grid > ItemsControl
+            // There are two ItemsControls inside the view:
+            //   1. TextEditor > Border > ScrollViewer > TextArea > DockPanel > ItemsControl  (editor text lines)
+            //   2. RootBorder > Grid > ItemsControl  ← THE BUTTON STRIP we want
+            // We find the button strip by looking for an ItemsControl that is NOT inside
+            // TextEditor/TextArea/ScrollViewer.
+
             object? buttonStrip = null;
             foreach (var node in _walker.DescendantsDepthFirst(textboxView))
             {
                 var nodeName = node.GetType().Name;
-                if (nodeName != "StackPanel" && nodeName != "Grid"
-                    && nodeName != "DockPanel" && nodeName != "WrapPanel") continue;
+                if (nodeName != "ItemsControl") continue;
+
+                // Skip if this ItemsControl is inside the TextEditor (text line container)
+                if (IsInsideTextEditor(node, textboxView)) continue;
 
                 int childCount = GetChildCount(node);
-                if (childCount < 2) continue;
+                Logger.Log("Translate", $"  Candidate ItemsControl: children={childCount}");
 
-                int buttonLike = CountButtonLikeChildren(node);
-                if (buttonLike >= 2)
-                {
-                    buttonStrip = node;
-                    Logger.Log("Translate", $"  Found button strip: {nodeName} children={childCount}, button-like={buttonLike}");
-                    break;
-                }
+                // The button strip should have at least 1 child (even if empty it's still our target)
+                buttonStrip = node;
+                Logger.Log("Translate", $"  Found button strip ItemsControl (children={childCount})");
+                break;
             }
 
             if (buttonStrip == null)
             {
-                Logger.Log("Translate", "  No button strip found, will retry");
-                return false;
+                // Fallback: look for any Grid/StackPanel that's a sibling of TextEditor
+                buttonStrip = FindButtonStripFallback(textboxView);
+                if (buttonStrip == null)
+                {
+                    Logger.Log("Translate", "  No button strip found, will retry");
+                    return false;
+                }
             }
 
             int stripId = RuntimeHelpers.GetHashCode(buttonStrip);
@@ -302,7 +313,7 @@ internal class TranslateEngine
             _injectedToolbars.Add(stripId);
             _buttons[RuntimeHelpers.GetHashCode(textboxView)] = btn;
 
-            // Wire pointer events — use direct reflection to distinguish left/right
+            // Wire pointer events — left-click opens popup, right-click toggles AutoTranslate
             var capturedBtn = btn;
             SubscribePointerPressed(capturedBtn, (isRight) =>
             {
@@ -331,6 +342,89 @@ internal class TranslateEngine
             Logger.Log("Translate", $"TryInjectButton error: {ex.Message}");
             return false;
         }
+    }
+
+    /// <summary>
+    /// Returns true if the given node is inside TextEditor / TextArea / ScrollViewer.
+    /// Used to distinguish the editor-internal ItemsControl from the toolbar ItemsControl.
+    /// Walks up at most 10 levels.
+    /// </summary>
+    private bool IsInsideTextEditor(object node, object stopAt)
+    {
+        try
+        {
+            var current = node;
+            for (int i = 0; i < 10; i++)
+            {
+                var parentProp = current.GetType().GetProperty("Parent",
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                var parent = parentProp?.GetValue(current);
+                if (parent == null || ReferenceEquals(parent, stopAt)) break;
+
+                var pn = parent.GetType().Name;
+                if (pn == "TextEditor" || pn == "TextArea" || pn == "ScrollViewer"
+                    || (_textEditorType != null && _textEditorType.IsAssignableFrom(parent.GetType()))
+                    || (_textAreaType   != null && _textAreaType.IsAssignableFrom(parent.GetType())))
+                    return true;
+
+                current = parent;
+            }
+        }
+        catch { }
+        return false;
+    }
+
+    /// <summary>
+    /// Fallback: find the button strip by looking at the children of the inner Grid
+    /// (the one that contains TextEditor as a sibling). Returns a Grid or StackPanel
+    /// that is a sibling of TextEditor and has at least 1 child.
+    /// </summary>
+    private object? FindButtonStripFallback(object textboxView)
+    {
+        try
+        {
+            // Walk all descendants; find each Grid/Panel; check if any sibling child
+            // is a TextEditor type → that Grid IS the outer container, so return it.
+            foreach (var node in _walker.DescendantsDepthFirst(textboxView))
+            {
+                var nodeName = node.GetType().Name;
+                if (nodeName != "Grid" && nodeName != "StackPanel"
+                    && nodeName != "DockPanel" && nodeName != "WrapPanel") continue;
+
+                if (HasTextEditorChildAndOtherChild(node))
+                {
+                    Logger.Log("Translate", $"  Fallback: found container Grid with TextEditor sibling");
+                    return node;
+                }
+            }
+        }
+        catch { }
+        return null;
+    }
+
+    private bool HasTextEditorChildAndOtherChild(object panel)
+    {
+        try
+        {
+            var childrenProp = panel.GetType().GetProperty("Children",
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            if (childrenProp == null) return false;
+            var children = childrenProp.GetValue(panel) as System.Collections.IEnumerable;
+            if (children == null) return false;
+
+            bool hasTextEditor = false;
+            int  otherCount    = 0;
+            foreach (var child in children)
+            {
+                var cn = child.GetType().Name;
+                if (cn == "TextEditor" || (_textEditorType != null && _textEditorType.IsAssignableFrom(child.GetType())))
+                    hasTextEditor = true;
+                else
+                    otherCount++;
+            }
+            return hasTextEditor && otherCount >= 1;
+        }
+        catch { return false; }
     }
 
     /// <summary>
@@ -402,68 +496,61 @@ internal class TranslateEngine
     {
         try
         {
-            var prop = panel.GetType().GetProperty("Children",
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-            if (prop == null) return 0;
-            var children = prop.GetValue(panel) as System.Collections.IEnumerable;
-            if (children == null) return 0;
-            int c = 0;
-            foreach (var _ in children) c++;
-            return c;
-        }
-        catch { return 0; }
-    }
-
-    private int CountButtonLikeChildren(object panel)
-    {
-        try
-        {
-            var prop = panel.GetType().GetProperty("Children",
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-            if (prop == null) return 0;
-            var children = prop.GetValue(panel) as System.Collections.IEnumerable;
-            if (children == null) return 0;
-            int count = 0;
-            foreach (var child in children)
+            foreach (var propName in new[] { "Children", "Items" })
             {
-                var n = child.GetType().Name;
-                if (n.IndexOf("Button", StringComparison.OrdinalIgnoreCase) >= 0
-                    || n.IndexOf("Svg", StringComparison.OrdinalIgnoreCase) >= 0
-                    || n.IndexOf("Icon", StringComparison.OrdinalIgnoreCase) >= 0
-                    || n == "Border" || n == "Canvas" || n == "Path")
-                    count++;
+                var prop = panel.GetType().GetProperty(propName,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                if (prop == null) continue;
+                var coll = prop.GetValue(panel) as System.Collections.IEnumerable;
+                if (coll == null) continue;
+                int c = 0;
+                foreach (var _ in coll) c++;
+                return c;
             }
-            return count;
         }
-        catch { return 0; }
+        catch { }
+        return 0;
     }
 
     private void InsertChildBeforeLast(object panel, object child)
     {
         try
         {
-            var childrenProp = panel.GetType().GetProperty("Children",
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-            if (childrenProp == null) return;
-            var children = childrenProp.GetValue(panel);
-            if (children == null) return;
-
-            var ct          = children.GetType();
-            var insertMethod = ct.GetMethod("Insert", BindingFlags.Public | BindingFlags.Instance);
-            var countProp    = ct.GetProperty("Count",  BindingFlags.Public | BindingFlags.Instance);
-
-            if (insertMethod != null && countProp != null)
+            // Try Children first (Panel-derived: Grid, StackPanel, etc.)
+            // Then try Items (ItemsControl — toolbar uses ItemsControl)
+            foreach (var collPropName in new[] { "Children", "Items" })
             {
-                int count    = (int)(countProp.GetValue(children) ?? 0);
-                int insertAt = Math.Max(0, count - 1);
-                insertMethod.Invoke(children, new object[] { insertAt, child });
-            }
-            else
-            {
+                var collProp = panel.GetType().GetProperty(collPropName,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                if (collProp == null) continue;
+
+                var coll = collProp.GetValue(panel);
+                if (coll == null) continue;
+
+                var ct           = coll.GetType();
+                var insertMethod = ct.GetMethod("Insert", BindingFlags.Public | BindingFlags.Instance);
+                var countProp    = ct.GetProperty("Count",  BindingFlags.Public | BindingFlags.Instance);
+
+                if (insertMethod != null && countProp != null)
+                {
+                    int count    = (int)(countProp.GetValue(coll) ?? 0);
+                    int insertAt = Math.Max(0, count - 1);
+                    insertMethod.Invoke(coll, new object[] { insertAt, child });
+                    Logger.Log("Translate", $"Inserted button at index {insertAt} via {collPropName} (count was {count})");
+                    return;
+                }
+
                 // Fallback: append
                 var addMethod = ct.GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
-                addMethod?.Invoke(children, new[] { child });
+                if (addMethod != null)
+                {
+                    addMethod.Invoke(coll, new[] { child });
+                    Logger.Log("Translate", $"Appended button via {collPropName}.Add");
+                    return;
+                }
             }
+
+            Logger.Log("Translate", $"InsertChildBeforeLast: no suitable collection found on {panel.GetType().Name}");
         }
         catch (Exception ex)
         {

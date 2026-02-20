@@ -544,35 +544,28 @@ internal class StartupHook
                 }
             }
 
-            // Phase 4.5j: Translate (compose bar button + auto-translate)
+            // Phase 4.5j: Translate engine — always start (engine self-gates on plugin enabled state).
+            // Like Rootcord, the engine is always created so it can be live-toggled without restart.
+            // The 2s discovery timer bails early when the plugin is disabled in settings.
             {
-                var translateSettings = UprootedSettings.Load();
-                var wantTranslate = translateSettings.Plugins.TryGetValue("translate", out var trEnabled) && trEnabled;
-                if (wantTranslate)
+                var trWindow   = mainWindow!;
+                var trResolver = resolver;
+                ThreadPool.QueueUserWorkItem(_ =>
                 {
-                    var trWindow   = mainWindow!;
-                    var trResolver = resolver;
-                    ThreadPool.QueueUserWorkItem(_ =>
+                    try
                     {
-                        try
-                        {
-                            Thread.Sleep(5_000);
-                            Logger.Log("Startup", "Phase 4.5j: Starting translate engine...");
-                            var engine = new TranslateEngine(trResolver, trWindow, themeEngine);
-                            TranslateEngine.Instance = engine;
-                            engine.Initialize();
-                            Logger.Log("Startup", "Phase 4.5j OK: Translate engine active");
-                        }
-                        catch (Exception ex)
-                        {
-                            Logger.Log("Startup", $"Phase 4.5j error: {ex.Message}");
-                        }
-                    });
-                }
-                else
-                {
-                    Logger.Log("Startup", "Phase 4.5j: Translate disabled, skipping");
-                }
+                        Thread.Sleep(5_000);
+                        Logger.Log("Startup", "Phase 4.5j: Starting translate engine (always-on, self-gated)...");
+                        var engine = new TranslateEngine(trResolver, trWindow, themeEngine);
+                        TranslateEngine.Instance = engine;
+                        engine.Initialize();
+                        Logger.Log("Startup", "Phase 4.5j OK: Translate engine initialized (plugin state managed internally)");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5j error: {ex.Message}");
+                    }
+                });
             }
 
             // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
