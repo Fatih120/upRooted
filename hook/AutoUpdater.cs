@@ -125,8 +125,8 @@ internal class AutoUpdater
     private static MethodInfo? s_getStringAsync;
     private static MethodInfo? s_getByteArrayAsync;
     internal static MethodInfo? s_getAsync;
-    private static MethodInfo? s_sendAsync;
-    private static Type? s_httpRequestMessageType;
+    internal static MethodInfo? s_sendAsync;
+    internal static Type? s_httpRequestMessageType;
     private static object? s_httpMethodGet;
     private static bool s_httpResolved;
 

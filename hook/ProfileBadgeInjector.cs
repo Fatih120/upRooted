@@ -32,6 +32,8 @@ internal class ProfileBadgeInjector
     private const string ScannedTag = "uprooted-profile-scanned";
     private const string BadgeTag = "uprooted-dev-badge";
     private const string AlphaBadgeTag = "uprooted-alpha-badge";
+    private const string PresenceIconTag = "uprooted-presence-icon";
+    private const string PresenceIconColor = "#4ADE80"; // Bright emerald green
     private const int FallbackPollMs = 200;
     private const string DevBadgeColor = "#8B6914";   // Gold/amber — developer channel
     private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
@@ -80,15 +82,17 @@ internal class ProfileBadgeInjector
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
     private readonly object _mainWindow;
+    private readonly UprootedPresenceBeacon? _beacon;
     private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
 
-    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow)
+    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null)
     {
         _r = resolver;
         _walker = new VisualTreeWalker(resolver);
         _mainWindow = mainWindow;
+        _beacon = beacon;
     }
 
     public void Initialize()
@@ -436,6 +440,15 @@ internal class ProfileBadgeInjector
         bool isDevUser = DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)) || HasRoleId(dc, DeveloperRoleId);
         if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
+        // Inject presence icon inline next to username (beacon check — independent of badge logic)
+        if (userId != null && _beacon != null)
+        {
+            // Skip presence icon on own profile (avoid showing icon on self-view)
+            bool isSelf = dc?.GetType().GetProperty("IsSelf")?.GetValue(dc) is true;
+            if (!isSelf)
+                TryInjectPresenceIcon(popup, usernameBlock, userId);
+        }
+
         if (!isDevUser && !isAlphaUser)
         {
             Logger.Log("ProfileBadge", $"User \"{username}\" has no badges to inject");
@@ -650,6 +663,110 @@ internal class ProfileBadgeInjector
             Logger.Log("ProfileBadge", $"TryInsertChild error: {ex.Message}");
             return false;
         }
+    }
+
+    // ===== Presence icon (inline, horizontal StackPanel next to username) =====
+
+    /// <summary>
+    /// Check beacon cache and inject presence icon if the user has Uprooted installed.
+    /// If not cached, fires a background query and injects when the result arrives.
+    /// </summary>
+    private void TryInjectPresenceIcon(object popup, object usernameBlock, string userId)
+    {
+        if (_beacon == null) return;
+
+        var cached = _beacon.TryGetCached(userId);
+        if (cached == true)
+        {
+            InjectPresenceIconIntoPopup(popup, usernameBlock);
+        }
+        else if (cached == null)
+        {
+            // Not cached — fire background query and inject on the UI thread when done
+            _beacon.QueryAsync(userId, result =>
+            {
+                if (!result) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try { InjectPresenceIconIntoPopup(popup, usernameBlock); }
+                    catch (Exception ex) { Logger.Log("ProfileBadge", $"Presence icon async inject error: {ex.Message}"); }
+                });
+            });
+        }
+        // cached == false → user doesn't have Uprooted, skip
+    }
+
+    /// <summary>
+    /// Insert the green Uprooted presence icon immediately after the username TextBlock
+    /// in its direct parent (the horizontal StackPanel in MemberProfileView).
+    /// Guards against duplicate injection with PresenceIconTag.
+    /// </summary>
+    private void InjectPresenceIconIntoPopup(object popup, object usernameBlock)
+    {
+        try
+        {
+            // Check if icon already present anywhere in popup
+            foreach (var node in _walker.DescendantsDepthFirst(popup))
+            {
+                if (_r.GetTag(node) == PresenceIconTag) return;
+            }
+
+            // Get the immediate parent of the username TextBlock (horizontal StackPanel)
+            var parent = _r.GetParent(usernameBlock);
+            if (parent == null)
+            {
+                Logger.Log("ProfileBadge", "Presence icon: username parent not found");
+                return;
+            }
+
+            var children = _r.GetChildren(parent);
+            if (children == null)
+            {
+                Logger.Log("ProfileBadge", "Presence icon: parent has no Children");
+                return;
+            }
+
+            var idx = children.IndexOf(usernameBlock);
+            if (idx < 0)
+            {
+                Logger.Log("ProfileBadge", "Presence icon: username not in parent children");
+                return;
+            }
+
+            var icon = CreatePresenceIcon();
+            if (icon == null)
+            {
+                Logger.Log("ProfileBadge", "Presence icon: CreatePresenceIcon returned null");
+                return;
+            }
+
+            if (TryInsertChild(parent, icon, idx + 1))
+                Logger.Log("ProfileBadge", $"Presence icon injected at index {idx + 1} in horizontal panel");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"InjectPresenceIconIntoPopup error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Build the small green Uprooted logo path icon (14×14) displayed inline next to the username.
+    /// Path: simplified Uprooted logo (downward arrow/chevron shape), color #4ADE80 (emerald green).
+    /// Margin 6,0,0,0 to give a gap from the username text.
+    /// </summary>
+    private object? CreatePresenceIcon()
+    {
+        var icon = _r.CreatePathIcon(
+            "M16 6 L12 16 L8 26 L12 24 L16 26 L20 24 L24 26 L20 16 Z",
+            size: 14,
+            foregroundHex: PresenceIconColor);
+
+        if (icon == null) return null;
+
+        _r.SetMargin(icon, 6, 0, 0, 0);
+        _r.SetTag(icon, PresenceIconTag);
+        _r.SetVerticalAlignment(icon, "Center");
+        return icon;
     }
 
     /// <summary>

@@ -377,7 +377,9 @@ internal class StartupHook
                 }
             });
 
-            // Phase 4.5e: Profile badge injector (all channels — badges visible to everyone)
+            // Phase 4.5e: Profile badge injector + presence beacon
+            // Beacon registers own UUID with api.uprooted.sh (delayed 10s internally).
+            // Badge injector uses beacon to show green icon on Uprooted users' profiles.
             {
                 var badgeWindow = mainWindow!;
                 var badgeResolver = resolver;
@@ -386,10 +388,15 @@ internal class StartupHook
                     try
                     {
                         Thread.Sleep(5_000); // Wait 5s for app to settle
-                        Logger.Log("Startup", "Phase 4.5e: Starting profile badge injector...");
-                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow);
+                        Logger.Log("Startup", "Phase 4.5e: Starting presence beacon + profile badge injector...");
+
+                        var beacon = new UprootedPresenceBeacon(badgeResolver, badgeWindow);
+                        beacon.Initialize(); // Registers in background after 10s
+
+                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow, beacon);
                         badge.Initialize();
-                        Logger.Log("Startup", "Phase 4.5e OK: Profile badge injector active");
+
+                        Logger.Log("Startup", "Phase 4.5e OK: Presence beacon + profile badge injector active");
                     }
                     catch (Exception ex)
                     {
