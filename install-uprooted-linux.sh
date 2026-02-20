@@ -4,6 +4,7 @@
 #
 # Usage: ./install-uprooted-linux.sh [--root-path /path/to/Root.AppImage]
 #        ./install-uprooted-linux.sh --prebuilt [--root-path /path/to/Root.AppImage]
+#        ./install-uprooted-linux.sh --auto-deps  (auto-install missing build deps)
 #        ./install-uprooted-linux.sh --uninstall
 #        ./install-uprooted-linux.sh --repair [--prebuilt]
 #        ./install-uprooted-linux.sh --diagnose
@@ -23,6 +24,7 @@ INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
 VERSION="0.4.2"
+AUTO_DEPS=false
 
 # Colors
 RED='\033[0;31m'
@@ -427,6 +429,10 @@ while [[ $# -gt 0 ]]; do
             USE_PREBUILT=true
             shift
             ;;
+        --auto-deps)
+            AUTO_DEPS=true
+            shift
+            ;;
         --desktop)
             CREATE_DESKTOP=true
             shift
@@ -442,6 +448,7 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --root-path    Path to Root.AppImage (auto-detected if not given)"
             echo "  --prebuilt     Download pre-built artifacts instead of building from source"
+            echo "  --auto-deps    Auto-install missing build dependencies without prompting"
             echo "  --desktop      Create a .desktop file for launching Root with Uprooted"
             echo "  --uninstall    Remove Uprooted completely (patches, env vars, files)"
             echo "  --repair       Re-deploy artifacts and re-patch HTML files"
@@ -601,33 +608,189 @@ find_root() {
     exit 1
 }
 
+# ── Dependency management (build from source) ──
+
+detect_pkg_manager() {
+    if command -v apt-get &>/dev/null; then echo "apt"
+    elif command -v dnf &>/dev/null; then echo "dnf"
+    elif command -v pacman &>/dev/null; then echo "pacman"
+    elif command -v zypper &>/dev/null; then echo "zypper"
+    else echo "unknown"
+    fi
+}
+
+# Install .NET 10 SDK via Microsoft's official install script (no apt feed config needed)
+install_dotnet() {
+    log "Installing .NET 10 SDK via Microsoft's dotnet-install.sh..."
+    local tmp_script
+    tmp_script=$(mktemp --suffix=.sh)
+
+    if command -v curl &>/dev/null; then
+        curl -sSL "https://dot.net/v1/dotnet-install.sh" -o "$tmp_script" || {
+            error "Failed to download dotnet-install.sh"
+            return 1
+        }
+    elif command -v wget &>/dev/null; then
+        wget -qO "$tmp_script" "https://dot.net/v1/dotnet-install.sh" || {
+            error "Failed to download dotnet-install.sh"
+            return 1
+        }
+    else
+        error "curl or wget is required to install .NET automatically."
+        return 1
+    fi
+
+    chmod +x "$tmp_script"
+    if ! bash "$tmp_script" --channel 10.0 --install-dir "$HOME/.dotnet"; then
+        rm -f "$tmp_script"
+        error ".NET install script failed."
+        return 1
+    fi
+    rm -f "$tmp_script"
+
+    export DOTNET_ROOT="$HOME/.dotnet"
+    export PATH="$HOME/.dotnet:$PATH"
+    log ".NET 10 SDK installed to ~/.dotnet"
+    warn "Add to your shell profile to make permanent:"
+    warn "  export DOTNET_ROOT=\$HOME/.dotnet"
+    warn "  export PATH=\$HOME/.dotnet:\$PATH"
+}
+
+install_sys_pkgs() {
+    local pkg_mgr="$1"
+    shift
+    local pkgs=("$@")
+    case "$pkg_mgr" in
+        apt)     sudo apt-get install -y "${pkgs[@]}" ;;
+        dnf)     sudo dnf install -y "${pkgs[@]}" ;;
+        pacman)  sudo pacman -S --noconfirm "${pkgs[@]}" ;;
+        zypper)  sudo zypper install -y "${pkgs[@]}" ;;
+        *)
+            error "Unknown package manager. Install manually: ${pkgs[*]}"
+            return 1
+            ;;
+    esac
+}
+
+# Maps abstract dep names to distro-specific package names
+pkg_name_for() {
+    local dep="$1"
+    local mgr="$2"
+    case "$dep:$mgr" in
+        gcc:*)     echo "gcc" ;;
+        nodejs:apt) echo "nodejs" ;;
+        nodejs:dnf) echo "nodejs" ;;
+        nodejs:pacman) echo "nodejs" ;;
+        nodejs:zypper) echo "nodejs" ;;
+        # npm is separate from nodejs on Ubuntu/Debian (and sometimes dnf)
+        npm:apt)   echo "npm" ;;
+        npm:dnf)   echo "npm" ;;
+        npm:pacman) echo "npm" ;;  # pacman nodejs usually includes npm
+        npm:zypper) echo "npm" ;;
+        *)         echo "$dep" ;;
+    esac
+}
+
 # ── Check prerequisites (build from source) ──
 
 check_prereqs() {
-    local missing=()
+    local need_gcc=false need_dotnet=false need_node=false need_npm=false need_pnpm=false
 
-    if ! command -v gcc &>/dev/null; then
-        missing+=("gcc")
-    fi
-    if ! command -v dotnet &>/dev/null; then
-        missing+=("dotnet-sdk-10.0")
-    fi
-    if ! command -v node &>/dev/null; then
-        missing+=("nodejs")
-    fi
-    if ! command -v pnpm &>/dev/null; then
-        missing+=("pnpm")
+    command -v gcc    &>/dev/null || need_gcc=true
+    command -v dotnet &>/dev/null || need_dotnet=true
+    command -v node   &>/dev/null || need_node=true
+    # npm is often a separate package from nodejs — check it explicitly
+    command -v npm    &>/dev/null || need_npm=true
+    command -v pnpm   &>/dev/null || need_pnpm=true
+
+    # All present — nothing to do
+    if ! $need_gcc && ! $need_dotnet && ! $need_node && ! $need_npm && ! $need_pnpm; then
+        return 0
     fi
 
-    if [[ ${#missing[@]} -gt 0 ]]; then
-        error "Missing build dependencies: ${missing[*]}"
-        echo "Install them and try again, or use --prebuilt to skip building."
+    echo ""
+    warn "Missing build dependencies:"
+    $need_gcc    && warn "  - gcc    (compiles the CLR profiler shared library)"
+    $need_dotnet && warn "  - dotnet (builds the C# hook — Root itself is a .NET 10 app)"
+    $need_node   && warn "  - nodejs (bundles the TypeScript plugin layer)"
+    $need_npm    && warn "  - npm    (needed to install pnpm — often separate from nodejs)"
+    $need_pnpm   && warn "  - pnpm   (TypeScript package manager)"
+    echo ""
+
+    local choice="1"
+    if [[ "$AUTO_DEPS" != "true" ]]; then
+        echo "  What do you want to do?"
+        echo "    [1] Auto-install missing dependencies (may require sudo)"
+        echo "    [2] Use pre-built artifacts instead  (RECOMMENDED — no build tools needed)"
+        echo "    [3] Exit and install manually"
         echo ""
-        echo "Ubuntu/Debian:"
-        echo "  sudo apt install gcc nodejs"
-        echo "  # Install .NET 10: https://dotnet.microsoft.com/download"
-        echo "  # Install pnpm: npm install -g pnpm"
-        exit 1
+        printf "  Choice [1/2/3]: "
+        read -r choice
+    fi
+
+    case "$choice" in
+        2)
+            log "Using pre-built artifacts."
+            USE_PREBUILT=true
+            return 0
+            ;;
+        3|q|Q|"")
+            echo ""
+            echo "  Install manually, then re-run — or use: $0 --prebuilt"
+            exit 1
+            ;;
+    esac
+
+    # --- Auto-install ---
+    local pkg_mgr
+    pkg_mgr=$(detect_pkg_manager)
+    log "Detected package manager: ${pkg_mgr:-none}"
+
+    # Install gcc + nodejs + npm via system package manager
+    local sys_pkgs=()
+    if $need_gcc;  then sys_pkgs+=("$(pkg_name_for gcc "$pkg_mgr")"); fi
+    if $need_node; then sys_pkgs+=("$(pkg_name_for nodejs "$pkg_mgr")"); fi
+    if $need_npm;  then sys_pkgs+=("$(pkg_name_for npm "$pkg_mgr")"); fi
+
+    if [[ ${#sys_pkgs[@]} -gt 0 ]]; then
+        log "Installing: ${sys_pkgs[*]}..."
+        if ! install_sys_pkgs "$pkg_mgr" "${sys_pkgs[@]}"; then
+            warn "System package install failed. Falling back to pre-built artifacts."
+            USE_PREBUILT=true
+            return 0
+        fi
+    fi
+
+    # Install .NET 10 via Microsoft's install script
+    if $need_dotnet; then
+        if ! install_dotnet; then
+            warn ".NET install failed. Falling back to pre-built artifacts."
+            USE_PREBUILT=true
+            return 0
+        fi
+    fi
+
+    # Install pnpm via npm (npm should now be available)
+    if $need_pnpm && command -v npm &>/dev/null; then
+        log "Installing pnpm via npm..."
+        npm install -g pnpm || {
+            warn "pnpm install failed. Falling back to pre-built artifacts."
+            USE_PREBUILT=true
+            return 0
+        }
+    fi
+
+    # Final check — if anything is still missing, fall back
+    local still_missing=()
+    command -v gcc    &>/dev/null || still_missing+=("gcc")
+    command -v dotnet &>/dev/null || still_missing+=("dotnet")
+    command -v node   &>/dev/null || still_missing+=("node")
+    command -v pnpm   &>/dev/null || still_missing+=("pnpm")
+
+    if [[ ${#still_missing[@]} -gt 0 ]]; then
+        warn "Still missing after install attempt: ${still_missing[*]}"
+        warn "Falling back to pre-built artifacts."
+        USE_PREBUILT=true
     fi
 }
 
