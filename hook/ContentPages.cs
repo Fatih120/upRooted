@@ -980,6 +980,9 @@ internal static class ContentPages
         // GetChildren on a TextBlock (which has no Children property and crashes)
         var activeRowGrids = new List<object>();
         object?[] noResultsMsg = { null };
+        object?[] showMoreObj = { null };
+        bool[] showAll = { false };
+        const int InitialCardLimit = 4; // 2 rows shown by default
 
         // Rebuild grid closure: detaches cards, filters, and lays out 2-column rows
         rebuildGrid = () =>
@@ -1000,11 +1003,16 @@ internal static class ContentPages
             }
             activeRowGrids.Clear();
 
-            // Remove "no results" message if present
+            // Remove "no results" message and show-more button if present
             if (noResultsMsg[0] != null)
             {
                 r.RemoveChild(cardContainer, noResultsMsg[0]);
                 noResultsMsg[0] = null;
+            }
+            if (showMoreObj[0] != null)
+            {
+                r.RemoveChild(cardContainer, showMoreObj[0]);
+                showMoreObj[0] = null;
             }
 
             // Filter cards by search text, filter mode, and experimental toggle
@@ -1044,6 +1052,15 @@ internal static class ContentPages
 
             var visible = visibleIndices.ConvertAll(i => cardObjects[i]);
 
+            // Truncate to InitialCardLimit when no search/filter is active and showAll is off
+            bool isFiltering = !string.IsNullOrEmpty(searchText[0]) || filterMode[0] != 0;
+            int hiddenCount = 0;
+            if (!showAll[0] && !isFiltering && visible.Count > InitialCardLimit)
+            {
+                hiddenCount = visible.Count - InitialCardLimit;
+                visible = visible.GetRange(0, InitialCardLimit);
+            }
+
             // Build 2-column rows
             for (int i = 0; i < visible.Count; i += 2)
             {
@@ -1065,6 +1082,36 @@ internal static class ContentPages
 
                 r.AddChild(cardContainer, rowGrid);
                 activeRowGrids.Add(rowGrid);
+            }
+
+            // Show More / Show Less button
+            if (!isFiltering && (hiddenCount > 0 || showAll[0]))
+            {
+                var label = showAll[0]
+                    ? "Show Less"
+                    : $"Show {hiddenCount} More";
+                var smText = r.CreateTextBlock(label, 12, TextMuted);
+                ApplyFont(r, smText, font);
+                r.SetHorizontalAlignment(smText, "Center");
+                var smBtn = r.CreateBorder("transparent", 6, smText);
+                if (smBtn != null)
+                {
+                    r.SetPadding(smBtn, 12, 8, 12, 8);
+                    r.SetMargin(smBtn, 0, 4, 0, 0);
+                    r.SetHorizontalAlignment(smBtn, "Center");
+                    r.SetCursorHand(smBtn);
+                    r.SubscribeEvent(smBtn, "PointerPressed", () =>
+                    {
+                        showAll[0] = !showAll[0];
+                        rebuildGrid?.Invoke();
+                    });
+                    r.SubscribeEvent(smBtn, "PointerEntered", () =>
+                        r.SetBackground(smBtn, ColorUtils.Lighten(CardBg, 8)));
+                    r.SubscribeEvent(smBtn, "PointerExited", () =>
+                        r.SetBackground(smBtn, "transparent"));
+                    r.AddChild(cardContainer, smBtn);
+                    showMoreObj[0] = smBtn;
+                }
             }
 
             // Update count label
