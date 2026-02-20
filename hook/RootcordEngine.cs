@@ -1517,11 +1517,17 @@ internal class RootcordEngine
             string onlineColor = "#43b581";
             string statusLabel = GetCurrentStatusLabel();
 
-            // Floating card: 240px wide, 12px rounded corners, cardBg background, elevated look
+            // Floating card: elastic width (fits username), 12px rounded corners, cardBg background, elevated look
             _userBar = _r.CreateBorder(_cardBg, 12);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            _r.SetWidth(_userBar, 240);
+            // Elastic width: no fixed Width — card auto-sizes to fit full display name
+            try
+            {
+                _userBar.GetType().GetProperty("MinWidth")?.SetValue(_userBar, 200.0);
+                _userBar.GetType().GetProperty("MaxWidth")?.SetValue(_userBar, 380.0);
+            }
+            catch { }
             SetBorderStroke(_userBar, AdjustForHighlight(_cardBg, 22), 1.0);
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
@@ -1531,7 +1537,7 @@ internal class RootcordEngine
             int rowCount = rowDefs?.Count ?? 4;
             _r.SetGridRowSpan(_userBar, rowCount);
             var allCols = _r.GetColumnDefinitions(_homeViewGrid)?.Count ?? 6;
-            _r.SetGridColumnSpan(_userBar, allCols); // spans full window width so Width=240+Left renders correctly
+            _r.SetGridColumnSpan(_userBar, allCols); // spans full grid so HorizontalAlignment=Left works with auto-width
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
             _r.SetMargin(_userBar, 8, 0, 0, 8); // floating: 8px gap from left and bottom window edges
@@ -1549,14 +1555,17 @@ internal class RootcordEngine
             var colDefs = _r.GetColumnDefinitions(contentGrid);
             if (colDefs?.Count >= 1)
                 _r.SetColumnDefinitionPixelWidth(colDefs[0], StripWidth); // 56px
-            if (colDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            if (colDefs?.Count >= 2 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
             {
                 try
                 {
                     var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
                     var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit)!;
-                    var colDef2 = colDefs[2];
-                    colDef2?.GetType().GetProperty("Width")?.SetValue(colDef2, autoLen);
+                    // Col 1: text column — Auto so card stretches to fit full display name
+                    colDefs[1]?.GetType().GetProperty("Width")?.SetValue(colDefs[1], autoLen);
+                    // Col 2: button tray — Auto so it sizes to button contents
+                    if (colDefs.Count >= 3)
+                        colDefs[2]?.GetType().GetProperty("Width")?.SetValue(colDefs[2], autoLen);
                 }
                 catch (Exception ex) { Logger.Log(Tag, $"UserBar: Auto col set error: {ex.Message}"); }
             }
@@ -1626,8 +1635,6 @@ internal class RootcordEngine
                     {
                         nameText.GetType().GetProperty("TextWrapping")?.SetValue(nameText,
                             Enum.Parse(nameText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
-                        nameText.GetType().GetProperty("TextTrimming")?.SetValue(nameText,
-                            Enum.Parse(nameText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
                     _r.AddChild(textPanel, nameText);
@@ -1661,7 +1668,7 @@ internal class RootcordEngine
                 var btnP = BuildActionButton(GlyphFriends,       () => InvokeHomeCommand("FriendsPaneToggleCommand"));
                 var btnD = BuildActionButton(GlyphMessages,      () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
                 var btnN = BuildActionButton(GlyphNotifications, () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
-                var btnS = BuildActionButton(GlyphSettings,      () => InvokeHomeCommand("ProfilePaneToggleCommand"));
+                var btnS = BuildActionButton(GlyphSettings,      () => OpenSettingsDirectly());
                 if (btnP != null) _r.AddChild(trayHost, btnP);
                 if (btnD != null) _r.AddChild(trayHost, btnD);
                 if (btnN != null) _r.AddChild(trayHost, btnN);
@@ -1694,6 +1701,57 @@ internal class RootcordEngine
             else Logger.Log(Tag, $"InvokeHomeCommand: '{commandName}' not found");
         }
         catch (Exception ex) { Logger.Log(Tag, $"InvokeHomeCommand '{commandName}' error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Open Root's settings directly: opens the profile pane then programmatically clicks the
+    /// "Settings" button within it, replicating the native user-bar → Settings flow.
+    /// </summary>
+    private void OpenSettingsDirectly()
+    {
+        // Open the profile pane first
+        InvokeHomeCommand("ProfilePaneToggleCommand");
+
+        // After the pane has had time to open, find and invoke the Settings button inside it
+        Task.Delay(350).ContinueWith(_ => _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                if (_rootSplitView == null) return;
+                var walker = new VisualTreeWalker(_r);
+                foreach (var node in walker.DescendantsDepthFirst(_rootSplitView))
+                {
+                    // Read text content from common properties
+                    string? text = null;
+                    foreach (var prop in new[] { "Text", "Content", "Header" })
+                    {
+                        try { text = _r.GetPropertyValue(node, prop) as string; } catch { }
+                        if (!string.IsNullOrEmpty(text)) break;
+                    }
+                    if (!string.Equals(text?.Trim(), "Settings", StringComparison.OrdinalIgnoreCase))
+                        continue;
+
+                    // Found a node labelled "Settings" — try to invoke its Command
+                    var cmd = _r.GetPropertyValue(node, "Command");
+                    if (cmd == null)
+                    {
+                        // Button's command may live on its DataContext
+                        var dc = _r.GetPropertyValue(node, "DataContext");
+                        if (dc != null)
+                            cmd = _r.GetPropertyValue(dc, "Command") ?? _r.GetPropertyValue(dc, "OpenCommand");
+                    }
+                    if (cmd != null)
+                    {
+                        InvokeCommand(cmd);
+                        Logger.Log(Tag, $"OpenSettingsDirectly: invoked via {node.GetType().Name}.Command");
+                        return;
+                    }
+                    Logger.Log(Tag, $"OpenSettingsDirectly: found '{node.GetType().Name}' text=Settings but no command");
+                }
+                Logger.Log(Tag, "OpenSettingsDirectly: Settings button not found in pane visual tree");
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"OpenSettingsDirectly error: {ex.Message}"); }
+        }));
     }
 
     /// <summary>

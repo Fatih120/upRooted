@@ -42,6 +42,14 @@ internal class UprootedSettings
     // Migration flag: tracks whether we've migrated from enabled-by-default to disabled-by-default plugins
     public bool PluginDefaultsMigrated { get; set; } = false;
 
+    // Translate plugin settings
+    public bool   TranslateAutoTranslate { get; set; } = false;
+    public bool   TranslateShowOriginal  { get; set; } = true;
+    public string TranslateFromLang      { get; set; } = "auto"; // received from
+    public string TranslateToLang        { get; set; } = "en";   // received to
+    public string TranslateSendFromLang  { get; set; } = "auto"; // sent from
+    public string TranslateSendToLang    { get; set; } = "en";   // sent to
+
     private static string? _settingsPath;
 
     // Time-based cache: avoid re-reading from disk on every 500ms timer tick
@@ -122,6 +130,12 @@ internal class UprootedSettings
                     case "AutoUpdate.PendingVersion": settings.PendingUpdateVersion = val; break;
                     case "AutoUpdate.LastPackageHash": settings.LastPackageHash = val; break;
                     case "Migrated.PluginDefaults": settings.PluginDefaultsMigrated = val == "true"; break;
+                    case "Translate.AutoTranslate":  settings.TranslateAutoTranslate = val == "true"; break;
+                    case "Translate.ShowOriginal":   settings.TranslateShowOriginal  = val == "true"; break;
+                    case "Translate.FromLang":       settings.TranslateFromLang      = val; break;
+                    case "Translate.ToLang":         settings.TranslateToLang        = val; break;
+                    case "Translate.SendFromLang":   settings.TranslateSendFromLang  = val; break;
+                    case "Translate.SendToLang":     settings.TranslateSendToLang    = val; break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
                         settings.Plugins[pluginName] = val == "true";
@@ -203,7 +217,13 @@ internal class UprootedSettings
                 "AutoUpdate.LastCheck=" + LastUpdateCheck,
                 "AutoUpdate.PendingVersion=" + PendingUpdateVersion,
                 "AutoUpdate.LastPackageHash=" + LastPackageHash,
-                "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false")
+                "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false"),
+                "Translate.AutoTranslate=" + (TranslateAutoTranslate ? "true" : "false"),
+                "Translate.ShowOriginal="  + (TranslateShowOriginal  ? "true" : "false"),
+                "Translate.FromLang="      + TranslateFromLang,
+                "Translate.ToLang="        + TranslateToLang,
+                "Translate.SendFromLang="  + TranslateSendFromLang,
+                "Translate.SendToLang="    + TranslateSendToLang
             };
             foreach (var (name, enabled) in Plugins)
             {
