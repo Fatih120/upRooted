@@ -395,6 +395,9 @@ internal class SidebarInjector
             Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
                 $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
 
+            // Auto-navigate to Uprooted About page on settings open
+            OnNavItemClicked("uprooted");
+
             // Walk burst after injection — Root will auto-select a tab, loading content
             // with default theme colors that needs immediate recoloring
             _themeEngine.ScheduleWalkBurst();
