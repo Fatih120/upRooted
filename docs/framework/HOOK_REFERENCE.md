@@ -1616,7 +1616,7 @@ When injected (`SidebarInjector.cs:116-143`):
 
 ### Cleanup and State Reset
 
-**`CleanupInjection()`** (`SidebarInjector.cs:248-293`): Full cleanup in order:
+**`CleanupInjection()`**: Full cleanup in order:
 1. Unwrap ScrollViewer.
 2. Remove all injected controls from NavContainer.
 3. Re-add original version border and sign-out.
@@ -1624,8 +1624,34 @@ When injected (`SidebarInjector.cs:116-143`):
 5. Restore save bar visibility.
 6. Remove content page.
 
-**`NullState()`** (`SidebarInjector.cs:295-318`): Nulls all references and resets all
+**`NullState()`**: Nulls all references and resets all
 state flags to allow re-injection on next settings page open.
+
+### Variant Change Re-injection
+
+When Root switches theme variant (Dark↔Light↔PureDark), the injector must remove
+its controls and re-inject with fresh native colors. The variant change callback
+(registered via `ThemeEngine.SetVariantChangedCallback`) performs a **minimal cleanup**
+instead of full `CleanupInjection()`:
+
+1. `UnwrapScrollViewer()` — critical: restores NavContainer to grid so layout detection works
+2. Remove injected controls from nav panel
+3. `RemoveContentPage()` + `RemoveVersionText()`
+4. `NullState()` (sets `_injected=false`)
+
+**Do NOT try to restore Root's controls** (SignOut, VersionBorder) during variant
+change — Root's own `DynamicResource` bindings handle them automatically. Attempting
+to restore stale references causes duplicate controls and layout shifts.
+
+Next `LayoutUpdated` pass detects `_injected=false`, runs `CheckAndInject` →
+`InjectIntoSettings` with fresh native colors from the new variant.
+
+### Native Color Capture
+
+At injection time, `SyncContentPagesFromNativeTree()` reads Root's live foreground
+and background colors from the actual visual tree (not ThemeDictionaries) and syncs
+them to `ContentPages` statics. This ensures Uprooted pages match the current variant
+even if ThemeDictionaries reading fails.
 
 ### Tag System
 
@@ -1662,18 +1688,39 @@ tagged `"uprooted-content"`.
 ### Color Theming for Pages
 
 Static color fields (`ContentPages.cs:18-31`) are updated at page build time by
-`ApplyThemedColors()` (`ContentPages.cs:69-110`). When a theme is active, card
-backgrounds, text colors, and accent colors derive from the theme palette. The
-`UpdateLiveColors()` method (`ContentPages.cs:37-63`) is called during live color picker
-drag for real-time preview.
+`ApplyThemedColors()`. Colors are read live from Root's ThemeDictionaries via
+`ThemeEngine.ReadLiveRootColors()` using `Application.TryGetResource`. This works
+for all variants (Dark/Light/PureDark) and when Uprooted themes are active.
+
+Key mappings:
+
+| Static Field | Root Resource Key | Purpose |
+|---|---|---|
+| `TextWhite` | `TextPrimary` | Primary text |
+| `TextMuted` | `TextSecondary` | Muted/secondary text |
+| `TextDim` | `TextTertiary` | Dim/tertiary text |
+| `CardBg` | `BackgroundSecondary` | Card/elevated surface bg |
+| `CardBorder` | `Border` | Card border color |
+| `AccentGreen` | `BrandPrimary` | Accent/brand color |
+
+The `UpdateLiveColors()` method is called during live color picker drag for
+real-time preview. `SyncContentPagesFromNativeTree()` in SidebarInjector provides
+a secondary color sync path from the actual visual tree at injection time.
+
+**Important:** Light theme text colors are solid (not alpha variants). Never derive
+`TextMuted`/`TextDim` by applying alpha to `TextPrimary` — always read the actual
+`TextSecondary`/`TextTertiary` resource values.
 
 ### Styling Constants
 
-Root's native settings pages use these styles:
-- **Cards:** `BG=#0f1923`, `CornerRadius=12`, `BorderThickness=0.5`
-- **Section headers:** `FontSize=12`, `FontWeight=Medium(500)`, `Fg=#66f2f2f2`
-- **Field labels:** `FontSize=13`, `FontWeight=450`, `Fg=#a3f2f2f2`
-- **Page title:** `FontSize=20`, `FontWeight=SemiBold(600)`, `Fg=#fff2f2f2`
+Root's native settings pages use these styles (values shown for Dark variant;
+all colors adapt per-variant via live resource reads):
+- **Cards:** `BG=BackgroundSecondary`, `CornerRadius=12`, `BorderThickness=1.5` (constant)
+- **Card borders:** `AdjustForHighlight(CardBg, 15)` at rest — luminance-aware (darkens on light, lightens on dark)
+- **Section headers:** `FontSize=12`, `FontWeight=Medium(500)`, `Fg=TextTertiary`
+- **Field labels:** `FontSize=13`, `FontWeight=450`, `Fg=TextSecondary`
+- **Page title:** `FontSize=20`, `FontWeight=SemiBold(600)`, `Fg=TextPrimary`
+- **Page background:** `BackgroundPrimary` (read live)
 - **Font:** CircularXX TT (captured from native controls)
 - **Page container:** `StackPanel(Margin=24,24,24,0)`
 

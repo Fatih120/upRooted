@@ -129,12 +129,19 @@ All mention colors use alpha-varied base colors for layered transparency effects
 Root uses `Avalonia.Media.Immutable.ImmutableSolidColorBrush` (frozen/immutable), not `SolidColorBrush`. This is important for our override strategy:
 - We can't modify the existing brush objects (they're immutable)
 - We must replace the entire resource value in the dictionary with a new brush
-- `SolidColorBrush` should work as a replacement (both implement `IBrush`)
-- Need to verify: does replacing a deferred value in the dictionary trigger DynamicResource re-resolution?
+- **Confirmed:** `SolidColorBrush` works as a replacement (both implement `IBrush`)
+- **Confirmed:** Replacing a value in the ThemeDictionary wrapper triggers DynamicResource re-resolution
+
+**Live-testing findings (2026-02-19):**
+- `Color.ToString()` can return named colors (e.g. `"White"` for `#FFFFFFFF`). Always extract via `Color.A`/`R`/`G`/`B` byte properties.
+- `ResourceDictionary["key"]` (indexer) does NOT resolve through MergedDictionaries — only returns direct entries. Use `Application.TryGetResource(key, ThemeVariant, out value)` for full resolution including deferred factories.
+- Light theme `TextSecondary`/`TextTertiary` are **solid opaque colors** (`#282828`, `#5E5E5E`), NOT alpha variants of `TextPrimary`. This differs from Dark where they use alpha (`#A3F2F2F2`, `#66F2F2F2`).
 
 ### SVG Asset Paths (~220 entries)
 
 All SVG paths point to `/Resources/Assets/SVGs/Dark Theme/...`. Categories: badges, channel types, community templates, connection status, explore page, files, message area, system messages, video player, theming previews. These swap per-theme variant (Dark vs Light vs PureDark) for icon variants.
+
+**Implementation note:** SVG resources are added to ThemeDictionary variant wrappers via `IDictionary.Add` (direct entries, plain `string` values) — NOT via `AddDeferred` like color brush keys. To enumerate them, iterate the variant wrapper dict itself. Keys all end with `SVG` suffix. Badge SVGs use a shared `Badges/` folder (not theme-specific).
 
 ---
 
