@@ -52,8 +52,14 @@
   - File: `hook/ContentPages.cs`
 - **Restart button color** — Deeper burnt orange (`#D06818`) for better visibility.
   - File: `hook/ContentPages.cs`
-- **Plugin card vector icons** — Gear and info icons replaced with Avalonia `PathIcon` vector graphics (SVG path data, `Geometry.Parse`) instead of Unicode text characters. New `CreatePathIcon` method in AvaloniaReflection.
+- **Plugin card vector icons** — Gear and info icons use `Shapes.Path` with `Stretch.Uniform` (Material Design 24x24 SVG paths). Replaced `PathIcon` which didn't scale geometry to fit.
   - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
+- **DPI-aware border thicknesses** — `ComputeDpiAwareBorders` reads `RenderScaling` from MainWindow and computes `ThinBorder` (1 physical pixel) and `ThickBorder` (next pixel boundary above thin). Outer cards use `ThinBorder`, inner cards and buttons use `ThickBorder`. Borders are always visually distinct at any DPI (100%, 125%, 150%, 200%).
+  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
+- **Radio selectors: Grid overlay** — Theme card radio indicators rebuilt as two sibling Borders in a Grid (ring + centered dot) instead of nested Border. Outer bumped to 18x18 so `(18-10)*scale` is always even — perfect centering at 100% and 150%.
+  - File: `hook/ContentPages.cs`
+- **Toggle switch centering** — Thumb 18→16 with margin 3→4, ensuring `(24-16)*scale` is always even for pixel-perfect centering at all common DPI scales.
+  - File: `hook/ContentPages.cs`
 - **Plugin card text** — Plugin names now render Bold via `SetFontWeight("Bold")` (previously `SetFontWeightNumeric(600)` which silently failed). Testing status badges (Alpha/Beta/Stable) also Bold with 1px border (was 0.5px).
   - File: `hook/ContentPages.cs`
 
