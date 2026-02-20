@@ -263,14 +263,15 @@ pub fn run_diagnose() {
     // ── [2/7] Process check ──
     header("2/7", "Process check");
     if hook::check_root_running() {
-        warn("Root is currently RUNNING — installation may require restart");
+        let killed = hook::kill_root_processes();
+        ok(&format!("Closed Root ({} process{}) — file handles released", killed, if killed == 1 { "" } else { "es" }));
     } else {
         ok("Root is not running");
     }
 
     // ── [3/7] File deployment ──
     header("3/7", "File deployment");
-    match hook::deploy_files() {
+    let deploy_ok = match hook::deploy_files() {
         Ok(()) => {
             ok("Files deployed successfully");
             let dir = hook::get_uprooted_dir();
@@ -291,11 +292,13 @@ pub fn run_diagnose() {
                     println!("    {DIM}{name}{RESET} ({} bytes)", format_size(size));
                 }
             }
+            true
         }
         Err(e) => {
             fail(&format!("File deployment FAILED: {e}"));
+            false
         }
-    }
+    };
 
     // ── [4/7] Environment variables ──
     header("4/7", "Environment variables");
@@ -333,8 +336,10 @@ pub fn run_diagnose() {
     let final_detection = detection::detect();
     let final_hs = &final_detection.hook_status;
 
-    if final_hs.files_ok {
+    if deploy_ok && final_hs.files_ok {
         ok("All files deployed");
+    } else if !deploy_ok {
+        fail("File deployment failed (see step 3)");
     } else {
         fail("Some files missing");
     }
@@ -352,7 +357,7 @@ pub fn run_diagnose() {
     }
 
     // Overall verdict
-    let all_good = final_hs.files_ok && final_hs.env_ok && final_detection.is_installed;
+    let all_good = deploy_ok && final_hs.files_ok && final_hs.env_ok && final_detection.is_installed;
     println!();
     if all_good {
         println!(
