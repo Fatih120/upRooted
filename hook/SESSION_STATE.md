@@ -11,6 +11,9 @@
 - **Auto-nav fix** — `_hasAutoNavigated` flag prevents re-navigation on variant change
 - **Ping toggle island fix** — Hardcoded off-color for no-recolor island
 - **ScrollViewer width fix** — `HorizontalScrollBarVisibility = Disabled` for correct content stretch
+- **Overlay scrollbar** — `CreateOverlayScrollViewer` relocates vertical ScrollBar into content Grid column via deferred LayoutUpdated handler, matching Root's native RootScrollViewer overlay behavior (no content displacement)
+- **Themes "Open" button** — taller (28px), border stroke, bold text to match toggle switch proportions
+- **Filter toggle "Enabled" color** — hardcoded `#40A050` (stable green) instead of theme-dependent `AccentGreen`
 
 ### v0.4.2 features
 - **Light/PureDark theme compatibility** — Settings UI adapts to all Root theme variants; live color system

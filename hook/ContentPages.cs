@@ -653,7 +653,7 @@ internal static class ContentPages
             r.AddChild(page, spacer);
         }
 
-        return r.CreateScrollViewer(page);
+        return CreateOverlayScrollViewer(r, page);
     }
 
     // Plain class to avoid ValueTuple TypeLoadException in profiler injection context
@@ -1027,7 +1027,7 @@ internal static class ContentPages
 
             // Filter toggle: single cycling pill (All Plugins → Enabled → Disabled)
             var filterLabels = new[] { "All Plugins", "Enabled", "Disabled" };
-            var filterColors = new[] { "#404050", AccentGreen, "#E04040" };
+            var filterColors = new[] { "#404050", "#40A050", "#E04040" };
             var filterBadgeText = r.CreateTextBlock(filterLabels[filterMode[0]], 13, "#FFFFFF");
             r.SetFontWeight(filterBadgeText, "Bold");
             ApplyFont(r, filterBadgeText, font);
@@ -1284,7 +1284,7 @@ internal static class ContentPages
             r.AddChild(page, spacer);
         }
 
-        return r.CreateScrollViewer(page);
+        return CreateOverlayScrollViewer(r, page);
     }
 
     /// <summary>
@@ -1406,11 +1406,12 @@ internal static class ContentPages
                     {
                         r.SetCursorHand(openBtn);
                         r.SetWidth(openBtn, 44);
-                        r.SetHeight(openBtn, 24);
+                        r.SetHeight(openBtn, 28);
                         r.SetVerticalAlignment(openBtn, "Center");
+                        SetBorderStroke(r, openBtn, AdjustForHighlight(openBtnBg, 30), ThickBorder);
 
                         var openLabel = CreateBoundText(r, "Open", 11, TextWhite, "TextPrimary");
-                        r.SetFontWeightNumeric(openLabel, 500);
+                        r.SetFontWeight(openLabel, "Bold");
                         ApplyFont(r, openLabel, font);
                         r.SetHorizontalAlignment(openLabel, "Center");
                         r.SetVerticalAlignment(openLabel, "Center");
@@ -2048,7 +2049,7 @@ internal static class ContentPages
             r.AddChild(page, spacer);
         }
 
-        return r.CreateScrollViewer(page);
+        return CreateOverlayScrollViewer(r, page);
     }
 
     /// <summary>
@@ -3668,6 +3669,48 @@ internal static class ContentPages
         var thinPhysical = Math.Ceiling(1.0 * scale);
         ThickBorder = (thinPhysical + 1) / scale;
         Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} ({thinPhysical}px), ThickBorder={ThickBorder:F3} ({thinPhysical + 1}px)");
+    }
+
+    /// <summary>
+    /// Wrap a page in a ScrollViewer with the vertical scrollbar overlaying the right edge
+    /// instead of displacing content. After the template is applied (on first LayoutUpdated),
+    /// moves the vertical ScrollBar from its own Grid column into the content column so it
+    /// renders on top — matching Root's native RootScrollViewer overlay behavior.
+    /// </summary>
+    private static object? CreateOverlayScrollViewer(AvaloniaReflection r, object page)
+    {
+        var sv = r.CreateScrollViewer(page);
+        if (sv == null) return null;
+
+        // Deferred: after template application, relocate the vertical ScrollBar to overlay
+        bool[] applied = { false };
+        r.SubscribeEvent(sv, "LayoutUpdated", () =>
+        {
+            if (applied[0]) return;
+
+            // Walk template children: ScrollViewer > Grid > [ScrollContentPresenter, ScrollBar, ...]
+            foreach (var templateChild in r.GetVisualChildren(sv))
+            {
+                // The template root is typically a Grid or Panel — look inside it for ScrollBars
+                foreach (var child in r.GetVisualChildren(templateChild))
+                {
+                    var typeName = child.GetType().Name;
+                    if (typeName != "ScrollBar") continue;
+
+                    // Check if this is the vertical scrollbar (in column 1)
+                    if (r.GetGridColumn(child) != 1) continue;
+
+                    // Move into content column (0) so it overlays instead of displacing
+                    r.SetGridColumn(child, 0);
+                    r.SetHorizontalAlignment(child, "Right");
+                    applied[0] = true;
+                    break;
+                }
+                if (applied[0]) break;
+            }
+        });
+
+        return sv;
     }
 
     private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)

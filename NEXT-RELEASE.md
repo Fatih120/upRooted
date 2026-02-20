@@ -34,7 +34,11 @@
   - File: `hook/ContentPages.cs`
 - **Plugin sort order** — Stability tier now takes priority over enabled/disabled state. Stable plugins always list before Beta, regardless of toggle state.
   - File: `hook/ContentPages.cs`
-- **Themes "Open" button sizing** — Shortened to match toggle switch dimensions (44×24) for visual consistency.
+- **Themes "Open" button** — Taller (28px) with border stroke and bold text to match toggle switch proportions.
+  - File: `hook/ContentPages.cs`
+- **Overlay scrollbar** — Settings pages use `CreateOverlayScrollViewer` which relocates the vertical ScrollBar into the content Grid column via a deferred LayoutUpdated handler, matching Root's native RootScrollViewer overlay behavior (no content displacement on scroll).
+  - File: `hook/ContentPages.cs`
+- **Filter toggle "Enabled" color** — Hardcoded to `#40A050` (stable green) instead of theme-dependent `AccentGreen` which changed with custom themes.
   - File: `hook/ContentPages.cs`
 - **Experimental plugins banner: theme-aware toggle** — When disabled, uses theme colors (CardBg, CardBorder, TextWhite, TextMuted); when enabled, switches to hardcoded amber warning colors (`#2A2415` bg, `#E0A030` border). Warning icon (20px) hidden when disabled. Toggle pill uses `AdjustForHighlight(CardBg, 8)` off-color instead of hardcoded `#2A2A44`.
   - File: `hook/ContentPages.cs`

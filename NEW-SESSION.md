@@ -161,6 +161,9 @@ Two independent injection layers into one app:
 - LinkEmbeds "Show file names" toggle: image-only embeds hide filename by default, live toggle via `RefreshTitleVisibility()` in settings lightbox
 - Lightbox font sizes scaled up (section headers 18, labels 19, descriptions 16, titles 26, inputs 17, pills 52×26, card width 560)
 - Log startup separator: 3 blank lines before first [Entry] log on Root launch; watch-log colors [Entry] green, fallback messages yellow
+- Overlay scrollbar: settings pages use `CreateOverlayScrollViewer` — relocates vertical ScrollBar into content Grid column via deferred LayoutUpdated, matching Root's native RootScrollViewer overlay (no content displacement on scroll)
+- Themes "Open" button: taller (28px), border stroke, bold text matching toggle switch proportions
+- Filter toggle "Enabled" color: hardcoded `#40A050` instead of theme-dependent AccentGreen
 
 **Testing (new 2026-02-18):**
 - 170 xUnit tests in `tests/UprootedTests/` — 113 new tests added this session
