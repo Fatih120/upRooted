@@ -35,7 +35,7 @@ internal class UprootedPresenceBeacon
     //       Current values: plain key = 4b9e2a71c38f561da4e7305c89f26b14d843972e61b50a7ce328549fc16a378d
     private static readonly byte[] _encryptedKey =
     {
-        0x7A, 0x69, 0x46, 0x54, 0x6A, 0xC1, 0xD5, 0x6F, 0x72, 0x76, 0x6F, 0x76, 0x45, 0x75, 0x72, 0x7A,
+        0x7A, 0x69, 0x46, 0x54, 0x6A, 0xC1, 0xD5, 0x6F, 0x72, 0x76, 0x6F, 0x76, 0x4D, 0x75, 0x72, 0x7A,
         0x6B, 0x6C, 0x43, 0x74, 0x69, 0x7C, 0x7E, 0x9D, 0x7E, 0x7A, 0x7F, 0x67, 0x67, 0x56, 0x47, 0x66,
     };
     private static readonly byte[] _keyXor =
@@ -71,7 +71,7 @@ internal class UprootedPresenceBeacon
     {
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            Thread.Sleep(10_000); // Wait for Root to settle and session to authenticate
+            Thread.Sleep(2_000); // Brief wait for session to authenticate (Root is fast)
             TryRegister();
         });
     }
@@ -110,7 +110,8 @@ internal class UprootedPresenceBeacon
             try
             {
                 result = FetchPresence(uuid);
-                ttl = result ? TimeSpan.FromMinutes(5) : TimeSpan.FromMinutes(2);
+                // Short TTL for false results so newly-installed users appear quickly
+                ttl = result ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(20);
             }
             catch (Exception ex)
             {
@@ -123,6 +124,15 @@ internal class UprootedPresenceBeacon
             try { onResult(result); }
             catch { }
         });
+    }
+
+    /// <summary>
+    /// Invalidate a cached entry so the next check re-queries the server.
+    /// Not currently called, but available for future use (e.g., settings toggle).
+    /// </summary>
+    internal void InvalidateCache(string uuid)
+    {
+        lock (_cacheLock) { _cache.Remove(uuid); }
     }
 
     // ===== Registration =====

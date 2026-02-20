@@ -34,7 +34,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 // Per-UUID registration throttle (stored in memory — single-process server)
 // Prevents re-registering more than once per ~55 min even if rate limiter is bypassed
 const registrationTimestamps = new Map(); // uuid → last registered ms
-const REGISTER_COOLDOWN_MS = 55 * 60 * 1000;
+const REGISTER_COOLDOWN_MS = 3 * 60 * 1000; // 3 min — short so failed registrations retry quickly
 
 app.use(express.json({ limit: '4kb' }));
 
