@@ -895,6 +895,8 @@ for version migration (force-disable on upgrade).
 
 **File:** `hook/AvaloniaReflection.cs` (~2383 lines)
 
+> **Before building custom UI, check Root's source.** Root's .NET assemblies are fully decompilable — `research/ilspy-dumps/` contains 66+ decompiled source files. Root's custom controls (`RootScrollViewer`, `RootBorder`, `RootSvgImage`, etc.) live in `RootApp.Client.Avalonia` assemblies and can be found at runtime via `AppDomain.CurrentDomain.GetAssemblies()` + `Activator.CreateInstance`. Their styles and templates are already loaded — you get native behavior for free. Always check the dumps before reimplementing UI patterns.
+
 ### Why Reflection Is Needed
 
 Root ships as a trimmed single-file .NET binary. Uprooted cannot reference Avalonia

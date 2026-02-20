@@ -419,6 +419,8 @@ for the full Enter key interception technique.
 
 ## Root Custom Control Types
 
+> **IMPORTANT: Always examine Root's source before replicating UI behavior.** Root's .NET assemblies are fully decompilable via ILSpy — decompiled sources live in `research/ilspy-dumps/` (66+ files). When you need a scrollbar, slider, theme mechanism, or any UI pattern, check the dumps first. Root's controls can often be instantiated directly at runtime (find the type via `AppDomain.CurrentDomain.GetAssemblies()`, create with `Activator.CreateInstance`), giving you the exact native behavior — styles, templates, and all — without reimplementing anything.
+
 Root defines custom controls that appear in the visual tree. When walking the tree, you'll encounter these type names. See [Root Control Reference](ROOT_CONTROL_REFERENCE.md) for full details.
 
 | Type                                              | Base           | Key Properties                                                     | Notes                                                      |

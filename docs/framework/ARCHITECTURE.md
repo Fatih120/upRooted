@@ -728,6 +728,8 @@ These rules reflect hard-won lessons from real bugs. Violating them causes crash
 
 12. **All injected elements must be identifiable.** C# controls use `Control.Tag` strings starting with `"uprooted-"`. DOM elements use `data-uprooted` attributes. These are the cleanup handles for removal.
 
+13. **When replicating Root UI elements, ALWAYS examine Root's decompiled source first.** Root's .NET assemblies are fully decompilable via ILSpy — decompiled sources live in `research/ilspy-dumps/`. Don't reinvent controls from scratch when Root already has working implementations. Root's custom types (`RootScrollViewer`, `RootBorder`, `RootSvgImage`, etc.) can be found at runtime via `AppDomain.CurrentDomain.GetAssemblies()` and instantiated with `Activator.CreateInstance` — their styles and templates are already loaded in the app.
+
 ---
 
 ## 10. Known Limitations

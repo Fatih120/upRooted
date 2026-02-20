@@ -3675,42 +3675,78 @@ internal static class ContentPages
     /// Wrap a page in a ScrollViewer with the vertical scrollbar overlaying the right edge
     /// instead of displacing content. After the template is applied (on first LayoutUpdated),
     /// moves the vertical ScrollBar from its own Grid column into the content column so it
-    /// renders on top — matching Root's native RootScrollViewer overlay behavior.
+    /// Uses Root's native RootScrollViewer for overlay scrollbar behavior.
+    /// Falls back to stock ScrollViewer if type not found.
     /// </summary>
+    private static Type? _rootScrollViewerType;
+    private static bool _rootScrollViewerResolved;
+
     private static object? CreateOverlayScrollViewer(AvaloniaReflection r, object page)
     {
-        var sv = r.CreateScrollViewer(page);
-        if (sv == null) return null;
-
-        // Deferred: after template application, relocate the vertical ScrollBar to overlay
-        bool[] applied = { false };
-        r.SubscribeEvent(sv, "LayoutUpdated", () =>
+        // Find RootScrollViewer type once (lives in RootApp.Client.Avalonia, not Avalonia*)
+        if (!_rootScrollViewerResolved)
         {
-            if (applied[0]) return;
-
-            // Walk template children: ScrollViewer > Grid > [ScrollContentPresenter, ScrollBar, ...]
-            foreach (var templateChild in r.GetVisualChildren(sv))
+            _rootScrollViewerResolved = true;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                // The template root is typically a Grid or Panel — look inside it for ScrollBars
-                foreach (var child in r.GetVisualChildren(templateChild))
+                try
                 {
-                    var typeName = child.GetType().Name;
-                    if (typeName != "ScrollBar") continue;
-
-                    // Check if this is the vertical scrollbar (in column 1)
-                    if (r.GetGridColumn(child) != 1) continue;
-
-                    // Move into content column (0) so it overlays instead of displacing
-                    r.SetGridColumn(child, 0);
-                    r.SetHorizontalAlignment(child, "Right");
-                    applied[0] = true;
-                    break;
+                    var name = asm.GetName().Name ?? "";
+                    if (!name.StartsWith("RootApp.Client.Avalonia", StringComparison.Ordinal)) continue;
+                    _rootScrollViewerType = asm.GetType("RootApp.Client.Avalonia.Controls.RootScrollViewer");
+                    if (_rootScrollViewerType != null)
+                    {
+                        Logger.Log("ContentPages", "Found RootScrollViewer type");
+                        break;
+                    }
                 }
-                if (applied[0]) break;
+                catch { }
             }
-        });
+            if (_rootScrollViewerType == null)
+                Logger.Log("ContentPages", "RootScrollViewer not found, falling back to stock ScrollViewer");
+        }
 
-        return sv;
+        // Use Root's native RootScrollViewer — its template + RootScrollBarThumb styles
+        // give us overlay scrollbar, show-on-hover, and smooth scroll physics for free
+        if (_rootScrollViewerType != null)
+        {
+            try
+            {
+                var sv = Activator.CreateInstance(_rootScrollViewerType);
+                if (sv != null)
+                {
+                    // Set content (inherited from ContentControl → ScrollViewer → RootScrollViewer)
+                    sv.GetType().GetProperty("Content")?.SetValue(sv, page);
+
+                    // Disable horizontal scrollbar so content stretches to fill width
+                    var visType = sv.GetType().Assembly.GetType("Avalonia.Controls.Primitives.ScrollBarVisibility")
+                               ?? typeof(object).Assembly.GetType("Avalonia.Controls.Primitives.ScrollBarVisibility");
+                    if (visType == null)
+                    {
+                        // Search Avalonia assemblies for the enum
+                        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                        {
+                            if (asm.GetName().Name?.StartsWith("Avalonia") == true)
+                            {
+                                visType = asm.GetType("Avalonia.Controls.Primitives.ScrollBarVisibility");
+                                if (visType != null) break;
+                            }
+                        }
+                    }
+                    if (visType != null)
+                        sv.GetType().GetProperty("HorizontalScrollBarVisibility")?.SetValue(sv, Enum.Parse(visType, "Disabled"));
+
+                    return sv;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ContentPages", $"RootScrollViewer instantiation failed: {ex.Message}");
+            }
+        }
+
+        // Fallback: stock ScrollViewer (no overlay behavior)
+        return r.CreateScrollViewer(page);
     }
 
     private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)

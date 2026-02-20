@@ -71,8 +71,9 @@ Ordered read sequences for common contributor tasks. Read only what you need —
 3. [ROOT_THEME_SYSTEM_FINDINGS](../research/ROOT_THEME_SYSTEM_FINDINGS.md) — all 32 exact hex values across 3 themes
 
 ### Build a C# hook feature (Avalonia, visual tree injection)
-1. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — patterns for the specific feature area
-2. [AVALONIA_PATTERNS](framework/AVALONIA_PATTERNS.md) — reflection pitfalls, Root custom control types
+1. **Check `research/ilspy-dumps/` first** — Root's .NET assemblies are fully decompilable. Always examine Root's source before reimplementing UI elements. Root controls (`RootScrollViewer`, `RootBorder`, etc.) can be instantiated directly at runtime — their styles and templates are already loaded.
+2. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — patterns for the specific feature area
+3. [AVALONIA_PATTERNS](framework/AVALONIA_PATTERNS.md) — reflection pitfalls, Root custom control types
 3. [ROOT_CONTROL_REFERENCE](framework/ROOT_CONTROL_REFERENCE.md) — ILSpy-confirmed type names, style classes, settings page pattern
 
 ### Build a TypeScript plugin (browser-side, DotNetBrowser Chromium)
