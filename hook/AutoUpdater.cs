@@ -291,7 +291,7 @@ internal class AutoUpdater
                 settings.Save();
 
                 // Download and apply
-                DownloadAndApply();
+                DownloadAndApply(isDev);
             }
             else if (cmp == 0 && _isManualCheck)
             {
@@ -299,7 +299,7 @@ internal class AutoUpdater
                 // its SHA-256 against the stored hash. A differing hash means a silent hotfix
                 // was published under the same version tag.
                 Logger.Log("AutoUpdate", $"Same version ({currentVersion}) — checking package hash for silent hotfix...");
-                DownloadAndApply();
+                DownloadAndApply(isDev);
             }
             else
             {
@@ -313,12 +313,13 @@ internal class AutoUpdater
         }
     }
 
-    private void DownloadAndApply()
+    private void DownloadAndApply(bool isDev)
     {
         var uprootedDir = PlatformPaths.GetUprootedDir();
         var stagingDir = Path.Combine(uprootedDir, "update-staging");
 
-        var isDev = UprootedSettings.Load().AutoUpdateChannel == "developer";
+        // Use channel determined by RunCheck — don't re-read settings (avoids race if user
+        // toggles the channel while the check is in progress)
         var downloadBase = isDev ? DevDownloadBase : StableDownloadBase;
         var authToken = isDev ? DecryptPat() : null;
 
@@ -331,13 +332,13 @@ internal class AutoUpdater
 
             // Download single encrypted package
             var pkgUrl = $"{downloadBase}/{_latestTag}/auto-update.uprpkg";
-            Logger.Log("AutoUpdate", $"Downloading auto-update.uprpkg...");
+            Logger.Log("AutoUpdate", $"Downloading {pkgUrl} (auth={authToken != null})...");
 
             var pkgBytes = HttpGetBytes(pkgUrl, authToken);
             if (pkgBytes == null || pkgBytes.Length == 0)
             {
-                _lastError = "Failed to download auto-update.uprpkg";
-                Logger.Log("AutoUpdate", "Package download failed");
+                _lastError = "Download failed (check log for HTTP status)";
+                Logger.Log("AutoUpdate", $"Package download failed: url={pkgUrl}, isDev={isDev}");
                 return;
             }
 
@@ -787,6 +788,14 @@ internal class AutoUpdater
                 var response = task?.GetType().GetProperty("Result")?.GetValue(task);
                 if (response == null) return null;
 
+                // SendAsync doesn't throw on non-2xx — check status explicitly
+                var statusCode = GetResponseStatusCode(response);
+                if (statusCode >= 0 && (statusCode < 200 || statusCode >= 300))
+                {
+                    Logger.Log("AutoUpdate", $"HTTP {statusCode} from {url}");
+                    return null;
+                }
+
                 var content = response.GetType().GetProperty("Content")?.GetValue(response);
                 if (content == null) return null;
 
@@ -856,6 +865,14 @@ internal class AutoUpdater
 
             if (response == null) return null;
 
+            // SendAsync doesn't throw on non-2xx — check status explicitly
+            var statusCode = GetResponseStatusCode(response);
+            if (statusCode >= 0 && (statusCode < 200 || statusCode >= 300))
+            {
+                Logger.Log("AutoUpdate", $"HTTP {statusCode} downloading {url}");
+                return null;
+            }
+
             var content = response.GetType().GetProperty("Content")?.GetValue(response);
             if (content == null) return null;
 
@@ -897,6 +914,23 @@ internal class AutoUpdater
         {
             Logger.Log("AutoUpdate", $"SetRequestAuth error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Extract the HTTP status code from an HttpResponseMessage via reflection.
+    /// Returns -1 if the status code cannot be determined.
+    /// </summary>
+    private static int GetResponseStatusCode(object? response)
+    {
+        if (response == null) return -1;
+        try
+        {
+            var statusCodeProp = response.GetType().GetProperty("StatusCode");
+            if (statusCodeProp != null)
+                return Convert.ToInt32(statusCodeProp.GetValue(response));
+        }
+        catch { }
+        return -1;
     }
 
     private static Exception UnwrapException(Exception ex)
