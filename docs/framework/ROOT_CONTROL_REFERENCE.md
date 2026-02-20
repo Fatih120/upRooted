@@ -930,7 +930,88 @@ Events: SaveChangesRequested, RevertChangesRequested, DiscardChangesAndGoBackReq
 
 Internal: `Stack<IViewModelBase>` navigation stack.
 
-**Impact for SidebarInjector**: Setting `HasPendingChanges = false` on the Navigator would hide the save bar via binding, avoiding the current opacity hack. To find the Navigator: `RootSettingsContainer.SelectedMenuItemPageContainer.Navigator`.
+**Impact for SidebarInjector**: The save bar and back button both use compiled bindings through `SelectedMenuItemPageContainer`. When Uprooted deselects the ListBox, `SelectedMenuItemPageContainer` becomes null and all bindings break — save bar visibility, back arrow visibility, and title text all fall to defaults. The collapse pattern (zeroing Opacity/MaxWidth/MaxHeight/Width/Margin) avoids fighting these bindings. See `research/SETTINGS_HEADER_BINDINGS.md`.
+
+### ProfileSettingsViewModel (382 lines, UI.Home.SystemTray.Profile.Settings)
+
+The ViewModel that populates `RootSettingsContainer` with all settings menu items. This is the **entry point** for the entire settings UI.
+
+**Menu structure** (populated via `generateUserMenuItems()` + `generateAppMenuItems()`):
+
+| # | MenuTitle | IsHeaderItem | Factory | VM Type |
+|---|-----------|:------------:|---------|---------|
+| 1 | "User Settings" | **yes** | — | section header |
+| 2 | "User Profile" | no | `EditProfileViewModelFactory` | `EditProfileViewModel` |
+| 3 | "Privacy" | no | `PrivacySettingsViewModelFactory` | `PrivacySettingsViewModel` |
+| 4 | "Blocked Users" | no | `BlockedUsersViewModelFactory` | `BlockedUsersViewModel` |
+| 5 | "App Settings" | **yes** | — | section header |
+| 6 | "Audio and Video" | no | `AudioVideoViewModelFactory` | `AudioVideoViewModel` |
+| 7 | "Chat" | no | `ChatViewModelFactory` | `ChatViewModel` |
+| 8 | "Notifications" | no | `NotificationSettingsViewModelFactory` | `NotificationSettingsViewModel` |
+| 9 | "Theme" | no | `ChangeThemeViewModelFactory` | `ChangeThemeViewModel` |
+| 10 | "Keybindings" | no | `KeybindingsViewModelFactory` | `KeybindingsViewModel` |
+| 11 | "Streamer Mode" | no | `StreamerModeSettingsViewModelFactory` | `StreamerModeSettingsViewModel` |
+| 12 | "Windows" | no | `WindowsSettingsViewModelFactory` | `WindowsSettingsViewModel` |
+| 13 | "Game Overlay" | no | `GameOverlaySettingsViewModelFactory` | `GameOverlaySettingsViewModel` |
+| 14 | "Advanced" | no | `AdvancedSettingsViewModelFactory` | `AdvancedSettingsViewModel` |
+
+Each clickable item has a private `MenuItemPageContainerViewModel?` field and subscribes to its `MenuItemSelected` event. When selected, the handler calls `container.Navigator.Push(factory.Create())` to push the settings page VM onto that container's navigation stack.
+
+Commands:
+- `CloseViewModelCommand` — checks all containers for `HasPendingChanges`; if any, pushes `DiscardChangesViewModel`; otherwise sends `PopViewModelFromStackMessage`
+- `ShowSignOutConfirmationViewModelCommand` — pushes `SignOutConfirmationViewModel` to the global stack
+- `CopySystemInfoCommand` — copies "Root Version: X\nSystem Info: Y" to clipboard
+- `CheckForUpdatesCommand` — async, calls `RootInstallationManager.CheckAndDownloadAsync()`
+
+Footer: `SidePanelFooter` contains a version info button ("Root Version: X" / "System Info: Y", TextTertiary 10px, ClickToCopy tooltip) + "Check for Updates" link (Link color, 10px).
+
+### ProfileSettingsView (714 lines, UI.Home.SystemTray.Profile.Settings)
+
+The View for `ProfileSettingsViewModel`. Wraps a `RootSettingsContainer` inside a `RootBorder`.
+
+```
+RootBorder (named: "MainBorder", Border=DynamicResource("Border"), bg=BackgroundPrimary)
+└── RootSettingsContainer (MenuWidth=250)
+    ├── MenuItemPageContainers ← binding to VM.MenuItemPageContainers
+    ├── CloseViewModelCommand ← binding to VM.CloseViewModelCommand
+    ├── ListHeader = ContentControl
+    │   └── Grid (3 cols: Star | 12px | Auto)
+    │       ├── RootImageLoader (40x40, CornerRadius=6, profile pic)
+    │       └── Grid (col 2, 2 rows)
+    │           ├── TextBlock (username, 14px, Medium, TextPrimary)
+    │           └── StackPanel (row 1, Horizontal)
+    │               ├── Border (6x6 online status dot, MultiBinding → color converter)
+    │               └── TextBlock (status text, 12px, FontWeight=450)
+    ├── ListFooter = ContentControl
+    │   └── Button (.BorderButton, white bg/border, SignOut icon + text)
+    └── SidePanelFooter = ContentControl
+        └── StackPanel
+            ├── Button (.BorderButton, BackgroundSecondary, Border, version info)
+            └── RootLinkButton ("Check for Updates", Link color, 10px)
+```
+
+**Key binding chain for header back arrow:**
+`RootSettingsContainer.SelectedMenuItemPageContainer` → `.Navigator` → `.CanGoBack` → back button `IsVisible` (compiled binding, no FallbackValue).
+When `SelectedMenuItemPageContainer` is null (ListBox deselected, `SelectedIndex = -1`), the binding fails and `IsVisible` falls back to its Avalonia property default (`true`) — causing the back arrow to appear. This is the root cause of the back-arrow glitch when Uprooted deselects the ListBox to show injected content. Setting `IsVisible = false` via reflection doesn't work because the compiled binding overwrites it on next evaluation. The fix is the collapse pattern: zero Opacity/MaxWidth/MaxHeight/Width/Margin (no bindings on these properties). See `research/SETTINGS_HEADER_BINDINGS.md` for full details.
+
+### Settings Page Catalog
+
+All 14 settings pages discovered from ILSpy decompilation (all implement `IPage`):
+
+| Page | View Lines | VM Lines | Key DataStore Keys / Features |
+|------|----------:|--------:|-------------------------------|
+| Edit Profile | 476 | 254 | Display name, bio, avatar upload, change password nav |
+| Privacy | 1,179 | 204 | Online status, read receipts, typing indicators, DM permissions |
+| Blocked Users | 238 | 40 | Blocked user list with unblock |
+| Audio/Video | 1,553 | 459 | Input/output device, voice activity, push-to-talk, noise suppression, video preview |
+| Chat | 424 | 116 | AutoConvertEmojis, TapToReply (via ILocalDataStore) |
+| Notifications | 675 | 207 | Enable/disable, sounds, flash taskbar, DND |
+| Theme | 815 | 55 | RadioButton per theme variant, preview SVGs |
+| Keybindings | 541 | 136 | Categories, keybind editor, reset all |
+| Streamer Mode | 1,118 | 261 | Auto-detect, hide personal info, disable sounds |
+| Windows | 290 | 63 | Minimize to tray, startup behavior |
+| Game Overlay | 1,070 | 313 | Position, opacity, keybindings, notification settings |
+| Advanced | 423 | 139 | Developer mode options, clipboard diagnostics |
 
 ---
 

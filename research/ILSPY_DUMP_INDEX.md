@@ -9,7 +9,7 @@
 > Source: ILSpy decompilation of Root v0.9.92 and its Avalonia dependencies.
 > Each file preserves original ILSpy comments (assembly version, full namespace path).
 
-**Total:** 219 files, 145,326 lines, 9.0 MB
+**Total:** 273 files, 159,149 lines, 9.7 MB
 
 **Already analyzed into docs:** Files marked with a checkmark have been distilled into [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) or [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md). The raw dumps remain the authoritative source — the docs are curated summaries.
 
@@ -21,7 +21,7 @@
 
 | Assembly | Version | Files | Description |
 |----------|---------|-------|-------------|
-| `RootApp.Client.Avalonia` | 0.9.92.0 | 196 | Main UI assembly — views, styles, themes, controls, settings, navigation |
+| `RootApp.Client.Avalonia` | 0.9.92.0 | 250 | Main UI assembly — views, styles, themes, controls, settings, navigation |
 | `RootApp.Client.Domain` | 0.9.92.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
 | `RootApp.Client.CoreDomain` | 0.9.92.0 | 4 | Core domain (IRootSessionAccessor, RootSessionAccessor, RootSession, RootSessionFactory) |
 | `Root` | 0.9.92.0 | 1 | Root.exe entry point |
@@ -163,12 +163,67 @@ RootApp.Client.Avalonia
 │   │   ├── PrivacyBlockedActionView                 → PrivacyBlockedActionView.cs
 │   │   ├── PrivacyBlockedActionViewModel            → PrivacyBlockedActionViewModel.cs
 │   │   ├── PrivacyBlockedActionViewModelFactory     → PrivacyBlockedActionViewModelFactory.cs
-│   │   └── SystemTray.Profile.Settings
-│   │       ├── ChangeThemeView                      → ChangeThemeView.cs
-│   │       ├── ChangeThemeViewModel                 → ChangeThemeViewModel.cs
-│   │       ├── ChangeThemeViewModelFactory          → ChangeThemeViewModelFactory.cs
-│   │       ├── ChatView                             → ChatView.cs
-│   │       └── ChatViewModel                        → ChatViewModel.cs
+│   │   └── SystemTray.Profile
+│   │       ├── BlockUserConfirmationView            → BlockUserConfirmationView.cs
+│   │       ├── BlockUserConfirmationViewModel       → BlockUserConfirmationViewModel.cs
+│   │       ├── BlockUserConfirmationViewModelFactory → BlockUserConfirmationViewModelFactory.cs
+│   │       ├── ProfileView                          → ProfileView.cs
+│   │       ├── ProfileViewModel                     → ProfileViewModel.cs
+│   │       ├── ProfileViewModelFactory              → ProfileViewModelFactory.cs
+│   │       ├── SignOutConfirmationView              → SignOutConfirmationView.cs
+│   │       ├── SignOutConfirmationViewModel         → SignOutConfirmationViewModel.cs
+│   │       ├── SignOutConfirmationViewModelFactory  → SignOutConfirmationViewModelFactory.cs
+│   │       └── Settings
+│   │           ├── AdvancedSettingsView             → AdvancedSettingsView.cs
+│   │           ├── AdvancedSettingsViewModel        → AdvancedSettingsViewModel.cs
+│   │           ├── AdvancedSettingsViewModelFactory → AdvancedSettingsViewModelFactory.cs
+│   │           ├── AudioVideoView                   → AudioVideoView.cs
+│   │           ├── AudioVideoViewModel              → AudioVideoViewModel.cs
+│   │           ├── AudioVideoViewModelFactory       → AudioVideoViewModelFactory.cs
+│   │           ├── BlockedUsersView                 → BlockedUsersView.cs
+│   │           ├── BlockedUsersViewModel            → BlockedUsersViewModel.cs
+│   │           ├── BlockedUsersViewModelFactory     → BlockedUsersViewModelFactory.cs
+│   │           ├── BlockedUserView                  → BlockedUserView.cs
+│   │           ├── BlockedUserViewModel             → BlockedUserViewModel.cs
+│   │           ├── BlockedUserViewModelFactory      → BlockedUserViewModelFactory.cs
+│   │           ├── ChangePasswordView               → ChangePasswordView.cs
+│   │           ├── ChangePasswordViewModel          → ChangePasswordViewModel.cs
+│   │           ├── ChangePasswordViewModelFactory   → ChangePasswordViewModelFactory.cs
+│   │           ├── ChangePasswordViewModelValidator → ChangePasswordViewModelValidator.cs
+│   │           ├── ChangeThemeView                  → ChangeThemeView.cs
+│   │           ├── ChangeThemeViewModel             → ChangeThemeViewModel.cs
+│   │           ├── ChangeThemeViewModelFactory      → ChangeThemeViewModelFactory.cs
+│   │           ├── ChatView                         → ChatView.cs
+│   │           ├── ChatViewModel                    → ChatViewModel.cs
+│   │           ├── ChatViewModelFactory             → ChatViewModelFactory.cs
+│   │           ├── EditProfileView                  → EditProfileView.cs
+│   │           ├── EditProfileViewModel             → EditProfileViewModel.cs
+│   │           ├── EditProfileViewModelFactory      → EditProfileViewModelFactory.cs
+│   │           ├── EditProfileViewModelValidator    → EditProfileViewModelValidator.cs
+│   │           ├── GameOverlaySettingsView          → GameOverlaySettingsView.cs
+│   │           ├── GameOverlaySettingsViewModel     → GameOverlaySettingsViewModel.cs
+│   │           ├── GameOverlaySettingsViewModelFactory → GameOverlaySettingsViewModelFactory.cs
+│   │           ├── KeybindingCategoryViewModel      → KeybindingCategoryViewModel.cs
+│   │           ├── KeybindingItemViewModel          → KeybindingItemViewModel.cs
+│   │           ├── KeybindingsView                  → KeybindingsView.cs
+│   │           ├── KeybindingsViewModel             → KeybindingsViewModel.cs
+│   │           ├── KeybindingsViewModelFactory      → KeybindingsViewModelFactory.cs
+│   │           ├── NotificationSettingsView         → NotificationSettingsView.cs
+│   │           ├── NotificationSettingsViewModel    → NotificationSettingsViewModel.cs
+│   │           ├── NotificationSettingsViewModelFactory → NotificationSettingsViewModelFactory.cs
+│   │           ├── PrivacySettingsView              → PrivacySettingsView.cs
+│   │           ├── PrivacySettingsViewModel         → PrivacySettingsViewModel.cs
+│   │           ├── PrivacySettingsViewModelFactory  → PrivacySettingsViewModelFactory.cs
+│   │           ├── ProfileSettingsView              → ProfileSettingsView.cs
+│   │           ├── ProfileSettingsViewModel         → ProfileSettingsViewModel.cs
+│   │           ├── ProfileSettingsViewModelFactory  → ProfileSettingsViewModelFactory.cs
+│   │           ├── SessionUserMirror                → SessionUserMirror.cs
+│   │           ├── StreamerModeSettingsView         → StreamerModeSettingsView.cs
+│   │           ├── StreamerModeSettingsViewModel    → StreamerModeSettingsViewModel.cs
+│   │           ├── StreamerModeSettingsViewModelFactory → StreamerModeSettingsViewModelFactory.cs
+│   │           ├── WindowsSettingsView              → WindowsSettingsView.cs
+│   │           ├── WindowsSettingsViewModel         → WindowsSettingsViewModel.cs
+│   │           └── WindowsSettingsViewModelFactory  → WindowsSettingsViewModelFactory.cs
 │   ├── Main
 │   │   ├── ConnectionBlockingView                   → ConnectionBlockingView.cs
 │   │   ├── ConnectionBlockingViewModel              → ConnectionBlockingViewModel.cs
@@ -270,32 +325,48 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | File | Lines | Namespace | Analyzed | Description |
 |------|------:|-----------|:--------:|-------------|
 | `MessageView.cs` | 3,602 | `UI.Messages.MessageView` | Y | Chat message control — named controls, updateBackgroundColor(), action bar, context menu, mention/hover highlights, role colors |
+| `AudioVideoView.cs` | 1,553 | `UI.Home.SystemTray.Profile.Settings.AudioVideoView` | N | Settings > Audio/Video page — input/output device, voice activity, push-to-talk, noise suppression, video preview |
 | `MemberProfileView.cs` | 1,582 | `UI.Members.MemberProfileView` | Y | Member profile popup — avatar, badges, online status, notes, quick message, action buttons |
 | `MembersView.cs` | 1,319 | `UI.Community.Members.MembersView` | N | Community members panel |
 | `HomeView.cs` | 1,280 | `UI.Home.HomeView` | partial | Main view after login — grid (3 rows: header, TabsControl, RootSplitView), pane bindings, SplitView structure documented in AVALONIA_PATTERNS.md §HomeView Structure |
 | `CommunityTabView.cs` | 1,232 | `UI.Home.CommunityTabView` | N | Community tab — channels, chat, members |
+| `PrivacySettingsView.cs` | 1,179 | `UI.Home.SystemTray.Profile.Settings.PrivacySettingsView` | N | Settings > Privacy — online status, read receipts, typing indicators, DM permissions |
 | `CreateCommunityView.cs` | 1,156 | `UI.Moderation` | N | Create community dialog |
+| `StreamerModeSettingsView.cs` | 1,118 | `UI.Home.SystemTray.Profile.Settings.StreamerModeSettingsView` | N | Settings > Streamer Mode — auto-detect, hide personal info, disable sounds |
+| `GameOverlaySettingsView.cs` | 1,070 | `UI.Home.SystemTray.Profile.Settings.GameOverlaySettingsView` | N | Settings > Game Overlay — position, opacity, keybindings, notification settings |
+| `ProfileView.cs` | 944 | `UI.Home.SystemTray.Profile.ProfileView` | N | System tray profile panel — avatar, status, settings navigation, sign out |
 | `InviteMembersView.cs` | 841 | `UI.Moderation` | N | Invite members dialog |
 | `ChangeThemeView.cs` | 815 | `UI.Home.SystemTray.Profile.Settings.ChangeThemeView` | Y | Settings > Theme picker — RadioButton per theme, preview SVGs |
 | `MemberView.cs` | 728 | `UI.Community.Members.MemberView` | N | Single member row in members panel |
+| `ProfileSettingsView.cs` | 714 | `UI.Home.SystemTray.Profile.Settings.ProfileSettingsView` | Y | Settings > Profile — main settings hub with navigation to sub-pages |
+| `NotificationSettingsView.cs` | 675 | `UI.Home.SystemTray.Profile.Settings.NotificationSettingsView` | N | Settings > Notifications — enable/disable, sounds, flash taskbar, DND |
 | `InviteMembersLinkSettingsView.cs` | 633 | `UI.Moderation` | N | Invite link settings |
+| `ChangePasswordView.cs` | 596 | `UI.Home.SystemTray.Profile.Settings.ChangePasswordView` | N | Settings > Change Password — current/new/confirm fields, validation |
 | `BanMemberView.cs` | 594 | `UI.Moderation.BanMemberView` | N | Ban member dialog |
 | `MemberInviteView.cs` | 584 | `UI.Community.Members.MemberInviteView` | N | Member invite row |
+| `KeybindingsView.cs` | 541 | `UI.Home.SystemTray.Profile.Settings.KeybindingsView` | N | Settings > Keybindings — category list, keybind editor, reset all |
 | `DirectMessageTabView.cs` | 522 | `UI.Home.DirectMessageTabView` | N | DM tab — conversation list, DM chat |
+| `EditProfileView.cs` | 476 | `UI.Home.SystemTray.Profile.Settings.EditProfileView` | N | Settings > Edit Profile — display name, bio, avatar upload |
 | `ChatView.cs` | 424 | `UI.Home.SystemTray.Profile.Settings.ChatView` | partial | Settings > Chat page: emoji toggle, tap-to-reply toggle |
+| `AdvancedSettingsView.cs` | 423 | `UI.Home.SystemTray.Profile.Settings.AdvancedSettingsView` | N | Settings > Advanced (Developer Mode) — debug options, clipboard diagnostics |
 | `MemberCheckBoxView.cs` | 418 | `UI.Community.Members.MemberCheckBoxView` | N | Member checkbox row (role assignment) |
 | `ChannelStartMessageView.cs` | 352 | `UI.Messages.ChannelStartMessageView` | N | "Welcome to #channel" start message |
 | `MainWindow.cs` | 317 | `UI.Main.MainWindow` | Y | Top-level window — title bar, tray icon, close/minimize behavior |
+| `WindowsSettingsView.cs` | 290 | `UI.Home.SystemTray.Profile.Settings.WindowsSettingsView` | N | Settings > Windows — minimize to tray, startup behavior |
 | `MenuItemPageContainerView.cs` | 281 | `Controls.Settings.MenuItemPageContainerView` | N | Settings page container with menu navigation |
 | `MainView.cs` | 259 | `UI.Main.MainView` | Y | Main content shell — hosts RootSplitView, navigation |
 | `MemberPickerView.cs` | 247 | `UI.Community.Members.MemberPickerView` | N | Member picker (search + select) |
+| `BlockedUsersView.cs` | 238 | `UI.Home.SystemTray.Profile.Settings.BlockedUsersView` | N | Settings > Blocked Users — blocked user list with unblock |
+| `BlockedUserView.cs` | 225 | `UI.Home.SystemTray.Profile.Settings.BlockedUserView` | N | Single blocked user row — avatar, name, unblock button |
 | `MemberGroupView.cs` | 187 | `UI.Community.Members.MemberGroupView` | N | Member group header in members panel |
 | `NewTabView.cs` | 165 | `UI.Home.NewTabView` | N | "New Tab" creation page |
 | `TransferOwnershipView.cs` | 161 | `UI.Moderation` | N | Transfer community ownership dialog |
 | `DeleteCommunityView.cs` | 159 | `UI.Moderation` | N | Delete community dialog |
 | `EnterVerificationCodeView.cs` | 151 | `UI.Moderation` | N | Verification code entry |
+| `BlockUserConfirmationView.cs` | 150 | `UI.Home.SystemTray.Profile.BlockUserConfirmationView` | N | Block user confirmation dialog |
 | `KickMemberView.cs` | 138 | `UI.Moderation` | N | Kick member dialog |
 | `LeaveCommunityView.cs` | 137 | `UI.Moderation` | N | Leave community dialog |
+| `SignOutConfirmationView.cs` | 130 | `UI.Home.SystemTray.Profile.SignOutConfirmationView` | N | Sign out confirmation dialog |
 | `PrivacyBlockedActionView.cs` | 129 | `UI.Home.PrivacyBlockedActionView` | N | Privacy blocked action banner |
 | `ConnectionBlockingView.cs` | 91 | `UI.Main.ConnectionBlockingView` | N | Connection blocked / offline banner |
 | `StreamerModeBanner.cs` | 202 | `Controls.StreamerModeBanner` | N | Streamer mode notification banner |
@@ -309,34 +380,53 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `MessageViewModel.cs` | 786 | `UI.Messages.MessageViewModel` | partial | Message data: HasSelfMention, HasLocalPendingReply, content, timestamps, edit state |
 | `CommunityTabViewModel.cs` | 678 | `UI.Home.CommunityTabViewModel` | N | Community tab VM — channel lists, members, chat |
 | `CreateCommunityViewModel.cs` | 464 | `UI.Moderation` | N | Create community VM |
+| `AudioVideoViewModel.cs` | 459 | `UI.Home.SystemTray.Profile.Settings.AudioVideoViewModel` | N | Settings > Audio/Video VM — device selection, voice settings, push-to-talk, noise suppression |
 | `MembersViewModel.cs` | 450 | `UI.Community.Members.MembersViewModel` | N | Members panel VM — member list, filters |
 | `MemberProfileViewModel.cs` | 408 | `UI.Members.MemberProfileViewModel` | Y | Member profile VM — BadgeDisplays, IsSelf, Roles, commands |
 | `MainViewModel.cs` | 400 | `UI.Main.MainViewModel` | Y | Top-level VM — DataContext chain root, navigation, DI container |
+| `ProfileSettingsViewModel.cs` | 382 | `UI.Home.SystemTray.Profile.Settings.ProfileSettingsViewModel` | Y | Settings > Profile VM — main settings hub, navigation to sub-pages |
 | `InviteMembersViewModel.cs` | 363 | `UI.Moderation` | N | Invite members VM |
 | `DirectMessageTabViewModel.cs` | 340 | `UI.Home.DirectMessageTabViewModel` | N | DM tab VM — DM list, conversation management |
+| `GameOverlaySettingsViewModel.cs` | 313 | `UI.Home.SystemTray.Profile.Settings.GameOverlaySettingsViewModel` | N | Settings > Game Overlay VM — overlay position, opacity, keybinds |
+| `StreamerModeSettingsViewModel.cs` | 261 | `UI.Home.SystemTray.Profile.Settings.StreamerModeSettingsViewModel` | N | Settings > Streamer Mode VM — auto-detect, hide personal info |
+| `EditProfileViewModel.cs` | 254 | `UI.Home.SystemTray.Profile.Settings.EditProfileViewModel` | N | Settings > Edit Profile VM — display name, bio, avatar |
 | `MemberInviteViewModel.cs` | 207 | `UI.Community.Members.MemberInviteViewModel` | N | Member invite VM |
+| `NotificationSettingsViewModel.cs` | 207 | `UI.Home.SystemTray.Profile.Settings.NotificationSettingsViewModel` | N | Settings > Notifications VM — enable/disable, sounds, DND |
+| `PrivacySettingsViewModel.cs` | 204 | `UI.Home.SystemTray.Profile.Settings.PrivacySettingsViewModel` | N | Settings > Privacy VM — online status, read receipts, typing, DM permissions |
 | `MemberViewModel.cs` | 200 | `UI.Community.Members.MemberViewModel` | N | Single member VM |
 | `InviteMembersLinkSettingsViewModel.cs` | 183 | `UI.Moderation` | N | Invite link settings VM |
+| `ChangePasswordViewModel.cs` | 178 | `UI.Home.SystemTray.Profile.Settings.ChangePasswordViewModel` | N | Settings > Change Password VM — current/new/confirm, validation |
+| `ProfileViewModel.cs` | 144 | `UI.Home.SystemTray.Profile.ProfileViewModel` | N | System tray profile panel VM — avatar, status, settings nav |
+| `AdvancedSettingsViewModel.cs` | 139 | `UI.Home.SystemTray.Profile.Settings.AdvancedSettingsViewModel` | N | Settings > Advanced VM — developer mode options |
+| `KeybindingItemViewModel.cs` | 139 | `UI.Home.SystemTray.Profile.Settings.KeybindingItemViewModel` | N | Single keybinding item — key capture, reset |
+| `KeybindingsViewModel.cs` | 136 | `UI.Home.SystemTray.Profile.Settings.KeybindingsViewModel` | N | Settings > Keybindings VM — categories, keybind editor |
 | `MenuItemPageContainerViewModel.cs` | 135 | `Controls.Settings.MenuItemPageContainerViewModel` | Y | Settings page container VM — page navigation, menu item selection |
-| `TransferOwnershipViewModel.cs` | 126 | `UI.Moderation` | N | Transfer ownership VM |
 | `DeleteCommunityViewModel.cs` | 134 | `UI.Moderation` | N | Delete community VM |
+| `TransferOwnershipViewModel.cs` | 126 | `UI.Moderation` | N | Transfer ownership VM |
 | `EnterVerificationCodeViewModel.cs` | 125 | `UI.Moderation` | N | Verification code VM |
 | `ChatViewModel.cs` | 116 | `UI.Home.SystemTray.Profile.Settings.ChatViewModel` | Y | Settings > Chat VM: AutoConvertEmojis, TapToReply (IPage, DataStore) |
 | `BanMemberViewModel.cs` | 115 | `UI.Moderation.BanMemberViewModel` | N | Ban member VM |
 | `DirectMessageOpenerService.cs` | 109 | `Helpers.Navigation.DirectMessageOpenerService` | Y | DM opener — DotNetBrowser discovery chain link |
 | `ViewModelBase_T_.cs` | 107 | `ViewModelBase<T>` | N | Generic ViewModel base class |
 | `LeaveCommunityViewModel.cs` | 100 | `UI.Moderation` | N | Leave community VM |
+| `BlockUserConfirmationViewModel.cs` | 94 | `UI.Home.SystemTray.Profile.BlockUserConfirmationViewModel` | N | Block user confirmation VM |
 | `KickMemberViewModel.cs` | 93 | `UI.Moderation` | N | Kick member VM |
+| `BlockedUserViewModel.cs` | 93 | `UI.Home.SystemTray.Profile.Settings.BlockedUserViewModel` | N | Single blocked user VM — unblock command |
 | `MemberCheckBoxViewModel.cs` | 83 | `UI.Community.Members.MemberCheckBoxViewModel` | N | Member checkbox VM |
 | `MemberPickerViewModel.cs` | 84 | `UI.Community.Members.MemberPickerViewModel` | N | Member picker VM |
 | `StreamerModeBannerViewModel.cs` | 67 | `Controls.StreamerModeBannerViewModel` | N | Streamer mode toggle state |
+| `WindowsSettingsViewModel.cs` | 63 | `UI.Home.SystemTray.Profile.Settings.WindowsSettingsViewModel` | N | Settings > Windows VM — minimize to tray, startup |
 | `CommunityOpenerService.cs` | 60 | `Helpers.Navigation.CommunityOpenerService` | N | Community navigation service |
+| `SignOutConfirmationViewModel.cs` | 57 | `UI.Home.SystemTray.Profile.SignOutConfirmationViewModel` | N | Sign out confirmation VM |
 | `ChangeThemeViewModel.cs` | 55 | `UI.Home.SystemTray.Profile.Settings.ChangeThemeViewModel` | Y | Theme picker VM |
 | `VoiceCallMemberAvatarViewModel.cs` | 53 | `UI.Home` | N | Voice call avatar VM |
 | `NewTabViewModel.cs` | 49 | `UI.Home.NewTabViewModel` | N | New tab VM |
 | `MemberGroupViewModel.cs` | 47 | `UI.Community.Members.MemberGroupViewModel` | N | Member group VM |
+| `BlockedUsersViewModel.cs` | 40 | `UI.Home.SystemTray.Profile.Settings.BlockedUsersViewModel` | N | Settings > Blocked Users VM — list management |
 | `PrivacyBlockedActionViewModel.cs` | 37 | `UI.Home.PrivacyBlockedActionViewModel` | N | Privacy blocked VM |
+| `KeybindingCategoryViewModel.cs` | 35 | `UI.Home.SystemTray.Profile.Settings.KeybindingCategoryViewModel` | N | Keybinding category header VM |
 | `ChannelStartMessageViewModel.cs` | 17 | `UI.Messages.ChannelStartMessageViewModel` | Y | Thin wrapper: exposes Message property |
+| `SessionUserMirror.cs` | 15 | `UI.Home.SystemTray.Profile.Settings.SessionUserMirror` | N | Wraps SessionUser — observable mirror for profile display |
 | `ConnectionBlockingViewModel.cs` | 14 | `UI.Main.ConnectionBlockingViewModel` | N | Connection blocking state |
 
 ### ViewModel Factories
@@ -345,13 +435,20 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 |------|------:|-----------|:--------:|-------------|
 | `HomeViewModelFactory.cs` | 29 | `UI.Home` | N | DI factory |
 | `MainViewModelFactory.cs` | 24 | `UI.Main` | N | DI factory |
+| `EditProfileViewModelValidator.cs` | 23 | `UI.Home.SystemTray.Profile.Settings` | N | Validation rules (display name, bio) |
 | `MemberProfileViewModelFactory.cs` | 22 | `UI.Members` | N | DI factory |
 | `CommunityTabViewModelFactory.cs` | 22 | `UI.Home` | N | DI factory |
 | `CreateCommunityViewModelValidator.cs` | 20 | `UI.Moderation` | N | Validation rules |
 | `MembersViewModelFactory.cs` | 19 | `UI.Community.Members` | N | DI factory |
+| `ProfileViewModelFactory.cs` | 19 | `UI.Home.SystemTray.Profile` | N | DI factory (ProfileView) |
+| `ProfileSettingsViewModelFactory.cs` | 18 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory (ProfileSettingsView) |
 | `DirectMessageTabViewModelFactory.cs` | 18 | `UI.Home` | N | DI factory |
+| `ChangePasswordViewModelValidator.cs` | 17 | `UI.Home.SystemTray.Profile.Settings` | N | Validation rules (password change) |
 | `InviteMembersViewModelFactory.cs` | 17 | `UI.Moderation` | N | DI factory |
 | `InviteMembersLinkSettingsViewModelFactory.cs` | 16 | `UI.Moderation` | N | DI factory |
+| `AudioVideoViewModelFactory.cs` | 16 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `BlockedUserViewModelFactory.cs` | 16 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `EditProfileViewModelFactory.cs` | 16 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
 | `MemberCheckBoxViewModelFactory.cs` | 16 | `UI.Community.Members` | N | DI factory |
 | `MemberInviteViewModelFactory.cs` | 16 | `UI.Community.Members` | N | DI factory |
 | `MemberPickerViewModelFactory.cs` | 16 | `UI.Community.Members` | N | DI factory |
@@ -360,17 +457,29 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `DeleteCommunityViewModelFactory.cs` | 16 | `UI.Moderation` | N | DI factory |
 | `LeaveCommunityViewModelFactory.cs` | 16 | `UI.Moderation` | N | DI factory |
 | `NewTabViewModelFactory.cs` | 15 | `UI.Home` | N | DI factory |
+| `AdvancedSettingsViewModelFactory.cs` | 15 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `BlockUserConfirmationViewModelFactory.cs` | 15 | `UI.Home.SystemTray.Profile` | N | DI factory |
 | `CreateCommunityViewModelFactory.cs` | 15 | `UI.Moderation` | N | DI factory |
 | `EnterVerificationCodeViewModelValidator.cs` | 15 | `UI.Moderation` | N | Validation rules |
 | `TransferOwnershipViewModelFactory.cs` | 14 | `UI.Moderation` | N | DI factory |
 | `TransferOwnershipViewModelValidator.cs` | 14 | `UI.Moderation` | N | Validation rules |
+| `ChatViewModelFactory.cs` | 14 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `GameOverlaySettingsViewModelFactory.cs` | 14 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `KeybindingsViewModelFactory.cs` | 14 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `NotificationSettingsViewModelFactory.cs` | 14 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
 | `BanMemberViewModelFactory.cs` | 14 | `UI.Moderation` | N | DI factory |
 | `DeleteCommunityViewModelValidator.cs` | 14 | `UI.Moderation` | N | Validation rules |
 | `EnterVerificationCodeViewModelFactory.cs` | 14 | `UI.Moderation` | N | DI factory |
 | `KickMemberViewModelFactory.cs` | 14 | `UI.Moderation` | N | DI factory |
+| `BlockedUsersViewModelFactory.cs` | 13 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `ChangePasswordViewModelFactory.cs` | 13 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `PrivacySettingsViewModelFactory.cs` | 13 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
+| `SignOutConfirmationViewModelFactory.cs` | 13 | `UI.Home.SystemTray.Profile` | N | DI factory |
+| `StreamerModeSettingsViewModelFactory.cs` | 13 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
 | `MemberGroupViewModelFactory.cs` | 13 | `UI.Community.Members` | N | DI factory |
 | `VoiceCallMemberAvatarViewModelFactory.cs` | 13 | `UI.Home` | N | DI factory |
 | `ConnectionBlockingViewModelFactory.cs` | 12 | `UI.Main` | N | DI factory |
+| `WindowsSettingsViewModelFactory.cs` | 12 | `UI.Home.SystemTray.Profile.Settings` | N | DI factory |
 | `ChangeThemeViewModelFactory.cs` | 10 | `UI.Home.SystemTray.Profile.Settings` | Y | DI factory for ChangeThemeViewModel |
 
 ### Custom Controls
@@ -600,16 +709,16 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 
 | Document | Source Dumps |
 |----------|-------------|
-| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, ChangeThemeViewModelFactory, ChannelStartMessageViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, ViewFactory, CheckBox, Style_CheckBox, Style_ComboBoxItem, Style_ListBox, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService, CInline, CRun, CSpan, CHyperlink, CCode, CImage, CTextBlock, MemberProfileView, MemberProfileViewModel |
+| [ROOT_CONTROL_REFERENCE.md](../docs/framework/ROOT_CONTROL_REFERENCE.md) | MessageView, MessageViewModel, ChatView, ChatViewModel, ChangeThemeView, ChangeThemeViewModel, ChangeThemeViewModelFactory, ChannelStartMessageViewModel, RootBorder, ThemeService, ThemeMapper, RootThemeEnum, ThemeToBoolConverter, DataStoreKeys, Program, App, ViewFactory, CheckBox, Style_CheckBox, Style_ComboBoxItem, Style_ListBox, Style_ListBoxItem, Style_SvgButton, Style_BorderButton, Style_TransparentButton, Style_ScrollViewer, Style_TabItem, Style_MessageMarkdown, Style_RootSplitView (partial), MainWindow, MainView, MainViewModel, RootSettingsContainer, SaveChangesView, IPage, MenuItemPageContainerViewModel, RootMessageItemsControl, RootMenuFlyout, ILocalDataStore, LocalDataStore, LocalDataStoreExtensions, SecureStorageImplementation, Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService, CInline, CRun, CSpan, CHyperlink, CCode, CImage, CTextBlock, MemberProfileView, MemberProfileViewModel, ProfileSettingsView, ProfileSettingsViewModel |
 | [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md) | ThemesDarkAxaml, ThemesLightAxaml, ThemesPureDarkAxaml |
 | [THEME_ENGINE_DEEP_DIVE.md](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | ThemeService, ThemeMapper, SimpleTheme (partial) |
 
 ---
 
-*Last updated: 2026-02-19 — 219 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Full inventory: Views (31), ViewModels (33), VM Factories (29), Custom Controls (30), Markdown (18), Settings (6), Data Store (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infrastructure (7), Interfaces (3), Avalonia Framework (4), AvaloniaEdit (3), Resources (2), XAML Infrastructure (9).*
+*Last updated: 2026-02-20 — 273 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Full inventory: Views (47), ViewModels (52), VM Factories (49), Custom Controls (30), Markdown (18), Settings (6), Data Store (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infrastructure (7), Interfaces (3), Avalonia Framework (4), AvaloniaEdit (3), Resources (2), XAML Infrastructure (9).*
 
 ---
 
-**Canonical for:** ILSpy dump file inventory (219 files, 145K lines), analysis status tracking, source assembly mapping
+**Canonical for:** ILSpy dump file inventory (273 files, 159K lines), analysis status tracking, source assembly mapping
 **Not canonical for:** curated control reference → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) | theme key values → [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md)
-*ILSpy dump index. Last updated 2026-02-19.*
+*ILSpy dump index. Last updated 2026-02-20.*

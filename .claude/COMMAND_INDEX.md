@@ -52,15 +52,15 @@ Two hooks are configured:
 
 A prompt hook on `Write|Edit` that blocks code changes violating Uprooted's critical rules before they land. Catches:
 
-| # | Pattern | Why it's blocked |
-|---|---------|-----------------|
-| 1 | `Type.GetType(` in C# | Fails silently in single-file .NET — use `AvaloniaReflection` |
-| 2 | `typeof(Avalonia` in C# | Same reason — use reflection cache |
-| 3 | `System.Text.Json` / `JsonSerializer` in C# | `MissingMethodException` in profiler context |
-| 4 | `.AddEventHandler(` on RoutedEvents | Incompatible with Avalonia — use `Expression.Lambda` |
-| 5 | `.Content =` on ContentControl | Freezes UI permanently — use Grid overlay |
-| 6 | `Enum.Parse` for `DispatcherPriority` | It's a struct, not enum in Avalonia 11+ |
-| 7 | `localStorage.` in TypeScript | Root runs `--incognito`, data is wiped every launch |
+| #   | Pattern                                     | Why it's blocked                                              |
+| --- | ------------------------------------------- | ------------------------------------------------------------- |
+| 1   | `Type.GetType(` in C#                       | Fails silently in single-file .NET — use `AvaloniaReflection` |
+| 2   | `typeof(Avalonia` in C#                     | Same reason — use reflection cache                            |
+| 3   | `System.Text.Json` / `JsonSerializer` in C# | `MissingMethodException` in profiler context                  |
+| 4   | `.AddEventHandler(` on RoutedEvents         | Incompatible with Avalonia — use `Expression.Lambda`          |
+| 5   | `.Content =` on ContentControl              | Freezes UI permanently — use Grid overlay                     |
+| 6   | `Enum.Parse` for `DispatcherPriority`       | It's a struct, not enum in Avalonia 11+                       |
+| 7   | `localStorage.` in TypeScript               | Root runs `--incognito`, data is wiped every launch           |
 
 Responds `APPROVE` or `BLOCK: [rule] [explanation]`. 15s timeout.
 
@@ -70,20 +70,20 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 
 ### Commands
 
-| Command | Purpose | When to use |
-|---------|---------|-------------|
-| `/hi` | Two-phase onboard: orient in codebase, then ask what's planned and deep-read all relevant docs | Start of a new session (first time) |
-| `/ok` | **Doc sweep:** update session state, changelog, tasks, NEW-SESSION, CLAUDE.md to match committed code | After committing and pushing work |
-| `/build-hook` | `dotnet build hook/ -c Release` | Quick build check after C# changes |
-| `/build-installer` | Console TUI installer (`cargo build --release`) | After modifying installer or before release |
-| `/deploy` | Build C# hook + deploy to local Root installation | Core dev loop: edit → build → deploy → test |
-| `/inject` | Build + close Root + deploy + relaunch (Windows only) | Native Windows: full automatic cycle |
-| `/watch-log` | Tail `uprooted-hook.log` | Debugging hook behavior at runtime |
-| `/diagnose` | Check installation health: files, env vars, HTML patches, settings, log | When something isn't working after deployment |
-| `/session-state` | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history | After a work cycle, before ending session |
-| `/nose <ver>` | Bump all version refs (with content freshness audit) | Release prep |
-| `/release <ver>` | Full release pipeline: doc sweep + version bump + build + changelog audit + commit + tag + push (two user gates) | Major/minor releases |
-| `/decomp` | Search ILSpy decompilation dumps for classes/controls/styles relevant to the current issue | Investigating Root internals for a feature or fix |
+| Command            | Purpose                                                                                                          | When to use                                       |
+| ------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| `/hi`              | Two-phase onboard: orient in codebase, then ask what's planned and deep-read all relevant docs                   | Start of a new session (first time)               |
+| `/ok`              | **Doc sweep:** update session state, changelog, tasks, NEW-SESSION, CLAUDE.md to match committed code            | After committing and pushing work                 |
+| `/build-hook`      | `dotnet build hook/ -c Release`                                                                                  | Quick build check after C# changes                |
+| `/build-installer` | Console TUI installer (`cargo build --release`)                                                                  | After modifying installer or before release       |
+| `/deploy`          | Build C# hook + deploy to local Root installation                                                                | Core dev loop: edit → build → deploy → test       |
+| `/inject`          | Build + close Root + deploy + relaunch (Windows only)                                                            | Native Windows: full automatic cycle              |
+| `/watch-log`       | Tail `uprooted-hook.log`                                                                                         | Debugging hook behavior at runtime                |
+| `/diagnose`        | Check installation health: files, env vars, HTML patches, settings, log                                          | When something isn't working after deployment     |
+| `/session-state`   | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history                                                    | After a work cycle, before ending session         |
+| `/nose <ver>`      | Bump all version refs (with content freshness audit)                                                             | Release prep                                      |
+| `/release <ver>`   | Full release pipeline: doc sweep + version bump + build + changelog audit + commit + tag + push (two user gates) | Major/minor releases                              |
+| `/decomp`          | Search ILSpy decompilation dumps for classes/controls/styles relevant to the current issue                       | Investigating Root internals for a feature or fix |
 
 **Typical workflows:**
 
@@ -110,6 +110,7 @@ Runs a structured code review against staged/modified files:
 **Trigger:** questions about architecture, injection lifecycle, critical rules, coding patterns, or work touching `hook/`, `src/`, or `installer/src-tauri/src/`.
 
 Provides:
+
 - Dual-layer architecture overview (C# hook phases, TypeScript bootstrap)
 - All 6 critical rules with explanations
 - C# and TypeScript coding patterns (from `references/` files)
@@ -120,6 +121,7 @@ Provides:
 **Trigger:** "build a plugin", "scaffold a feature", "add a settings page", "create a theme", "intercept bridge method".
 
 Provides:
+
 - File location guides for each component type
 - Step-by-step registration sequences (TypeScript plugin, C# settings page, bridge patch, theme)
 - Templates and API surfaces from `references/` files
