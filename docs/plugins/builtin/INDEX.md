@@ -29,7 +29,7 @@ These plugins run inside Root's .NET process via the CLR profiler hook and modif
 | ClearURLs | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs before sending | None | `hook/ClearUrlsEngine.cs` |
 | [Message Logger](message-logger.md) | Logs deleted messages with visual indicators | Delete/edit toggles, retention limit, ignore own messages | `hook/MessageLogger.cs`, `hook/MessageStore.cs` |
 | ContentFilter | Blurs images flagged as NSFW using Google Cloud Vision | API key, threshold | `hook/NsfwFilter.cs` |
-| Rootcord | Experimental Discord-style vertical server sidebar replacing Root's horizontal tab bar | None | `hook/RootcordEngine.cs` |
+| [Rootcord](rootcord.md) | Experimental Discord-style vertical server sidebar replacing Root's horizontal tab bar | Enable toggle | `hook/RootcordEngine.cs` |
 
 ### Core Framework (not toggleable)
 

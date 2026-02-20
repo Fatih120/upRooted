@@ -97,6 +97,12 @@ internal class RootcordEngine
     private const double IconSpacing = 4;
     private const double PillWidth = 3;
     private const double PillHeight = 20;
+    // Icon glyphs for user bar buttons (Segoe Fluent Icons / Segoe MDL2 Assets)
+    private const string GlyphFriends       = "\uE716"; // Contact / People
+    private const string GlyphMessages      = "\uE8F2"; // Message / Chat
+    private const string GlyphNotifications = "\uEA8F"; // Ringer / Bell
+    private const string GlyphSettings      = "\uE713"; // Settings gear
+    private const string GlyphIconFonts     = "Segoe Fluent Icons,Segoe MDL2 Assets,Segoe UI Symbol";
 
     public RootcordEngine(AvaloniaReflection resolver, object mainWindow, ThemeEngine? themeEngine)
     {
@@ -1511,13 +1517,14 @@ internal class RootcordEngine
             string onlineColor = "#43b581";
             string statusLabel = GetCurrentStatusLabel();
 
-            // Outer Border: 240px wide, ColSpan=2 (server strip + channel list col)
-            _userBar = _r.CreateBorder(_bg, 0);
+            // Floating card: 240px wide, 12px rounded corners, cardBg background, elevated look
+            _userBar = _r.CreateBorder(_cardBg, 12);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
             _r.SetWidth(_userBar, 240);
+            SetBorderStroke(_userBar, AdjustForHighlight(_cardBg, 22), 1.0);
 
-            // Position in HomeView Grid: Col=0, spanning all rows, bottom-aligned, ZIndex=10
+            // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
             _r.SetGridColumn(_userBar, 0);
             _r.SetGridRow(_userBar, 0);
             var rowDefs = _r.GetRowDefinitions(_homeViewGrid);
@@ -1527,27 +1534,13 @@ internal class RootcordEngine
             _r.SetGridColumnSpan(_userBar, allCols); // spans full window width so Width=240+Left renders correctly
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
+            _r.SetMargin(_userBar, 8, 0, 0, 8); // floating: 8px gap from left and bottom window edges
             _userBar.GetType().GetProperty("ZIndex")?.SetValue(_userBar, 10);
-
-            // Top separator line
-            var outerStack = _r.CreateStackPanel(vertical: true, spacing: 0);
-            if (outerStack == null) return;
-
-            var sepLine = _r.CreateBorder(AdjustForHighlight(_bg, 12), 0);
-            if (sepLine != null)
-            {
-                _r.SetHeight(sepLine, 1);
-                _r.AddChild(outerStack, sepLine);
-            }
-
-            // Inner card: 240px wide, 52px tall
-            var innerCard = _r.CreateBorder(_cardBg, 0);
-            if (innerCard == null) return;
-            _r.SetHeight(innerCard, 52);
 
             // 3-column content Grid: [56px avatar] [* text] [Auto tray]
             var contentGrid = _r.CreateGrid();
             if (contentGrid == null) return;
+            _r.SetMargin(contentGrid, 10, 6, 6, 6); // inner padding inside the floating card
 
             _r.AddGridColumn(contentGrid, 1.0); // Col 0 → will be set to 56px
             _r.AddGridColumn(contentGrid, 1.0); // Col 1 → star (fills middle)
@@ -1665,10 +1658,10 @@ internal class RootcordEngine
                 _r.SetVerticalAlignment(trayHost, "Center");
                 _r.SetMargin(trayHost, 0, 0, 4, 0);
 
-                var btnP = BuildActionButton("P", () => InvokeHomeCommand("FriendsPaneToggleCommand"));
-                var btnD = BuildActionButton("D", () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
-                var btnN = BuildActionButton("N", () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
-                var btnS = BuildActionButton("\u2699", () => InvokeHomeCommand("ProfilePaneToggleCommand")); // ⚙ Settings/gear
+                var btnP = BuildActionButton(GlyphFriends,       () => InvokeHomeCommand("FriendsPaneToggleCommand"));
+                var btnD = BuildActionButton(GlyphMessages,      () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
+                var btnN = BuildActionButton(GlyphNotifications, () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
+                var btnS = BuildActionButton(GlyphSettings,      () => InvokeHomeCommand("ProfilePaneToggleCommand"));
                 if (btnP != null) _r.AddChild(trayHost, btnP);
                 if (btnD != null) _r.AddChild(trayHost, btnD);
                 if (btnN != null) _r.AddChild(trayHost, btnN);
@@ -1677,12 +1670,10 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, trayHost);
             }
 
-            _r.SetBorderChild(innerCard, contentGrid);
-            _r.AddChild(outerStack, innerCard);
-            _r.SetBorderChild(_userBar, outerStack);
+            _r.SetBorderChild(_userBar, contentGrid);
 
             _r.AddChild(_homeViewGrid, _userBar);
-            Logger.Log(Tag, "User bar injected: 240px wide, ColSpan=2, ZIndex=10, avatar+text+4buttons");
+            Logger.Log(Tag, "User bar injected: 240px floating card, 12px corners, 8px margins, icon-glyph buttons");
         }
         catch (Exception ex)
         {
@@ -1706,27 +1697,48 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Build a small icon button for the user bar fallback mode.
+    /// Build an icon button for the user bar tray using Segoe icon font glyphs.
+    /// Falls back to a Unicode character if the icon font is unavailable.
     /// </summary>
-    private object? BuildActionButton(string label, Action onClick)
+    private object? BuildActionButton(string glyph, Action onClick)
     {
-        var btn = _r.CreateBorder(_bg, 4);
+        var btn = _r.CreateBorder("#00000000", 6);
         if (btn == null) return null;
-        _r.SetWidth(btn, 24);
-        _r.SetHeight(btn, 24);
+        _r.SetWidth(btn, 30);
+        _r.SetHeight(btn, 30);
         _r.SetCursorHand(btn);
-        var icon = _r.CreateTextBlock(label, 11, _muted);
+        var icon = _r.CreateTextBlock(glyph, 16, _muted);
         if (icon != null)
         {
             _r.SetHorizontalAlignment(icon, "Center");
             _r.SetVerticalAlignment(icon, "Center");
+            // Apply icon font chain for proper glyph rendering on Windows
+            try
+            {
+                var ffProp = icon.GetType().GetProperty("FontFamily");
+                if (ffProp != null)
+                {
+                    var ff = Activator.CreateInstance(ffProp.PropertyType, GlyphIconFonts);
+                    if (ff != null) ffProp.SetValue(icon, ff);
+                }
+            }
+            catch { /* use system default font — glyph renders as Unicode fallback */ }
             _r.SetBorderChild(btn, icon);
         }
         var btnRef = btn;
-        var hoverColor = AdjustForHighlight(_bg, 8);
+        var iconRef = icon;
+        var hoverBg = AdjustForHighlight(_cardBg, 14);
         _r.SubscribeEvent(btn, "PointerPressed", onClick);
-        _r.SubscribeEvent(btn, "PointerEntered", () => _r.SetBackground(btnRef, hoverColor));
-        _r.SubscribeEvent(btn, "PointerExited",  () => _r.SetBackground(btnRef, _bg));
+        _r.SubscribeEvent(btn, "PointerEntered", () =>
+        {
+            _r.SetBackground(btnRef, hoverBg);
+            if (iconRef != null) _r.SetForeground(iconRef, _text);
+        });
+        _r.SubscribeEvent(btn, "PointerExited", () =>
+        {
+            _r.SetBackground(btnRef, "#00000000");
+            if (iconRef != null) _r.SetForeground(iconRef, _muted);
+        });
         return btn;
     }
 
