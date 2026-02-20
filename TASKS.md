@@ -99,6 +99,8 @@ Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The r
 
 Items not yet committed to but worth tracking.
 
+- [ ] **Settings detection flash after long idle** — After 5+ minutes without touching settings, the first open shows a brief flash of Root's User Profile tab before auto-navigating to About. Rapid re-opens are instant (50ms throttle works). Likely cause: LayoutUpdated stops firing when no layout changes occur during idle, so detection falls to the 200ms timer poll. May need to investigate whether the timer is drifting or `_injecting` lock is stale after long idle periods.
+  - Files: `hook/SidebarInjector.cs`
 - [ ] Simplify user-facing descriptions on About and Themes settings tabs — current text exposes too many backend/implementation details (e.g. "ResourceDictionary overrides", "reflection"). Rewrite for end users.
   - Files: `hook/ContentPages.cs`
 - [ ] Structural fallback for settings page detection (currently depends on "APP SETTINGS" text)

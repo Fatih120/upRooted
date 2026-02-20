@@ -7,7 +7,8 @@ namespace Uprooted;
 /// Architecture:
 /// - Sidebar items injected into NavContainer StackPanel (below the ListBox)
 /// - Content pages placed directly into Root's content Panel
-/// - Back button in Row=0 is hidden when Uprooted pages are active (prevents freeze)
+/// - Back button collapsed (Opacity/MaxWidth=0, not IsVisible) when Uprooted pages are active
+///   (avoids fighting Root's IsVisible binding on SelectedMenuItemPageContainer.Navigator.CanGoBack)
 /// - DetachedFromVisualTree on LayoutContainer cleans up BEFORE recursive detach
 ///   (prevents the freeze caused by OnDetachedFromVisualTreeCore walking our ScrollViewer wrapper)
 /// </summary>
@@ -54,6 +55,7 @@ internal class SidebarInjector
     // Header state (back arrow hidden + title set when Uprooted pages active)
     private object? _backButton;                         // The back arrow RootSvgButton in header (left side)
     private bool _backButtonWasVisible = true;           // Original visibility to restore
+    private bool _backButtonCollapsed;                   // Whether we've collapsed the back button (Opacity/MaxWidth, NOT IsVisible)
     private object? _headerTitleText;                    // TextBlock in header Grid showing page title
     private string? _headerTitleOriginal;                // Original title text to restore
     private object? _closeCommand;                       // ICommand from back button (for X button behavior)
@@ -71,6 +73,7 @@ internal class SidebarInjector
     private bool _diagnosticsDone;
     private long _lastLayoutCheckMs;                       // Throttle for LayoutUpdated checks
     private bool _hasAutoNavigated;                        // Only auto-nav to About once per settings open
+    private long _selectionSuppressedUntilMs;               // Suppress Root ListBox auto-select until this tick
 
     public SidebarInjector(AvaloniaReflection resolver, object mainWindow, ThemeEngine themeEngine)
     {
@@ -228,15 +231,22 @@ internal class SidebarInjector
             return;
         }
 
-        // Throttle: 500ms when not injected — prevents freezing on large views (e.g. VC channels)
-        // that trigger many rapid LayoutUpdated events. The 200ms safety-net timer provides
-        // adequate settings-detection latency; LayoutUpdated here is just an extra fast-path.
+        // Throttle: 50ms when not injected — prevents running FindSettingsLayout on every
+        // single layout pass during animations. FindFirstTextBlockFast with 1500-node cap
+        // takes ~150μs per call; at 50ms throttle that's ~20 calls/s = 3ms/s — negligible.
+        // (Was 500ms, but that caused a visible flash of Root's default settings page on
+        // fast open/close cycles: NullState resets the throttle, a LayoutUpdated fires during
+        // the close animation burning the free check, then the 500ms window blocks detection.)
         long now = Environment.TickCount64;
-        if (now - _lastLayoutCheckMs < 500) return;
+        if (now - _lastLayoutCheckMs < 50) return;
         _lastLayoutCheckMs = now;
 
-        // Shared re-entrancy guard with timer path
-        if (Interlocked.CompareExchange(ref _injecting, 1, 0) != 0) return;
+        // No _injecting guard here: both LayoutUpdated and the timer's RunOnUIThread callback
+        // execute on the UI thread — they cannot overlap. The timer claims _injecting on its
+        // threadpool thread BEFORE posting to UI, which would block this fast-path for ~200ms
+        // until the timer callback runs and releases the lock. Skipping the guard lets
+        // LayoutUpdated inject on the same render frame; the timer callback will then see
+        // _injected=true and return harmlessly.
         try
         {
             CheckAndInject();
@@ -244,10 +254,6 @@ internal class SidebarInjector
         catch (Exception ex)
         {
             Logger.Log("Injector", $"LayoutUpdated check error: {ex.Message}");
-        }
-        finally
-        {
-            Interlocked.Exchange(ref _injecting, 0);
         }
     }
 
@@ -261,11 +267,36 @@ internal class SidebarInjector
                 int currentIdx = _r.GetSelectedIndex(_listBox);
                 if (currentIdx >= 0 && currentIdx != _lastListBoxIdx)
                 {
-                    Logger.Log("Injector", $"ListBox selection changed {_lastListBoxIdx} -> {currentIdx}");
-                    _lastListBoxIdx = currentIdx;
-                    RemoveContentPage();
-                    // New Root tab content loads with default colors — walk burst to recolor
-                    _themeEngine.ScheduleWalkBurst();
+                    // Suppress during post-injection window (Root's initial auto-select)
+                    if (Environment.TickCount64 < _selectionSuppressedUntilMs)
+                    {
+                        _r.SetSelectedIndex(_listBox, -1);
+                        // Re-deselection fires the title binding to null — restore header state
+                        if (_activePage != null)
+                        {
+                            CollapseBackButton();
+                            SetHeaderTitle(_activePage);
+                        }
+                    }
+                    else
+                    {
+                        Logger.Log("Injector", $"ListBox selection changed {_lastListBoxIdx} -> {currentIdx}");
+                        _lastListBoxIdx = currentIdx;
+                        RemoveContentPage();
+                        // New Root tab content loads with default colors — walk burst to recolor
+                        _themeEngine.ScheduleWalkBurst();
+                    }
+                }
+            }
+
+            // Back button retry: find structurally if not found during injection
+            if (_activePage != null && _backButton == null)
+            {
+                FindHeaderControls();
+                if (_backButton != null)
+                {
+                    CollapseBackButton();
+                    SetHeaderTitle(_activePage);
                 }
             }
 
@@ -393,23 +424,10 @@ internal class SidebarInjector
             });
             Logger.Log("Injector", "DetachedFromVisualTree subscribed on LayoutContainer");
 
-            // Step 1c: Store back button reference if found (may be null -- back button
-            // only appears AFTER we deselect the ListBox in OnNavItemClicked).
-            // We'll re-search for it after deselection.
-            if (layout.BackButton != null)
-            {
-                try
-                {
-                    _closeCommand = layout.BackButton.GetType().GetProperty("Command")?.GetValue(layout.BackButton);
-                    _closeCommandParam = layout.BackButton.GetType().GetProperty("CommandParameter")?.GetValue(layout.BackButton);
-                }
-                catch { }
-                Logger.Log("Injector", $"Back button found during layout: {layout.BackButton.GetType().Name}, closeCommand={_closeCommand != null}");
-            }
-            else
-            {
-                Logger.Log("Injector", "Back button not found during layout (expected -- appears after deselection)");
-            }
+            // Step 1c: Find back button and title TextBlock in header Grid structurally.
+            // This works immediately (no bounds needed) even before layout has run.
+            // The back button is always in the tree; its IsVisible is binding-controlled.
+            FindHeaderControls();
 
             // Step 2: Save and remove version Border and sign-out from NavContainer
             if (_navContainer != null)
@@ -439,6 +457,20 @@ internal class SidebarInjector
                 _r.SubscribeEvent(_listBox, "SelectionChanged", () =>
                 {
                     int idx = _r.GetSelectedIndex(_listBox);
+                    // Suppress Root's initial auto-select during the post-injection window.
+                    // Our OnNavItemClicked sets idx=-1; Root tries to re-select a real tab.
+                    // Only suppress positive selections (idx >= 0), not our own deselections.
+                    if (idx >= 0 && Environment.TickCount64 < _selectionSuppressedUntilMs)
+                    {
+                        _r.SetSelectedIndex(_listBox, -1);
+                        // Re-deselection fires the title binding to null — restore header state
+                        if (_activePage != null)
+                        {
+                            CollapseBackButton();
+                            SetHeaderTitle(_activePage);
+                        }
+                        return;
+                    }
                     if (idx >= 0 && _activePage != null)
                     {
                         _lastListBoxIdx = idx;
@@ -456,19 +488,13 @@ internal class SidebarInjector
 
             // Auto-navigate to Uprooted About page on FIRST settings open only.
             // Skip on re-injection after variant change (user was already on a tab).
-            // Delayed: Root's initial ListBox selection (User profile) fires SelectionChanged
-            // which would immediately remove our content page. Wait for it to settle first.
+            // Suppression window swallows Root's initial ListBox auto-select (both event
+            // handler and poll) so we can navigate immediately without a timer delay.
             if (!_hasAutoNavigated)
             {
                 _hasAutoNavigated = true;
-                var navTimer = new Timer(_ =>
-                {
-                    _r.RunOnUIThread(() =>
-                    {
-                        if (_injected && _activePage == null)
-                            OnNavItemClicked("uprooted");
-                    });
-                }, null, 150, Timeout.Infinite);
+                _selectionSuppressedUntilMs = Environment.TickCount64 + 500;
+                OnNavItemClicked("uprooted");
             }
 
             // Walk burst after injection — Root will auto-select a tab, loading content
@@ -546,6 +572,7 @@ internal class SidebarInjector
         _saveBarCollapsed = false;
         _backButton = null;
         _backButtonWasVisible = true;
+        _backButtonCollapsed = false;
         _headerTitleText = null;
         _headerTitleOriginal = null;
         _closeCommand = null;
@@ -561,6 +588,9 @@ internal class SidebarInjector
         _lastListBoxIdx = -1;
         _injected = false;
         _aliveCheckCounter = 0;
+        _lastLayoutCheckMs = 0;                            // Allow instant LayoutUpdated detection on next settings open
+        _selectionSuppressedUntilMs = 0;
+        Interlocked.Exchange(ref _injecting, 0);           // Clear stale timer lock from previous cycle
     }
 
     // ===== NavContainer item building =====
@@ -988,16 +1018,20 @@ internal class SidebarInjector
                 _activeContentPage = page;
             }
 
-            // Deselect Root's ListBox items (triggers Root's "no tab" state with back arrow)
+            // Collapse back button BEFORE deselecting ListBox to prevent visual flash.
+            // The IsVisible binding fallback shows the back arrow when SelectedMenuItemPageContainer
+            // becomes null; collapsing via Opacity/MaxWidth/MaxHeight avoids fighting the binding.
+            CollapseBackButton();
+
+            // Deselect Root's ListBox items
             if (_listBox != null)
             {
                 _r.SetSelectedIndex(_listBox, -1);
                 _lastListBoxIdx = -1;
             }
 
-            // Find and hide the back arrow that appears after deselection.
-            // Also set header title to our page name.
-            FindAndHideBackButton(pageName);
+            // Set header title AFTER deselecting (binding fires synchronously to null, then we override)
+            SetHeaderTitle(pageName);
 
             // Collapse save bar on Uprooted pages (prevents Revert freeze)
             // Search dynamically since save bar may appear after injection
@@ -1242,34 +1276,18 @@ internal class SidebarInjector
     // ===== Back button management =====
 
     /// <summary>
-    /// After deselecting Root's ListBox, a back arrow appears in Row=0 of the header.
-    /// The header Grid (content side, ~900px wide) contains two RootSvgButtons:
-    ///   - Left side (@~24px): back arrow — HIDE this
-    ///   - Right side (@~836px): X close button — KEEP this
-    /// Also sets the title TextBlock to our page display name.
-    /// Called on every nav click (including switching between our tabs).
+    /// Find the back button and title TextBlock in the header Grid by child order.
+    /// The header Grid (Row=0 of layoutContainer) has 3 direct children:
+    ///   [0] RootSvgButton (back arrow, Col=0) — DownArrowSVG rotated 90°
+    ///   [1] TextBlock (page title, Col=1) — bound to Navigator.CurrentViewModel.PageTitle
+    ///   [2] RootSvgButton (close button, Col=2) — ExitThickSVG
+    /// Works before layout has run (no bounds needed). Called once during injection.
     /// </summary>
-    private void FindAndHideBackButton(string pageName)
+    private void FindHeaderControls()
     {
         if (_layoutContainer == null) return;
 
-        // Map internal page name to display title
-        var displayName = pageName == "uprooted" ? "About"
-            : char.ToUpper(pageName[0]) + pageName[1..];
-
-        // If we already found the title TextBlock, just update the text
-        if (_headerTitleText != null)
-        {
-            try { _headerTitleText.GetType().GetProperty("Text")?.SetValue(_headerTitleText, displayName); }
-            catch { }
-            Logger.Log("Injector", $"Title updated: \"{displayName}\"");
-        }
-
-        // Already found and hidden back button + title? Nothing more to search.
-        if (_backButton != null && _headerTitleText != null) return;
-
-        // Find the content header Grid in Row=0.
-        // Multiple children sit at Row=0; the header is a Grid (not Panel/Border/Rectangle).
+        // Find header Grid at Row=0
         object? headerGrid = null;
         foreach (var child in _r.GetVisualChildren(_layoutContainer))
         {
@@ -1281,72 +1299,100 @@ internal class SidebarInjector
 
         if (headerGrid == null)
         {
-            Logger.Log("Injector", "Content header Grid not found in Row=0");
+            Logger.Log("Injector", "FindHeaderControls: no Grid at Row=0");
             return;
         }
 
-        var gridBounds = _r.GetBounds(headerGrid);
-        double gridWidth = gridBounds?.W ?? 900;
-
-        // Walk header Grid descendants to find back arrow and title
-        foreach (var node in _walker.DescendantsDepthFirst(headerGrid))
+        // Direct children in order: back button (first Button-like), title (first TextBlock)
+        foreach (var child in _r.GetVisualChildren(headerGrid))
         {
-            var typeName = node.GetType().Name;
+            var typeName = child.GetType().Name;
 
-            // Identify buttons by position: left side = back arrow, right side = X close
-            if (typeName.Contains("Button") && _backButton == null)
+            if (_backButton == null && typeName.Contains("Button"))
             {
-                var b = _r.GetBounds(node);
-                if (b != null && b.Value.X < gridWidth / 2)
+                _backButton = child;
+                _backButtonWasVisible = _r.GetIsVisible(child);
+                if (_closeCommand == null)
                 {
-                    _backButton = node;
-                    _backButtonWasVisible = _r.GetIsVisible(node);
-                    _r.SetIsVisible(node, false);
-                    Logger.Log("Injector", $"Back arrow hidden: {typeName} @{b.Value.X:F0},{b.Value.Y:F0}");
-
-                    // Extract close command if we didn't get it during layout
-                    if (_closeCommand == null)
+                    try
                     {
-                        try
-                        {
-                            _closeCommand = node.GetType().GetProperty("Command")?.GetValue(node);
-                            _closeCommandParam = node.GetType().GetProperty("CommandParameter")?.GetValue(node);
-                        }
-                        catch { }
+                        _closeCommand = child.GetType().GetProperty("Command")?.GetValue(child);
+                        _closeCommandParam = child.GetType().GetProperty("CommandParameter")?.GetValue(child);
                     }
-                }
-            }
-
-            // Find the title TextBlock (direct child of header Grid)
-            if (_r.IsTextBlock(node) && _headerTitleText == null)
-            {
-                var parent = _r.GetParent(node);
-                if (parent == headerGrid)
-                {
-                    _headerTitleText = node;
-                    _headerTitleOriginal = _r.GetText(node);
-                    try { node.GetType().GetProperty("Text")?.SetValue(node, displayName); }
                     catch { }
-                    Logger.Log("Injector", $"Title set: \"{_headerTitleOriginal}\" -> \"{displayName}\"");
                 }
+                Logger.Log("Injector", $"Back button found: {typeName}, visible={_backButtonWasVisible}");
+            }
+            else if (_headerTitleText == null && _r.IsTextBlock(child))
+            {
+                _headerTitleText = child;
+                _headerTitleOriginal = _r.GetText(child);
+                Logger.Log("Injector", $"Title found: \"{_headerTitleOriginal}\"");
             }
         }
+    }
 
-        if (_backButton == null)
-            Logger.Log("Injector", "Back arrow not found in header Grid (no left-side button)");
+    /// <summary>
+    /// Collapse back button visually without touching IsVisible. Zeros Opacity, MaxWidth,
+    /// MaxHeight, Width, and Margin so the Auto column in the header Grid measures to 0px.
+    /// Root's IsVisible binding (SelectedMenuItemPageContainer.Navigator.CanGoBack) is unaffected.
+    /// Same pattern as CollapseSaveBar — avoids fighting Avalonia bindings.
+    /// </summary>
+    private void CollapseBackButton()
+    {
+        if (_backButton == null || _backButtonCollapsed) return;
+        try
+        {
+            _backButton.GetType().GetProperty("Opacity")?.SetValue(_backButton, 0.0);
+            _backButton.GetType().GetProperty("IsHitTestVisible")?.SetValue(_backButton, false);
+            _backButton.GetType().GetProperty("MaxWidth")?.SetValue(_backButton, 0.0);
+            _backButton.GetType().GetProperty("MaxHeight")?.SetValue(_backButton, 0.0);
+            _backButton.GetType().GetProperty("Width")?.SetValue(_backButton, 0.0);
+            _r.SetMargin(_backButton, 0, 0, 0, 0);         // Root sets Margin=(24,0,0,0) — must zero for column collapse
+            _backButtonCollapsed = true;
+        }
+        catch (Exception ex) { Logger.Log("Injector", $"CollapseBackButton error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Restore back button to normal state. Reverses CollapseBackButton by resetting
+    /// Opacity/MaxWidth/MaxHeight/Width/Margin to Root's original values. IsVisible is never touched.
+    /// </summary>
+    private void RestoreBackButtonVisuals()
+    {
+        if (_backButton == null || !_backButtonCollapsed) return;
+        try
+        {
+            _backButton.GetType().GetProperty("Opacity")?.SetValue(_backButton, 1.0);
+            _backButton.GetType().GetProperty("IsHitTestVisible")?.SetValue(_backButton, true);
+            _backButton.GetType().GetProperty("MaxWidth")?.SetValue(_backButton, double.PositiveInfinity);
+            _backButton.GetType().GetProperty("MaxHeight")?.SetValue(_backButton, double.PositiveInfinity);
+            _backButton.GetType().GetProperty("Width")?.SetValue(_backButton, 40.0);  // Root's inline Width=40
+            _r.SetMargin(_backButton, 24, 0, 0, 0);        // Root's inline Margin=(24,0,0,0)
+            _backButtonCollapsed = false;
+        }
+        catch (Exception ex) { Logger.Log("Injector", $"RestoreBackButton error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Set the header title TextBlock to display our page name.
+    /// Called AFTER deselecting ListBox — the binding fires synchronously to null,
+    /// then our SetValue overrides at the same priority level.
+    /// </summary>
+    private void SetHeaderTitle(string pageName)
+    {
+        if (_headerTitleText == null) return;
+        var displayName = pageName == "uprooted" ? "About"
+            : char.ToUpper(pageName[0]) + pageName[1..];
+        try { _headerTitleText.GetType().GetProperty("Text")?.SetValue(_headerTitleText, displayName); }
+        catch { }
     }
 
     private void RestoreBackButton()
     {
-        // Don't restore back arrow visibility — Root manages its own header state
-        // when a tab is selected. Our local IsVisible=false will be discarded when
-        // Root tears down and recreates the settings page.
-        _backButton = null;
-
-        // Don't restore title text — Root's ViewModel binding will overwrite it
-        // when its own tab is selected. Setting it to "" first causes a visible flash.
-        _headerTitleText = null;
-        _headerTitleOriginal = null;
+        RestoreBackButtonVisuals();
+        // Keep _backButton and _headerTitleText references for next Uprooted tab switch.
+        // Root's binding overwrites the title text when a Root tab is selected.
     }
 
     // ===== Helpers =====

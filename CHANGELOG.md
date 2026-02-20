@@ -38,6 +38,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
 - **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
+- **Settings header back arrow** — Structural search finds back button by child order in header Grid (not by bounds or text). Collapse pattern (Opacity/MaxWidth/MaxHeight/Width/Margin all zeroed) avoids fighting Root's `IsVisible` binding on `SelectedMenuItemPageContainer.Navigator.CanGoBack`. Title TextBlock overridden after ListBox deselection. Restores original values (Width=40, Margin=24,0,0,0) when switching back to Root tabs.
+- **Settings detection delay** — Lowered LayoutUpdated throttle from 500ms to 50ms; removed `_injecting` reentracy guard from LayoutUpdated path (both paths run on UI thread); reset stale timer lock in NullState. Detection is now near-instant on every open including rapid close/reopen cycles.
+- **Title disappearing on rapid re-opens** — Selection suppression re-deselection now re-applies CollapseBackButton + SetHeaderTitle to restore header state that the binding fallback destroys
 
 ---
 
