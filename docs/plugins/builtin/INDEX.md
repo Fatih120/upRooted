@@ -3,7 +3,7 @@
 > **What this is:** Built-in plugin overview — what ships with Uprooted, load order, C# vs TypeScript runtime differences.
 > **Read when:** Understanding what plugins are included; checking load order; understanding the two plugin runtimes.
 
-Uprooted ships seven built-in plugins across two runtime layers. All are registered automatically at startup and appear in the Plugin Settings page.
+Uprooted ships eight built-in plugins across two runtime layers. All are registered automatically at startup and appear in the Plugin Settings page.
 
 > **Related docs:** [Plugin API Reference](../API_REFERENCE.md) | [Root Environment](../ROOT_ENVIRONMENT.md) | [TypeScript Reference](../../framework/TYPESCRIPT_REFERENCE.md)
 
@@ -18,7 +18,7 @@ Uprooted ships seven built-in plugins across two runtime layers. All are registe
 | [Sentry Blocker](sentry-blocker.md) | Blocks Sentry telemetry to protect user privacy | None | `src/plugins/sentry-blocker/` |
 | [Themes](themes.md) | CSS variable theme engine with presets and custom colors | Theme selector, accent/background colors | `src/plugins/themes/` + `hook/ThemeEngine.cs` |
 | [Link Embeds](link-embeds.md) | Discord-style rich link previews, YouTube thumbnails, animated GIFs | Show file names toggle | `hook/LinkEmbedEngine.cs` + `src/plugins/link-embeds/` |
-| SilentTyping | Prevents your typing indicator from being sent | None | `src/plugins/silent-typing/` |
+| SilentTyping | Prevents your typing indicator from being sent (TS plugin is a no-op stub since v0.4.2; actual gRPC blocking handled by `hook/SilentTypingEngine.cs`) | None | `src/plugins/silent-typing/` + `hook/SilentTypingEngine.cs` |
 
 ### C# Hook / Avalonia-Native Layer
 
@@ -29,6 +29,7 @@ These plugins run inside Root's .NET process via the CLR profiler hook and modif
 | ClearURLs | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs before sending | None | `hook/ClearUrlsEngine.cs` |
 | [Message Logger](message-logger.md) | Logs deleted messages with visual indicators | Delete/edit toggles, retention limit, ignore own messages | `hook/MessageLogger.cs`, `hook/MessageStore.cs` |
 | ContentFilter | Blurs images flagged as NSFW using Google Cloud Vision | API key, threshold | `hook/NsfwFilter.cs` |
+| Rootcord | Experimental Discord-style vertical server sidebar replacing Root's horizontal tab bar | None | `hook/RootcordEngine.cs` |
 
 ### Core Framework (not toggleable)
 
@@ -55,6 +56,10 @@ Initialized after Avalonia is ready, with delays to ensure chat is populated:
 - **ClearUrlsEngine** -- Phase 4.5a (14s delay), hooks AvaloniaEdit TextArea
 - **LinkEmbedEngine** -- Phase 4.5b (14s delay), visual tree watching for chat links
 - **MessageLogger** -- Phase 4.5c (20s delay), subscribes to chat ObservableCollection
+- **AutoUpdater** -- Phase 4.5d, background update check (1-minute interval)
+- **ProfileBadgeInjector** -- Phase 4.5e (500ms poller), dev channel only; injects "Uprooted Dev" badge into profile popups
+- **SilentTypingEngine** -- Phase 4.5f (12s delay), DiagnosticListener-based gRPC interception
+- **NsfwFilter** -- Phase 4.5g, Avalonia-native visual tree scan for NSFW images
 
 ## Runtime Context
 

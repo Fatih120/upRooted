@@ -1,6 +1,6 @@
 # Hook Reference
 
-> **What this is:** Implementation-level reference for all 24 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
+> **What this is:** Implementation-level reference for all 28 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
 > **Read when:** Modifying or extending any C# hook feature; understanding startup sequence detail; debugging hook behavior.
 > **Skip if:** You need the architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md). You need Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md).
 > **Does NOT cover:** Architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection specifics → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | TypeScript layer → [TYPESCRIPT_REFERENCE.md](TYPESCRIPT_REFERENCE.md)
@@ -48,33 +48,36 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 24 source files in the `hook/` directory:
+The hook layer consists of 28 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
-| `Entry.cs` | 33 | `[ModuleInitializer]` profiler injection entry point |
+| `Entry.cs` | 37 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 518 | Multi-phase startup orchestrator (Phase 0-5), version migration |
-| `AvaloniaReflection.cs` | 2030 | Reflection cache for ~50 Avalonia types, ~55 members |
+| `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5), version migration |
+| `AvaloniaReflection.cs` | ~2383 | Reflection cache for ~80 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1408 | Event + timer-based sidebar injection and content management |
-| `ContentPages.cs` | ~3400 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | ~2510 | Runtime theme engine with resource + visual tree color override + custom ping color |
-| `ColorUtils.cs` | 262 | HSL/HSV/RGB conversion and manipulation |
+| `SidebarInjector.cs` | ~1508 | Event + timer-based sidebar injection and content management |
+| `ContentPages.cs` | ~3602 | Page builders for Uprooted/Plugins/Themes settings |
+| `ThemeEngine.cs` | ~1280 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color |
+| `ColorUtils.cs` | ~414 | HSL/HSV/RGB/OKLCH conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
-| `HtmlPatchVerifier.cs` | 429 | Self-healing HTML patch system with FileSystemWatcher |
-| `DotNetBrowserReflection.cs` | 1914 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `HtmlPatchVerifier.cs` | 442 | Self-healing HTML patch system with FileSystemWatcher |
+| `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 467 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
-| `LinkEmbedEngine.cs` | 1763 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
-| `AnimatedImage.cs` | 795 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
-| `MessageLogger.cs` | 1876 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
+| `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
+| `MessageLogger.cs` | ~2100 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
-| `AutoUpdater.cs` | ~810 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
-| `ProfileBadgeInjector.cs` | ~450 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
+| `AutoUpdater.cs` | 909 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
+| `ProfileBadgeInjector.cs` | 535 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
 | `SilentTypingEngine.cs` | ~90 | Blocks `SetTypingIndicator` gRPC calls via .NET `DiagnosticListener` interception. Subscribes to HTTP diagnostic events, intercepts `HttpRequestOut.Start`, redirects matching requests to `localhost:0`. Phase 4.5f, 12s startup delay. Original DiagnosticListener approach by Kurumi Nanase. |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
-| `UprootedSettings.cs` | 161 | INI-based settings persistence |
+| `RootcordEngine.cs` | ~2873 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `DesktopNotification.cs` | 56 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
+| `AuditLogEngine.cs` | ~674 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
+| `UprootedSettings.cs` | 210 | INI-based settings persistence |
 | `Logger.cs` | 46 | Thread-safe file logging |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
@@ -761,7 +764,7 @@ on each check via `UprootedSettings.Load()`.
 ### Check Flow
 
 1. **Throttle:** `ShouldCheck()` compares `AutoUpdate.LastCheck` (ISO 8601 timestamp) against
-   the current time. Skips if less than 6 hours have passed (`CheckIntervalHours = 6`).
+   the current time. Skips if less than 1 minute has passed (`CheckIntervalMinutes = 1`).
 2. **API request:** Hits the channel-appropriate GitHub API endpoint. For the dev channel,
    sets `Authorization: Bearer {decryptedPat}` per-request via `SendAsync` (can't set
    per-request headers with `GetStringAsync`).
@@ -890,7 +893,7 @@ for version migration (force-disable on upgrade).
 
 ## AvaloniaReflection Deep Dive
 
-**File:** `hook/AvaloniaReflection.cs` (2030 lines)
+**File:** `hook/AvaloniaReflection.cs` (~2383 lines)
 
 ### Why Reflection Is Needed
 
@@ -1794,7 +1797,7 @@ Three sections:
 
 ## Theme Engine
 
-**File:** `hook/ThemeEngine.cs` (~2510 lines)
+**File:** `hook/ThemeEngine.cs` (~1280 lines)
 
 The theme engine is the largest and most complex component. It modifies Root's native
 Avalonia UI colors at runtime through two complementary strategies: resource dictionary
@@ -2388,13 +2391,16 @@ Returns:
 | `DotNetBrowserReflection.cs` | `AvaloniaReflection`, `Logger` | DotNetBrowser type resolution + IBrowser discovery |
 | `BrowserDiscovery.cs` | `AvaloniaReflection`, `Logger` | Diagnostic visual tree + assembly dump |
 | `LinkEmbedEngine.cs` | `AvaloniaReflection`, `VisualTreeWalker`, `ContentPages`, `ColorUtils`, `UprootedSettings`, `Logger` | Avalonia-native link embed engine |
-| `NsfwFilter.cs` | `DotNetBrowserReflection`, `Logger` | JS injection into DotNetBrowser |
+| `NsfwFilter.cs` | `AvaloniaReflection`, `Logger` | Avalonia-native visual tree scan |
+| `RootcordEngine.cs` | `AvaloniaReflection`, `VisualTreeWalker`, `ContentPages`, `ThemeEngine`, `Logger` | Rootcord Discord-style server sidebar |
+| `DesktopNotification.cs` | `Logger` | OS-level toast notifications |
+| `AuditLogEngine.cs` | `AvaloniaReflection`, `Logger` | Audit log HTTP interception + protobuf decoding |
 | `UprootedSettings.cs` | `PlatformPaths`, `Logger` | INI persistence |
 | `Logger.cs` | `PlatformPaths` | File path for log |
 | `PlatformPaths.cs` | (none) | Pure path resolution |
 
 ---
 
-**Canonical for:** all 24 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter
+**Canonical for:** all 28 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter, RootcordEngine, DesktopNotification, AuditLogEngine
 **Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
 *Hook reference for Uprooted v0.4.2. Last updated 2026-02-19.*

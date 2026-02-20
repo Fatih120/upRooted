@@ -69,6 +69,9 @@ Two independent injection layers into one app:
 | `ProfileBadgeInjector.cs` | 535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
 | `SilentTypingEngine.cs` | ~90 | Silent typing: DiagnosticListener-based interception — subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0. Replaces 482-line handler injection. |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
+| `RootcordEngine.cs` | ~2873 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `DesktopNotification.cs` | 56 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
+| `AuditLogEngine.cs` | ~674 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 | `Logger.cs` | 92 | Thread-safe file logging, startup separator, dev-channel gate (stable = no log file), runtime Enable/Disable |
 
@@ -265,8 +268,9 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | AI Contributor Guide | `CLAUDE.md` | Repository rules, structure, build commands for AI sessions |
 | Architecture | `docs/framework/ARCHITECTURE.md` | System design, layer boundaries, data flow, critical rules |
 | How It Works | `docs/HOW_IT_WORKS.md` | Narrative technical walkthrough from RE to running mod |
-| Hook Reference | `docs/framework/HOOK_REFERENCE.md` | C# hook deep dive -- all 18 .cs files |
+| Hook Reference | `docs/framework/HOOK_REFERENCE.md` | C# hook deep dive -- all 28 .cs files |
 | TypeScript Reference | `docs/framework/TYPESCRIPT_REFERENCE.md` | Browser injection layer -- plugin runtime, bridge, themes |
+| Root Control Reference | `docs/framework/ROOT_CONTROL_REFERENCE.md` | Root Avalonia control hierarchy, theme system mechanics, message view internals, app startup chain |
 | CLR Profiler | `docs/framework/CLR_PROFILER.md` | Native C profiler DLL -- IL injection, env vars, attach |
 | Installer Reference | `docs/framework/INSTALLER.md` | Console TUI installer -- detection, patching, deployment |
 | Build Guide | `docs/install/BUILD.md` | Build pipeline for all layers |
@@ -274,6 +278,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Roadmap | `docs/ROADMAP.md` | Known issues, planned features, future direction |
 | Documentation Index | `docs/INDEX.md` | Navigation hub for all documentation |
 | Contributing | `CONTRIBUTING.md` | Branch rules, PR process, code style |
+| Testing Guide | `docs/dev/TESTING.md` | Test suites, stubs, Docker sandboxes, how to add tests |
 | Session State | `hook/SESSION_STATE.md` | Last session context handoff (what changed, pending work) |
 
 ### Plugin Documentation
@@ -286,6 +291,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | Root Environment | `docs/plugins/ROOT_ENVIRONMENT.md` | Root internals -- DOM, CSS variables, Chromium context |
 | Plugin Examples | `docs/plugins/EXAMPLES.md` | Annotated example plugins covering common patterns |
 | Advanced Plugin Dev | `docs/plugins/ADVANCED_DEVELOPMENT.md` | Advanced plugin patterns and techniques |
+| Plugin Contribution Guide | `docs/plugins/CONTRIBUTING_PLUGINS.md` | How to contribute built-in plugins -- conventions, review process |
 | Plugin Roadmap | `docs/PLUGIN_ROADMAP.md` | Planned plugins with architecture notes and implementation strategies |
 | Built-in Plugins | `docs/plugins/builtin/INDEX.md` | Per-plugin docs for 7 shipped plugins (sentry-blocker, themes, link-embeds, clear-urls, message-logger, silent-typing, content-filter) |
 
@@ -301,6 +307,7 @@ The workspace is bind-mounted, so `dotnet build hook/ -c Release` inside the con
 | gRPC Lib Reference | `docs/research/GRPC_LIB_REFERENCE.md` | gRPC library usage and integration reference |
 | Reverse Engineering | `docs/research/REVERSE_ENGINEERING.md` | RE methodology -- decompilation, IL analysis, runtime inspection |
 | Security Research | `docs/research/SECURITY_RESEARCH.md` | Security analysis -- trust model, attack surface, mitigations |
+| Mitigation Countermeasures | `docs/research/MITIGATION_COUNTERMEASURES.md` | Countermeasures and hardening recommendations from security research |
 | Research Index | `docs/research/RESEARCH_INDEX.md` | Navigation hub for all research documents |
 | Planning Reference | `docs/dev/PLANNING_REFERENCE.md` | Project planning, milestones, decision log |
 | Contributing (Technical) | `docs/dev/CONTRIBUTING_TECHNICAL.md` | Technical contribution guide -- code patterns, testing, review |

@@ -29,7 +29,7 @@ CLR profiler environment variables (`DOTNET_ENABLE_PROFILING`, `DOTNET_PROFILER`
 ### High
 
 **AvaloniaReflection brittleness**
-The reflection cache (`hook/AvaloniaReflection.cs`, ~815 lines) assumes specific Avalonia type names, property names, and method signatures. Any Avalonia version update that renames or removes types will break all UI injection. The entire C# layer becomes non-functional if the reflection cache cannot resolve its targets.
+The reflection cache (`hook/AvaloniaReflection.cs`, ~2383 lines) assumes specific Avalonia type names, property names, and method signatures. Any Avalonia version update that renames or removes types will break all UI injection. The entire C# layer becomes non-functional if the reflection cache cannot resolve its targets.
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
@@ -83,7 +83,7 @@ Next 2-3 releases. Expanding the platform and improving the developer/user exper
 A discoverable listing of community plugins. Could be a static registry (JSON manifest in a GitHub repo) or a simple web interface. Plugin authors would submit metadata; users would browse and install from within Uprooted.
 
 ### Auto-update mechanism — SHIPPED (v0.4.2)
-In-process auto-updater (`hook/AutoUpdater.cs`) checks GitHub releases every 6 hours, downloads a single encrypted `.uprpkg` package, decrypts and unpacks 6 update files, and overwrites them in-place. Developer channel with password-gated access to pre-release builds. Changes take effect on next Root restart.
+In-process auto-updater (`hook/AutoUpdater.cs`) checks GitHub releases every 1 minute, downloads a single encrypted `.uprpkg` package, decrypts and unpacks 6 update files, and overwrites them in-place. Developer channel with password-gated access to pre-release builds. Changes take effect on next Root restart.
 
 ### Linux support improvements
 The standalone bash installer (`install-uprooted-linux.sh`) covers basic installation. Improve detection reliability, test across distributions, and ensure the native profiler (`tools/uprooted_profiler_linux.c`) handles Linux-specific edge cases.
