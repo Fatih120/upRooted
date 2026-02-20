@@ -24,7 +24,7 @@ internal static class ContentPages
 
     // Themed colors derived from the active theme engine (set per-build)
     internal static string CardBg = DefaultCardBg;
-    private static string CardBorder = DefaultCardBorder;
+    internal static string CardBorder = DefaultCardBorder;
     internal static string TextWhite = DefaultTextWhite;
     internal static string TextMuted = DefaultTextMuted;
     internal static string TextDim = DefaultTextDim;

@@ -53,6 +53,19 @@ internal class RootcordEngine
     private object? _tooltipOverlay;  // OverlayLayer reference
     private object? _tooltipPanel;    // The tooltip Border on the overlay
 
+    // Cached theme colors (refreshed from ContentPages statics each Apply)
+    private string _bg = "#0a1018";
+    private string _cardBg = "#0f1923";
+    private string _border = "#19ffffff";
+    private string _text = "#fff2f2f2";
+    private string _muted = "#a3f2f2f2";
+    private string _dim = "#66f2f2f2";
+    private string _accent = "#2A5A40";
+
+    // Profile pane control
+    private bool _wasProfilePaneOpen;
+    private object? _profileInterceptHandler;
+
     // State
     public bool IsApplied { get; private set; }
 
@@ -71,6 +84,46 @@ internal class RootcordEngine
         _themeEngine = themeEngine;
     }
 
+    // ===== Color helpers =====
+
+    /// <summary>
+    /// Refresh cached color fields from ContentPages statics (live-updated by ThemeEngine).
+    /// </summary>
+    private void RefreshColors()
+    {
+        _cardBg = ContentPages.CardBg;
+        _bg     = ColorUtils.Darken(_cardBg, 6);
+        _border = ContentPages.CardBorder;
+        _text   = ContentPages.TextWhite;
+        _muted  = ContentPages.TextMuted;
+        _dim    = ContentPages.TextDim;
+        _accent = ContentPages.AccentGreen;
+    }
+
+    /// <summary>
+    /// Luminance-aware highlight: lightens on dark backgrounds, darkens on light backgrounds.
+    /// Same algorithm as ContentPages.AdjustForHighlight.
+    /// </summary>
+    private static string AdjustForHighlight(string bg, double percent)
+    {
+        try
+        {
+            return ColorUtils.Luminance(bg) > 0.5
+                ? ColorUtils.Darken(bg, percent)
+                : ColorUtils.Lighten(bg, percent);
+        }
+        catch { return bg; }
+    }
+
+    /// <summary>
+    /// Set border brush and thickness on a Border control.
+    /// </summary>
+    private void SetBorderStroke(object? b, string hex, double w)
+    {
+        _r.SetBorderBrush(b, hex);
+        _r.SetBorderThickness(b, w);
+    }
+
     // ===== Lifecycle =====
 
     public void Apply()
@@ -84,6 +137,9 @@ internal class RootcordEngine
         try
         {
             Logger.Log(Tag, "Applying Discord-style layout...");
+
+            // Refresh cached colors from ContentPages statics
+            RefreshColors();
 
             // Step 1: Discover HomeView grid
             if (!DiscoverHomeViewGrid())
@@ -110,10 +166,13 @@ internal class RootcordEngine
 
             CollapseTabBarRow();
 
-            // Step 5: Build and inject server strip
+            // Step 5: Close right-side Profile pane (our strip card replaces it)
+            CloseProfilePane();
+
+            // Step 6: Build and inject server strip
             BuildAndInjectServerStrip();
 
-            // Step 6: Subscribe to tab changes
+            // Step 7: Subscribe to tab changes + intercept Profile pane reopens
             SubscribeTabChanges();
 
             IsApplied = true;
@@ -137,8 +196,17 @@ internal class RootcordEngine
             DismissIconTooltip();
             DismissUserCardPopup();
 
-            // Unsubscribe tab monitoring
+            // Unsubscribe tab monitoring + profile intercept
             UnsubscribeTabChanges();
+
+            // Restore Profile pane if it was open before Apply
+            if (_wasProfilePaneOpen && _homeViewModel != null)
+            {
+                _r.SetPropertyValue(_homeViewModel, "PaneOpen", true);
+                _r.SetPropertyValue(_homeViewModel, "ProfileOpen", true);
+                Logger.Log(Tag, "Profile pane restored");
+            }
+            _wasProfilePaneOpen = false;
 
             // Remove server strip from grid
             if (_serverStripBorder != null && _homeViewGrid != null)
@@ -179,6 +247,31 @@ internal class RootcordEngine
         {
             Logger.Log(Tag, $"Revert error: {ex.Message}");
             IsApplied = false;
+        }
+    }
+
+    // ===== Profile pane control =====
+
+    /// <summary>
+    /// Close the right-side Profile pane on Apply.
+    /// Our bottom-left user card handles Profile functionality.
+    /// </summary>
+    private void CloseProfilePane()
+    {
+        if (_homeViewModel == null) return;
+        try
+        {
+            _wasProfilePaneOpen = _r.GetPropertyValue(_homeViewModel, "ProfileOpen") is true;
+            if (_wasProfilePaneOpen)
+            {
+                _r.SetPropertyValue(_homeViewModel, "PaneOpen", false);
+                _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);
+                Logger.Log(Tag, "Profile pane closed (was open)");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"CloseProfilePane error: {ex.Message}");
         }
     }
 
@@ -615,8 +708,7 @@ internal class RootcordEngine
         }
 
         // Wrap the 3-row Grid in a Border for background styling
-        var stripBg = GetThemedColor("BackgroundSecondary", "#0a1018");
-        _serverStripBorder = _r.CreateBorder(stripBg, 0, _stripGrid);
+        _serverStripBorder = _r.CreateBorder(_bg, 0, _stripGrid);
         if (_serverStripBorder == null)
         {
             Logger.Log(Tag, "Failed to create server strip border");
@@ -781,11 +873,9 @@ internal class RootcordEngine
         var initial = isDm ? "\u2709" : (displayName.Length > 0 ? displayName[0].ToString().ToUpper() : "?");
         Logger.Log(Tag, $"  Icon: {displayName} -> '{initial}' (DM={isDm}, selected={isSelected}, hasImage={bitmap != null})");
 
-        // Icon colors
-        var bgColor = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var bgHover = ColorUtils.Lighten(bgColor, 12);
-        var textColor = GetThemedColor("TextPrimary", "#f2f2f2");
-        var accentColor = GetThemedColor("BrandPrimary", "#3B6AF8");
+        // Icon colors from cached ContentPages statics
+        var bgColor = _cardBg;
+        var bgHover = AdjustForHighlight(_cardBg, 10);
 
         // Outer container: holds the pill indicator + icon
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);
@@ -794,7 +884,7 @@ internal class RootcordEngine
         _r.SetTag(container, $"rootcord-icon-{displayName}");
 
         // Selection pill (Discord-style left indicator)
-        var pillBorder = _r.CreateBorder(isSelected ? accentColor : "#00000000", 2);
+        var pillBorder = _r.CreateBorder(isSelected ? _accent : "#00000000", 2);
         if (pillBorder != null)
         {
             _r.SetWidth(pillBorder, PillWidth);
@@ -805,7 +895,7 @@ internal class RootcordEngine
         }
 
         // Circular icon border (ClipToBounds clips image to circle)
-        var iconBorder = _r.CreateBorder(isSelected ? accentColor : bgColor, IconCornerRadius);
+        var iconBorder = _r.CreateBorder(isSelected ? _accent : bgColor, IconCornerRadius);
         if (iconBorder == null) return container;
 
         _r.SetWidth(iconBorder, IconSize);
@@ -827,12 +917,12 @@ internal class RootcordEngine
             else
             {
                 // Fallback to letter if image creation fails
-                SetIconToLetter(iconBorder, initial, isSelected, textColor);
+                SetIconToLetter(iconBorder, initial, isSelected, _text);
             }
         }
         else
         {
-            SetIconToLetter(iconBorder, initial, isSelected, textColor);
+            SetIconToLetter(iconBorder, initial, isSelected, _text);
         }
 
         // Click handler: switch tab
@@ -868,10 +958,8 @@ internal class RootcordEngine
     /// </summary>
     private object? BuildHomeButton(bool isDmSelected)
     {
-        var bgColor = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var bgHover = ColorUtils.Lighten(bgColor, 12);
-        var accentColor = GetThemedColor("BrandPrimary", "#3B6AF8");
-        var textColor = GetThemedColor("TextPrimary", "#f2f2f2");
+        var bgColor = _cardBg;
+        var bgHover = AdjustForHighlight(_cardBg, 10);
 
         // Outer container: pill + icon (same pattern as BuildServerIcon)
         var container = _r.CreateStackPanel(vertical: false, spacing: 0);
@@ -880,7 +968,7 @@ internal class RootcordEngine
         _r.SetTag(container, "rootcord-home");
 
         // Selection pill
-        var pillBorder = _r.CreateBorder(isDmSelected ? accentColor : "#00000000", 2);
+        var pillBorder = _r.CreateBorder(isDmSelected ? _accent : "#00000000", 2);
         if (pillBorder != null)
         {
             _r.SetWidth(pillBorder, PillWidth);
@@ -891,7 +979,7 @@ internal class RootcordEngine
         }
 
         // Circular icon
-        var iconBorder = _r.CreateBorder(isDmSelected ? accentColor : bgColor, IconCornerRadius);
+        var iconBorder = _r.CreateBorder(isDmSelected ? _accent : bgColor, IconCornerRadius);
         if (iconBorder == null) return container;
         _r.SetWidth(iconBorder, IconSize);
         _r.SetHeight(iconBorder, IconSize);
@@ -899,7 +987,7 @@ internal class RootcordEngine
         _r.SetClipToBounds(iconBorder, true);
 
         // Home symbol
-        var text = _r.CreateTextBlock("\u2302", 20, isDmSelected ? "#FFFFFF" : textColor);
+        var text = _r.CreateTextBlock("\u2302", 20, isDmSelected ? "#FFFFFF" : _text);
         _r.SetFontWeight(text, "Bold");
         _r.SetHorizontalAlignment(text, "Center");
         _r.SetVerticalAlignment(text, "Center");
@@ -1001,7 +1089,7 @@ internal class RootcordEngine
     /// </summary>
     private object? BuildSeparator()
     {
-        var sepColor = ColorUtils.Lighten(GetThemedColor("BackgroundSecondary", "#0a1018"), 15);
+        var sepColor = AdjustForHighlight(_cardBg, 15);
         var sep = _r.CreateBorder(sepColor, 1);
         if (sep == null) return null;
         _r.SetWidth(sep, 32);
@@ -1019,10 +1107,7 @@ internal class RootcordEngine
     {
         if (_homeViewModel == null) return null;
 
-        var stripBg = GetThemedColor("BackgroundSecondary", "#0a1018");
-        var cardBg = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var cardHover = ColorUtils.Lighten(cardBg, 10);
-        var textColor = GetThemedColor("TextPrimary", "#f2f2f2");
+        var cardHover = AdjustForHighlight(_cardBg, 10);
         var onlineColor = "#43b581";
 
         string username = GetCurrentUsername() ?? "User";
@@ -1030,12 +1115,12 @@ internal class RootcordEngine
         object? avatarBitmap = TryGetProfileBitmap();
 
         // Outer wrapper fills full strip width with opaque background
-        var wrapper = _r.CreateBorder(stripBg, 0);
+        var wrapper = _r.CreateBorder(_bg, 0);
         if (wrapper == null) return null;
         _r.SetTag(wrapper, "rootcord-usercard");
 
         // Inner card with rounded corners and padding
-        var card = _r.CreateBorder(cardBg, 8);
+        var card = _r.CreateBorder(_cardBg, 8);
         if (card == null) return wrapper;
         _r.SetMargin(card, 4, 2, 4, 6);
         _r.SetCursorHand(card);
@@ -1053,7 +1138,7 @@ internal class RootcordEngine
             _r.SetWidth(avatarContainer, 28);
             _r.SetHeight(avatarContainer, 28);
 
-            var avatarBorder = _r.CreateBorder(stripBg, 14);
+            var avatarBorder = _r.CreateBorder(_bg, 14);
             if (avatarBorder != null)
             {
                 _r.SetWidth(avatarBorder, 28);
@@ -1071,10 +1156,10 @@ internal class RootcordEngine
                         _r.SetBorderChild(avatarBorder, img);
                     }
                     else
-                        SetAvatarInitial(avatarBorder, initial, textColor);
+                        SetAvatarInitial(avatarBorder, initial, _text);
                 }
                 else
-                    SetAvatarInitial(avatarBorder, initial, textColor);
+                    SetAvatarInitial(avatarBorder, initial, _text);
 
                 _r.AddChild(avatarContainer, avatarBorder);
             }
@@ -1093,7 +1178,7 @@ internal class RootcordEngine
         }
 
         // Username text
-        var nameText = _r.CreateTextBlock(username, 11, textColor);
+        var nameText = _r.CreateTextBlock(username, 11, _text);
         if (nameText != null)
         {
             try
@@ -1111,6 +1196,7 @@ internal class RootcordEngine
         _r.SetBorderChild(wrapper, card);
 
         // Click: show user card popup above this card
+        var cardBgCapture = _cardBg;
         var cardRef = card;
         _r.SubscribeEvent(card, "PointerPressed", () =>
         {
@@ -1119,7 +1205,7 @@ internal class RootcordEngine
 
         // Hover
         _r.SubscribeEvent(card, "PointerEntered", () => _r.SetBackground(cardRef, cardHover));
-        _r.SubscribeEvent(card, "PointerExited", () => _r.SetBackground(cardRef, cardBg));
+        _r.SubscribeEvent(card, "PointerExited", () => _r.SetBackground(cardRef, cardBgCapture));
 
         return wrapper;
     }
@@ -1133,6 +1219,7 @@ internal class RootcordEngine
     /// <summary>
     /// Show a popup card expanding upward from the user card (like Discord).
     /// Contains avatar, username, status, Settings, Sign out.
+    /// Styled to match Root's native card pattern.
     /// </summary>
     private void ShowUserCardPopup(object anchorControl)
     {
@@ -1158,23 +1245,18 @@ internal class RootcordEngine
         double anchorX = translated.Value.X;
         double anchorY = translated.Value.Y;
 
-        var popupBg = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var textColor = GetThemedColor("TextPrimary", "#f2f2f2");
-        var mutedColor = GetThemedColor("TextSecondary", "#a0a0a0");
-        var accentColor = GetThemedColor("BrandPrimary", "#3B6AF8");
         var onlineColor = "#43b581";
 
         string username = GetCurrentUsername() ?? "User";
         object? avatarBitmap = TryGetProfileBitmap();
         string initial = username.Length > 0 ? username[0].ToString().ToUpper() : "U";
 
-        // Popup container — themed card with thin accent border
-        _userCardPopupPanel = _r.CreateBorder(popupBg, 10);
+        // Popup container — native card: CardBg, 12 radius, subtle border
+        _userCardPopupPanel = _r.CreateBorder(_cardBg, 12);
         if (_userCardPopupPanel == null) return;
         _r.SetTag(_userCardPopupPanel, "rootcord-usercard-popup");
-        _r.SetWidth(_userCardPopupPanel, 200);
-        _r.SetBorderBrush(_userCardPopupPanel, accentColor);
-        _r.SetBorderThickness(_userCardPopupPanel, 1);
+        _r.SetWidth(_userCardPopupPanel, 220);
+        SetBorderStroke(_userCardPopupPanel, AdjustForHighlight(_cardBg, 15), 1.5);
 
         var content = _r.CreateStackPanel(vertical: true, spacing: 0);
         if (content == null) return;
@@ -1194,7 +1276,7 @@ internal class RootcordEngine
                 _r.SetHeight(avatarGrid, 48);
                 _r.SetHorizontalAlignment(avatarGrid, "Center");
 
-                var avBorder = _r.CreateBorder(GetThemedColor("BackgroundSecondary", "#0a1018"), 24);
+                var avBorder = _r.CreateBorder(_bg, 24);
                 if (avBorder != null)
                 {
                     _r.SetWidth(avBorder, 48);
@@ -1204,9 +1286,9 @@ internal class RootcordEngine
                     {
                         var img = _r.CreateImage("UniformToFill");
                         if (img != null) { _r.SetImageSource(img, avatarBitmap); _r.SetWidth(img, 48); _r.SetHeight(img, 48); _r.SetBorderChild(avBorder, img); }
-                        else SetAvatarInitial(avBorder, initial, textColor);
+                        else SetAvatarInitial(avBorder, initial, _text);
                     }
-                    else SetAvatarInitial(avBorder, initial, textColor);
+                    else SetAvatarInitial(avBorder, initial, _text);
                     _r.AddChild(avatarGrid, avBorder);
                 }
                 var dot = _r.CreateBorder(onlineColor, 7);
@@ -1215,22 +1297,59 @@ internal class RootcordEngine
             }
 
             // Username
-            var nameBlock = _r.CreateTextBlock(username, 14, textColor);
+            var nameBlock = _r.CreateTextBlock(username, 14, _text);
             if (nameBlock != null) { _r.SetFontWeight(nameBlock, "SemiBold"); _r.SetHorizontalAlignment(nameBlock, "Center"); _r.AddChild(headerPanel, nameBlock); }
 
-            // Status line
-            var statusBlock = _r.CreateTextBlock("\u25CF Online", 12, onlineColor);
-            if (statusBlock != null) { _r.SetHorizontalAlignment(statusBlock, "Center"); _r.AddChild(headerPanel, statusBlock); }
+            // Status selector — clickable, shows current status with dropdown
+            var currentStatus = GetCurrentStatusLabel();
+            var statusColor = GetStatusColor(currentStatus);
+            var statusBtnBg = AdjustForHighlight(_cardBg, 5);
+            var statusBtn = _r.CreateBorder(statusBtnBg, 10);
+            if (statusBtn != null)
+            {
+                _r.SetHorizontalAlignment(statusBtn, "Center");
+                _r.SetCursorHand(statusBtn);
+
+                var statusLayout = _r.CreateStackPanel(vertical: false, spacing: 4);
+                if (statusLayout != null)
+                {
+                    _r.SetMargin(statusLayout, 10, 4, 10, 4);
+                    _r.SetVerticalAlignment(statusLayout, "Center");
+
+                    var statusDotText = _r.CreateTextBlock("\u25CF", 10, statusColor);
+                    if (statusDotText != null) { _r.SetVerticalAlignment(statusDotText, "Center"); _r.AddChild(statusLayout, statusDotText); }
+
+                    var statusLabel = _r.CreateTextBlock(currentStatus, 11, _muted);
+                    if (statusLabel != null) { _r.SetVerticalAlignment(statusLabel, "Center"); _r.AddChild(statusLayout, statusLabel); }
+
+                    var chevron = _r.CreateTextBlock("\u25BE", 10, _muted);
+                    if (chevron != null) { _r.SetVerticalAlignment(chevron, "Center"); _r.AddChild(statusLayout, chevron); }
+
+                    _r.SetBorderChild(statusBtn, statusLayout);
+                }
+
+                var statusBtnHover = AdjustForHighlight(_cardBg, 10);
+                var statusBtnNormal = statusBtnBg;
+                var statusBtnRef = statusBtn;
+                _r.SubscribeEvent(statusBtn, "PointerEntered", () => _r.SetBackground(statusBtnRef, statusBtnHover));
+                _r.SubscribeEvent(statusBtn, "PointerExited", () => _r.SetBackground(statusBtnRef, statusBtnNormal));
+                _r.SubscribeEvent(statusBtn, "PointerPressed", () =>
+                {
+                    ShowStatusSelector(statusBtnRef, content);
+                });
+                _r.AddChild(headerPanel, statusBtn);
+            }
 
             _r.AddChild(content, headerPanel);
         }
 
         // Divider
-        var divider = _r.CreateBorder(GetThemedColor("BackgroundSecondary", "#0a1018"), 0);
+        var dividerColor = AdjustForHighlight(_cardBg, 15);
+        var divider = _r.CreateBorder(dividerColor, 0);
         if (divider != null) { _r.SetHeight(divider, 1); _r.SetMargin(divider, 8, 2, 8, 2); _r.AddChild(content, divider); }
 
         // Profile button — opens Root's Profile pane (contains Settings, Support, Sign out)
-        var profileBtn = BuildPopupButton("Profile", textColor, popupBg);
+        var profileBtn = BuildPopupButton("Profile", _text, _cardBg);
         if (profileBtn != null)
         {
             _r.SubscribeEvent(profileBtn, "PointerPressed", () =>
@@ -1248,7 +1367,7 @@ internal class RootcordEngine
             ?? _r.GetPropertyValue(_homeViewModel, "LogoutCommand");
         if (signOutCmd != null)
         {
-            var signOutBtn = BuildPopupButton("Sign out", "#e74c3c", popupBg);
+            var signOutBtn = BuildPopupButton("Sign out", "#e74c3c", _cardBg);
             if (signOutBtn != null)
             {
                 var capturedCmd = signOutCmd;
@@ -1294,8 +1413,9 @@ internal class RootcordEngine
 
     private object? BuildPopupButton(string label, string textColor, string bgColor)
     {
-        var hoverBg = ColorUtils.Lighten(bgColor, 8);
-        var btn = _r.CreateBorder(bgColor, 4);
+        var hoverBg = AdjustForHighlight(bgColor, 10);
+        var normalBg = AdjustForHighlight(bgColor, 5);
+        var btn = _r.CreateBorder(normalBg, 4);
         if (btn == null) return null;
         _r.SetMargin(btn, 8, 2, 8, 6);
         _r.SetCursorHand(btn);
@@ -1305,7 +1425,7 @@ internal class RootcordEngine
 
         var btnRef = btn;
         _r.SubscribeEvent(btn, "PointerEntered", () => _r.SetBackground(btnRef, hoverBg));
-        _r.SubscribeEvent(btn, "PointerExited", () => _r.SetBackground(btnRef, bgColor));
+        _r.SubscribeEvent(btn, "PointerExited", () => _r.SetBackground(btnRef, normalBg));
         return btn;
     }
 
@@ -1321,6 +1441,188 @@ internal class RootcordEngine
         _userCardPopupPanel = null;
         _userCardBackdrop = null;
         _userCardPopupOverlay = null;
+        _statusSelectorPanel = null;
+    }
+
+    // ===== Status selector =====
+
+    private static readonly (string Label, string Color, string[] CommandNames)[] StatusOptions =
+    {
+        ("Online",         "#43b581", new[] { "SetOnlineStatusCommand", "GoOnlineCommand", "OnlineCommand" }),
+        ("Idle",           "#faa61a", new[] { "SetIdleStatusCommand", "GoIdleCommand", "IdleCommand" }),
+        ("Do Not Disturb", "#f04747", new[] { "SetDndStatusCommand", "SetDoNotDisturbCommand", "DndCommand", "DoNotDisturbCommand" }),
+        ("Invisible",      "#747f8d", new[] { "SetInvisibleStatusCommand", "GoInvisibleCommand", "InvisibleCommand", "SetOfflineStatusCommand" }),
+    };
+
+    private object? _statusSelectorPanel; // inline dropdown within the popup
+
+    /// <summary>
+    /// Get the current user status label by probing HomeViewModel properties.
+    /// </summary>
+    private string GetCurrentStatusLabel()
+    {
+        if (_homeViewModel == null) return "Online";
+        try
+        {
+            // Try common property names for current status
+            var status = _r.GetPropertyValue(_homeViewModel, "UserStatus")
+                ?? _r.GetPropertyValue(_homeViewModel, "Status")
+                ?? _r.GetPropertyValue(_homeViewModel, "PresenceStatus")
+                ?? _r.GetPropertyValue(_homeViewModel, "CurrentStatus");
+
+            if (status != null)
+            {
+                var s = status.ToString() ?? "";
+                // Map enum/string values to our labels
+                if (s.Contains("Idle", StringComparison.OrdinalIgnoreCase)) return "Idle";
+                if (s.Contains("Dnd", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("DoNotDisturb", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Busy", StringComparison.OrdinalIgnoreCase)) return "Do Not Disturb";
+                if (s.Contains("Invisible", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Offline", StringComparison.OrdinalIgnoreCase)) return "Invisible";
+                if (s.Contains("Online", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Available", StringComparison.OrdinalIgnoreCase)) return "Online";
+                Logger.Log(Tag, $"GetCurrentStatusLabel: unrecognized status '{s}'");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"GetCurrentStatusLabel error: {ex.Message}");
+        }
+        return "Online"; // default
+    }
+
+    private static string GetStatusColor(string label) => label switch
+    {
+        "Idle"           => "#faa61a",
+        "Do Not Disturb" => "#f04747",
+        "Invisible"      => "#747f8d",
+        _                => "#43b581",
+    };
+
+    /// <summary>
+    /// Show an inline status selector replacing the area below the status button.
+    /// Each option is a row: colored dot + label, clickable.
+    /// </summary>
+    private void ShowStatusSelector(object anchorBtn, object popupContent)
+    {
+        // Toggle: if already open, remove it
+        if (_statusSelectorPanel != null)
+        {
+            _r.RemoveChild(popupContent, _statusSelectorPanel);
+            _statusSelectorPanel = null;
+            return;
+        }
+
+        _statusSelectorPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
+        if (_statusSelectorPanel == null) return;
+        _r.SetMargin(_statusSelectorPanel, 8, 0, 8, 4);
+
+        // Thin divider above selector
+        var divColor = AdjustForHighlight(_cardBg, 15);
+        var div = _r.CreateBorder(divColor, 0);
+        if (div != null) { _r.SetHeight(div, 1); _r.SetMargin(div, 0, 2, 0, 4); _r.AddChild(_statusSelectorPanel, div); }
+
+        foreach (var (label, color, cmdNames) in StatusOptions)
+        {
+            var row = BuildStatusRow(label, color, _text, _cardBg, cmdNames, popupContent);
+            if (row != null) _r.AddChild(_statusSelectorPanel, row);
+        }
+
+        // Insert selector into popup content (before the main divider/buttons)
+        // Find insertion point: after the header panel (index 0), before divider (index 1)
+        var children = _r.GetChildren(popupContent);
+        if (children != null && children.Count >= 2)
+        {
+            // Insert at index 1 (after header, before divider)
+            try { children.Insert(1, _statusSelectorPanel); }
+            catch { _r.AddChild(popupContent, _statusSelectorPanel); }
+        }
+        else
+        {
+            _r.AddChild(popupContent, _statusSelectorPanel);
+        }
+    }
+
+    private object? BuildStatusRow(string label, string dotColor, string textColor,
+        string bgColor, string[] cmdNames, object popupContent)
+    {
+        var rowBg = "#00000000"; // transparent default
+        var rowHover = AdjustForHighlight(bgColor, 10);
+
+        var row = _r.CreateBorder(rowBg, 6);
+        if (row == null) return null;
+        _r.SetCursorHand(row);
+        _r.SetMargin(row, 0, 1, 0, 1);
+
+        var layout = _r.CreateStackPanel(vertical: false, spacing: 8);
+        if (layout == null) return row;
+        _r.SetMargin(layout, 8, 5, 8, 5);
+        _r.SetVerticalAlignment(layout, "Center");
+
+        // Status dot
+        var dot = _r.CreateBorder(dotColor, 5);
+        if (dot != null) { _r.SetWidth(dot, 10); _r.SetHeight(dot, 10); _r.SetVerticalAlignment(dot, "Center"); _r.AddChild(layout, dot); }
+
+        // Label
+        var text = _r.CreateTextBlock(label, 12, textColor);
+        if (text != null) { _r.SetVerticalAlignment(text, "Center"); _r.AddChild(layout, text); }
+
+        _r.SetBorderChild(row, layout);
+
+        // Hover
+        var rowRef = row;
+        _r.SubscribeEvent(row, "PointerEntered", () => _r.SetBackground(rowRef, rowHover));
+        _r.SubscribeEvent(row, "PointerExited", () => _r.SetBackground(rowRef, rowBg));
+
+        // Click: try to invoke the status command, then dismiss
+        var capturedLabel = label;
+        var capturedCmdNames = cmdNames;
+        _r.SubscribeEvent(row, "PointerPressed", () =>
+        {
+            if (_homeViewModel == null) return;
+            bool invoked = false;
+
+            // Try each command name on HomeViewModel
+            foreach (var name in capturedCmdNames)
+            {
+                var cmd = _r.GetPropertyValue(_homeViewModel, name);
+                if (cmd != null)
+                {
+                    InvokeCommand(cmd);
+                    Logger.Log(Tag, $"Status changed to '{capturedLabel}' via {name}");
+                    invoked = true;
+                    break;
+                }
+            }
+
+            // Fallback: try SetStatus(string) / SetPresence method
+            if (!invoked)
+            {
+                try
+                {
+                    var setStatus = _homeViewModel.GetType().GetMethod("SetStatus",
+                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
+                    if (setStatus != null)
+                    {
+                        setStatus.Invoke(_homeViewModel, new object[] { capturedLabel });
+                        Logger.Log(Tag, $"Status changed to '{capturedLabel}' via SetStatus()");
+                        invoked = true;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(Tag, $"SetStatus fallback error: {ex.Message}");
+                }
+            }
+
+            if (!invoked)
+                Logger.Log(Tag, $"Status '{capturedLabel}': no command found (visual-only change)");
+
+            DismissUserCardPopup();
+        });
+
+        return row;
     }
 
     private void SetAvatarInitial(object avatarBorder, string initial, string textColor)
@@ -1472,10 +1774,6 @@ internal class RootcordEngine
         if (_homeViewModel == null) return;
 
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-        var accentColor = GetThemedColor("BrandPrimary", "#3B6AF8");
-        var bgColor = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var textColor = GetThemedColor("TextPrimary", "#f2f2f2");
-
         bool isDmSelected = selectedTab != null && IsDmTab(selectedTab);
 
         // Update Home button highlight
@@ -1487,13 +1785,13 @@ internal class RootcordEngine
                 var pill = homeChildren[0];
                 var iconBorder = homeChildren[1];
 
-                _r.SetBackground(pill, isDmSelected ? accentColor : "#00000000");
+                _r.SetBackground(pill, isDmSelected ? _accent : "#00000000");
                 _r.SetHeight(pill, isDmSelected ? PillHeight : 8);
-                _r.SetBackground(iconBorder, isDmSelected ? accentColor : bgColor);
+                _r.SetBackground(iconBorder, isDmSelected ? _accent : _cardBg);
 
                 var iconChild = _r.GetBorderChild(iconBorder);
                 if (iconChild != null && _r.IsTextBlock(iconChild))
-                    _r.SetForeground(iconChild, isDmSelected ? "#FFFFFF" : textColor);
+                    _r.SetForeground(iconChild, isDmSelected ? "#FFFFFF" : _text);
             }
         }
 
@@ -1527,13 +1825,13 @@ internal class RootcordEngine
             var pill = containerChildren[0];
             var iconBorder = containerChildren[1];
 
-            _r.SetBackground(pill, isSelected ? accentColor : "#00000000");
+            _r.SetBackground(pill, isSelected ? _accent : "#00000000");
             _r.SetHeight(pill, isSelected ? PillHeight : 8);
-            _r.SetBackground(iconBorder, isSelected ? accentColor : bgColor);
+            _r.SetBackground(iconBorder, isSelected ? _accent : _cardBg);
 
             var iconChild = _r.GetBorderChild(iconBorder);
             if (iconChild != null && _r.IsTextBlock(iconChild))
-                _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : textColor);
+                _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : _text);
 
             idx++;
         }
@@ -1560,6 +1858,23 @@ internal class RootcordEngine
 
         if (_selectionHandler != null)
             Logger.Log(Tag, "Subscribed to SelectedTabViewModel changes");
+
+        // Intercept Profile pane from reopening while Rootcord is active
+        _profileInterceptHandler = _r.SubscribePropertyChanged(_homeViewModel, (prop) =>
+        {
+            if (prop == "ProfileOpen" && IsApplied &&
+                _r.GetPropertyValue(_homeViewModel, "ProfileOpen") is true)
+            {
+                _r.RunOnUIThread(() =>
+                {
+                    _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);
+                    _r.SetPropertyValue(_homeViewModel, "PaneOpen", false);
+                });
+            }
+        });
+
+        if (_profileInterceptHandler != null)
+            Logger.Log(Tag, "Subscribed to ProfileOpen intercept");
 
         // Watch for Tabs collection changes (tab added/removed)
         _tabsCollection = _r.GetPropertyValue(_homeViewModel, "Tabs");
@@ -1588,6 +1903,13 @@ internal class RootcordEngine
 
     private void UnsubscribeTabChanges()
     {
+        // Unsubscribe profile intercept first (before restoring pane state)
+        if (_profileInterceptHandler != null && _homeViewModel != null)
+        {
+            _r.UnsubscribePropertyChanged(_homeViewModel, _profileInterceptHandler);
+            _profileInterceptHandler = null;
+        }
+
         if (_selectionHandler != null && _homeViewModel != null)
         {
             _r.UnsubscribePropertyChanged(_homeViewModel, _selectionHandler);
@@ -1606,7 +1928,7 @@ internal class RootcordEngine
 
     /// <summary>
     /// Show a themed tooltip pill to the right of the hovered icon.
-    /// Matches Root's native tooltip style: dark bg, thin accent border, rounded.
+    /// Matches Root's native card style: CardBg, 12 radius, subtle 1.5px border.
     /// </summary>
     private void ShowIconTooltip(object iconBorder, string displayName, object? tabViewModel)
     {
@@ -1628,23 +1950,17 @@ internal class RootcordEngine
         double iconY = translated.Value.Y;
         double iconH = iconBounds.Value.H;
 
-        // Themed colors — match the rest of the UI
-        var tooltipBg = GetThemedColor("BackgroundTertiary", "#1a2535");
-        var tooltipText = GetThemedColor("TextPrimary", "#f2f2f2");
-        var borderColor = GetThemedColor("BrandPrimary", "#3B6AF8");
-
-        // Build tooltip: rounded pill with thin accent border
-        _tooltipPanel = _r.CreateBorder(tooltipBg, 14);
+        // Build tooltip: native card — CardBg, 12 radius, subtle border
+        _tooltipPanel = _r.CreateBorder(_cardBg, 12);
         if (_tooltipPanel == null) return;
         _r.SetTag(_tooltipPanel, "rootcord-tooltip");
-        _r.SetBorderBrush(_tooltipPanel, borderColor);
-        _r.SetBorderThickness(_tooltipPanel, 1);
+        SetBorderStroke(_tooltipPanel, AdjustForHighlight(_cardBg, 15), 1.5);
 
         // Single line: community name centered in the pill
-        var nameText = _r.CreateTextBlock(displayName, 13, tooltipText);
+        var nameText = _r.CreateTextBlock(displayName, 13, _text);
         if (nameText == null) return;
         _r.SetFontWeight(nameText, "SemiBold");
-        _r.SetMargin(nameText, 14, 8, 14, 8);
+        _r.SetMargin(nameText, 12, 8, 12, 8);
         _r.SetBorderChild(_tooltipPanel, nameText);
 
         // Position tooltip: right of icon with gap, vertically centered on icon
@@ -1663,66 +1979,5 @@ internal class RootcordEngine
         }
         _tooltipPanel = null;
         _tooltipOverlay = null;
-    }
-
-    /// <summary>
-    /// Try to extract member counts from a CommunityTabViewModel.
-    /// Reads Members (IMemberService) for online and total counts.
-    /// </summary>
-    private (string Total, string? Online)? GetMemberCounts(object tabViewModel)
-    {
-        try
-        {
-            // CommunityTabViewModel.Members -> IMemberService
-            var memberService = _r.GetPropertyValue(tabViewModel, "Members");
-            if (memberService == null) return null;
-
-            // Try to get both online and total counts
-            var onlineObj = _r.GetPropertyValue(memberService, "OnlineMemberCount")
-                ?? _r.GetPropertyValue(memberService, "ActiveMemberCount");
-            var totalObj = _r.GetPropertyValue(memberService, "TotalMemberCount")
-                ?? _r.GetPropertyValue(memberService, "MemberCount");
-
-            // AttachedMemberCount may be online members (those loaded/visible)
-            var attachedObj = _r.GetPropertyValue(memberService, "AttachedMemberCount");
-
-            // Community.MemberCount may have the total
-            var community = _r.GetPropertyValue(tabViewModel, "Community");
-            var communityMemberCount = community != null
-                ? _r.GetPropertyValue(community, "MemberCount") : null;
-
-            string? online = onlineObj?.ToString() ?? attachedObj?.ToString();
-            string? total = totalObj?.ToString() ?? communityMemberCount?.ToString();
-
-            // If we only have one number, show it as total
-            if (total == null && online != null)
-            {
-                total = online;
-                online = null;
-            }
-
-            if (total != null)
-                return (total, online != total ? online : null);
-        }
-        catch { }
-        return null;
-    }
-
-    // ===== Theme integration =====
-
-    /// <summary>
-    /// Get a themed color from the ThemeEngine palette, with fallback.
-    /// </summary>
-    private string GetThemedColor(string key, string fallback)
-    {
-        if (_themeEngine == null) return fallback;
-        try
-        {
-            var palette = _themeEngine.GetPalette();
-            if (palette != null && palette.TryGetValue(key, out var color))
-                return color;
-        }
-        catch { }
-        return fallback;
     }
 }
