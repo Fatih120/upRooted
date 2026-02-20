@@ -201,11 +201,11 @@ A utility that can distinguish genuine content changes (message added, message d
 
 Space for additional plugin concepts as they emerge. When adding a new idea, include at minimum: the inspiration source, which layer it needs (C# hook vs. TypeScript browser), and a rough complexity estimate.
 
-- _(Ideas will be added here as they are proposed)_
+- **Code block overhaul** — Inspired by Vencord's BetterCodeblocks / MonacoEditor plugin and Discord's custom CSS approach to restyling code blocks. Root renders chat natively in Avalonia, so code blocks are Avalonia `TextBlock` or `Border` controls rather than HTML `<pre>` elements. Implementation would use the `LinkEmbedEngine` visual tree scanning pattern to locate code block controls and replace or augment them with syntax highlighting (e.g. via a bundled highlighting library or a simple regex tokenizer), a copy button, language label, and improved styling. Complexity: **medium-high** — requires identifying Root's exact code block control structure via visual tree dump, then building a reflection-based replacement. C# hook layer.
 
 ---
 
-*Last updated: 2026-02-18 — added NoReplyPing and Translate plugin plans*
+*Last updated: 2026-02-20 — added code block overhaul to Future Plugin Ideas*
 
 ---
 
