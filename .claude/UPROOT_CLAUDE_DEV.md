@@ -20,7 +20,8 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 │   ├── diagnose.md             # /diagnose — check installation health
 │   ├── session-state.md        # /session-state — update SESSION_STATE.md + NEW-SESSION.md
 │   ├── nose.md                 # /nose <ver> — bump all version references
-│   └── release.md              # /release <ver> — full release pipeline (doc sweep + version bump + build + ship)
+│   ├── release.md              # /release <ver> — full release pipeline (doc sweep + version bump + build + ship)
+│   └── decomp.md               # /decomp — search ILSpy dumps for info relevant to current issue
 ├── agents/                     # Specialized subagents
 │   └── uprooted-reviewer.md   # Code reviewer (critical rules, conventions)
 └── skills/                     # Knowledge skills (auto-loaded on relevant queries)
@@ -82,6 +83,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 | `/session-state` | Update `SESSION_STATE.md` + `NEW-SESSION.md` from git history | After a work cycle, before ending session |
 | `/nose <ver>` | Bump all version refs (with content freshness audit) | Release prep |
 | `/release <ver>` | Full release pipeline: doc sweep + version bump + build + changelog audit + commit + tag + push (two user gates) | Major/minor releases |
+| `/decomp` | Search ILSpy decompilation dumps for classes/controls/styles relevant to the current issue | Investigating Root internals for a feature or fix |
 
 **Typical workflows:**
 
