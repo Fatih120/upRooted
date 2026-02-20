@@ -30,13 +30,17 @@
   - File: `hook/ContentPages.cs`
 - **ScrollViewer horizontal scroll disabled** — All content ScrollViewers set `HorizontalScrollBarVisibility = Disabled` so content stretches to fill available width.
   - File: `hook/AvaloniaReflection.cs`
-- **Plugin filter: dropdown → cycling toggle** — Replaced the 3-option dropdown overlay (Show All/Enabled/Disabled) with a single cycling pill button. Click to cycle through "All Plugins" → "Enabled" → "Disabled". Each state has a distinct color. Hardcoded text/colors immune to custom themes.
+- **Plugin filter: dropdown → cycling toggle** — Replaced the 3-option dropdown overlay (Show All/Enabled/Disabled) with a single cycling pill button. Click to cycle through "All Plugins" → "Enabled" → "Disabled". Each state has a distinct color with `AdjustForHighlight` 1.5px border that updates on cycle. Bold text. Fixed `MinWidth` prevents width jitter when cycling.
   - File: `hook/ContentPages.cs`
 - **Plugin sort order** — Stability tier now takes priority over enabled/disabled state. Stable plugins always list before Beta, regardless of toggle state.
   - File: `hook/ContentPages.cs`
 - **Themes "Open" button sizing** — Shortened to match toggle switch dimensions (44×24) for visual consistency.
   - File: `hook/ContentPages.cs`
-- **Theme-immune warning cards** — Experimental plugins banner and restart-required banner use hardcoded colors (`#2A2415` bg, `#E0A030` border, white text) with `uprooted-no-recolor` tag. Developer/Stable channel badge also hardcoded.
+- **Experimental plugins banner: theme-aware toggle** — When disabled, uses theme colors (CardBg, CardBorder, TextWhite, TextMuted); when enabled, switches to hardcoded amber warning colors (`#2A2415` bg, `#E0A030` border). Warning icon (20px) hidden when disabled. Toggle pill uses `AdjustForHighlight(CardBg, 8)` off-color instead of hardcoded `#2A2A44`.
+  - File: `hook/ContentPages.cs`
+- **Restart banners: consistent card format** — Both plugin restart and update restart banners now use title + subtitle layout matching the experimental card height. Distinct burnt orange tint (`#2A1D15` bg, `#D06818` border/icon) differentiates from amber warnings. Update banner text changed from "use" to "install".
+  - File: `hook/ContentPages.cs`
+- **Restart buttons: accent button format** — Bold text, centered, `AdjustForHighlight(color, 30)` 1.5px border. Matches established button standard across all Uprooted tabs.
   - File: `hook/ContentPages.cs`
 - **Cards-in-a-card layout** — Preset and custom theme sections wrapped in outer container cards (`BackgroundSecondary` bg, `Border` border, corner radius 12). Inner theme cards use 2nd-order styling: slightly lighter bg (`AdjustForHighlight(CardBg, 4.5)`), `CardBorder` rest border, `Lighten(CardBorder, 60)` hover border, 1.5px thickness. Equal-width Grid columns replace fixed-width cards.
   - File: `hook/ContentPages.cs`
@@ -47,6 +51,10 @@
 - **Button borders and text** — Accent buttons (version badge, Check for Updates, Developer/Stable, Go) use `AdjustForHighlight(btnColor, 30)` 1.5px borders with Bold text. Non-accent buttons (Open Logs) use `AdjustForHighlight(bg, 15)`. Developer/Stable border updates dynamically on toggle.
   - File: `hook/ContentPages.cs`
 - **Restart button color** — Deeper burnt orange (`#D06818`) for better visibility.
+  - File: `hook/ContentPages.cs`
+- **Plugin card vector icons** — Gear and info icons replaced with Avalonia `PathIcon` vector graphics (SVG path data, `Geometry.Parse`) instead of Unicode text characters. New `CreatePathIcon` method in AvaloniaReflection.
+  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
+- **Plugin card text** — Plugin names now render Bold via `SetFontWeight("Bold")` (previously `SetFontWeightNumeric(600)` which silently failed). Testing status badges (Alpha/Beta/Stable) also Bold with 1px border (was 0.5px).
   - File: `hook/ContentPages.cs`
 
 ### Fixed
