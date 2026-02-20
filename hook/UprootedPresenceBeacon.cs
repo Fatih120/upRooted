@@ -16,23 +16,27 @@ namespace Uprooted;
 /// whether the viewed user has Uprooted installed, then injects a small green icon
 /// inline next to their username if they do.
 ///
-/// Cache TTLs: active=true → 5 min, active=false → 2 min, error → 30s.
-/// Registration is delayed 10s on startup to let Root settle.
+/// Cache TTLs: active=true → 5 min, active=false → 20s, error → 30s.
+/// Registration fires 2s after Initialize(); if session is not ready, retries every
+/// 5s for up to 60s before giving up.
 ///
-/// HTTP via AutoUpdater's shared reflection-based HttpClient (avoids MissingMethodException
-/// in Root's trimmed single-file deployment).
+/// HTTP uses AutoUpdater's shared reflection-based HttpClient (avoids MissingMethodException
+/// in Root's trimmed single-file deployment). GET requests use SendAsync with per-request
+/// headers to avoid contamination from AutoUpdater's DefaultRequestHeaders (GitHub Accept).
 /// </summary>
 internal class UprootedPresenceBeacon
 {
     private const string Tag = "PresenceBeacon";
     private const string ApiBase = "https://api.uprooted.sh";
+
+    // Keep in sync with StartupHook.CurrentVersion.
+    // Can't share the constant — StartupHook is in the global namespace, not Uprooted.
     private const string Version = "0.4.2";
 
     // HMAC secret for registration proof: HMAC-SHA256(uuid:dayNumber, SECRET)
     // Server stores this same secret in plaintext (via PRESENCE_HMAC_SECRET env var).
     // Hook stores it XOR-obfuscated so the raw key isn't trivially readable in the DLL.
-    // NOTE: Replace _encryptedKey + _keyXor with agreed values before production deploy.
-    //       Current values: plain key = 4b9e2a71c38f561da4e7305c89f26b14d843972e61b50a7ce328549fc16a378d
+    // Plain key = 4b9e2a71c38f561da4e7305c89f26b14d843972e61b50a7ce328549fc16a378d
     private static readonly byte[] _encryptedKey =
     {
         0x7A, 0x69, 0x46, 0x54, 0x6A, 0xC1, 0xD5, 0x6F, 0x72, 0x76, 0x6F, 0x76, 0x4D, 0x75, 0x72, 0x7A,
@@ -44,7 +48,7 @@ internal class UprootedPresenceBeacon
         0xB3, 0x2F, 0xD4, 0x5A, 0x08, 0xC9, 0x74, 0xE1, 0x9D, 0x52, 0x2B, 0xF8, 0xA6, 0x3C, 0x70, 0xEB,
     };
 
-    // Resolved HttpMethod.Post via reflection (same assembly as AutoUpdater's resolved types)
+    // HttpMethod.Post resolved from the System.Net.Http assembly (after EnsureHttpResolved)
     private static object? s_httpMethodPost;
     private static Type? s_stringContentType;
     private static bool s_postResolved;
@@ -65,13 +69,20 @@ internal class UprootedPresenceBeacon
     }
 
     /// <summary>
-    /// Start the beacon: discover own UUID and register with the server after a 10s delay.
+    /// Own UUID once acquired (lowercase). Null until registration succeeds.
+    /// Used by ProfileBadgeInjector to skip presence icon on own profile.
+    /// </summary>
+    internal string? OwnUuidStr => _ownUuidStr;
+
+    /// <summary>
+    /// Start the beacon. Registers in the background after a brief 2s delay.
+    /// If the session is not ready, retries every 5s for up to 60s.
     /// </summary>
     internal void Initialize()
     {
         ThreadPool.QueueUserWorkItem(_ =>
         {
-            Thread.Sleep(2_000); // Brief wait for session to authenticate (Root is fast)
+            Thread.Sleep(2_000); // Brief wait for Root's session to authenticate
             TryRegister();
         });
     }
@@ -99,18 +110,18 @@ internal class UprootedPresenceBeacon
     /// <summary>
     /// Query the server in the background for a UUID's presence.
     /// Calls onResult(true/false) on a thread pool thread when complete.
-    /// Caches the result for future calls.
+    /// Caches the result; active=true TTL 5min, active=false TTL 20s, error TTL 30s.
     /// </summary>
     internal void QueryAsync(string uuid, Action<bool> onResult)
     {
         ThreadPool.QueueUserWorkItem(_ =>
         {
             bool result = false;
-            TimeSpan ttl = TimeSpan.FromSeconds(30); // error TTL
+            TimeSpan ttl = TimeSpan.FromSeconds(30); // error TTL — retry soon on failure
             try
             {
                 result = FetchPresence(uuid);
-                // Short TTL for false results so newly-installed users appear quickly
+                // Short false-TTL so newly-installed users appear quickly on next popup open
                 ttl = result ? TimeSpan.FromMinutes(5) : TimeSpan.FromSeconds(20);
             }
             catch (Exception ex)
@@ -128,7 +139,6 @@ internal class UprootedPresenceBeacon
 
     /// <summary>
     /// Invalidate a cached entry so the next check re-queries the server.
-    /// Not currently called, but available for future use (e.g., settings toggle).
     /// </summary>
     internal void InvalidateCache(string uuid)
     {
@@ -141,10 +151,20 @@ internal class UprootedPresenceBeacon
     {
         try
         {
-            _ownUuidStr = TryGetOwnUuid();
+            // Poll for own UUID — session may not have authenticated yet at 2s
+            const int maxRetries = 12; // 12 × 5s = 60s total
+            for (int attempt = 0; attempt <= maxRetries; attempt++)
+            {
+                if (attempt > 0) Thread.Sleep(5_000);
+                _ownUuidStr = TryGetOwnUuid();
+                if (_ownUuidStr != null) break;
+                if (attempt == 0)
+                    Logger.Log(Tag, "Own UUID not ready — will retry every 5s (up to 60s)");
+            }
+
             if (_ownUuidStr == null)
             {
-                Logger.Log(Tag, "Own UUID not found — cannot register (session may not be ready)");
+                Logger.Log(Tag, "Own UUID not found after 60s — registration skipped");
                 return;
             }
 
@@ -162,7 +182,7 @@ internal class UprootedPresenceBeacon
             if (statusCode is 200 or 204)
                 Logger.Log(Tag, "Registered successfully");
             else if (statusCode == 429)
-                Logger.Log(Tag, "Registration rate-limited (registered recently — OK)");
+                Logger.Log(Tag, "Registration rate-limited (already registered recently — OK)");
             else
                 Logger.Log(Tag, $"Registration failed: HTTP {statusCode}");
         }
@@ -176,52 +196,21 @@ internal class UprootedPresenceBeacon
 
     /// <summary>
     /// Walk the visual tree to find HomeViewModel, then resolve:
-    ///   HomeViewModel → RootSessionAccessor/SessionAccessor/Session → Session → UserInfoService → SessionUser → Id
-    /// Returns lowercase UUID string or null if unavailable.
+    ///   HomeViewModel → RootSessionAccessor/SessionAccessor/Session → UserInfoService → SessionUser → Id
+    /// Returns lowercase UUID string, or null if the session is not yet authenticated.
     /// </summary>
     private string? TryGetOwnUuid()
     {
         try
         {
-            // Find HomeViewModel DataContext in visual tree
-            object? homeViewModel = null;
-            var walker = new VisualTreeWalker(_r);
-            foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+            // HomeViewModel must be dispatched on UI thread for safe access
+            string? result = null;
+            _r.RunOnUIThread(() =>
             {
-                var dc = _r.GetDataContext(node);
-                if (dc?.GetType().Name.Contains("HomeViewModel") == true)
-                {
-                    homeViewModel = dc;
-                    break;
-                }
-            }
-
-            if (homeViewModel == null)
-            {
-                Logger.Log(Tag, "HomeViewModel not found in visual tree");
-                return null;
-            }
-
-            // Walk: HomeViewModel → RootSessionAccessor/SessionAccessor/Session → Session → UserInfoService → SessionUser → Id
-            foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
-            {
-                var accessor = _r.GetPropertyValue(homeViewModel, accProp);
-                if (accessor == null) continue;
-                var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
-                if (session == null) continue;
-                var userInfoService = _r.GetPropertyValue(session, "UserInfoService");
-                if (userInfoService == null) continue;
-                var sessionUser = _r.GetPropertyValue(userInfoService, "SessionUser");
-                if (sessionUser == null) continue;
-                var id = _r.GetPropertyValue(sessionUser, "Id");
-                if (id == null) continue;
-                var idStr = id.ToString()?.ToLowerInvariant();
-                if (!string.IsNullOrEmpty(idStr))
-                    return idStr;
-            }
-
-            Logger.Log(Tag, "UserInfoService.SessionUser.Id not found via ViewModel walk");
-            return null;
+                try { result = TryGetOwnUuidOnUIThread(); }
+                catch (Exception ex) { Logger.Log(Tag, $"TryGetOwnUuid UI error: {ex.Message}"); }
+            });
+            return result;
         }
         catch (Exception ex)
         {
@@ -230,36 +219,103 @@ internal class UprootedPresenceBeacon
         }
     }
 
+    private string? TryGetOwnUuidOnUIThread()
+    {
+        object? homeViewModel = null;
+        var walker = new VisualTreeWalker(_r);
+        foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+        {
+            var dc = _r.GetDataContext(node);
+            if (dc?.GetType().Name.Contains("HomeViewModel") == true)
+            {
+                homeViewModel = dc;
+                break;
+            }
+        }
+
+        if (homeViewModel == null) return null;
+
+        // Walk: HomeViewModel → accessor → Session → UserInfoService → SessionUser → Id
+        foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
+        {
+            var accessor = _r.GetPropertyValue(homeViewModel, accProp);
+            if (accessor == null) continue;
+            var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
+            if (session == null) continue;
+            var userInfoService = _r.GetPropertyValue(session, "UserInfoService");
+            if (userInfoService == null) continue;
+            var sessionUser = _r.GetPropertyValue(userInfoService, "SessionUser");
+            if (sessionUser == null) continue;
+            var id = _r.GetPropertyValue(sessionUser, "Id");
+            if (id == null) continue;
+            var idStr = id.ToString()?.ToLowerInvariant();
+            if (!string.IsNullOrEmpty(idStr)) return idStr;
+        }
+
+        return null;
+    }
+
     // ===== Network =====
 
     private bool FetchPresence(string uuid)
     {
-        AutoUpdater.EnsureHttpResolved();
-        if (AutoUpdater.s_httpClient == null) return false;
-
         var url = $"{ApiBase}/presence/{uuid}";
-        var json = HttpGet(url);
+        var json = HttpGetPresence(url);
         if (json == null) return false;
 
-        // Parse {"active":true} or {"active":false}
         return json.Contains("\"active\":true", StringComparison.OrdinalIgnoreCase)
             || json.Contains("\"active\": true", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static string? HttpGet(string url)
+    /// <summary>
+    /// HTTP GET via SendAsync with per-request Accept header.
+    /// Uses SendAsync instead of GetAsync to avoid inheriting AutoUpdater's
+    /// DefaultRequestHeaders (which include Accept: application/vnd.github+json).
+    /// </summary>
+    private static string? HttpGetPresence(string url)
     {
         try
         {
             AutoUpdater.EnsureHttpResolved();
-            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_getAsync == null) return null;
+            EnsurePostResolved(); // Resolves s_httpMethodPost which we need for GET too
 
-            var paramType = AutoUpdater.s_getAsync.GetParameters()[0].ParameterType;
-            object arg = paramType == typeof(Uri) ? new Uri(url) : (object)url;
-            var task = AutoUpdater.s_getAsync.Invoke(AutoUpdater.s_httpClient, new[] { arg });
+            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
+                || AutoUpdater.s_httpRequestMessageType == null || s_httpMethodPost == null)
+            {
+                Logger.Log(Tag, "HttpGetPresence: HTTP not resolved");
+                return null;
+            }
+
+            // Resolve HttpMethod.Get from the already-resolved assembly
+            var httpAsm = AutoUpdater.s_httpRequestMessageType.Assembly;
+            var httpMethodType = httpAsm.GetType("System.Net.Http.HttpMethod");
+            var httpMethodGet = httpMethodType?.GetProperty("Get",
+                BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (httpMethodGet == null) return null;
+
+            // Create per-request HttpRequestMessage with clean Accept header
+            var request = Activator.CreateInstance(AutoUpdater.s_httpRequestMessageType, httpMethodGet, new Uri(url));
+            if (request == null) return null;
+
+            // Set Accept: application/json on the per-request headers
+            try
+            {
+                var headers = request.GetType().GetProperty("Headers")?.GetValue(request);
+                var tryAdd = headers?.GetType().GetMethod("TryAddWithoutValidation",
+                    new[] { typeof(string), typeof(string) });
+                tryAdd?.Invoke(headers, new object[] { "Accept", "application/json" });
+            }
+            catch { }
+
+            var sendParams = AutoUpdater.s_sendAsync.GetParameters();
+            object?[] args = sendParams.Length == 1
+                ? new[] { request }
+                : new object?[] { request, System.Threading.CancellationToken.None };
+
+            var task = AutoUpdater.s_sendAsync.Invoke(AutoUpdater.s_httpClient, args);
             var response = task?.GetType().GetProperty("Result")?.GetValue(task);
             if (response == null) return null;
 
-            // Check status
             var statusCodeProp = response.GetType().GetProperty("StatusCode");
             var statusCode = statusCodeProp != null ? Convert.ToInt32(statusCodeProp.GetValue(response)) : -1;
             if (statusCode >= 0 && (statusCode < 200 || statusCode >= 300))
@@ -277,7 +333,7 @@ internal class UprootedPresenceBeacon
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"HttpGet error: {ex.Message}");
+            Logger.Log(Tag, $"HttpGetPresence error: {ex.Message}");
             return null;
         }
     }
@@ -300,7 +356,6 @@ internal class UprootedPresenceBeacon
                 return -1;
             }
 
-            // Create HttpRequestMessage(HttpMethod.Post, uri)
             var request = Activator.CreateInstance(AutoUpdater.s_httpRequestMessageType, s_httpMethodPost, new Uri(url));
             if (request == null) return -1;
 
@@ -309,31 +364,25 @@ internal class UprootedPresenceBeacon
 
             if (s_stringContentType != null)
             {
-                try
-                {
-                    bodyContent = Activator.CreateInstance(s_stringContentType, jsonBody, Encoding.UTF8, "application/json");
-                }
+                try { bodyContent = Activator.CreateInstance(s_stringContentType, jsonBody, Encoding.UTF8, "application/json"); }
                 catch { }
             }
 
             if (bodyContent == null)
             {
-                // Fallback: ByteArrayContent with Content-Type header set manually
-                var bytes = Encoding.UTF8.GetBytes(jsonBody);
                 var httpAsm = AutoUpdater.s_httpRequestMessageType.Assembly;
                 var byteArrayContentType = httpAsm.GetType("System.Net.Http.ByteArrayContent");
                 if (byteArrayContentType != null)
                 {
+                    var bytes = Encoding.UTF8.GetBytes(jsonBody);
                     bodyContent = Activator.CreateInstance(byteArrayContentType, bytes);
                     if (bodyContent != null)
                     {
-                        // Set Content-Type header
                         var headers = bodyContent.GetType().GetProperty("Headers")?.GetValue(bodyContent);
                         var contentType = headers?.GetType().GetProperty("ContentType");
                         if (contentType != null)
                         {
-                            var httpAsm2 = httpAsm;
-                            var mediaHeaderType = httpAsm2.GetType("System.Net.Http.Headers.MediaTypeHeaderValue");
+                            var mediaHeaderType = httpAsm.GetType("System.Net.Http.Headers.MediaTypeHeaderValue");
                             if (mediaHeaderType != null)
                             {
                                 var mediaHeader = Activator.CreateInstance(mediaHeaderType, "application/json");
@@ -373,7 +422,7 @@ internal class UprootedPresenceBeacon
 
     /// <summary>
     /// Resolve HttpMethod.Post and StringContent type from the System.Net.Http assembly.
-    /// Called once; AutoUpdater.EnsureHttpResolved() must be called first.
+    /// Called once after AutoUpdater.EnsureHttpResolved().
     /// </summary>
     private static void EnsurePostResolved()
     {

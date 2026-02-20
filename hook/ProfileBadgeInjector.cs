@@ -441,12 +441,22 @@ internal class ProfileBadgeInjector
         if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
         // Inject presence icon inline next to username (beacon check — independent of badge logic)
-        if (userId != null && _beacon != null)
+        if (_beacon != null)
         {
-            // Skip presence icon on own profile (avoid showing icon on self-view)
-            bool isSelf = dc?.GetType().GetProperty("IsSelf")?.GetValue(dc) is true;
-            if (!isSelf)
-                TryInjectPresenceIcon(popup, usernameBlock, userId);
+            if (userId != null)
+            {
+                // Skip own profile: compare userId against our registered UUID (reliable, no Root property dependency)
+                bool isSelf = string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
+                if (!isSelf)
+                    TryInjectPresenceIcon(popup, usernameBlock, userId);
+            }
+            else
+            {
+                // DataContext not ready yet — schedule presence-only retries after ScannedTag is set.
+                // (The badge retry mechanism cannot help here since ScannedTag skips already-detected popups.)
+                SchedulePresenceRetry(popup, usernameBlock, 300);
+                SchedulePresenceRetry(popup, usernameBlock, 900);
+            }
         }
 
         if (!isDevUser && !isAlphaUser)
@@ -682,18 +692,57 @@ internal class ProfileBadgeInjector
         }
         else if (cached == null)
         {
-            // Not cached — fire background query and inject on the UI thread when done
+            // Not cached — fire background query and inject on the UI thread when done.
+            // Capture both references; verify popup is still attached before injecting
+            // (user may close the profile before the HTTP round-trip completes).
             _beacon.QueryAsync(userId, result =>
             {
                 if (!result) return;
                 _r.RunOnUIThread(() =>
                 {
-                    try { InjectPresenceIconIntoPopup(popup, usernameBlock); }
+                    try
+                    {
+                        if (_r.GetParent(popup) == null) return; // popup detached — skip
+                        InjectPresenceIconIntoPopup(popup, usernameBlock);
+                    }
                     catch (Exception ex) { Logger.Log("ProfileBadge", $"Presence icon async inject error: {ex.Message}"); }
                 });
             });
         }
         // cached == false → user doesn't have Uprooted, skip
+    }
+
+    /// <summary>
+    /// Scheduled retry for presence icon injection when DataContext wasn't ready on first scan.
+    /// Re-reads the DataContext after <paramref name="delayMs"/> and calls TryInjectPresenceIcon
+    /// if userId becomes available. The popup's ScannedTag is already set so the normal scan
+    /// path will not re-enter — this is the only retry path for the presence icon in that case.
+    /// </summary>
+    private void SchedulePresenceRetry(object popup, object usernameBlock, int delayMs)
+    {
+        Task.Delay(delayMs).ContinueWith(_ =>
+        {
+            _r.RunOnUIThread(() =>
+            {
+                try
+                {
+                    if (_r.GetParent(popup) == null) return; // popup already closed
+
+                    // Check if icon already injected by a previous retry
+                    foreach (var node in _walker.DescendantsDepthFirst(popup))
+                        if (_r.GetTag(node) == PresenceIconTag) return;
+
+                    var dc = FindProfileDataContext(popup);
+                    var uid = TryGetUserIdFromDc(dc);
+                    if (uid == null) return; // DataContext still not ready
+
+                    bool isSelf = string.Equals(uid, _beacon?.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
+                    if (!isSelf)
+                        TryInjectPresenceIcon(popup, usernameBlock, uid);
+                }
+                catch { }
+            });
+        });
     }
 
     /// <summary>

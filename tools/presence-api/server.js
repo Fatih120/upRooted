@@ -15,7 +15,7 @@
  * Security:
  *   - Registration: HMAC-SHA256(uuid:dayNumber, SECRET) proof required
  *   - UUIDs stored as SHA-256 hashes (no plaintext at rest)
- *   - Registration: 1 per UUID per 55 min (rate limit)
+ *   - Registration: 1 per UUID per 3 min (rate limit)
  *   - Query: 60 req/min per IP (rate limit)
  *   - Entries expire after 30 days (passive re-registration on next startup)
  */
@@ -32,7 +32,7 @@ const PORT = parseInt(process.env.PORT || '3742', 10);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Per-UUID registration throttle (stored in memory — single-process server)
-// Prevents re-registering more than once per ~55 min even if rate limiter is bypassed
+// Prevents re-registering more than once per ~3 min even if rate limiter is bypassed
 const registrationTimestamps = new Map(); // uuid → last registered ms
 const REGISTER_COOLDOWN_MS = 3 * 60 * 1000; // 3 min — short so failed registrations retry quickly
 
@@ -131,5 +131,12 @@ app.listen(PORT, '127.0.0.1', () => {
   console.log(`[Presence API] HMAC secret: ${process.env.PRESENCE_HMAC_SECRET ? 'from env' : 'default (dev)'}`);
 });
 
-// Hourly cleanup of expired entries
-setInterval(cleanup, 60 * 60 * 1000);
+// Hourly cleanup: expired DB entries + stale in-memory throttle timestamps
+const TIMESTAMP_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days — matches DB expiry
+setInterval(() => {
+  cleanup();
+  const cutoff = Date.now() - TIMESTAMP_MAX_AGE_MS;
+  for (const [uuid, ts] of registrationTimestamps) {
+    if (ts < cutoff) registrationTimestamps.delete(uuid);
+  }
+}, 60 * 60 * 1000);
