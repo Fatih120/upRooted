@@ -55,6 +55,7 @@ internal class AvaloniaReflection
 
     // Grid layout types
     public Type? ColumnDefinitionType { get; private set; }
+    public Type? RowDefinitionType { get; private set; }
     public Type? GridLengthType { get; private set; }
     public Type? GridUnitTypeEnum { get; private set; }
 
@@ -209,6 +210,7 @@ internal class AvaloniaReflection
         CornerRadiusType = Find("Avalonia.CornerRadius");
 
         ColumnDefinitionType = Find("Avalonia.Controls.ColumnDefinition");
+        RowDefinitionType = Find("Avalonia.Controls.RowDefinition");
         GridLengthType = Find("Avalonia.Controls.GridLength");
         GridUnitTypeEnum = Find("Avalonia.Controls.GridUnitType");
 
@@ -1098,6 +1100,20 @@ internal class AvaloniaReflection
     public void SetBorderChild(object? border, object? child) => _borderChild?.SetValue(border, child);
     public object? GetBorderChild(object? border) => _borderChild?.GetValue(border);
 
+    public void SetBorderBrush(object? border, string hex)
+    {
+        if (border == null || _borderBorderBrush == null) return;
+        var brush = CreateBrush(hex);
+        if (brush != null) _borderBorderBrush.SetValue(border, brush);
+    }
+
+    public void SetBorderThickness(object? border, double uniform)
+    {
+        if (border == null || _borderBorderThickness == null || ThicknessType == null) return;
+        var thickness = Activator.CreateInstance(ThicknessType, uniform, uniform, uniform, uniform);
+        _borderBorderThickness.SetValue(border, thickness);
+    }
+
     public void SetScrollViewerContent(object? sv, object? content) => _scrollViewerContent?.SetValue(sv, content);
 
     public void SetGridColumn(object? control, int column) => _gridSetColumn?.Invoke(null, new[] { control, (object)column });
@@ -1147,6 +1163,52 @@ internal class AvaloniaReflection
         catch (Exception ex)
         {
             Logger.Log("Reflection", $"AddGridColumn error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Add an auto-height row definition to a Grid.
+    /// </summary>
+    public void AddGridRowAuto(object? grid)
+    {
+        if (grid == null || RowDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var autoUnit = Enum.Parse(GridUnitTypeEnum, "Auto");
+            var gridLength = Activator.CreateInstance(GridLengthType, 0d, autoUnit);
+            var rowDef = Activator.CreateInstance(RowDefinitionType);
+            RowDefinitionType.GetProperty("Height")?.SetValue(rowDef, gridLength);
+
+            var rowDefs = grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid);
+            if (rowDefs is System.Collections.IList rowList)
+                rowList.Add(rowDef);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddGridRowAuto error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Add a star-height row definition to a Grid.
+    /// </summary>
+    public void AddGridRowStar(object? grid, double starHeight = 1.0)
+    {
+        if (grid == null || RowDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var starUnit = Enum.Parse(GridUnitTypeEnum, "Star");
+            var gridLength = Activator.CreateInstance(GridLengthType, starHeight, starUnit);
+            var rowDef = Activator.CreateInstance(RowDefinitionType);
+            RowDefinitionType.GetProperty("Height")?.SetValue(rowDef, gridLength);
+
+            var rowDefs = grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid);
+            if (rowDefs is System.Collections.IList rowList)
+                rowList.Add(rowDef);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddGridRowStar error: {ex.Message}");
         }
     }
 
@@ -2166,6 +2228,44 @@ internal class AvaloniaReflection
             return grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid) as IList;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Gets the Height (GridLength) of a RowDefinition.
+    /// Returns (value, unitType) where unitType is "Auto", "Pixel", or "Star".
+    /// </summary>
+    public (double Value, string UnitType)? GetRowDefinitionHeight(object? rowDef)
+    {
+        if (rowDef == null) return null;
+        try
+        {
+            var heightProp = rowDef.GetType().GetProperty("Height");
+            var gridLength = heightProp?.GetValue(rowDef);
+            if (gridLength == null) return null;
+            var glType = gridLength.GetType();
+            var value = (double)(glType.GetProperty("Value")?.GetValue(gridLength) ?? 0.0);
+            var unitType = glType.GetProperty("GridUnitType")?.GetValue(gridLength);
+            return (value, unitType?.ToString() ?? "Pixel");
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Sets the Height of a RowDefinition to a pixel value.
+    /// </summary>
+    public void SetRowDefinitionPixelHeight(object? rowDef, double pixels)
+    {
+        if (rowDef == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var pixelUnit = Enum.Parse(GridUnitTypeEnum, "Pixel");
+            var gridLength = Activator.CreateInstance(GridLengthType, pixels, pixelUnit);
+            rowDef.GetType().GetProperty("Height")?.SetValue(rowDef, gridLength);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetRowDefinitionPixelHeight error: {ex.Message}");
+        }
     }
 
     /// <summary>
