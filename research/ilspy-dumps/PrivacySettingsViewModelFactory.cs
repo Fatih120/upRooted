@@ -1,0 +1,13 @@
+// RootApp.Client.Avalonia, Version=0.9.92.0, Culture=neutral, PublicKeyToken=null
+// RootApp.Client.Avalonia.UI.Home.SystemTray.Profile.Settings.PrivacySettingsViewModelFactory
+using RootApp.Client.Avalonia.UI.Home.SystemTray.Profile.Settings;
+using RootApp.Client.CoreDomain;
+
+public class PrivacySettingsViewModelFactory(IRootSessionAccessor P_0)
+{
+	public PrivacySettingsViewModel Create()
+	{
+		return new PrivacySettingsViewModel(P_0);
+	}
+}
+
