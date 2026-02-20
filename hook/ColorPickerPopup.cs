@@ -35,6 +35,9 @@ internal static class ColorPickerPopup
     private static bool _updatingFromHex;    // Prevent recursive hex updates
     private static Action<string>? _onColorChanged; // Live callback on every color change
 
+    /// <summary>True while the popup is visible.</summary>
+    public static bool IsOpen => _currentPopup != null;
+
     // Layout constants - Discord-like proportions
     private const double SV_WIDTH = 262;
     private const double SV_HEIGHT = 180;

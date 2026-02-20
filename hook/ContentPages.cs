@@ -65,17 +65,19 @@ internal static class ContentPages
     {
         AccentGreen = accent;
 
-        // Use palette colors so Uprooted elements match Root's tree-walked colors
-        if (palette != null &&
-            palette.TryGetValue("BackgroundSecondary", out var palBg) &&
-            palette.TryGetValue("TextPrimary", out var palText))
+        // Use actual palette values for all keys — matches what's in ThemeDictionaries
+        if (palette != null)
         {
-            CardBg = palBg;
-            CardBorder = ColorUtils.WithAlpha(palText, 0x19);
-            var (tr, tg, tb) = ColorUtils.ParseHex(palText);
-            TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
-            TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-            TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
+            if (palette.TryGetValue("BackgroundSecondary", out var palBg))
+                CardBg = palBg;
+            if (palette.TryGetValue("Border", out var palBorder))
+                CardBorder = palBorder;
+            if (palette.TryGetValue("TextPrimary", out var palText))
+                TextWhite = NormalizeHex(palText);
+            if (palette.TryGetValue("TextSecondary", out var palSec))
+                TextMuted = NormalizeHex(palSec);
+            if (palette.TryGetValue("TextTertiary", out var palTer))
+                TextDim = NormalizeHex(palTer);
         }
         else
         {
@@ -90,6 +92,14 @@ internal static class ContentPages
 
         // Keep any live embed cards in sync with the new palette
         LinkEmbedEngine.Instance?.NotifyThemeChanged();
+    }
+
+    /// <summary>Ensure hex is in #AARRGGBB format for consistent walker matching.</summary>
+    private static string NormalizeHex(string hex)
+    {
+        var h = hex.TrimStart('#');
+        if (h.Length == 6) return $"#FF{h.ToUpperInvariant()}";
+        return $"#{h.ToUpperInvariant()}";
     }
 
     /// <summary>
@@ -192,10 +202,11 @@ internal static class ContentPages
             return null;
         }
 
-        // Set background from live Root colors so it matches Dark/Light/PureDark
+        // Tag for walker-based recoloring + bind attempt
         var bg = themeEngine?.ReadLiveRootColor("BackgroundPrimary") ?? themeEngine?.GetBgPrimary() ?? "#0D1521";
         r.SetBackground(page, bg);
-        r.SetTag(page, "uprooted-content");
+        r.SetTag(page, "dyn-bg:BackgroundPrimary");
+        r.BindToDynamicResource(page, "Background", "BackgroundPrimary");
 
         Logger.Log("ContentPages", $"BuildPage('{pageName}') OK");
         return page;
@@ -205,6 +216,43 @@ internal static class ContentPages
     {
         if (control != null && fontFamily != null)
             r.SetFontFamily(control, fontFamily);
+    }
+
+    // ===== DynamicResource-bound control helpers =====
+    // These create controls with hardcoded fallback colors, then bind to Root's
+    // DynamicResource keys so they auto-update on theme/variant changes.
+
+    /// <summary>
+    /// Create a TextBlock tagged for automatic recoloring by the theme walker.
+    /// Tag format: "dyn-fg:ResourceKey" — walker reads palette[ResourceKey] and sets Foreground.
+    /// Also attempts DynamicResource binding as primary mechanism (tag is fallback).
+    /// </summary>
+    private static object? CreateBoundText(AvaloniaReflection r, string text, double fontSize,
+        string fallbackColor, string resourceKey)
+    {
+        var tb = r.CreateTextBlock(text, fontSize, fallbackColor);
+        if (tb != null)
+        {
+            r.SetTag(tb, $"dyn-fg:{resourceKey}");
+            r.BindToDynamicResource(tb, "Foreground", resourceKey);
+        }
+        return tb;
+    }
+
+    /// <summary>
+    /// Create a Border tagged for automatic recoloring by the theme walker.
+    /// Tag format: "dyn-bg:ResourceKey" — walker reads palette[ResourceKey] and sets Background.
+    /// </summary>
+    private static object? CreateBoundBorder(AvaloniaReflection r, string fallbackBg,
+        double cornerRadius, string resourceKey)
+    {
+        var border = r.CreateBorder(fallbackBg, cornerRadius);
+        if (border != null)
+        {
+            r.SetTag(border, $"dyn-bg:{resourceKey}");
+            r.BindToDynamicResource(border, "Background", resourceKey);
+        }
+        return border;
     }
 
     private static object? BuildUprootedPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
@@ -219,13 +267,13 @@ internal static class ContentPages
         var pageTitleRow = r.CreatePanel();
         if (pageTitleRow != null)
         {
-            var pageTitle = r.CreateTextBlock("Uprooted", 15, TextWhite);
+            var pageTitle = CreateBoundText(r, "Uprooted", 15, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(pageTitle, 600);
             ApplyFont(r, pageTitle, font);
             r.SetVerticalAlignment(pageTitle, "Center");
             r.AddChild(pageTitleRow, pageTitle);
 
-            var logBtnText = r.CreateTextBlock("Open Logs", 11, TextMuted);
+            var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
             ApplyFont(r, logBtnText, font);
             r.SetHorizontalAlignment(logBtnText, "Center");
             var logBtnBg = ColorUtils.Lighten(CardBg, 8);
@@ -262,19 +310,21 @@ internal static class ContentPages
             var title = CreateSectionHeader(r, "UPROOTED", font);
             r.AddChild(titleRow, title);
 
-            var versionText = r.CreateTextBlock($"v{settings.Version}", 11, TextWhite);
+            var versionText = CreateBoundText(r, $"v{settings.Version}", 11, TextWhite, "TextPrimary");
             ApplyFont(r, versionText, font);
             var versionBadge = r.CreateBorder(AccentGreen, 8, versionText);
+            r.SetTag(versionBadge, "dyn-bg:BrandPrimary");
+            r.BindToDynamicResource(versionBadge, "Background", "BrandPrimary");
             r.SetPadding(versionBadge, 8, 2, 8, 2);
             r.SetVerticalAlignment(versionBadge, "Center");
             r.AddChild(titleRow, versionBadge);
             r.AddChild(cardContent, titleRow);
 
             // About text
-            var aboutText = r.CreateTextBlock(
+            var aboutText = CreateBoundText(r,
                 "A client modification framework for Root Communications. " +
                 "Customize your Root experience with plugins and themes.",
-                13, TextMuted);
+                13, TextMuted, "TextSecondary");
             if (aboutText != null)
             {
                 ApplyFont(r, aboutText, font);
@@ -380,7 +430,7 @@ internal static class ContentPages
             {
                 r.SetMargin(updateStatusRow, 0, 16, 0, 0);
 
-                var statusLabel = r.CreateTextBlock("Status: ", 13, TextMuted);
+                var statusLabel = CreateBoundText(r, "Status: ", 13, TextMuted, "TextSecondary");
                 r.SetFontWeightNumeric(statusLabel, 450);
                 ApplyFont(r, statusLabel, font);
                 r.AddChild(updateStatusRow, statusLabel);
@@ -405,7 +455,7 @@ internal static class ContentPages
                 }
                 catch { /* keep "Never" */ }
             }
-            var lastCheckLabel = r.CreateTextBlock($"Last checked: {lastCheckText}", 12, TextDim);
+            var lastCheckLabel = CreateBoundText(r, $"Last checked: {lastCheckText}", 12, TextDim, "TextTertiary");
             if (lastCheckLabel != null)
             {
                 ApplyFont(r, lastCheckLabel, font);
@@ -419,7 +469,7 @@ internal static class ContentPages
             var wasUpdated = updater?.UpdateApplied ?? false;
 
             var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
-            var btnText = r.CreateTextBlock(btnLabel, 13, TextWhite);
+            var btnText = CreateBoundText(r, btnLabel, 13, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(btnText, 500);
             ApplyFont(r, btnText, font);
             r.SetHorizontalAlignment(btnText, "Center");
@@ -534,13 +584,15 @@ internal static class ContentPages
                     }
 
                     // Restart button
-                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                    var updateRestartBtnText = CreateBoundText(r, "Restart", 12, TextWhite, "TextPrimary");
                     r.SetFontWeightNumeric(updateRestartBtnText, 500);
                     ApplyFont(r, updateRestartBtnText, font);
                     r.SetHorizontalAlignment(updateRestartBtnText, "Center");
                     var updateRestartBtn = r.CreateBorder(AccentGreen, 6, updateRestartBtnText);
                     if (updateRestartBtn != null)
                     {
+                        r.SetTag(updateRestartBtn, "dyn-bg:BrandPrimary");
+                        r.BindToDynamicResource(updateRestartBtn, "Background", "BrandPrimary");
                         r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
                         r.SetHorizontalAlignment(updateRestartBtn, "Right");
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
@@ -671,7 +723,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Plugin Settings", 15, TextWhite);
+        var pageTitle = CreateBoundText(r, "Plugin Settings", 15, TextWhite, "TextPrimary");
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -696,12 +748,12 @@ internal static class ContentPages
                     var expTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                     if (expTextStack != null)
                     {
-                        var expLabel = r.CreateTextBlock("Show experimental plugins", 13, TextWhite);
+                        var expLabel = CreateBoundText(r, "Show experimental plugins", 13, TextWhite, "TextPrimary");
                         r.SetFontWeightNumeric(expLabel, 500);
                         ApplyFont(r, expLabel, font);
                         r.AddChild(expTextStack, expLabel);
 
-                        var expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, TextMuted);
+                        var expDesc = CreateBoundText(r, "These plugins are untested and may cause unexpected behavior or crashes.", 11, TextMuted, "TextSecondary");
                         ApplyFont(r, expDesc, font);
                         r.AddChild(expTextStack, expDesc);
 
@@ -794,7 +846,7 @@ internal static class ContentPages
                 }
 
                 // Restart button (right-aligned)
-                var restartBtnText = r.CreateTextBlock("Restart", 12, TextWhite);
+                var restartBtnText = CreateBoundText(r, "Restart", 12, TextWhite, "TextPrimary");
                 r.SetFontWeightNumeric(restartBtnText, 500);
                 ApplyFont(r, restartBtnText, font);
                 r.SetHorizontalAlignment(restartBtnText, "Center");
@@ -903,7 +955,7 @@ internal static class ContentPages
             }
 
             // Filter button
-            filterTextBlock = r.CreateTextBlock("Show All \u25BE", 13, TextMuted);
+            filterTextBlock = CreateBoundText(r, "Show All \u25BE", 13, TextMuted, "TextSecondary");
             ApplyFont(r, filterTextBlock, font);
             var filterBtnBg = AdjustForHighlight(CardBg, 5);
             var filterBtn = r.CreateBorder(filterBtnBg, 8);
@@ -935,7 +987,7 @@ internal static class ContentPages
         }
 
         // Plugin count label
-        var countLabel = r.CreateTextBlock($"{KnownPlugins?.Length ?? 0} plugins", 13, TextDim);
+        var countLabel = CreateBoundText(r, $"{KnownPlugins?.Length ?? 0} plugins", 13, TextDim, "TextTertiary");
         if (countLabel != null)
         {
             ApplyFont(r, countLabel, font);
@@ -1126,7 +1178,7 @@ internal static class ContentPages
             // No results message
             if (visible.Count == 0)
             {
-                var noResults = r.CreateTextBlock("No plugins match your filters.", 13, TextDim);
+                var noResults = CreateBoundText(r, "No plugins match your filters.", 13, TextDim, "TextTertiary");
                 ApplyFont(r, noResults, font);
                 r.SetMargin(noResults, 0, 8, 0, 0);
                 r.SetHorizontalAlignment(noResults, "Center");
@@ -1174,7 +1226,7 @@ internal static class ContentPages
         if (topRow != null)
         {
             // Plugin name - left aligned
-            var nameText = r.CreateTextBlock(displayName, 14, TextWhite);
+            var nameText = CreateBoundText(r, displayName, 14, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(nameText, 600);
             ApplyFont(r, nameText, font);
             r.SetHorizontalAlignment(nameText, "Left");
@@ -1200,7 +1252,7 @@ internal static class ContentPages
                         r.SetHeight(gearBtn, 22);
                         r.SetCursorHand(gearBtn);
 
-                        var gearText = r.CreateTextBlock("\u2699", 13, TextMuted);
+                        var gearText = CreateBoundText(r, "\u2699", 13, TextMuted, "TextSecondary");
                         ApplyFont(r, gearText, font);
                         r.SetHorizontalAlignment(gearText, "Center");
                         r.SetVerticalAlignment(gearText, "Center");
@@ -1232,7 +1284,7 @@ internal static class ContentPages
                         r.SetHeight(infoBtn, 22);
                         r.SetCursorHand(infoBtn);
 
-                        var infoText = r.CreateTextBlock("i", 12, TextMuted);
+                        var infoText = CreateBoundText(r, "i", 12, TextMuted, "TextSecondary");
                         r.SetFontWeightNumeric(infoText, 600);
                         ApplyFont(r, infoText, font);
                         r.SetHorizontalAlignment(infoText, "Center");
@@ -1267,7 +1319,7 @@ internal static class ContentPages
                         r.SetPadding(openBtn, 12, 4, 12, 4);
                         r.SetVerticalAlignment(openBtn, "Center");
 
-                        var openLabel = r.CreateTextBlock("Open", 12, TextWhite);
+                        var openLabel = CreateBoundText(r, "Open", 12, TextWhite, "TextPrimary");
                         r.SetFontWeightNumeric(openLabel, 500);
                         ApplyFont(r, openLabel, font);
                         r.SetBorderChild(openBtn, openLabel);
@@ -1350,7 +1402,7 @@ internal static class ContentPages
         }
 
         // Description
-        var descText = r.CreateTextBlock(description, 13, TextMuted);
+        var descText = CreateBoundText(r, description, 13, TextMuted, "TextSecondary");
         if (descText != null)
         {
             ApplyFont(r, descText, font);
@@ -1428,7 +1480,7 @@ internal static class ContentPages
         }
 
         // Dropdown panel
-        _filterPanel = r.CreateBorder(CardBg, 8);
+        _filterPanel = CreateBoundBorder(r, CardBg, 8, "BackgroundSecondary");
         if (_filterPanel == null) return;
         r.SetTag(_filterPanel, "uprooted-no-recolor");
         SetBorderStroke(r, _filterPanel, CardBorder, 0.5);
@@ -1547,7 +1599,7 @@ internal static class ContentPages
 
         // Lightbox card
         double cardW = 560;
-        _infoPanel = r.CreateBorder(CardBg, 12);
+        _infoPanel = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (_infoPanel == null) return;
         r.SetTag(_infoPanel, "uprooted-no-recolor");
         SetBorderStroke(r, _infoPanel, CardBorder, 0.5);
@@ -1566,7 +1618,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName, LightboxScale.Title, TextWhite);
+            var titleText = CreateBoundText(r, pluginName, LightboxScale.Title, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -1584,7 +1636,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 18, TextMuted);
+                var closeText = CreateBoundText(r, "\u2715", 18, TextMuted, "TextSecondary");
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -1604,7 +1656,7 @@ internal static class ContentPages
         }
 
         // Description
-        var descText = r.CreateTextBlock(description, LightboxScale.Label, TextMuted);
+        var descText = CreateBoundText(r, description, LightboxScale.Label, TextMuted, "TextSecondary");
         if (descText != null)
         {
             ApplyFont(r, descText, font);
@@ -1694,7 +1746,7 @@ internal static class ContentPages
 
         // Notification card
         double cardW = 480;
-        _updateNotifyPanel = r.CreateBorder(CardBg, 14);
+        _updateNotifyPanel = CreateBoundBorder(r, CardBg, 14, "BackgroundSecondary");
         if (_updateNotifyPanel == null) return;
         r.SetTag(_updateNotifyPanel, "uprooted-no-recolor");
         SetBorderStroke(r, _updateNotifyPanel, AccentGreen, 1.0);
@@ -1721,7 +1773,7 @@ internal static class ContentPages
                 r.AddChild(headerRow, icon);
             }
 
-            var titleText = r.CreateTextBlock("Uprooted Updated", LightboxScale.Title, TextWhite);
+            var titleText = CreateBoundText(r, "Uprooted Updated", LightboxScale.Title, TextWhite, "TextPrimary");
             if (titleText != null)
             {
                 r.SetFontWeightNumeric(titleText, 600);
@@ -1733,9 +1785,9 @@ internal static class ContentPages
         }
 
         // Message
-        var msgText = r.CreateTextBlock(
+        var msgText = CreateBoundText(r,
             $"Version {version} was installed in the background. The update will take effect the next time Root restarts.",
-            LightboxScale.Description, TextMuted);
+            LightboxScale.Description, TextMuted, "TextSecondary");
         if (msgText != null)
         {
             r.SetTextWrapping(msgText, "Wrap");
@@ -1747,6 +1799,8 @@ internal static class ContentPages
         var okBtn = r.CreateBorder(AccentGreen, 8);
         if (okBtn != null)
         {
+            r.SetTag(okBtn, "dyn-bg:BrandPrimary");
+            r.BindToDynamicResource(okBtn, "Background", "BrandPrimary");
             r.SetCursorHand(okBtn);
             r.SetTag(okBtn, "uprooted-no-recolor");
             r.SetHorizontalAlignment(okBtn, "Right");
@@ -1807,9 +1861,9 @@ internal static class ContentPages
         if (content == null) return box;
         r.SetMargin(content, 16, 14, 16, 14);
 
-        var headerText = r.CreateTextBlock(
+        var headerText = CreateBoundText(r,
             "Without this plugin, Root sends the following to Sentry's servers (not Root's servers):",
-            LightboxScale.SectionHeader, TextMuted);
+            LightboxScale.SectionHeader, TextMuted, "TextSecondary");
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 450);
@@ -1827,7 +1881,7 @@ internal static class ContentPages
         };
         foreach (var item in items)
         {
-            var itemText = r.CreateTextBlock(item, LightboxScale.Description, TextDim);
+            var itemText = CreateBoundText(r, item, LightboxScale.Description, TextDim, "TextTertiary");
             if (itemText != null)
             {
                 ApplyFont(r, itemText, font);
@@ -1914,7 +1968,7 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = r.CreateTextBlock("Theme Settings", 15, TextWhite);
+        var pageTitle = CreateBoundText(r, "Theme Settings", 15, TextWhite, "TextPrimary");
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
@@ -1983,91 +2037,68 @@ internal static class ContentPages
         object? font, ThemeEngine? themeEngine, Action? onThemeChanged)
     {
         bool isActive = settings.ActiveTheme == "custom";
-        var restingBorder = AdjustForHighlight(CardBg, 15);
-        var borderColor = isActive ? settings.CustomAccent : restingBorder;
 
-        var card = r.CreateBorder(CardBg, 12);
+        // Custom theme section is a "no-recolor island" — hardcoded dark bg, white text.
+        // The walker skips this entire subtree so color pickers stay readable
+        // regardless of what theme is active.
+        const string islandBg = "#1A1A2E";
+        const string islandBorder = "#333355";
+        const string islandText = "#F0F0F0";
+        const string islandMuted = "#A0A0B0";
+
+        var card = r.CreateBorder(islandBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, CardBorderThickness);
+        r.SetTag(card, "uprooted-no-recolor"); // Walker skips entire subtree
+        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, CardBorderThickness);
 
         var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (outerContent == null) return card;
         r.SetMargin(outerContent, 20, 16, 20, 16);
 
         // Header row with radio indicator -- clickable to activate custom theme
+        object? radioOuter = null;
+        object? radioDot = null;
         var headerRow = r.CreateStackPanel(vertical: false, spacing: 12);
         if (headerRow != null)
         {
             r.SetVerticalAlignment(headerRow, "Center");
             r.SetBackground(headerRow, "Transparent"); // Required for hit-testing
 
-            var radioOuter = r.CreateBorder(null, 4);
+            radioOuter = r.CreateBorder(null, 4);
             if (radioOuter != null)
             {
                 r.SetWidth(radioOuter, 20);
                 r.SetHeight(radioOuter, 20);
-                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : AdjustForHighlight(CardBg, 25), 2.0);
+                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : "#555577", 2.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
-                if (isActive)
+
+                var innerDot = r.CreateBorder(isActive ? settings.CustomAccent : "#00000000", 2);
+                if (innerDot != null)
                 {
-                    var innerDot = r.CreateBorder(settings.CustomAccent, 2);
-                    if (innerDot != null)
-                    {
-                        r.SetWidth(innerDot, 10);
-                        r.SetHeight(innerDot, 10);
-                        r.SetMargin(innerDot, 3, 3, 3, 3);
-                    }
-                    r.SetBorderChild(radioOuter, innerDot);
+                    r.SetWidth(innerDot, 10);
+                    r.SetHeight(innerDot, 10);
+                    r.SetMargin(innerDot, 3, 3, 3, 3);
                 }
+                r.SetBorderChild(radioOuter, innerDot);
+                radioDot = innerDot;
+
                 r.AddChild(headerRow, radioOuter);
             }
 
             var textStack = r.CreateStackPanel(vertical: true, spacing: 2);
             if (textStack != null)
             {
-                var nameText = r.CreateTextBlock("Custom", 14, TextWhite);
+                var nameText = r.CreateTextBlock("Custom", 14, islandText);
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock("Pick your own accent and background", 12, TextMuted);
+                var descText = r.CreateTextBlock("Accent: buttons, links, highlights. Background: app surface. Text: labels, messages (empty = auto).", 12, islandMuted);
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
                 r.AddChild(headerRow, textStack);
             }
-
-            // Click handler to activate custom theme
-            r.SetCursorHand(headerRow);
-            r.SubscribeEvent(headerRow, "PointerReleased", () =>
-            {
-                try
-                {
-                    if (settings.ActiveTheme == "custom") return; // already active
-
-                    Logger.Log("Theme", "Custom theme card clicked");
-                    settings.ActiveTheme = "custom";
-
-                    // Apply custom theme with current saved colors
-                    themeEngine?.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
-
-                    try { settings.Save(); }
-                    catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
-
-                    if (onThemeChanged != null)
-                    {
-                        r.RunOnUIThread(() =>
-                        {
-                            try { onThemeChanged.Invoke(); }
-                            catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
-                        });
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log("Theme", "Custom theme activate error: " + ex.Message);
-                }
-            });
 
             r.AddChild(outerContent, headerRow);
         }
@@ -2076,6 +2107,7 @@ internal static class ContentPages
         // (which may not exist yet at closure creation time)
         object?[] accentTextBoxRef = new object?[1];
         object?[] bgTextBoxRef = new object?[1];
+        object?[] textTextBoxRef = new object?[1];
 
         // Track last-known values to skip no-op TextChanged events during page init.
         // Avalonia fires TextChanged when controls attach to the visual tree, even
@@ -2083,6 +2115,7 @@ internal static class ContentPages
         // UpdateCustomThemeLive calls and saves during page construction.
         string[] lastAccent = new[] { settings.CustomAccent };
         string[] lastBg = new[] { settings.CustomBackground };
+        string[] lastText = new[] { settings.CustomText };
 
         // Debounced auto-save: saves settings 1s after last color change
         System.Threading.Timer? saveTimer = null;
@@ -2096,20 +2129,54 @@ internal static class ContentPages
             }, null, 1000, System.Threading.Timeout.Infinite);
         };
 
+        // Debounced page rebuild: refreshes Uprooted UI colors 500ms after last change.
+        // While color picker is open, re-schedules instead of firing (avoids destroying picker).
+        // Once picker closes, the next timer tick rebuilds.
+        System.Threading.Timer? rebuildTimer = null;
+        System.Threading.TimerCallback? rebuildCallback = null;
+        rebuildCallback = _ =>
+        {
+            if (ColorPickerPopup.IsOpen)
+            {
+                // Picker still open — check again in 500ms
+                rebuildTimer?.Change(500, System.Threading.Timeout.Infinite);
+                return;
+            }
+            if (onThemeChanged != null)
+            {
+                r.RunOnUIThread(() =>
+                {
+                    try { onThemeChanged.Invoke(); }
+                    catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                });
+            }
+        };
+        Action debounceRebuild = () =>
+        {
+            rebuildTimer?.Dispose();
+            rebuildTimer = new System.Threading.Timer(rebuildCallback!, null, 2000, System.Threading.Timeout.Infinite);
+        };
+
+        // Helper: read current text color (null if empty/invalid = auto-derive)
+        Func<string?> getCurrentTextHex = () =>
+        {
+            var t = r.GetTextBoxText(textTextBoxRef[0])?.Trim() ?? settings.CustomText;
+            return !string.IsNullOrEmpty(t) && ColorUtils.IsValidHex(t) ? t : null;
+        };
+
         // Accent row: label + textbox + swatch
         var accentSwatch = r.CreateBorder(settings.CustomAccent, 6);
         r.SetTag(accentSwatch, "uprooted-no-recolor");
         var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch,
             accentHex =>
             {
-                // Skip if this is the same value (e.g. from page init TextChanged)
                 if (string.Equals(accentHex, lastAccent[0], StringComparison.OrdinalIgnoreCase)) return;
                 lastAccent[0] = accentHex;
                 settings.CustomAccent = accentHex;
                 settings.ActiveTheme = "custom";
                 var bgVal = r.GetTextBoxText(bgTextBoxRef[0])?.Trim() ?? settings.CustomBackground;
                 if (ColorUtils.IsValidHex(bgVal))
-                    themeEngine?.UpdateCustomThemeLive(accentHex, bgVal);
+                    themeEngine?.UpdateCustomThemeLive(accentHex, bgVal, getCurrentTextHex());
                 debounceSave();
             });
         if (accentRow != null)
@@ -2124,14 +2191,13 @@ internal static class ContentPages
         var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch,
             bgHex =>
             {
-                // Skip if this is the same value (e.g. from page init TextChanged)
                 if (string.Equals(bgHex, lastBg[0], StringComparison.OrdinalIgnoreCase)) return;
                 lastBg[0] = bgHex;
                 settings.CustomBackground = bgHex;
                 settings.ActiveTheme = "custom";
                 var accentVal = r.GetTextBoxText(accentTextBoxRef[0])?.Trim() ?? settings.CustomAccent;
                 if (ColorUtils.IsValidHex(accentVal))
-                    themeEngine?.UpdateCustomThemeLive(accentVal, bgHex);
+                    themeEngine?.UpdateCustomThemeLive(accentVal, bgHex, getCurrentTextHex());
                 debounceSave();
             });
         if (bgRow != null)
@@ -2140,82 +2206,38 @@ internal static class ContentPages
             r.AddChild(outerContent, bgRow);
         }
 
-        // Fill in the mutable holders now that both rows exist
-        accentTextBoxRef[0] = GetTextBoxFromRow(r, accentRow);
-        bgTextBoxRef[0] = GetTextBoxFromRow(r, bgRow);
-
-        // Apply button
-        var applyRow = r.CreateStackPanel(vertical: false, spacing: 0);
-        if (applyRow != null)
-        {
-            r.SetMargin(applyRow, 32, 16, 0, 0);
-
-            var applyBtn = r.CreateBorder(AccentGreen, 8);
-            if (applyBtn != null)
+        // Text color row: label + textbox + swatch (empty = auto-derive)
+        var textInitial = string.IsNullOrEmpty(settings.CustomText) ? "" : settings.CustomText;
+        var textSwatchColor = string.IsNullOrEmpty(settings.CustomText) ? TextWhite : settings.CustomText;
+        var textSwatch = r.CreateBorder(textSwatchColor, 6);
+        r.SetTag(textSwatch, "uprooted-no-recolor");
+        var textRow = BuildColorInputRow(r, "Text", textInitial, font, textSwatch,
+            textHex =>
             {
-                r.SetCursorHand(applyBtn);
-                var applyText = r.CreateTextBlock("Apply Custom", 13, TextWhite);
-                r.SetFontWeightNumeric(applyText, 500);
-                ApplyFont(r, applyText, font);
-                r.SetPadding(applyBtn, 16, 6, 16, 6);
-                r.SetBorderChild(applyBtn, applyText);
-
-                // Get textbox references for reading values
-                var accentTextBox = GetTextBoxFromRow(r, accentRow);
-                var bgTextBox = GetTextBoxFromRow(r, bgRow);
-
-                r.SubscribeEvent(applyBtn, "PointerPressed", () =>
-                {
-                    try
-                    {
-                        var accentVal = r.GetTextBoxText(accentTextBox)?.Trim() ?? "";
-                        var bgVal = r.GetTextBoxText(bgTextBox)?.Trim() ?? "";
-
-                        if (!ColorUtils.IsValidHex(accentVal) || !ColorUtils.IsValidHex(bgVal))
-                        {
-                            Logger.Log("Theme", "Invalid custom hex values: accent=" + accentVal + " bg=" + bgVal);
-                            return;
-                        }
-
-                        settings.CustomAccent = accentVal;
-                        settings.CustomBackground = bgVal;
-                        settings.ActiveTheme = "custom";
-
-                        themeEngine?.ApplyCustomTheme(accentVal, bgVal);
-
-                        try { settings.Save(); }
-                        catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
-
-                        if (onThemeChanged != null)
-                        {
-                            r.RunOnUIThread(() =>
-                            {
-                                try { onThemeChanged.Invoke(); }
-                                catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
-                            });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Theme", "Custom theme apply error: " + ex.Message);
-                    }
-                });
-
-                // Hover effects
-                var btnAccent = AccentGreen;
-                r.SubscribeEvent(applyBtn, "PointerEntered", () =>
-                    r.SetBackground(applyBtn, ColorUtils.Lighten(btnAccent, 15)));
-                r.SubscribeEvent(applyBtn, "PointerExited", () =>
-                    r.SetBackground(applyBtn, btnAccent));
-
-                r.AddChild(applyRow, applyBtn);
-            }
-
-            r.AddChild(outerContent, applyRow);
+                if (string.Equals(textHex, lastText[0], StringComparison.OrdinalIgnoreCase)) return;
+                lastText[0] = textHex;
+                settings.CustomText = textHex;
+                settings.ActiveTheme = "custom";
+                var accentVal = r.GetTextBoxText(accentTextBoxRef[0])?.Trim() ?? settings.CustomAccent;
+                var bgVal = r.GetTextBoxText(bgTextBoxRef[0])?.Trim() ?? settings.CustomBackground;
+                var textParam = !string.IsNullOrEmpty(textHex) && ColorUtils.IsValidHex(textHex) ? textHex : null;
+                if (ColorUtils.IsValidHex(accentVal) && ColorUtils.IsValidHex(bgVal))
+                    themeEngine?.UpdateCustomThemeLive(accentVal, bgVal, textParam);
+                debounceSave();
+            });
+        if (textRow != null)
+        {
+            r.SetMargin(textRow, 32, 10, 0, 0);
+            r.AddChild(outerContent, textRow);
         }
 
+        // Fill in the mutable holders now that all rows exist
+        accentTextBoxRef[0] = GetTextBoxFromRow(r, accentRow);
+        bgTextBoxRef[0] = GetTextBoxFromRow(r, bgRow);
+        textTextBoxRef[0] = GetTextBoxFromRow(r, textRow);
+
         // ── Ping Color (merged into this card) ──
-        var pingDivider = r.CreateBorder(CardBorder, 0);
+        var pingDivider = r.CreateBorder(islandBorder, 0);
         if (pingDivider != null)
         {
             pingDivider.GetType().GetProperty("Height")?.SetValue(pingDivider, 1.0);
@@ -2235,12 +2257,12 @@ internal static class ContentPages
                 r.SetVerticalAlignment(pingTextStack, "Center");
                 r.SetMargin(pingTextStack, 0, 0, 60, 0);
 
-                var pingNameText = r.CreateTextBlock("Ping Color", 14, TextWhite);
+                var pingNameText = r.CreateTextBlock("Ping Color", 14, islandText);
                 r.SetFontWeightNumeric(pingNameText, 450);
                 ApplyFont(r, pingNameText, font);
                 r.AddChild(pingTextStack, pingNameText);
 
-                var pingDescText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, TextMuted);
+                var pingDescText = r.CreateTextBlock("Override the mention/reply highlight color. Persists across theme switches.", 12, islandMuted);
                 ApplyFont(r, pingDescText, font);
                 r.SetTextWrapping(pingDescText, "Wrap");
                 r.AddChild(pingTextStack, pingDescText);
@@ -2329,6 +2351,67 @@ internal static class ContentPages
         }
 
         r.SetBorderChild(card, outerContent);
+
+        // Hover effect — island colors (not themed)
+        var radioRef = radioOuter;
+        var dotRef = radioDot;
+        r.SubscribeEvent(card, "PointerEntered", () =>
+        {
+            if (!isActive)
+            {
+                SetBorderStroke(r, card, "#555577", CardBorderThickness);
+                if (radioRef != null)
+                    SetBorderStroke(r, radioRef, "#666688", 2.0);
+                if (dotRef != null)
+                    r.SetBackground(dotRef, "#444466");
+            }
+        });
+        r.SubscribeEvent(card, "PointerExited", () =>
+        {
+            if (!isActive)
+            {
+                SetBorderStroke(r, card, islandBorder, CardBorderThickness);
+                if (radioRef != null)
+                    SetBorderStroke(r, radioRef, "#555577", 2.0);
+                if (dotRef != null)
+                    r.SetBackground(dotRef, "#00000000");
+            }
+        });
+
+        // Click handler on card to activate custom theme (matches preset cards)
+        r.SetCursorHand(card);
+        r.SubscribeEvent(card, "PointerReleased", () =>
+        {
+            try
+            {
+                if (settings.ActiveTheme == "custom") return; // already active
+
+                Logger.Log("Theme", "Custom theme card clicked");
+                settings.ActiveTheme = "custom";
+
+                // Apply custom theme with current saved colors
+                var textParam = !string.IsNullOrEmpty(settings.CustomText) && ColorUtils.IsValidHex(settings.CustomText)
+                    ? settings.CustomText : null;
+                themeEngine?.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground, textParam);
+
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("Theme", "Save error: " + sx.Message); }
+
+                if (onThemeChanged != null)
+                {
+                    r.RunOnUIThread(() =>
+                    {
+                        try { onThemeChanged.Invoke(); }
+                        catch (Exception rx) { Logger.Log("Theme", "Rebuild error: " + rx.Message); }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Theme", "Custom theme activate error: " + ex.Message);
+            }
+        });
+
         return card;
     }
 
@@ -2343,21 +2426,21 @@ internal static class ContentPages
         if (row == null) return null;
         r.SetVerticalAlignment(row, "Center");
 
-        // Label
-        var labelText = r.CreateTextBlock(label, 13, TextMuted);
+        // Label — hardcoded island colors (inside no-recolor zone)
+        var labelText = r.CreateTextBlock(label, 13, "#A0A0B0");
         r.SetFontWeightNumeric(labelText, 450);
         ApplyFont(r, labelText, font);
         r.SetWidth(labelText, 110);
         r.AddChild(row, labelText);
 
-        // TextBox
+        // TextBox — hardcoded island colors
         var textBox = r.CreateTextBox("#RRGGBB", initialValue, 7);
         if (textBox != null)
         {
             r.SetWidth(textBox, 120);
             textBox.GetType().GetProperty("FontSize")?.SetValue(textBox, 13.0);
-            r.SetBackground(textBox, AdjustForHighlight(CardBg, 5));
-            r.SetForeground(textBox, TextWhite);
+            r.SetBackground(textBox, "#252540");
+            r.SetForeground(textBox, "#F0F0F0");
             ApplyFont(r, textBox, font);
             r.SetTag(textBox, "uprooted-color-input");
 
@@ -2422,9 +2505,13 @@ internal static class ContentPages
     {
         var restingBorder = AdjustForHighlight(CardBg, 15);
         var borderColor = isActive ? accentColor : restingBorder;
-        var card = r.CreateBorder(CardBg, 12);
+        var card = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (card == null) return null;
         SetBorderStroke(r, card, borderColor, CardBorderThickness);
+        // Tag for live recoloring: bg always, border depends on active state
+        r.SetTag(card, isActive
+            ? "dyn-bg:BackgroundSecondary,dyn-bb:BrandPrimary"
+            : "dyn-bg:BackgroundSecondary,dyn-bb:Border");
         r.SetCursorHand(card);
         r.SetWidth(card, 200);
 
@@ -2480,12 +2567,12 @@ internal static class ContentPages
             if (textStack != null)
             {
                 r.SetVerticalAlignment(textStack, "Center");
-                var nameText = r.CreateTextBlock(displayName, 13, TextWhite);
+                var nameText = CreateBoundText(r, displayName, 13, TextWhite, "TextPrimary");
                 r.SetFontWeightNumeric(nameText, 500);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(description, 11, TextMuted);
+                var descText = CreateBoundText(r, description, 11, TextMuted, "TextSecondary");
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -2678,7 +2765,7 @@ internal static class ContentPages
 
         // Lightbox card
         double cardW = 560;
-        _settingsPanel = r.CreateBorder(CardBg, 12);
+        _settingsPanel = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (_settingsPanel == null) return;
         r.SetTag(_settingsPanel, "uprooted-no-recolor");
         SetBorderStroke(r, _settingsPanel, CardBorder, 0.5);
@@ -2697,7 +2784,7 @@ internal static class ContentPages
         var headerRow = r.CreatePanel();
         if (headerRow != null)
         {
-            var titleText = r.CreateTextBlock(pluginName + " Settings", LightboxScale.Title, TextWhite);
+            var titleText = CreateBoundText(r, pluginName + " Settings", LightboxScale.Title, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(titleText, 600);
             ApplyFont(r, titleText, font);
             r.SetHorizontalAlignment(titleText, "Left");
@@ -2715,7 +2802,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(closeBtn, "Right");
                 r.SetVerticalAlignment(closeBtn, "Center");
 
-                var closeText = r.CreateTextBlock("\u2715", 18, TextMuted);
+                var closeText = CreateBoundText(r, "\u2715", 18, TextMuted, "TextSecondary");
                 ApplyFont(r, closeText, font);
                 r.SetHorizontalAlignment(closeText, "Center");
                 r.SetVerticalAlignment(closeText, "Center");
@@ -2802,9 +2889,9 @@ internal static class ContentPages
             r.AddChild(content, apiTextBox);
         }
 
-        var helperText = r.CreateTextBlock(
+        var helperText = CreateBoundText(r,
             "Get a free API key from Google Cloud Console \u2014 SafeSearch costs about $1.50 per 1,000 images",
-            LightboxScale.Description, TextDim);
+            LightboxScale.Description, TextDim, "TextTertiary");
         if (helperText != null)
         {
             ApplyFont(r, helperText, font);
@@ -2822,8 +2909,10 @@ internal static class ContentPages
             var saveBtn = r.CreateBorder(AccentGreen, 8);
             if (saveBtn != null)
             {
+                r.SetTag(saveBtn, "dyn-bg:BrandPrimary");
+                r.BindToDynamicResource(saveBtn, "Background", "BrandPrimary");
                 r.SetCursorHand(saveBtn);
-                var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, TextWhite);
+                var saveBtnText = CreateBoundText(r, "Save API Key", LightboxScale.Button, TextWhite, "TextPrimary");
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -2950,12 +3039,12 @@ internal static class ContentPages
             if (textStack != null)
             {
                 r.SetVerticalAlignment(textStack, "Center");
-                var nameText = r.CreateTextBlock(label, LightboxScale.Label, TextWhite);
+                var nameText = CreateBoundText(r, label, LightboxScale.Label, TextWhite, "TextPrimary");
                 r.SetFontWeightNumeric(nameText, 450);
                 ApplyFont(r, nameText, font);
                 r.AddChild(textStack, nameText);
 
-                var descText = r.CreateTextBlock(desc, LightboxScale.Description, TextMuted);
+                var descText = CreateBoundText(r, desc, LightboxScale.Description, TextMuted, "TextSecondary");
                 ApplyFont(r, descText, font);
                 r.AddChild(textStack, descText);
 
@@ -3100,7 +3189,7 @@ internal static class ContentPages
             r.SetMargin(maxRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(maxRow, "Center");
 
-            var maxLabel = r.CreateTextBlock("Max logged messages:", LightboxScale.Label, TextMuted);
+            var maxLabel = CreateBoundText(r, "Max logged messages:", LightboxScale.Label, TextMuted, "TextSecondary");
             r.SetFontWeightNumeric(maxLabel, 450);
             ApplyFont(r, maxLabel, font);
             r.SetVerticalAlignment(maxLabel, "Center");
@@ -3139,9 +3228,9 @@ internal static class ContentPages
             r.AddChild(content, maxRow);
         }
 
-        var retentionHelp = r.CreateTextBlock(
+        var retentionHelp = CreateBoundText(r,
             "Oldest messages are automatically removed when this limit is exceeded.",
-            LightboxScale.Description, TextDim);
+            LightboxScale.Description, TextDim, "TextTertiary");
         if (retentionHelp != null)
         {
             ApplyFont(r, retentionHelp, font);
@@ -3190,12 +3279,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 60, 0);
 
-            var nameText = r.CreateTextBlock(label, s.Label, TextWhite);
+            var nameText = CreateBoundText(r, label, s.Label, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock(description, s.Description, TextMuted);
+            var descText = CreateBoundText(r, description, s.Description, TextMuted, "TextSecondary");
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3261,12 +3350,12 @@ internal static class ContentPages
             r.SetVerticalAlignment(leftStack, "Center");
             r.SetMargin(leftStack, 0, 0, 140, 0);
 
-            var nameText = r.CreateTextBlock("Update channel", 13, TextWhite);
+            var nameText = CreateBoundText(r, "Update channel", 13, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = r.CreateTextBlock("Stable receives public releases, Developer receives pre-release builds", 12, TextMuted);
+            var descText = CreateBoundText(r, "Stable receives public releases, Developer receives pre-release builds", 12, TextMuted, "TextSecondary");
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -3279,7 +3368,7 @@ internal static class ContentPages
         var badgeColor = isDev ? "#8B6914" : AccentGreen;
         var badgeLabel = isDev ? "Developer" : "Stable";
 
-        var badgeText = r.CreateTextBlock(badgeLabel, 12, TextWhite);
+        var badgeText = CreateBoundText(r, badgeLabel, 12, TextWhite, "TextPrimary");
         r.SetFontWeightNumeric(badgeText, 500);
         ApplyFont(r, badgeText, font);
         r.SetHorizontalAlignment(badgeText, "Center");
@@ -3371,7 +3460,7 @@ internal static class ContentPages
         r.AddChild(promptRow, passBox);
 
         // Submit button
-        var submitText = r.CreateTextBlock("Go", 13, TextWhite);
+        var submitText = CreateBoundText(r, "Go", 13, TextWhite, "TextPrimary");
         r.SetFontWeightNumeric(submitText, 500);
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");
@@ -3380,6 +3469,8 @@ internal static class ContentPages
         var submitBtn = r.CreateBorder(AccentGreen, 6, submitText);
         if (submitBtn != null)
         {
+            r.SetTag(submitBtn, "dyn-bg:BrandPrimary");
+            r.BindToDynamicResource(submitBtn, "Background", "BrandPrimary");
             r.SetPadding(submitBtn, 12, 5, 12, 5);
             r.SetVerticalAlignment(submitBtn, "Center");
             r.SetCursorHand(submitBtn);
@@ -3487,7 +3578,7 @@ internal static class ContentPages
         if (boxContent == null) return box;
         r.SetMargin(boxContent, 16, 14, 16, 14);
 
-        var headerText = r.CreateTextBlock("HOW IT WORKS", LightboxScale.SectionHeader, TextDim);
+        var headerText = CreateBoundText(r, "HOW IT WORKS", LightboxScale.SectionHeader, TextDim, "TextTertiary");
         if (headerText != null)
         {
             r.SetFontWeightNumeric(headerText, 500);
@@ -3495,14 +3586,14 @@ internal static class ContentPages
         }
         r.AddChild(boxContent, headerText);
 
-        var howText = r.CreateTextBlock(
+        var howText = CreateBoundText(r,
             "Images in chat are checked against Google Cloud Vision's SafeSearch detection. " +
             "While an image is being checked, it gets a light blur. If flagged as NSFW, a full " +
             "blur is applied with a \"Click to reveal\" overlay. Results are remembered so the " +
             "same image isn't checked twice. If Google's service is unreachable, images show " +
             "normally \u2014 the filter never blocks you from seeing content. Your images are " +
             "only sent to Google for classification and are not stored anywhere.",
-            LightboxScale.Description, TextMuted);
+            LightboxScale.Description, TextMuted, "TextSecondary");
         if (howText != null)
         {
             ApplyFont(r, howText, font);
@@ -3524,7 +3615,7 @@ internal static class ContentPages
     private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font,
         FontScale? scale = null)
     {
-        var header = r.CreateTextBlock(text, (scale ?? PageScale).SectionHeader, TextDim);
+        var header = CreateBoundText(r, text, (scale ?? PageScale).SectionHeader, TextDim, "TextTertiary");
         r.SetFontWeightNumeric(header, 500);
         ApplyFont(r, header, font);
         return header;
@@ -3541,15 +3632,15 @@ internal static class ContentPages
 
     private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)
     {
-        var card = r.CreateBorder(CardBg, 12);
+        var card = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (card == null) return null;
 
         // Visible resting border — constant thickness, color changes on hover
         var restingBorder = AdjustForHighlight(CardBg, 15);
         SetBorderStroke(r, card, restingBorder, CardBorderThickness);
 
-        // No hover highlight on plugin cards — they're not clickable as a whole.
-        // Only the toggle/button inside is interactive.
+        // Combine bg + border tags for live walker recoloring
+        r.SetTag(card, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
 
         return card;
     }
@@ -3564,12 +3655,12 @@ internal static class ContentPages
         if (row == null) return;
         r.SetMargin(row, 0, first ? 16 : 12, 0, 0);
 
-        var labelText = r.CreateTextBlock(label, 13, TextMuted);
+        var labelText = CreateBoundText(r, label, 13, TextMuted, "TextSecondary");
         r.SetFontWeightNumeric(labelText, 450);
         ApplyFont(r, labelText, font);
         r.AddChild(row, labelText);
 
-        var separator = r.CreateTextBlock(" \u2022 ", 13, TextDim);
+        var separator = CreateBoundText(r, " \u2022 ", 13, TextDim, "TextTertiary");
         ApplyFont(r, separator, font);
         r.AddChild(row, separator);
 

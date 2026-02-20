@@ -23,6 +23,7 @@ internal class ThemeEngine
     private Dictionary<string, string>? _customPalette;
     private string? _customAccent;
     private string? _customBg;
+    private string _customSvgMode = "auto";
 
     // Custom ping/reply color (persists across theme switches)
     private string? _customPingColor;
@@ -32,11 +33,33 @@ internal class ThemeEngine
     private readonly Dictionary<string, object?> _savedStyleOriginals = new();
     private readonly HashSet<string> _addedStyleKeys = new();
 
+    // Track controls recolored by the walker, so we can ClearValue on revert
+    // to let DynamicResource reassert. Set of (control, propertyFieldName) pairs.
+    private readonly HashSet<(object control, string propertyField)> _walkerRecolored = new();
+
     // Single-shot walk timer
     private System.Threading.Timer? _walkTimer;
 
     // Throttle for live preview
     private long _lastLiveUpdateTick;
+    private long _lastLiveWalkTick;
+
+    // Track what colors the walker LAST painted onto injected controls.
+    // Used by BuildTreeColorMap as the map SOURCE (what's actually on screen),
+    // instead of ContentPages statics which drift between walks.
+    private string _walkedTextPri = DefaultTextWhite;
+    private string _walkedTextSec = DefaultTextMuted;
+    private string _walkedTextTer = DefaultTextDim;
+    private string _walkedCardBg = DefaultCardBg;
+    private string _walkedBorder = DefaultCardBorder;
+    private string _walkedAccent = DefaultAccentGreen;
+
+    private const string DefaultTextWhite = "#FFF2F2F2";
+    private const string DefaultTextMuted = "#A3F2F2F2";
+    private const string DefaultTextDim = "#66F2F2F2";
+    private const string DefaultCardBg = "#FF0F1923";
+    private const string DefaultCardBorder = "#19F2F2F2";
+    private const string DefaultAccentGreen = "#FF3B6AF8";
 
     // Cached reference to the variant dict we're overriding
     private IDictionary? _themeDicts;
@@ -45,6 +68,13 @@ internal class ThemeEngine
 
     // Whether we've subscribed to variant changes
     private bool _variantChangeSubscribed;
+
+    // Guard: true while we're programmatically switching the variant for theme application.
+    // Prevents the variant change handler from reverting our theme or re-injecting sidebar.
+    private bool _switchingVariantForTheme;
+
+    // The variant that was active before we switched it (null = we didn't switch)
+    private object? _originalVariantKey;
 
     // Callback for SidebarInjector to re-inject on Root variant change
     private Action? _onVariantChanged;
@@ -282,7 +312,7 @@ internal class ThemeEngine
     }
 
     /// <summary>Apply a custom theme from user-chosen accent + background.</summary>
-    public bool ApplyCustomTheme(string accentHex, string bgHex)
+    public bool ApplyCustomTheme(string accentHex, string bgHex, string? textHex = null, string svgMode = "auto")
     {
         if (!ColorUtils.IsValidHex(accentHex) || !ColorUtils.IsValidHex(bgHex))
         {
@@ -290,11 +320,12 @@ internal class ThemeEngine
             return false;
         }
 
-        var rootKeys = GenerateV2Palette(accentHex, bgHex);
+        var rootKeys = GenerateV2Palette(accentHex, bgHex, textHex);
         var simpleKeys = DeriveSimpleThemeKeys(accentHex, bgHex);
         _customPalette = MergePalettes(rootKeys, simpleKeys);
         _customAccent = accentHex;
         _customBg = bgHex;
+        _customSvgMode = svgMode;
         return ApplyThemeInternal("custom", rootKeys, simpleKeys);
     }
 
@@ -303,7 +334,7 @@ internal class ThemeEngine
     /// Only updates resource dictionaries — no revert, no tree walk.
     /// Throttled to ~60fps.
     /// </summary>
-    public void UpdateCustomThemeLive(string accentHex, string bgHex)
+    public void UpdateCustomThemeLive(string accentHex, string bgHex, string? textHex = null, string svgMode = "auto")
     {
         if (!ColorUtils.IsValidHex(accentHex) || !ColorUtils.IsValidHex(bgHex))
             return;
@@ -312,7 +343,7 @@ internal class ThemeEngine
         if (_activeThemeName != "custom" || _activeVariantDict == null)
         {
             Logger.Log("Theme", "Live preview: bootstrapping full custom apply");
-            ApplyCustomTheme(accentHex, bgHex);
+            ApplyCustomTheme(accentHex, bgHex, textHex, svgMode);
             _lastLiveUpdateTick = Environment.TickCount64;
             return;
         }
@@ -322,10 +353,23 @@ internal class ThemeEngine
         if (now - _lastLiveUpdateTick < 16) return;
         _lastLiveUpdateTick = now;
 
+        // Check if brightness crossed the dark/light threshold — if so, need a full
+        // re-apply to switch Root's variant (for correct SVGs).
+        var rootKeys = GenerateV2Palette(accentHex, bgHex, textHex);
+        bool themeNeedsDark = ThemeNeedsDarkSvgs(rootKeys);
+        var currentVariantName = _r.GetActiveThemeVariant()?.ToString() ?? "Dark";
+        bool currentIsDark = currentVariantName != "Light";
+        if (themeNeedsDark != currentIsDark)
+        {
+            Logger.Log("Theme", $"Live preview: brightness crossed threshold (needsDark={themeNeedsDark}, variant={currentVariantName}) — full re-apply");
+            ApplyCustomTheme(accentHex, bgHex, textHex, svgMode);
+            _lastLiveUpdateTick = Environment.TickCount64;
+            return;
+        }
+
         _customAccent = accentHex;
         _customBg = bgHex;
-
-        var rootKeys = GenerateV2Palette(accentHex, bgHex);
+        _customSvgMode = svgMode;
         var simpleKeys = DeriveSimpleThemeKeys(accentHex, bgHex);
         _customPalette = MergePalettes(rootKeys, simpleKeys);
 
@@ -335,7 +379,19 @@ internal class ThemeEngine
         // Update Styles[0].Resources
         OverrideSimpleThemeKeys(simpleKeys);
 
-        // Update ContentPages statics
+        // Walk injected controls to recolor with new palette values.
+        // BuildTreeColorMap reads ContentPages statics (current on-screen colors)
+        // and maps them to the new palette. Walk BEFORE updating statics.
+        // Throttled: walk every 100ms max (vs 16ms dict updates).
+        long walkNow = Environment.TickCount64;
+        if (walkNow - _lastLiveWalkTick >= 100)
+        {
+            _lastLiveWalkTick = walkNow;
+            WalkAllWindows();
+        }
+
+        // NOW update ContentPages statics to match new palette
+        // (so next walk maps from current→new correctly)
         ContentPages.UpdateLiveColors(accentHex, bgHex, _customPalette);
 
         // Update DWM title bar
@@ -390,11 +446,83 @@ internal class ThemeEngine
         _savedStyleOriginals.Clear();
         _addedStyleKeys.Clear();
 
+        // Phase 2b: ClearValue on ALL walker-recolored controls to remove LocalValue overrides.
+        foreach (var (ctrl, propField) in _walkerRecolored)
+        {
+            try { _r.ClearValue(ctrl, propField); }
+            catch { }
+        }
+        _walkerRecolored.Clear();
+
         // Phase 3: Restore default DWM title bar
         UpdateTitleBarColor(DefaultDarkBg);
 
         _activeThemeName = null;
         _customPalette = null;
+        _customSvgMode = "auto";
+
+        // Phase 4: Restore original variant if we switched it
+        if (_originalVariantKey != null)
+        {
+            Logger.Log("Theme", "Restoring original variant: " + _originalVariantKey);
+            _switchingVariantForTheme = true;
+            try
+            {
+                _r.SetRequestedThemeVariant(_originalVariantKey);
+            }
+            finally
+            {
+                _switchingVariantForTheme = false;
+                _originalVariantKey = null;
+            }
+            _activeVariantDict = null;
+            _activeVariantKey = null;
+        }
+
+        // Phase 5: Force Root's native theme refresh by toggling the variant.
+        // This makes Avalonia re-resolve ALL DynamicResource bindings across the entire tree.
+        // Our ClearValue'd controls pick up Root's native colors via inheritance/resolution.
+        {
+            var current = _r.GetActiveThemeVariant();
+            var opposite = _r.GetThemeVariantByName(
+                current?.ToString() == "Light" ? "Dark" : "Light");
+            if (current != null && opposite != null)
+            {
+                _switchingVariantForTheme = true;
+                try
+                {
+                    _r.SetRequestedThemeVariant(opposite);
+                    _r.SetRequestedThemeVariant(current);
+                }
+                finally
+                {
+                    _switchingVariantForTheme = false;
+                }
+                Logger.Log("Theme", "Variant toggled to force DynamicResource re-resolution");
+            }
+
+            // Restore our injected controls (tagged dyn-*) from Root's now-correct live colors.
+            // These don't have DynamicResource bindings, so the variant toggle alone won't fix them.
+            var liveColors = ReadLiveRootColors();
+            if (liveColors != null)
+            {
+                int restored = 0;
+                var topLevels = _r.GetAllTopLevels();
+                foreach (var tl in topLevels)
+                    restored += RestoreTaggedControls(tl, liveColors, 0);
+                if (restored > 0)
+                    Logger.Log("Theme", $"Restored {restored} injected controls from live Root colors");
+            }
+        }
+
+        // Reset walked colors to defaults for next theme application
+        _walkedTextPri = DefaultTextWhite;
+        _walkedTextSec = DefaultTextMuted;
+        _walkedTextTer = DefaultTextDim;
+        _walkedCardBg = DefaultCardBg;
+        _walkedBorder = DefaultCardBorder;
+        _walkedAccent = DefaultAccentGreen;
+
         Logger.Log("Theme", "Theme reverted — DynamicResource bindings auto-propagate");
     }
 
@@ -537,13 +665,14 @@ internal class ThemeEngine
         // Subscribe to variant changes (once)
         SubscribeToVariantChanges();
 
+        // Phase 0: Switch Root's variant if theme brightness requires different SVGs.
+        // Dark backgrounds need Dark variant (light-colored SVGs).
+        // Light backgrounds need Light variant (dark-colored SVGs).
+        SwitchVariantIfNeeded(rootKeys);
+
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
         OverrideThemeDictKeys(rootKeys);
-
-        // Phase 1b: Swap SVG asset paths if theme brightness doesn't match variant's SVG set
-        // E.g., Uprooted dark theme on Light variant → swap Light SVGs to Dark SVGs
-        SwapSvgPathsIfNeeded(rootKeys);
 
         // Phase 2: Override Styles[0].Resources with SimpleTheme keys
         var styleRes = _r.GetStyleResources(0);
@@ -588,16 +717,21 @@ internal class ThemeEngine
             Logger.Log("Theme", "Styles[0]: " + styleOverrides + " overrides applied");
         }
 
-        // Phase 3: Update ContentPages statics
-        var merged = MergePalettes(rootKeys, simpleThemeKeys);
+        _activeThemeName = themeName;
+
+        // Phase 3: Walk injected controls BEFORE updating ContentPages statics.
+        // The _walked* fields hold the PREVIOUS colors (what's on screen now).
+        // The palette has the NEW colors. Walk maps previous→new correctly.
+        _customPalette = MergePalettes(rootKeys, simpleThemeKeys);
+        WalkAllWindows();
+
+        // Phase 3b: NOW update ContentPages statics to match new palette
         ContentPages.UpdateLiveColors(
             rootKeys.GetValueOrDefault("BrandPrimary", GetAccentColor()),
             rootKeys.GetValueOrDefault("BackgroundPrimary", DefaultDarkBg),
-            merged);
+            _customPalette);
 
-        _activeThemeName = themeName;
-
-        // Phase 4: Schedule single delayed walk (500ms one-shot)
+        // Phase 4: Follow-up delayed walk (catches controls created after initial walk)
         ScheduleDelayedWalk(500);
 
         // Phase 5: Update DWM title bar color
@@ -611,6 +745,60 @@ internal class ThemeEngine
         Logger.Log("Theme", "Theme applied: " + themeName +
             " (" + _overriddenThemeDictKeys.Count + " ThemeDict + " + styleOverrides + " Style)");
         return true;
+    }
+
+    /// <summary>
+    /// Switch Root's variant to match theme brightness so SVGs load correctly.
+    /// Dark themes need Dark variant (light-colored SVG icons).
+    /// Light themes need Light variant (dark-colored SVG icons).
+    /// Sets _originalVariantKey so RevertTheme can restore it.
+    /// </summary>
+    private void SwitchVariantIfNeeded(Dictionary<string, string> rootKeys)
+    {
+        // Determine what variant the theme needs based on background luminance
+        bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys); // luminance <= 0.3 → dark SVGs → Dark variant
+        string targetVariant = themeIsDark ? "Dark" : "Light";
+
+        var currentVariant = _r.GetActiveThemeVariant();
+        var currentName = currentVariant?.ToString() ?? "Dark";
+
+        // PureDark uses Dark SVGs, so treat it as Dark for comparison
+        bool currentIsDark = currentName != "Light";
+
+        if (themeIsDark == currentIsDark)
+        {
+            // Already on the right variant family — no switch needed
+            Logger.Log("Theme", $"Variant {currentName} matches theme brightness (dark={themeIsDark}), no switch");
+            _originalVariantKey = null;
+            return;
+        }
+
+        // Need to switch. Get the target ThemeVariant object.
+        var targetKey = _r.GetThemeVariantByName(targetVariant);
+        if (targetKey == null)
+        {
+            Logger.Log("Theme", $"WARNING: Could not get ThemeVariant.{targetVariant} — skipping variant switch");
+            _originalVariantKey = null;
+            return;
+        }
+
+        Logger.Log("Theme", $"Switching variant {currentName} → {targetVariant} for theme SVGs");
+        _originalVariantKey = currentVariant;
+
+        // Guard so our variant change handler skips this switch
+        _switchingVariantForTheme = true;
+        try
+        {
+            _r.SetRequestedThemeVariant(targetKey);
+        }
+        finally
+        {
+            _switchingVariantForTheme = false;
+        }
+
+        // Clear cached variant dict so EnsureVariantDictResolved picks up the new one
+        _activeVariantDict = null;
+        _activeVariantKey = null;
     }
 
     // ===== ThemeDictionaries Override =====
@@ -842,13 +1030,16 @@ internal class ThemeEngine
     /// differs from what the active Root variant provides.
     /// E.g., Uprooted dark theme on Light variant → swap Light SVGs to Dark SVGs.
     /// </summary>
-    private void SwapSvgPathsIfNeeded(Dictionary<string, string> rootKeys)
+    private void SwapSvgPathsIfNeeded(Dictionary<string, string> rootKeys, string svgMode = "auto")
     {
         if (_activeVariantDict == null) return;
 
         // Determine what SVG set Root is currently providing vs what our theme needs
         var currentFolder = GetCurrentVariantSvgFolder();
-        bool needsDark = ThemeNeedsDarkSvgs(rootKeys);
+        bool needsDark;
+        if (svgMode == "light") needsDark = false;
+        else if (svgMode == "dark") needsDark = true;
+        else needsDark = ThemeNeedsDarkSvgs(rootKeys);  // auto
         var neededFolder = needsDark ? DarkSvgFolder : LightSvgFolder;
 
         // If current variant already uses the right SVG set, nothing to do
@@ -922,6 +1113,13 @@ internal class ThemeEngine
 
         _r.SubscribeActualThemeVariantChanged(() =>
         {
+            // Skip if WE triggered the variant change (for SVG/theme purposes)
+            if (_switchingVariantForTheme)
+            {
+                Logger.Log("Theme", "Variant change from our own switch — skipping handler");
+                return;
+            }
+
             var newVariant = GetCurrentRootVariant();
             Logger.Log("Theme", $"ActualThemeVariant changed -> {newVariant}");
 
@@ -1015,13 +1213,14 @@ internal class ThemeEngine
     /// <summary>
     /// Generate Root's 32 custom resource keys from accent + background using OKLCH.
     /// </summary>
-    private static Dictionary<string, string> GenerateV2Palette(string accentHex, string bgHex)
+    private static Dictionary<string, string> GenerateV2Palette(
+        string accentHex, string bgHex, string? textHex = null)
     {
         var (aL, aC, aH) = ColorUtils.HexToOklch(accentHex);
         var (bL, bC, bH) = ColorUtils.HexToOklch(bgHex);
 
-        // Clamp bg lightness to dark range
-        bL = Math.Clamp(bL, 0.05, 0.25);
+        // Allow full lightness range, just prevent pure extremes
+        bL = Math.Clamp(bL, 0.05, 0.93);
 
         var palette = new Dictionary<string, string>();
 
@@ -1032,32 +1231,78 @@ internal class ThemeEngine
         palette["BrandTertiary"]  = ColorUtils.OklchToHex(
             Math.Clamp(aL + 0.08, 0, 1), aC * 0.5, (aH + 210) % 360);
 
-        // --- Background hierarchy (perceptually even L steps) ---
+        // --- Background hierarchy (smooth direction-aware L steps) ---
+        // Smoothly interpolate step direction: at bL=0.5 steps are 0 (no offset).
+        // Dark bg: secondary lighter, tertiary/input darker.
+        // Light bg: secondary darker, tertiary/input lighter.
+        // dir: -1.0 at bL=0.05, 0.0 at bL=0.50, +1.0 at bL=0.93
+        double dir = (bL - 0.05) / (0.93 - 0.05) * 2.0 - 1.0; // linear -1..+1
+        double step1 = 0.02 * (1.0 - dir);   // Secondary: +0.04 dark, 0 mid, -0.04 light
+        double step2 = -0.015 * (1.0 - dir);  // Tertiary: -0.03 dark, 0 mid, +0.03 light
+        double step3 = -0.01 * (1.0 - dir);   // Input: -0.02 dark, 0 mid, +0.02 light
         palette["BackgroundPrimary"]   = ColorUtils.OklchToHex(bL, bC, bH);
-        palette["BackgroundSecondary"] = ColorUtils.OklchToHex(bL + 0.02, bC, bH);
-        palette["BackgroundTertiary"]  = ColorUtils.OklchToHex(Math.Max(0.03, bL - 0.015), bC, bH);
-        palette["Input"]               = ColorUtils.OklchToHex(Math.Max(0.03, bL - 0.01), bC * 0.8, bH);
+        palette["BackgroundSecondary"] = ColorUtils.OklchToHex(Math.Clamp(bL + step1, 0.05, 0.95), bC, bH);
+        palette["BackgroundTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(bL + step2, 0.05, 0.95), bC, bH);
+        palette["Input"]               = ColorUtils.OklchToHex(Math.Clamp(bL + step3, 0.05, 0.95), bC * 0.8, bH);
 
-        // --- Text colors ---
-        palette["TextPrimary"]   = ColorUtils.OklchToHex(0.93, 0.005, aH);
-        palette["TextSecondary"] = ColorUtils.WithAlpha(palette["TextPrimary"], 0xA3);
-        palette["TextTertiary"]  = ColorUtils.WithAlpha(palette["TextPrimary"], 0x66);
-        palette["TextWhite"]     = "#F2F2F2";
+        // --- Text colors (custom or auto-derived) ---
+        // TextPrimary: user-specified or smooth inverse of background lightness.
+        // No hard threshold — smoothly transitions from light text to dark text
+        // as background lightness increases.
+        if (!string.IsNullOrEmpty(textHex) && ColorUtils.IsValidHex(textHex))
+        {
+            palette["TextPrimary"] = textHex;
+        }
+        else
+        {
+            // Smooth inverse: bL=0.05→textL=0.93, bL=0.93→textL=0.15
+            // Linear map ensures no snap at any lightness value
+            double textL = 0.93 - (bL - 0.05) / (0.93 - 0.05) * (0.93 - 0.15);
+            textL = Math.Clamp(textL, 0.15, 0.95);
+            palette["TextPrimary"] = ColorUtils.OklchToHex(textL, 0.005, aH);
+        }
 
-        // --- UI elements ---
+        // Secondary/Tertiary: lerp toward mid-range (L=0.50) from TextPrimary.
+        // No threshold — completely smooth across the entire lightness spectrum.
+        // Secondary = 35% toward mid, Tertiary = 60% toward mid.
+        {
+            var (tL, tC, tH) = ColorUtils.HexToOklch(palette["TextPrimary"]);
+            double secL = tL + (0.50 - tL) * 0.35;
+            double terL = tL + (0.50 - tL) * 0.60;
+            palette["TextSecondary"] = ColorUtils.OklchToHex(Math.Clamp(secL, 0.10, 0.90), tC, tH);
+            palette["TextTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(terL, 0.10, 0.90), tC, tH);
+        }
+        palette["TextWhite"] = "#F2F2F2";
+
+        // --- UI elements (smooth direction-aware) ---
+        // Border: lighter than bg on dark, darker on light. Smooth via dir.
         palette["Border"] = ColorUtils.OklchToHex(
-            bL + 0.08, bC * 0.4, ((aH + bH) / 2) % 360);
-        palette["HighlightLight"]  = "#0AFFFFFF";
-        palette["HighlightNormal"] = "#19FFFFFF";
-        palette["HighlightStrong"] = "#30FFFFFF";
+            Math.Clamp(bL + 0.08 * (1.0 - dir), 0.05, 0.95),
+            bC * 0.4, ((aH + bH) / 2) % 360);
+
+        // Highlights: smooth blend from white-alpha (dark bg) to black-alpha (light bg).
+        // At mid-range, both blend equally. Uses dir to interpolate alpha channels.
+        // dir: -1=dark (white overlay), +1=light (black overlay)
+        double whiteWeight = Math.Clamp((1.0 - dir) / 2.0, 0.0, 1.0);  // 1.0 at dark, 0.0 at light
+        double blackWeight = 1.0 - whiteWeight;
+        int hlA = (int)(0x0A * whiteWeight + 0x0A * blackWeight);
+        int hnA = (int)(0x19 * whiteWeight + 0x19 * blackWeight);
+        int hsA = (int)(0x30 * whiteWeight + 0x30 * blackWeight);
+        palette["HighlightLight"]  = whiteWeight >= 0.5
+            ? $"#{hlA:X2}FFFFFF" : $"#{hlA:X2}000000";
+        palette["HighlightNormal"] = whiteWeight >= 0.5
+            ? $"#{hnA:X2}FFFFFF" : $"#{hnA:X2}000000";
+        palette["HighlightStrong"] = whiteWeight >= 0.5
+            ? $"#{hsA:X2}FFFFFF" : $"#{hsA:X2}000000";
 
         // --- Semantic (kept from Root) ---
         palette["Info"]    = "#5BC0DE";
         palette["Warning"] = "#F0AD4E";
         palette["Error"]   = "#F03F36";
 
-        // --- Derived ---
-        palette["Muted"] = ColorUtils.OklchToHex(bL + 0.18, 0.015, bH);
+        // --- Derived (smooth direction-aware) ---
+        palette["Muted"] = ColorUtils.OklchToHex(
+            Math.Clamp(bL + 0.18 * (1.0 - dir), 0.05, 0.95), 0.015, bH);
         palette["Link"]  = ColorUtils.OklchToHex(
             Math.Clamp(aL + 0.12, 0, 1), aC * 0.55, ((aH - 15) + 360) % 360);
 
@@ -1080,8 +1325,9 @@ internal class ThemeEngine
         // --- ScrollShadow (bg-colored gradient) ---
         palette["ScrollShadow"] = palette["BackgroundPrimary"];
 
-        // --- Drop shadow (constant) ---
-        palette["DropShadow"] = "#80000000";
+        // --- Drop shadow (smooth: heavier on dark, lighter on light) ---
+        int shadowAlpha = (int)(0x80 * whiteWeight + 0x30 * blackWeight);
+        palette["DropShadow"] = $"#{Math.Clamp(shadowAlpha, 0x20, 0x80):X2}000000";
 
         return palette;
     }
@@ -1092,8 +1338,11 @@ internal class ThemeEngine
     private static Dictionary<string, string> DeriveSimpleThemeKeys(string accentHex, string bgHex)
     {
         var (bL, bC, bH) = ColorUtils.HexToOklch(bgHex);
+        // Smooth direction: matches GenerateV2Palette's dir calculation
+        double dir = (Math.Clamp(bL, 0.05, 0.93) - 0.05) / (0.93 - 0.05) * 2.0 - 1.0;
+        double step = 0.02 * (1.0 - dir);
         var bgSecondary = ColorUtils.OklchToHex(
-            Math.Clamp(bL + 0.02, 0.05, 0.25), bC, bH);
+            Math.Clamp(bL + step, 0.05, 0.95), bC, bH);
 
         return new Dictionary<string, string>
         {
@@ -1157,30 +1406,114 @@ internal class ThemeEngine
             try { total += WalkAndRecolor(topLevel, colorMap, 0); }
             catch { }
         }
+
+        // Record what we just painted so next walk maps from correct source
+        if (total > 0) UpdateWalkedColors(palette);
+
         return total;
     }
 
     /// <summary>
-    /// Build a map from Root's original ARGB colors to our themed colors.
-    /// Only needed for hardcoded code-behind values that DynamicResource doesn't reach.
+    /// Build a map from CURRENT on-screen ARGB colors to new themed colors.
+    /// Maps both hardcoded defaults AND previous theme colors to the new palette.
     /// </summary>
-    private static Dictionary<string, string> BuildTreeColorMap(Dictionary<string, string> palette)
+    /// <summary>
+    /// Build color map for TEXT colors only (Foreground matching on untagged Root controls).
+    /// Maps from ALL known text color sources → new palette targets.
+    /// Includes: walked colors, hardcoded defaults, AND Root's native variant colors.
+    /// This ensures the walker can find and recolor text regardless of variant state.
+    /// </summary>
+    private Dictionary<string, string> BuildTreeColorMap(Dictionary<string, string> palette)
     {
         var map = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
-        // ContentPages card colors (hardcoded by our own UI code)
-        // Map the defaults to our themed values
-        if (palette.TryGetValue("BackgroundSecondary", out var bgSec))
-            map["#FF0F1923"] = NormalizeArgb(bgSec);
-        if (palette.TryGetValue("TextPrimary", out var textPri))
-        {
-            var (tr, tg, tb) = ColorUtils.ParseHex(textPri);
-            map["#FFF2F2F2"] = $"#FF{tr:X2}{tg:X2}{tb:X2}";
-            map["#A3F2F2F2"] = $"#A3{tr:X2}{tg:X2}{tb:X2}";
-            map["#66F2F2F2"] = $"#66{tr:X2}{tg:X2}{tb:X2}";
-        }
+        if (!palette.TryGetValue("TextPrimary", out var textPri)) return map;
+
+        var newPri = NormalizeArgb(textPri);
+        var newSec = palette.TryGetValue("TextSecondary", out var ts) ? NormalizeArgb(ts) : newPri;
+        var newTer = palette.TryGetValue("TextTertiary", out var tt) ? NormalizeArgb(tt) : newPri;
+
+        // Source 1: What the walker last painted
+        map[NormalizeArgb(_walkedTextPri)] = newPri;
+        map[NormalizeArgb(_walkedTextSec)] = newSec;
+        map[NormalizeArgb(_walkedTextTer)] = newTer;
+
+        // Source 2: Root's native Dark/PureDark variant text (from ROOT_THEME_SYSTEM_FINDINGS)
+        map["#FFF2F2F2"] = newPri;  // Dark TextPrimary + TextWhite
+        map["#A3F2F2F2"] = newSec;  // Dark TextSecondary (alpha)
+        map["#66F2F2F2"] = newTer;  // Dark TextTertiary (alpha)
+        map["#FFFFFFFF"] = newPri;  // Pure white (some controls)
+        map["#FFE8E8E8"] = newPri;  // Near-white variant
+        map["#FFEAEAEA"] = newPri;  // Near-white variant
+        map["#FFE0E0E0"] = newPri;  // Light gray
+
+        // Source 3: Root's native Light variant text (solid, NOT alpha)
+        map["#FF131313"] = newPri;  // Light TextPrimary (confirmed from Root findings)
+        map["#FF282828"] = newSec;  // Light TextSecondary
+        map["#FF5E5E5E"] = newTer;  // Light TextTertiary
+        map["#FF1A1A1A"] = newPri;  // Near-black variant
+        map["#FF333333"] = newSec;  // Dark gray variant
+        map["#FF000000"] = newPri;  // Pure black
+
+        // Source 5: ContentPages statics (may differ from walked if statics updated between walks)
+        var cpPri = NormalizeArgb(ContentPages.TextWhite);
+        var cpSec = NormalizeArgb(ContentPages.TextMuted);
+        var cpTer = NormalizeArgb(ContentPages.TextDim);
+        if (!string.IsNullOrEmpty(cpPri)) map[cpPri] = newPri;
+        if (!string.IsNullOrEmpty(cpSec)) map[cpSec] = newSec;
+        if (!string.IsNullOrEmpty(cpTer)) map[cpTer] = newTer;
 
         return map;
+    }
+
+    /// <summary>
+    /// Update _walked* fields to reflect what the walker just painted.
+    /// Called AFTER a successful walk so the next walk knows what's on screen.
+    /// </summary>
+    private void UpdateWalkedColors(Dictionary<string, string> palette)
+    {
+        if (palette.TryGetValue("TextPrimary", out var tp)) _walkedTextPri = NormalizeArgb(tp);
+        if (palette.TryGetValue("TextSecondary", out var ts)) _walkedTextSec = NormalizeArgb(ts);
+        if (palette.TryGetValue("TextTertiary", out var tt)) _walkedTextTer = NormalizeArgb(tt);
+        if (palette.TryGetValue("BackgroundSecondary", out var bg)) _walkedCardBg = NormalizeArgb(bg);
+        if (palette.TryGetValue("Border", out var b)) _walkedBorder = NormalizeArgb(b);
+        if (palette.TryGetValue("BrandPrimary", out var a)) _walkedAccent = NormalizeArgb(a);
+    }
+
+    /// <summary>
+    /// Walk the tree and restore dyn-* tagged controls from live Root colors.
+    /// Used after revert to set injected controls to Root's native values.
+    /// </summary>
+    private int RestoreTaggedControls(object visual, Dictionary<string, string> liveColors, int depth)
+    {
+        if (depth > 50) return 0;
+        var tag = _r.GetTag(visual);
+        if (tag == "uprooted-no-recolor") return 0;
+
+        int count = 0;
+        if (tag != null && tag.StartsWith("dyn-"))
+        {
+            foreach (var part in tag.Split(','))
+            {
+                var t = part.Trim();
+                if (!t.StartsWith("dyn-")) continue;
+                var ci = t.IndexOf(':', 4);
+                if (ci < 0) continue;
+                var mode = t[4..ci];
+                var key = t[(ci + 1)..];
+                var pn = mode switch { "fg" => "Foreground", "bg" => "Background", "bb" => "BorderBrush", _ => null };
+                if (pn == null) continue;
+                if (!liveColors.TryGetValue(key, out var hex)) continue;
+                var brush = _r.CreateBrush(hex);
+                if (brush == null) continue;
+                var prop = visual.GetType().GetProperty(pn);
+                if (prop != null) { prop.SetValue(visual, brush); count++; }
+            }
+        }
+
+        foreach (var child in _r.GetVisualChildren(visual))
+            count += RestoreTaggedControls(child, liveColors, depth + 1);
+        return count;
     }
 
     private int WalkAndRecolor(object visual, Dictionary<string, string> colorMap, int depth)
@@ -1193,7 +1526,52 @@ internal class ThemeEngine
         int count = 0;
         try
         {
-            foreach (var propName in new[] { "Background", "Foreground", "BorderBrush" })
+            // Strategy 1: Tag-based recoloring (deterministic, never desyncs)
+            // Tags: "dyn-fg:TextPrimary", "dyn-bg:BackgroundSecondary"
+            if (tag != null && tag.StartsWith("dyn-"))
+            {
+                var palette = GetPalette();
+                if (palette != null)
+                {
+                    // Support multiple bindings: "dyn-fg:TextPrimary,dyn-bg:BackgroundSecondary"
+                    foreach (var part in tag.Split(','))
+                    {
+                        var trimmed = part.Trim();
+                        if (!trimmed.StartsWith("dyn-")) continue;
+                        var colonIdx = trimmed.IndexOf(':', 4);
+                        if (colonIdx < 0) continue;
+
+                        var mode = trimmed[4..colonIdx];  // "fg" or "bg"
+                        var key = trimmed[(colonIdx + 1)..]; // "TextPrimary"
+
+                        if (!palette.TryGetValue(key, out var hex)) continue;
+                        var newBrush = _r.CreateBrush(hex);
+                        if (newBrush == null) continue;
+
+                        var propName = mode switch
+                        {
+                            "fg" => "Foreground",
+                            "bg" => "Background",
+                            "bb" => "BorderBrush",
+                            _ => null
+                        };
+                        if (propName != null)
+                        {
+                            var prop = visual.GetType().GetProperty(propName);
+                            if (prop != null)
+                            {
+                                prop.SetValue(visual, newBrush);
+                                _walkerRecolored.Add((visual, propName + "Property"));
+                                count++;
+                            }
+                        }
+                    }
+                }
+            }
+            // Untagged controls: color-map matching for TEXT colors only.
+            // Uses SetValueStylePriority so DynamicResource can reassert on revert.
+            // This recolors Root's native text (settings tabs, profile labels, etc.)
+            foreach (var propName in new[] { "Foreground" })
             {
                 var prop = visual.GetType().GetProperty(propName);
                 if (prop == null) continue;
@@ -1210,6 +1588,8 @@ internal class ThemeEngine
                         if (newBrush != null)
                         {
                             prop.SetValue(visual, newBrush);
+                            // Track for ClearValue on revert
+                            _walkerRecolored.Add((visual, propName + "Property"));
                             count++;
                         }
                     }

@@ -133,6 +133,16 @@ internal class AvaloniaReflection
     private PropertyInfo? _appResources;              // Application.Resources
     private PropertyInfo? _resourcesMergedDicts;       // IResourceDictionary.MergedDictionaries
 
+    // DynamicResource binding support
+    private bool _dynamicResourceResolved;
+    private Type? _dynamicResourceExtType;             // DynamicResourceExtension
+    private MethodInfo? _avaloniaBindMethod;            // AvaloniaObjectExtensions.Bind(obj, prop, IBinding)
+    private MethodInfo? _avaloniaBindObservableMethod;  // AvaloniaObjectExtensions.Bind(obj, prop, IObservable)
+    private object? _bindingPriorityLocalValue;         // BindingPriority.LocalValue enum value
+    private bool _loggedBindStrategy;
+    private bool _loggedBindStrategyB;
+    private readonly Dictionary<string, FieldInfo?> _avaloniaPropertyFieldCache = new();
+
     public bool IsResolved { get; private set; }
 
     public bool Resolve()
@@ -1390,6 +1400,219 @@ internal class AvaloniaReflection
         catch { return false; }
     }
 
+    // ===== DynamicResource Binding =====
+
+    /// <summary>
+    /// Bind an injected control's property to a DynamicResource key.
+    /// The control auto-updates when ThemeDictionaries change — no rebuild needed.
+    ///
+    /// Usage:
+    ///   r.BindToDynamicResource(border, "Background", "BackgroundSecondary");
+    ///   r.BindToDynamicResource(textBlock, "Foreground", "TextPrimary");
+    ///   r.BindToDynamicResource(border, "BorderBrush", "Border");
+    ///
+    /// Programmatic equivalent of XAML: Background="{DynamicResource BackgroundSecondary}"
+    /// </summary>
+    public bool BindToDynamicResource(object? control, string propertyName, string resourceKey)
+    {
+        if (control == null) return false;
+
+        EnsureDynamicResourceTypesResolved();
+
+        try
+        {
+            // Step 1: Find the static AvaloniaProperty field (e.g. Border.BackgroundProperty)
+            var fieldName = propertyName + "Property";
+            var avProp = FindAvaloniaPropertyField(control.GetType(), fieldName);
+            if (avProp == null)
+            {
+                Logger.Log("Reflection", $"BindToDynRes: {control.GetType().Name}.{fieldName} not found");
+                return false;
+            }
+
+            // Strategy A: GetResourceObservable + Bind
+            var getResObs = control.GetType().GetMethod("GetResourceObservable",
+                BindingFlags.Public | BindingFlags.Instance,
+                null, new[] { typeof(object) }, null);
+
+            if (getResObs != null)
+            {
+                var observable = getResObs.Invoke(control, new object[] { resourceKey });
+                if (observable != null)
+                {
+                    if (_avaloniaBindObservableMethod == null)
+                        ResolveBindObservableMethod();
+
+                    if (_avaloniaBindObservableMethod != null)
+                    {
+                        try
+                        {
+                            var paramCount = _avaloniaBindObservableMethod.GetParameters().Length;
+                            var args = paramCount == 4
+                                ? new[] { control, avProp, observable, _bindingPriorityLocalValue }
+                                : paramCount == 3
+                                    ? new[] { control, avProp, observable }
+                                    : new[] { control, avProp, observable, null };
+                            _avaloniaBindObservableMethod.Invoke(null, args);
+                            if (!_loggedBindStrategy) { _loggedBindStrategy = true; Logger.Log("Reflection", "BindToDynRes: Strategy A (observable) succeeded"); }
+                            return true;
+                        }
+                        catch (Exception ex)
+                        {
+                            if (!_loggedBindStrategy) { _loggedBindStrategy = true; Logger.Log("Reflection", $"BindToDynRes: Strategy A failed: {ex.InnerException?.Message ?? ex.Message}"); }
+                        }
+                    }
+                    else if (!_loggedBindStrategy)
+                    {
+                        _loggedBindStrategy = true;
+                        Logger.Log("Reflection", "BindToDynRes: Strategy A skipped — no BindObservable method found");
+                    }
+                }
+            }
+            else if (!_loggedBindStrategy)
+            {
+                _loggedBindStrategy = true;
+                Logger.Log("Reflection", $"BindToDynRes: GetResourceObservable not found on {control.GetType().Name}");
+            }
+
+            // Strategy B: DynamicResourceExtension as IBinding (fallback)
+            if (_dynamicResourceExtType != null && _avaloniaBindMethod != null)
+            {
+                var ext = Activator.CreateInstance(_dynamicResourceExtType, resourceKey);
+                if (ext != null)
+                {
+                    var paramCount = _avaloniaBindMethod.GetParameters().Length;
+                    var args = paramCount == 4
+                        ? new[] { control, avProp, ext, null }
+                        : new[] { control, avProp, ext };
+                    _avaloniaBindMethod.Invoke(null, args);
+                    if (!_loggedBindStrategyB) { _loggedBindStrategyB = true; Logger.Log("Reflection", $"BindToDynRes: Strategy B (DynResExt) — IBinding type={ext.GetType().Name}, interfaces={string.Join(",", ext.GetType().GetInterfaces().Select(i => i.Name))}"); }
+                    return true;
+                }
+            }
+
+            Logger.Log("Reflection", $"BindToDynRes: no strategy worked for {propertyName}={resourceKey}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"BindToDynRes({propertyName}, {resourceKey}): {ex.InnerException?.Message ?? ex.Message}");
+            return false;
+        }
+    }
+
+    private void EnsureDynamicResourceTypesResolved()
+    {
+        if (_dynamicResourceResolved) return;
+        _dynamicResourceResolved = true;
+
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                // DynamicResourceExtension
+                if (_dynamicResourceExtType == null)
+                {
+                    _dynamicResourceExtType = asm.GetType(
+                        "Avalonia.Markup.Xaml.MarkupExtensions.DynamicResourceExtension");
+                }
+
+                // AvaloniaObjectExtensions — contains Bind(AvaloniaObject, AvaloniaProperty, IBinding)
+                if (_avaloniaBindMethod == null)
+                {
+                    var extType = asm.GetType("Avalonia.AvaloniaObjectExtensions");
+                    if (extType != null)
+                    {
+                        // Find Bind overload: (AvaloniaObject, AvaloniaProperty, IBinding)
+                        foreach (var m in extType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                        {
+                            if (m.Name != "Bind" || m.IsGenericMethod) continue;
+                            var parms = m.GetParameters();
+                            if (parms.Length >= 3 &&
+                                parms[2].ParameterType.Name == "IBinding")
+                            {
+                                _avaloniaBindMethod = m;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        // Resolve BindingPriority.LocalValue for observable binding
+        if (_bindingPriorityLocalValue == null)
+        {
+            EnsureBindingPriorityResolved();
+            // BindingPriority.LocalValue = 0 in Avalonia
+            foreach (var bpAsm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var bpType = bpAsm.GetType("Avalonia.Data.BindingPriority");
+                if (bpType != null)
+                {
+                    _bindingPriorityLocalValue = Enum.ToObject(bpType, 0);
+                    break;
+                }
+            }
+        }
+
+        Logger.Log("Reflection", $"DynamicResource types: ext={_dynamicResourceExtType != null} bind={_avaloniaBindMethod != null}");
+    }
+
+    /// <summary>
+    /// Resolve AvaloniaObjectExtensions.Bind overload that accepts IObservable.
+    /// Signature: Bind(AvaloniaObject, AvaloniaProperty, IObservable&lt;object?&gt;, BindingPriority)
+    /// </summary>
+    private void ResolveBindObservableMethod()
+    {
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                var extType = asm.GetType("Avalonia.AvaloniaObjectExtensions");
+                if (extType == null) continue;
+
+                // Look for non-generic Bind that takes IObservable parameter
+                foreach (var m in extType.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                {
+                    if (m.Name != "Bind" || m.IsGenericMethod) continue;
+                    var parms = m.GetParameters();
+                    if (parms.Length < 3) continue;
+
+                    // Check 3rd param is IObservable<T> or IObservable
+                    var p2Type = parms[2].ParameterType;
+                    if (p2Type.Name.StartsWith("IObservable"))
+                    {
+                        _avaloniaBindObservableMethod = m;
+                        Logger.Log("Reflection", $"BindObservable method found: {parms.Length} params, p2={p2Type.Name}");
+                        return;
+                    }
+                }
+            }
+            catch { }
+        }
+        Logger.Log("Reflection", "BindObservable method NOT found — will use DynamicResourceExtension fallback");
+    }
+
+    /// <summary>
+    /// Find a static AvaloniaProperty field on a control type (cached).
+    /// E.g. FindAvaloniaPropertyField(typeof(Border), "BackgroundProperty")
+    /// </summary>
+    private object? FindAvaloniaPropertyField(Type controlType, string fieldName)
+    {
+        var cacheKey = controlType.FullName + "." + fieldName;
+        if (_avaloniaPropertyFieldCache.TryGetValue(cacheKey, out var cached))
+            return cached?.GetValue(null);
+
+        // Search up the hierarchy
+        var field = controlType.GetField(fieldName,
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+        _avaloniaPropertyFieldCache[cacheKey] = field;
+
+        return field?.GetValue(null);
+    }
+
     /// <summary>
     /// Map a property name to its Avalonia static property field name.
     /// E.g. "Background" -> "BackgroundProperty"
@@ -2134,6 +2357,62 @@ internal class AvaloniaReflection
         catch (Exception ex)
         {
             Logger.Log("Reflection", $"GetActiveThemeVariant error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Sets Application.Current.RequestedThemeVariant to switch the active variant.
+    /// The variantKey should be a ThemeVariant object (from GetActiveThemeVariant or
+    /// GetThemeVariantByName). Setting this changes ActualThemeVariant synchronously
+    /// on the UI thread, which triggers ActualThemeVariantChanged.
+    /// </summary>
+    public bool SetRequestedThemeVariant(object? variantKey)
+    {
+        if (variantKey == null) return false;
+        var app = GetAppCurrent();
+        if (app == null) return false;
+        try
+        {
+            var prop = app.GetType().GetProperty("RequestedThemeVariant",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null)
+            {
+                Logger.Log("Reflection", "RequestedThemeVariant property not found");
+                return false;
+            }
+            prop.SetValue(app, variantKey);
+            Logger.Log("Reflection", $"Set RequestedThemeVariant -> {variantKey}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetRequestedThemeVariant error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Get a ThemeVariant static field by name ("Dark", "Light", "Default").
+    /// Uses the runtime type of ActualThemeVariant to find the ThemeVariant class,
+    /// then reads the static field.
+    /// </summary>
+    public object? GetThemeVariantByName(string name)
+    {
+        var actual = GetActiveThemeVariant();
+        if (actual == null) return null;
+        try
+        {
+            var tvType = actual.GetType();
+            var field = tvType.GetField(name, BindingFlags.Public | BindingFlags.Static);
+            if (field != null) return field.GetValue(null);
+
+            var prop = tvType.GetProperty(name, BindingFlags.Public | BindingFlags.Static);
+            return prop?.GetValue(null);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"GetThemeVariantByName({name}) error: {ex.Message}");
             return null;
         }
     }

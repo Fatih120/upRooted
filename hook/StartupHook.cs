@@ -162,7 +162,9 @@ internal class StartupHook
                     if (savedSettings.ActiveTheme == "custom")
                     {
                         Logger.Log("Startup", "Applying saved custom theme: accent=" + savedSettings.CustomAccent + " bg=" + savedSettings.CustomBackground);
-                        themeEngine.ApplyCustomTheme(savedSettings.CustomAccent, savedSettings.CustomBackground);
+                        var textHex = !string.IsNullOrEmpty(savedSettings.CustomText) && ColorUtils.IsValidHex(savedSettings.CustomText)
+                            ? savedSettings.CustomText : null;
+                        themeEngine.ApplyCustomTheme(savedSettings.CustomAccent, savedSettings.CustomBackground, textHex);
                     }
                     else if (savedSettings.ActiveTheme != "default-dark")
                     {

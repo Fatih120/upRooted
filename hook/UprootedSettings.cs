@@ -9,6 +9,8 @@ internal class UprootedSettings
     public string CustomCss { get; set; } = "";
     public string CustomAccent { get; set; } = "#3B6AF8";
     public string CustomBackground { get; set; } = "#0D1521";
+    public string CustomText { get; set; } = "";           // Empty = auto-derive from bg
+    public string CustomSvgMode { get; set; } = "auto";    // "auto", "light", or "dark"
     public bool NsfwFilterEnabled { get; set; } = false;
     public string NsfwApiKey { get; set; } = "";
     public double NsfwThreshold { get; set; } = 0.6;
@@ -94,6 +96,8 @@ internal class UprootedSettings
                     case "CustomCss": settings.CustomCss = val; break;
                     case "CustomAccent": settings.CustomAccent = val; break;
                     case "CustomBackground": settings.CustomBackground = val; break;
+                    case "CustomText": settings.CustomText = val; break;
+                    case "CustomSvgMode": settings.CustomSvgMode = val; break;
                     case "NsfwFilterEnabled": settings.NsfwFilterEnabled = val == "true"; break;
                     case "NsfwApiKey": settings.NsfwApiKey = val; break;
                     case "NsfwThreshold":
@@ -181,6 +185,8 @@ internal class UprootedSettings
                 "CustomCss=" + CustomCss,
                 "CustomAccent=" + CustomAccent,
                 "CustomBackground=" + CustomBackground,
+                "CustomText=" + CustomText,
+                "CustomSvgMode=" + CustomSvgMode,
                 "NsfwFilterEnabled=" + (NsfwFilterEnabled ? "true" : "false"),
                 "NsfwApiKey=" + NsfwApiKey,
                 "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),

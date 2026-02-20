@@ -87,6 +87,15 @@ internal class SidebarInjector
             {
                 try
                 {
+                    // Reset saved theme to default — the user chose a Root theme,
+                    // so don't let custom theme TextChanged re-apply it on rebuild.
+                    if (_settings.ActiveTheme != "default-dark")
+                    {
+                        _settings.ActiveTheme = "default-dark";
+                        try { _settings.Save(); }
+                        catch (Exception sx) { Logger.Log("Injector", "Settings save on variant change: " + sx.Message); }
+                    }
+
                     if (_injected)
                     {
                         // Root updates DynamicResource-bound controls on variant change,
@@ -828,11 +837,14 @@ internal class SidebarInjector
             var textBlock = _r.CreateTextBlock(label, 14);
             if (textBlock != null)
             {
-                // Apply exact native foreground and font weight (copied from real ListBoxItem)
+                // Bind to DynamicResource so text auto-updates on theme/variant change.
+                // Falls back to native foreground or hardcoded color if binding fails.
+                // Set initial foreground from native or fallback, then tag for walker recoloring
                 if (nativeForeground != null)
                     _r.TextBlockType?.GetProperty("Foreground")?.SetValue(textBlock, nativeForeground);
                 else
                     _r.SetForeground(textBlock, "#fff2f2f2");
+                _r.SetTag(textBlock, "dyn-fg:TextPrimary");
 
                 if (nativeFontWeight != null)
                     _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(textBlock, nativeFontWeight);
@@ -1156,6 +1168,8 @@ internal class SidebarInjector
 
             var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, versionFg);
             if (versionText == null) return;
+            _r.SetTag(versionText, "dyn-fg:TextTertiary");
+            _r.BindToDynamicResource(versionText, "Foreground", "TextTertiary");
 
             _r.AddChild(versionStackPanel, versionText);
             _versionTextBlock = versionText;
