@@ -395,8 +395,17 @@ internal class SidebarInjector
             Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
                 $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
 
-            // Auto-navigate to Uprooted About page on settings open
-            OnNavItemClicked("uprooted");
+            // Auto-navigate to Uprooted About page on settings open.
+            // Delayed: Root's initial ListBox selection (User profile) fires SelectionChanged
+            // which would immediately remove our content page. Wait for it to settle first.
+            var navTimer = new Timer(_ =>
+            {
+                _r.RunOnUIThread(() =>
+                {
+                    if (_injected && _activePage == null)
+                        OnNavItemClicked("uprooted");
+                });
+            }, null, 150, Timeout.Infinite);
 
             // Walk burst after injection — Root will auto-select a tab, loading content
             // with default theme colors that needs immediate recoloring
