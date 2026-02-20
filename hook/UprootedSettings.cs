@@ -22,6 +22,9 @@ internal class UprootedSettings
     // LinkEmbeds settings
     public bool LinkEmbedsShowFilenames { get; set; } = false;
 
+    // Show experimental (TestingStatus=0) plugins on the Plugins page
+    public bool ShowExperimentalPlugins { get; set; } = false;
+
     // Custom ping/reply highlight color (empty = use theme default)
     public string CustomPingColor { get; set; } = "";
 
@@ -106,6 +109,7 @@ internal class UprootedSettings
                             settings.MessageLoggerMaxMessages = maxMsg;
                         break;
                     case "LinkEmbeds.ShowFilenames": settings.LinkEmbedsShowFilenames = val == "true"; break;
+                    case "ShowExperimentalPlugins": settings.ShowExperimentalPlugins = val == "true"; break;
                     case "CustomPingColor": settings.CustomPingColor = val; break;
                     case "AutoUpdate.Enabled": settings.AutoUpdateEnabled = val == "true"; break;
                     case "AutoUpdate.Notify": settings.AutoUpdateNotify = val == "true"; break;
@@ -185,6 +189,7 @@ internal class UprootedSettings
                 "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
                 "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
                 "LinkEmbeds.ShowFilenames=" + (LinkEmbedsShowFilenames ? "true" : "false"),
+                "ShowExperimentalPlugins=" + (ShowExperimentalPlugins ? "true" : "false"),
                 "CustomPingColor=" + CustomPingColor,
                 "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
                 "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),

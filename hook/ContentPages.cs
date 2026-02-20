@@ -613,8 +613,8 @@ internal static class ContentPages
         public int TestingStatus;
     }
 
-    // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Stable (green)
-    private static readonly string[] TestingLabels = { "Untested", "Alpha", "Beta", "Stable" };
+    // Testing status levels: 0=Experimental (red), 1=Alpha (orange), 2=Beta (yellow), 3=Stable (green)
+    private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable" };
     private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050" };
 
     // Known plugins metadata
@@ -694,6 +694,89 @@ internal static class ContentPages
         r.SetFontWeightNumeric(pageTitle, 600);
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
+
+        // Declare rebuildGrid early so the experimental banner toggle can reference it
+        Action? rebuildGrid = null;
+
+        // "Show experimental plugins" toggle banner
+        bool[] showExperimental = { settings.ShowExperimentalPlugins };
+        {
+            var expOuter = r.CreatePanel();
+            if (expOuter != null)
+            {
+                var expContent = r.CreateStackPanel(vertical: false, spacing: 8);
+                if (expContent != null)
+                {
+                    r.SetVerticalAlignment(expContent, "Center");
+                    var expIcon = r.CreateTextBlock("\u26A0", 14, "#E04040");
+                    ApplyFont(r, expIcon, font);
+                    r.AddChild(expContent, expIcon);
+
+                    var expTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
+                    if (expTextStack != null)
+                    {
+                        var expLabel = r.CreateTextBlock("Show experimental plugins", 13, TextWhite);
+                        r.SetFontWeightNumeric(expLabel, 500);
+                        ApplyFont(r, expLabel, font);
+                        r.AddChild(expTextStack, expLabel);
+
+                        var expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, TextMuted);
+                        ApplyFont(r, expDesc, font);
+                        r.AddChild(expTextStack, expDesc);
+
+                        r.AddChild(expContent, expTextStack);
+                    }
+                }
+
+                var expInner = r.CreateBorder("#E0404015", 8, expContent);
+                if (expInner != null)
+                {
+                    r.SetPadding(expInner, 14, 10, 14, 10);
+                    SetBorderStroke(r, expInner, "#E0404040", 1);
+                }
+
+                // Toggle pill (right-aligned)
+                var expToggleBg = showExperimental[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
+                var expPill = r.CreateBorder(expToggleBg, 13);
+                if (expPill != null)
+                {
+                    r.SetWidth(expPill, 44);
+                    r.SetHeight(expPill, 24);
+                    r.SetHorizontalAlignment(expPill, "Right");
+                    r.SetVerticalAlignment(expPill, "Center");
+                    r.SetMargin(expPill, 0, 0, 14, 0);
+                    r.SetCursorHand(expPill);
+
+                    var expDot = r.CreateBorder("#FFFFFF", 8);
+                    if (expDot != null)
+                    {
+                        r.SetWidth(expDot, 18);
+                        r.SetHeight(expDot, 18);
+                        r.SetHorizontalAlignment(expDot, showExperimental[0] ? "Right" : "Left");
+                        r.SetMargin(expDot, 3, 3, 3, 3);
+                        r.SetBorderChild(expPill, expDot);
+
+                        var pillRef = expPill;
+                        var dotRef = expDot;
+                        r.SubscribeEvent(expPill, "PointerPressed", () =>
+                        {
+                            showExperimental[0] = !showExperimental[0];
+                            r.SetBackground(pillRef, showExperimental[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20));
+                            r.SetHorizontalAlignment(dotRef, showExperimental[0] ? "Right" : "Left");
+                            settings.ShowExperimentalPlugins = showExperimental[0];
+                            settings.Save();
+                            rebuildGrid?.Invoke();
+                        });
+                    }
+
+                    r.AddChild(expOuter, expPill);
+                }
+
+                if (expInner != null) r.AddChild(expOuter, expInner);
+                r.SetMargin(expOuter, 0, 12, 0, 0);
+                r.AddChild(page, expOuter);
+            }
+        }
 
         // Snapshot plugin states at launch (set once, survives page rebuilds)
         if (_launchPluginStates == null && KnownPlugins != null)
@@ -789,7 +872,6 @@ internal static class ContentPages
         // State for search and filter
         string[] searchText = { "" };
         int[] filterMode = { 0 };
-        Action? rebuildGrid = null;
 
         // "FILTERS" section header
         var filtersHeader = CreateSectionHeader(r, "FILTERS", font);
@@ -890,6 +972,7 @@ internal static class ContentPages
         var cardIds = new List<string>();
         var cardNames = new List<string>();
         var cardDescs = new List<string>();
+        var cardStatuses = new List<int>();
         var cardObjects = new List<object>();
         foreach (var plugin in KnownPlugins ?? Array.Empty<PluginInfo>())
         {
@@ -907,6 +990,7 @@ internal static class ContentPages
                 cardIds.Add(plugin.Id);
                 cardNames.Add(plugin.DisplayName);
                 cardDescs.Add(plugin.Description);
+                cardStatuses.Add(plugin.TestingStatus);
                 cardObjects.Add(card);
             }
         }
@@ -942,10 +1026,13 @@ internal static class ContentPages
                 noResultsMsg[0] = null;
             }
 
-            // Filter cards by search text and filter mode
+            // Filter cards by search text, filter mode, and experimental toggle
             var visible = new List<object>();
             for (int ci = 0; ci < cardObjects.Count; ci++)
             {
+                // Hide experimental plugins unless the toggle is on
+                if (!showExperimental[0] && cardStatuses[ci] == 0)
+                    continue;
                 if (!string.IsNullOrEmpty(searchText[0]))
                 {
                     var q = searchText[0].ToLowerInvariant();
