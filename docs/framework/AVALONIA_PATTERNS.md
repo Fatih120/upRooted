@@ -326,25 +326,26 @@ _r.RunOnUIThread(() => {
 
 ### Key Types
 
-| Type | Purpose in Uprooted |
-|------|---------------------|
-| `Control` | Base type: Tag, IsVisible, Margin, Cursor |
-| `Panel` | Container base with Children collection |
-| `StackPanel` | Vertical/horizontal layout with Spacing -- most common container |
-| `Grid` | Row/column layout -- 2-column plugin cards, sidebar structure |
-| `Border` | Single-child decorator: Background, CornerRadius, BorderThickness |
-| `TextBlock` | Text display: FontSize, FontWeight, Foreground, TextWrapping |
-| `TextBox` | Text input: Watermark, MaxLength (CLR setters trimmed). **Not the compose input** (see below) |
-| `ScrollViewer` | Scrollable wrapper for NavContainer and content pages |
-| `ContentControl` | Root's content area (never modify Content directly) |
-| `Canvas` | Absolute positioning via Left/Top attached properties |
-| `Window` | Top-level: Clipboard access, OverlayLayer |
+| Type             | Purpose in Uprooted                                                                           |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `Control`        | Base type: Tag, IsVisible, Margin, Cursor                                                     |
+| `Panel`          | Container base with Children collection                                                       |
+| `StackPanel`     | Vertical/horizontal layout with Spacing -- most common container                              |
+| `Grid`           | Row/column layout -- 2-column plugin cards, sidebar structure                                 |
+| `Border`         | Single-child decorator: Background, CornerRadius, BorderThickness                             |
+| `TextBlock`      | Text display: FontSize, FontWeight, Foreground, TextWrapping                                  |
+| `TextBox`        | Text input: Watermark, MaxLength (CLR setters trimmed). **Not the compose input** (see below) |
+| `ScrollViewer`   | Scrollable wrapper for NavContainer and content pages                                         |
+| `ContentControl` | Root's content area (never modify Content directly)                                           |
+| `Canvas`         | Absolute positioning via Left/Top attached properties                                         |
+| `Window`         | Top-level: Clipboard access, OverlayLayer                                                     |
 
 ### Creating Controls
 
 All use `Activator.CreateInstance` on cached types. Examples:
 
 **TextBlock** (`hook/AvaloniaReflection.cs:650-667`):
+
 ```csharp
 var tb = Activator.CreateInstance(TextBlockType);
 _textBlockText?.SetValue(tb, text);
@@ -352,6 +353,7 @@ _textBlockFontSize?.SetValue(tb, fontSize);
 ```
 
 **StackPanel** (`hook/AvaloniaReflection.cs:669-685`):
+
 ```csharp
 var sp = Activator.CreateInstance(StackPanelType);
 var orientation = Enum.Parse(OrientationType, vertical ? "Vertical" : "Horizontal");
@@ -359,6 +361,7 @@ _stackPanelOrientation?.SetValue(sp, orientation);
 ```
 
 **Border** (`hook/AvaloniaReflection.cs:687-709`):
+
 ```csharp
 var border = Activator.CreateInstance(BorderType);
 var cr = Activator.CreateInstance(CornerRadiusType, cornerRadius);
@@ -388,11 +391,11 @@ library — NOT `Avalonia.Controls.TextBox`. This is significant because:
 - The visual tree path is: `RootMessageTextboxView` > `TextEditor` > `TextArea` >
   `TextView` > `TextLayer`
 
-| AvaloniaEdit Type | Purpose |
-|-------------------|---------|
-| `AvaloniaEdit.TextEditor` | Top-level control, has `Text` CLR property for reading/writing content |
-| `AvaloniaEdit.Editing.TextArea` | Actual editing surface, receives keyboard input |
-| `AvaloniaEdit.Rendering.TextView` | Text rendering layer |
+| AvaloniaEdit Type                 | Purpose                                                                |
+| --------------------------------- | ---------------------------------------------------------------------- |
+| `AvaloniaEdit.TextEditor`         | Top-level control, has `Text` CLR property for reading/writing content |
+| `AvaloniaEdit.Editing.TextArea`   | Actual editing surface, receives keyboard input                        |
+| `AvaloniaEdit.Rendering.TextView` | Text rendering layer                                                   |
 
 To interact with compose input, resolve these types from loaded assemblies (NOT via
 `AvaloniaReflection`):
@@ -418,22 +421,22 @@ for the full Enter key interception technique.
 
 Root defines custom controls that appear in the visual tree. When walking the tree, you'll encounter these type names. See [Root Control Reference](ROOT_CONTROL_REFERENCE.md) for full details.
 
-| Type | Base | Key Properties | Notes |
-|------|------|---------------|-------|
-| `RootBorder` | `Border` | `DynamicBorderThicknessProperty` | `StyleKeyOverride=typeof(Border)` — uses Border styles |
-| `RootSvgImage` | (control) | `SvgPathProperty` | SVG renderer, path from DynamicResource key |
-| `RootSvgButton` | (button) | `SvgOpacityProperty`, `SvgBorderOpacityProperty` | Icon button, multiple CSS class variants |
-| `RootSvgCheckBox` | `CheckBox` | `SvgOpacityProperty`, `SvgBorderOpacityProperty` | Checkbox with SVG checkmark |
-| `RootScrollViewer` | `ScrollViewer` | — | Transparent background scroll container |
-| `RootScrollBarThumb` | (thumb) | — | 4px wide, TextPrimary color at low opacity |
-| `RootMarkdownTextBlock` | (control) | `Document` property | Markdown renderer — **not a TextBlock** |
-| `RootLinkButton` | (button) | `ForegroundProperty` | Username link in MessageView |
-| `RootMenuFlyout` | (menu) | — | Context menu flyout |
-| `RootMessageScrollViewer` | `ScrollViewer` | — | Message list scroll container |
-| `RootSplitView` | `SplitView` | — | PaneBackground=ThemeControlHighlightLowBrush (SimpleTheme) |
-| `RootPercentageSlider` | `Slider` | — | FG=BrandPrimary, BG=Border |
-| `CTextBlock` | (control) | `SelectionBrushProperty`, `FontSizeProperty`, `ForegroundProperty` | Markdown text |
-| `CInline`, `CRun`, `CHyperlink`, `CSpan`, `CCode` | — | border/bg/fg props | Markdown inline elements |
+| Type                                              | Base           | Key Properties                                                     | Notes                                                      |
+| ------------------------------------------------- | -------------- | ------------------------------------------------------------------ | ---------------------------------------------------------- |
+| `RootBorder`                                      | `Border`       | `DynamicBorderThicknessProperty`                                   | `StyleKeyOverride=typeof(Border)` — uses Border styles     |
+| `RootSvgImage`                                    | (control)      | `SvgPathProperty`                                                  | SVG renderer, path from DynamicResource key                |
+| `RootSvgButton`                                   | (button)       | `SvgOpacityProperty`, `SvgBorderOpacityProperty`                   | Icon button, multiple CSS class variants                   |
+| `RootSvgCheckBox`                                 | `CheckBox`     | `SvgOpacityProperty`, `SvgBorderOpacityProperty`                   | Checkbox with SVG checkmark                                |
+| `RootScrollViewer`                                | `ScrollViewer` | —                                                                  | Transparent background scroll container                    |
+| `RootScrollBarThumb`                              | (thumb)        | —                                                                  | 4px wide, TextPrimary color at low opacity                 |
+| `RootMarkdownTextBlock`                           | (control)      | `Document` property                                                | Markdown renderer — **not a TextBlock**                    |
+| `RootLinkButton`                                  | (button)       | `ForegroundProperty`                                               | Username link in MessageView                               |
+| `RootMenuFlyout`                                  | (menu)         | —                                                                  | Context menu flyout                                        |
+| `RootMessageScrollViewer`                         | `ScrollViewer` | —                                                                  | Message list scroll container                              |
+| `RootSplitView`                                   | `SplitView`    | —                                                                  | PaneBackground=ThemeControlHighlightLowBrush (SimpleTheme) |
+| `RootPercentageSlider`                            | `Slider`       | —                                                                  | FG=BrandPrimary, BG=Border                                 |
+| `CTextBlock`                                      | (control)      | `SelectionBrushProperty`, `FontSizeProperty`, `ForegroundProperty` | Markdown text                                              |
+| `CInline`, `CRun`, `CHyperlink`, `CSpan`, `CCode` | —              | border/bg/fg props                                                 | Markdown inline elements                                   |
 
 ### Imperative DynamicResource Binding
 
@@ -451,6 +454,7 @@ MessageBackgroundHighlightBorder[!TemplatedControl.BackgroundProperty] = new Dyn
 This creates a live DynamicResource binding — if the resource changes (e.g., theme switch or our ThemeEngine override), the property auto-updates.
 
 To replicate this in Uprooted via reflection:
+
 ```csharp
 // Find DynamicResourceExtension type from Avalonia.Markup.Xaml assembly
 // Call ProvideValue() on it with the correct IServiceProvider context
@@ -627,6 +631,7 @@ GetChildren(overlay)?.Add(child);
 ```
 
 Typical workflow (see `hook/ContentPages.cs:665-767`):
+
 1. Get OverlayLayer from main window
 2. Create transparent backdrop for click-to-dismiss
 3. Position dropdown using TranslatePoint + GetBounds
@@ -693,13 +698,13 @@ SolidColorBrushType.GetProperty("Color")?.SetValue(brush, color);
 
 `Control.Tag` marks injected controls for identification and cleanup:
 
-| Tag | Purpose |
-|-----|---------|
-| `uprooted-injected` | Sidebar container (duplicate injection guard) |
-| `uprooted-nav-{page}` | Individual nav items |
-| `uprooted-highlight-{page}` | Nav highlight borders |
-| `uprooted-content` | Content pages |
-| `uprooted-no-recolor` | Excluded from theme engine tree walks |
+| Tag                         | Purpose                                       |
+| --------------------------- | --------------------------------------------- |
+| `uprooted-injected`         | Sidebar container (duplicate injection guard) |
+| `uprooted-nav-{page}`       | Individual nav items                          |
+| `uprooted-highlight-{page}` | Nav highlight borders                         |
+| `uprooted-content`          | Content pages                                 |
+| `uprooted-no-recolor`       | Excluded from theme engine tree walks         |
 
 ---
 
@@ -760,6 +765,7 @@ via `assembly.GetType()` (`hook/SidebarInjector.cs:658-661`).
 ### AddHandler Requires All Routing Strategies for AvaloniaEdit Enter Key
 
 AvaloniaEdit marks Enter (`Key.Return`) as `Handled=true` internally. This means:
+
 - CLR `EventInfo.AddEventHandler` does NOT receive Enter (fires for modifier keys only)
 - `AddHandler` with `RoutingStrategies.Bubble` alone does NOT receive Enter
 - You MUST use all three strategies combined (`Bubble | Tunnel | Direct = 7`) with
@@ -817,14 +823,52 @@ Root runs Chromium with `--incognito`. `localStorage` is not persisted.
 
 Patterns established for Uprooted's injected Avalonia controls (ContentPages cards, SidebarInjector nav items). These match Root's native settings UI conventions.
 
-### Card Border Highlights
+### Cards-in-a-Card Pattern (Root Native)
 
-All cards use **constant border thickness** (`1.5px`) — never change thickness on hover/selection (causes layout shift as cards grow/shrink by a few pixels).
+Root's native settings UI uses a **two-level card hierarchy** throughout (e.g., `ChangeThemeView`). An outer container card holds inner selectable cards. This pattern is replicated in Uprooted's theme preset selector.
 
-- **Resting**: 15% contrast from `CardBg` via `AdjustForHighlight(CardBg, 15)`
-- **Hover (theme cards)**: Card border brightens to 35% contrast. Radio indicator border brightens to 50% contrast. Inner radio dot fills with 40% contrast highlight. No background change.
-- **Hover (plugin cards)**: No highlight — plugin cards are not clickable as a whole. Only the toggle/button inside is interactive.
-- **Selected**: Accent color border on the card + accent-filled inner radio dot.
+**Outer container card:**
+
+- Background: `BackgroundSecondary` (= `CardBg`)
+- Border: `CardBorder` (= Root's `Border` resource), 1.0px thickness
+- Corner radius: 12
+- Inner padding: 20px horizontal, 16px vertical
+- Section header label inside the card (not above it)
+- Dynamic recolor tag: `dyn-bg:BackgroundSecondary,dyn-bb:Border`
+
+**Inner selectable cards (2nd-order):**
+
+- Background: `AdjustForHighlight(CardBg, 4.5)` — slightly lighter than container
+- Border (rest): `CardBorder` — same as outer container, follows theme tint
+- Border (hover): `ColorUtils.Lighten(CardBorder, 60)` — very bright on hover
+- Border (selected): accent color
+- Border thickness: 1.5px constant (never changes on hover)
+- Corner radius: 12
+- Inner padding: 14px all sides
+- No dynamic recolor tags — page rebuilds handle theme changes
+- Cards laid out in equal-width Grid columns (star sizing), not fixed widths
+
+**Radio indicator (inside inner cards):**
+
+- Neutral color only — always `TextWhite` (white on dark, black on light)
+- Never uses accent color, unaffected by selection state for border
+- Outer ring: 16×16, corner radius 4, 1.0px border
+- Inner dot: 10×10, corner radius 2, 1px margin from border edge
+- Dot fill (rest): transparent (`#00000000`)
+- Dot fill (hover): `AdjustForHighlight(CardBg, 55)` — almost as bright as card hover border
+- Dot fill (selected): `TextWhite` (solid)
+
+```
+┌───────────────────────────────────────────────────────┐  ← Outer card (CardBg, CardBorder 1.0px)
+│  SECTION HEADER                                       │
+│  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐  │
+│  │ preview  │ │ preview  │ │ preview  │ │ preview  │  │  ← Inner cards (CardBg+4.5%, CardBorder 1.5px)
+│  │          │ │          │ │          │ │          │  │
+│  │ ○ Name   │ │ ● Name   │ │ ○ Name   │ │ ○ Name   │  │  ← Radio: TextWhite only
+│  │   desc   │ │   desc   │ │   desc   │ │   desc   │  │
+│  └──────────┘ └──────────┘ └──────────┘ └──────────┘  │
+└───────────────────────────────────────────────────────┘
+```
 
 ```csharp
 // Luminance-aware highlight: darkens on light bg, lightens on dark bg
@@ -833,6 +877,47 @@ private static string AdjustForHighlight(string bg, double percent)
         ? ColorUtils.Darken(bg, percent)
         : ColorUtils.Lighten(bg, percent);
 ```
+
+### Typography (Root Native)
+
+Root's settings pages use consistent text sizing and weight. Uprooted matches these conventions:
+
+**Page title** (e.g., "Theme Settings"):
+- Font size: 20px
+- Font weight: `Bold` (via `SetFontWeight("Bold")`)
+- Color: `TextPrimary`
+
+**Section header** (e.g., "PRESET THEMES", "CUSTOM THEME"):
+- Font size: 14px (`PageScale.SectionHeader`)
+- Font weight: `Bold` (via `SetFontWeight("Bold")`)
+- Color: `TextPrimary`
+- Positioned inside the container card, not above it
+- ALL CAPS by convention
+
+**Important:** Use `SetFontWeight(control, "Bold")` (string-based static property lookup), not `SetFontWeightNumeric(control, 700)`. The numeric method uses `Activator.CreateInstance(FontWeightType, int)` which silently fails on Avalonia's `FontWeight` struct — text renders at default weight with no error.
+
+### Button Borders
+
+Accent-colored buttons (version badge, Check for Updates, Developer|Stable, Go) use a lightened border derived from their background color:
+
+- Border: `AdjustForHighlight(btnColor, 30)` — lightens dark accents, darkens light accents
+- Thickness: 1.5px
+- When button color changes dynamically (e.g., Developer↔Stable toggle), the border must be updated in the same handler
+- Button text: `SetFontWeight("Bold")`
+
+Non-accent buttons (Open Logs) use a subtler border:
+
+- Background: `ColorUtils.Lighten(CardBg, 4)`
+- Border: `AdjustForHighlight(bg, 15)`, 1.5px
+
+### Standard Card Borders
+
+For non-nested cards (plugin cards, custom theme island, warning banners):
+
+- **Resting**: `CardBorder` (Root's `Border` resource)
+- **Hover (plugin cards)**: No highlight — plugin cards are not clickable as a whole. Only the toggle/button inside is interactive.
+- **Selected**: Accent color border.
+- **Thickness**: 1.0px constant
 
 ### Sidebar Nav Item Highlights
 
@@ -851,14 +936,14 @@ Read highlight colors from Root's live ThemeDictionaries resources — these aut
 
 Colors come from `Application.TryGetResource` reading Root's live theme keys. This works for all variants and when Uprooted themes are active:
 
-| Static Field | Root Resource Key | Dark Value | Light Value |
-|---|---|---|---|
-| `TextWhite` | `TextPrimary` | `#FFF2F2F2` | `#FF131313` |
-| `TextMuted` | `TextSecondary` | `#A3F2F2F2` | `#FF282828` |
-| `TextDim` | `TextTertiary` | `#66F2F2F2` | `#FF5E5E5E` |
-| `CardBg` | `BackgroundSecondary` | `#FF121A26` | `#FFFFFFFF` |
-| `CardBorder` | `Border` | `#FF242C36` | `#FFDBDBDB` |
-| `AccentGreen` | `BrandPrimary` | `#FF3B6AF8` | `#FF3B6AF8` |
+| Static Field  | Root Resource Key     | Dark Value  | Light Value |
+| ------------- | --------------------- | ----------- | ----------- |
+| `TextWhite`   | `TextPrimary`         | `#FFF2F2F2` | `#FF131313` |
+| `TextMuted`   | `TextSecondary`       | `#A3F2F2F2` | `#FF282828` |
+| `TextDim`     | `TextTertiary`        | `#66F2F2F2` | `#FF5E5E5E` |
+| `CardBg`      | `BackgroundSecondary` | `#FF121A26` | `#FFFFFFFF` |
+| `CardBorder`  | `Border`              | `#FF242C36` | `#FFDBDBDB` |
+| `AccentGreen` | `BrandPrimary`        | `#FF3B6AF8` | `#FF3B6AF8` |
 
 Fallback: if `ReadLiveRootColors()` returns null, hardcoded Dark defaults are used.
 
@@ -904,6 +989,6 @@ The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentCo
 
 ---
 
-**Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s_instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
+**Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s*instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
 **Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-*Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-19.*
+\_Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-19.*

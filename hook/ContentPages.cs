@@ -54,7 +54,7 @@ internal static class ContentPages
         double Description,    // toggle/field/radio secondary text, info box items
         double Button);        // button labels
 
-    private static readonly FontScale PageScale = new(15, 11, 13, 12, 13);
+    private static readonly FontScale PageScale = new(15, 14, 13, 12, 13);
     private static readonly FontScale LightboxScale = new(24, 20, 20, 17, 18);
 
     /// <summary>
@@ -267,8 +267,8 @@ internal static class ContentPages
         var pageTitleRow = r.CreatePanel();
         if (pageTitleRow != null)
         {
-            var pageTitle = CreateBoundText(r, "Uprooted", 15, TextWhite, "TextPrimary");
-            r.SetFontWeightNumeric(pageTitle, 600);
+            var pageTitle = CreateBoundText(r, "About Uprooted", 20, TextWhite, "TextPrimary");
+            r.SetFontWeight(pageTitle, "Bold");
             ApplyFont(r, pageTitle, font);
             r.SetVerticalAlignment(pageTitle, "Center");
             r.AddChild(pageTitleRow, pageTitle);
@@ -276,15 +276,15 @@ internal static class ContentPages
             var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
             ApplyFont(r, logBtnText, font);
             r.SetHorizontalAlignment(logBtnText, "Center");
-            var logBtnBg = ColorUtils.Lighten(CardBg, 8);
+            var logBtnBg = ColorUtils.Lighten(CardBg, 4);
             var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
             if (logBtn != null)
             {
-                r.SetPadding(logBtn, 10, 4, 10, 4);
+                r.SetPadding(logBtn, 8, 4, 8, 4);
                 r.SetHorizontalAlignment(logBtn, "Right");
                 r.SetVerticalAlignment(logBtn, "Center");
                 r.SetCursorHand(logBtn);
-                SetBorderStroke(r, logBtn, CardBorder, 0.5);
+                SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), 1.5);
                 var logPath = Logger.GetLogPath();
                 r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
                 r.SubscribeEvent(logBtn, "PointerEntered", () =>
@@ -308,15 +308,19 @@ internal static class ContentPages
             // Section header + version badge
             var titleRow = r.CreateStackPanel(vertical: false, spacing: 12);
             var title = CreateSectionHeader(r, "UPROOTED", font);
+            r.SetVerticalAlignment(title, "Center");
             r.AddChild(titleRow, title);
 
-            var versionText = CreateBoundText(r, $"v{settings.Version}", 11, TextWhite, "TextPrimary");
+            var versionText = CreateBoundText(r, $"v{settings.Version}", 13, TextWhite, "TextPrimary");
+            r.SetFontWeight(versionText, "SemiBold");
             ApplyFont(r, versionText, font);
+            r.SetHorizontalAlignment(versionText, "Center");
             var versionBadge = r.CreateBorder(AccentGreen, 8, versionText);
             r.SetTag(versionBadge, "dyn-bg:BrandPrimary");
             r.BindToDynamicResource(versionBadge, "Background", "BrandPrimary");
-            r.SetPadding(versionBadge, 8, 2, 8, 2);
+            r.SetPadding(versionBadge, 8, 1, 8, 1);
             r.SetVerticalAlignment(versionBadge, "Center");
+            SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 30), 1.5);
             r.AddChild(titleRow, versionBadge);
             r.AddChild(cardContent, titleRow);
 
@@ -470,7 +474,7 @@ internal static class ContentPages
 
             var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
             var btnText = CreateBoundText(r, btnLabel, 13, TextWhite, "TextPrimary");
-            r.SetFontWeightNumeric(btnText, 500);
+            r.SetFontWeight(btnText, "Bold");
             ApplyFont(r, btnText, font);
             r.SetHorizontalAlignment(btnText, "Center");
 
@@ -482,6 +486,7 @@ internal static class ContentPages
                 r.SetMargin(btn, 0, 14, 0, 0);
                 r.SetHorizontalAlignment(btn, "Left");
                 r.SetCursorHand(btn);
+                SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 30), 1.5);
 
                 if (!isChecking && !wasUpdated)
                 {
@@ -720,8 +725,8 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = CreateBoundText(r, "Plugin Settings", 15, TextWhite, "TextPrimary");
-        r.SetFontWeightNumeric(pageTitle, 600);
+        var pageTitle = CreateBoundText(r, "Plugin Settings", 20, TextWhite, "TextPrimary");
+        r.SetFontWeight(pageTitle, "Bold");
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
@@ -848,7 +853,7 @@ internal static class ContentPages
                 r.SetFontWeightNumeric(restartBtnText, 500);
                 ApplyFont(r, restartBtnText, font);
                 r.SetHorizontalAlignment(restartBtnText, "Center");
-                var restartBtn = r.CreateBorder("#E88A1A", 6, restartBtnText);
+                var restartBtn = r.CreateBorder("#D06818", 6, restartBtnText);
                 if (restartBtn != null)
                 {
                     r.SetPadding(restartBtn, 12, 5, 12, 5);
@@ -857,9 +862,9 @@ internal static class ContentPages
                     r.SetCursorHand(restartBtn);
                     r.SubscribeEvent(restartBtn, "PointerPressed", RestartRoot);
                     r.SubscribeEvent(restartBtn, "PointerEntered", () =>
-                        r.SetBackground(restartBtn, ColorUtils.Lighten("#E88A1A", 10)));
+                        r.SetBackground(restartBtn, ColorUtils.Lighten("#D06818", 10)));
                     r.SubscribeEvent(restartBtn, "PointerExited", () =>
-                        r.SetBackground(restartBtn, "#E88A1A"));
+                        r.SetBackground(restartBtn, "#D06818"));
                 }
 
                 var innerBorder = r.CreateBorder("#4A3010", 8, bannerContent);
@@ -1850,57 +1855,101 @@ internal static class ContentPages
         r.SetTag(page, "uprooted-content");
 
         // Page title
-        var pageTitle = CreateBoundText(r, "Theme Settings", 15, TextWhite, "TextPrimary");
-        r.SetFontWeightNumeric(pageTitle, 600);
+        var pageTitle = CreateBoundText(r, "Theme Settings", 20, TextWhite, "TextPrimary");
+        r.SetFontWeight(pageTitle, "Bold");
         ApplyFont(r, pageTitle, font);
         r.AddChild(page, pageTitle);
 
         // === PRESET THEMES section ===
-        var presetHeader = CreateSectionHeader(r, "PRESET THEMES", font);
-        if (presetHeader != null)
+        // Outer container card (matches Root's native ChangeThemeView pattern)
+        var presetsContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
+        if (presetsContainer != null)
         {
-            r.SetMargin(presetHeader, 0, 20, 0, 12);
-            r.AddChild(page, presetHeader);
-        }
+            SetBorderStroke(r, presetsContainer, CardBorder, CardBorderThickness);
+            r.SetTag(presetsContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
+            r.SetMargin(presetsContainer, 0, 20, 0, 0);
 
-        // All three preset cards in a horizontal row
-        var allPresets = new[]
-        {
-            ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default"),
-            ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
-            ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
-            ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
-        };
-
-        var presetsRow = r.CreateStackPanel(vertical: false, spacing: 8);
-        if (presetsRow != null)
-        {
-            for (int i = 0; i < allPresets.Length; i++)
+            var presetsInner = r.CreateStackPanel(vertical: true, spacing: 0);
+            if (presetsInner != null)
             {
-                var (displayName, themeId, bgColor, accentColor, description) = allPresets[i];
-                bool isActive = settings.ActiveTheme == themeId;
-                var card = BuildThemeCard(r, displayName, themeId, bgColor, accentColor,
-                    description, isActive, font, themeEngine, settings, onThemeChanged);
-                if (card != null)
+                r.SetMargin(presetsInner, 20, 16, 20, 16);
+
+                // Section header inside the card
+                var presetHeader = CreateSectionHeader(r, "PRESET THEMES", font);
+                if (presetHeader != null)
                 {
-                    r.AddChild(presetsRow, card);
+                    r.SetMargin(presetHeader, 0, 0, 0, 12);
+                    r.AddChild(presetsInner, presetHeader);
                 }
+
+                var allPresets = new[]
+                {
+                    ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default"),
+                    ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
+                    ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
+                    ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
+                };
+
+                // 4-column equal-width grid so cards stretch to fill container
+                var presetsGrid = r.CreateGrid();
+                if (presetsGrid != null)
+                {
+                    for (int i = 0; i < allPresets.Length; i++)
+                        r.AddGridColumn(presetsGrid, 1.0);
+
+                    for (int i = 0; i < allPresets.Length; i++)
+                    {
+                        var (displayName, themeId, bgColor, accentColor, description) = allPresets[i];
+                        bool isActive = settings.ActiveTheme == themeId;
+                        var card = BuildThemeCard(r, displayName, themeId, bgColor, accentColor,
+                            description, isActive, font, themeEngine, settings, onThemeChanged);
+                        if (card != null)
+                        {
+                            r.SetGridColumn(card, i);
+                            if (i < allPresets.Length - 1)
+                                r.SetMargin(card, 0, 0, 8, 0); // spacing between cards
+                            r.AddChild(presetsGrid, card);
+                        }
+                    }
+
+                    r.AddChild(presetsInner, presetsGrid);
+                }
+
+                r.SetBorderChild(presetsContainer, presetsInner);
             }
 
-            r.AddChild(page, presetsRow);
+            r.AddChild(page, presetsContainer);
         }
 
-        // === CUSTOM THEME section ===
-        var customHeader = CreateSectionHeader(r, "CUSTOM THEME", font);
-        if (customHeader != null)
+        // === CUSTOM THEME section (cards-in-a-card pattern) ===
+        var customContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
+        if (customContainer != null)
         {
-            r.SetMargin(customHeader, 0, 16, 0, 12);
-            r.AddChild(page, customHeader);
-        }
+            SetBorderStroke(r, customContainer, CardBorder, CardBorderThickness);
+            r.SetTag(customContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
+            r.SetMargin(customContainer, 0, 16, 0, 0);
 
-        var customSection = BuildCustomThemeSection(r, settings, font, themeEngine, onThemeChanged);
-        if (customSection != null)
-            r.AddChild(page, customSection);
+            var customInner = r.CreateStackPanel(vertical: true, spacing: 0);
+            if (customInner != null)
+            {
+                r.SetMargin(customInner, 20, 16, 20, 16);
+
+                var customHeader = CreateSectionHeader(r, "CUSTOM THEME", font);
+                if (customHeader != null)
+                {
+                    r.SetMargin(customHeader, 0, 0, 0, 12);
+                    r.AddChild(customInner, customHeader);
+                }
+
+                var customSection = BuildCustomThemeSection(r, settings, font, themeEngine, onThemeChanged);
+                if (customSection != null)
+                    r.AddChild(customInner, customSection);
+
+                r.SetBorderChild(customContainer, customInner);
+            }
+
+            r.AddChild(page, customContainer);
+        }
 
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
@@ -1931,7 +1980,7 @@ internal static class ContentPages
         var card = r.CreateBorder(islandBg, 12);
         if (card == null) return null;
         r.SetTag(card, "uprooted-no-recolor"); // Walker skips entire subtree
-        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, CardBorderThickness);
+        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, 1.5);
 
         var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (outerContent == null) return card;
@@ -1949,17 +1998,17 @@ internal static class ContentPages
             radioOuter = r.CreateBorder(null, 4);
             if (radioOuter != null)
             {
-                r.SetWidth(radioOuter, 20);
-                r.SetHeight(radioOuter, 20);
-                SetBorderStroke(r, radioOuter, isActive ? settings.CustomAccent : "#555577", 2.0);
+                r.SetWidth(radioOuter, 16);
+                r.SetHeight(radioOuter, 16);
+                SetBorderStroke(r, radioOuter, islandText, 1.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
 
-                var innerDot = r.CreateBorder(isActive ? settings.CustomAccent : "#00000000", 2);
+                var innerDot = r.CreateBorder(isActive ? islandText : "#00000000", 2);
                 if (innerDot != null)
                 {
                     r.SetWidth(innerDot, 10);
                     r.SetHeight(innerDot, 10);
-                    r.SetMargin(innerDot, 3, 3, 3, 3);
+                    r.SetMargin(innerDot, 1, 1, 1, 1);
                 }
                 r.SetBorderChild(radioOuter, innerDot);
                 radioDot = innerDot;
@@ -2234,27 +2283,22 @@ internal static class ContentPages
 
         r.SetBorderChild(card, outerContent);
 
-        // Hover effect — island colors (not themed)
-        var radioRef = radioOuter;
+        // Hover effect — island colors (not themed), radio border stays constant
         var dotRef = radioDot;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, "#555577", CardBorderThickness);
-                if (radioRef != null)
-                    SetBorderStroke(r, radioRef, "#666688", 2.0);
+                SetBorderStroke(r, card, "#555577", 1.5);
                 if (dotRef != null)
-                    r.SetBackground(dotRef, "#444466");
+                    r.SetBackground(dotRef, "#555577");
             }
         });
         r.SubscribeEvent(card, "PointerExited", () =>
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, islandBorder, CardBorderThickness);
-                if (radioRef != null)
-                    SetBorderStroke(r, radioRef, "#555577", 2.0);
+                SetBorderStroke(r, card, islandBorder, 1.5);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }
@@ -2385,16 +2429,13 @@ internal static class ContentPages
         bool isActive, object? font, ThemeEngine? themeEngine,
         UprootedSettings settings, Action? onThemeChanged)
     {
+        // Inner theme cards are "2nd-order" — lighter bg and thicker border than the container
+        var innerCardBg = AdjustForHighlight(CardBg, 4.5);
         var borderColor = isActive ? accentColor : CardBorder;
-        var card = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
+        var card = r.CreateBorder(innerCardBg, 12);
         if (card == null) return null;
-        SetBorderStroke(r, card, borderColor, CardBorderThickness);
-        // Tag for live recoloring: bg always, border depends on active state
-        r.SetTag(card, isActive
-            ? "dyn-bg:BackgroundSecondary,dyn-bb:BrandPrimary"
-            : "dyn-bg:BackgroundSecondary,dyn-bb:Border");
+        SetBorderStroke(r, card, borderColor, 1.5);
         r.SetCursorHand(card);
-        r.SetWidth(card, 200);
 
         // Vertical layout: preview on top, radio + name below
         var outerLayout = r.CreateStackPanel(vertical: true, spacing: 0);
@@ -2419,22 +2460,22 @@ internal static class ContentPages
             r.SetMargin(bottomRow, 0, 12, 0, 0);
             r.SetVerticalAlignment(bottomRow, "Center");
 
-            // Radio indicator — always has inner dot, transparent when inactive
+            // Radio indicator — neutral color (TextPrimary), unaffected by selection/accent
             radioOuter = r.CreateBorder(null, 4);
             if (radioOuter != null)
             {
-                r.SetWidth(radioOuter, 18);
-                r.SetHeight(radioOuter, 18);
-                SetBorderStroke(r, radioOuter, isActive ? accentColor : AdjustForHighlight(CardBg, 25), 2.0);
+                r.SetWidth(radioOuter, 16);
+                r.SetHeight(radioOuter, 16);
+                SetBorderStroke(r, radioOuter, TextWhite, 1.0);
                 r.SetVerticalAlignment(radioOuter, "Center");
 
-                // Inner dot: filled when active, transparent when inactive (shown on hover)
-                var innerDot = r.CreateBorder(isActive ? accentColor : "#00000000", 2);
+                // Inner dot: filled with TextPrimary when active, transparent when inactive
+                var innerDot = r.CreateBorder(isActive ? TextWhite : "#00000000", 2);
                 if (innerDot != null)
                 {
-                    r.SetWidth(innerDot, 8);
-                    r.SetHeight(innerDot, 8);
-                    r.SetMargin(innerDot, 3, 3, 3, 3);
+                    r.SetWidth(innerDot, 10);
+                    r.SetHeight(innerDot, 10);
+                    r.SetMargin(innerDot, 1, 1, 1, 1);
                     r.SetTag(innerDot, "uprooted-radio-dot");
                 }
                 r.SetBorderChild(radioOuter, innerDot);
@@ -2504,20 +2545,16 @@ internal static class ContentPages
             }
         });
 
-        // Hover effect — card border + radio border + inner dot highlight (no bg change)
-        var hoverBorder = AdjustForHighlight(CardBg, 35);
-        var radioRestBorder = AdjustForHighlight(CardBg, 25);
-        var radioHoverBorder = AdjustForHighlight(CardBg, 50);
-        var dotHoverColor = AdjustForHighlight(CardBg, 40);
-        var radioRef = radioOuter;
+        // Hover effect — card border brightens, radio dot shows preview fill
+        var restBorder = CardBorder;
+        var hoverBorder = ColorUtils.Lighten(CardBorder, 60);
+        var dotHoverColor = AdjustForHighlight(CardBg, 55);
         var dotRef = radioDot;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, hoverBorder, CardBorderThickness);
-                if (radioRef != null)
-                    SetBorderStroke(r, radioRef, radioHoverBorder, 2.0);
+                SetBorderStroke(r, card, hoverBorder, 1.5);
                 if (dotRef != null)
                     r.SetBackground(dotRef, dotHoverColor);
             }
@@ -2526,9 +2563,7 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, CardBorder, CardBorderThickness);
-                if (radioRef != null)
-                    SetBorderStroke(r, radioRef, radioRestBorder, 2.0);
+                SetBorderStroke(r, card, restBorder, 1.5);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }
@@ -3250,7 +3285,7 @@ internal static class ContentPages
         var badgeLabel = isDev ? "Developer" : "Stable";
 
         var badgeText = r.CreateTextBlock(badgeLabel, 12, "#FFFFFF");
-        r.SetFontWeightNumeric(badgeText, 500);
+        r.SetFontWeight(badgeText, "Bold");
         ApplyFont(r, badgeText, font);
         r.SetHorizontalAlignment(badgeText, "Center");
 
@@ -3262,6 +3297,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
             r.SetTag(badge, "uprooted-no-recolor");
+            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 30), 1.5);
 
             var badgeRef = badge;
             var badgeTextRef = badgeText;
@@ -3282,6 +3318,7 @@ internal static class ContentPages
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 30), 1.5);
                 }
                 else
                 {
@@ -3343,7 +3380,7 @@ internal static class ContentPages
 
         // Submit button
         var submitText = CreateBoundText(r, "Go", 13, TextWhite, "TextPrimary");
-        r.SetFontWeightNumeric(submitText, 500);
+        r.SetFontWeight(submitText, "Bold");
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");
         r.SetVerticalAlignment(submitText, "Center");
@@ -3356,6 +3393,7 @@ internal static class ContentPages
             r.SetPadding(submitBtn, 12, 5, 12, 5);
             r.SetVerticalAlignment(submitBtn, "Center");
             r.SetCursorHand(submitBtn);
+            SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 30), 1.5);
             r.AddChild(promptRow, submitBtn);
         }
 
@@ -3414,6 +3452,7 @@ internal static class ContentPages
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
                 r.SetBackground(badgeRef, "#8B6914");
+                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 30), 1.5);
                 r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
                 Logger.Log("AutoUpdate", "Switched to Developer channel");
 
@@ -3497,8 +3536,8 @@ internal static class ContentPages
     private static object? CreateSectionHeader(AvaloniaReflection r, string text, object? font,
         FontScale? scale = null)
     {
-        var header = CreateBoundText(r, text, (scale ?? PageScale).SectionHeader, TextDim, "TextTertiary");
-        r.SetFontWeightNumeric(header, 500);
+        var header = CreateBoundText(r, text, (scale ?? PageScale).SectionHeader, TextWhite, "TextPrimary");
+        r.SetFontWeight(header, "Bold");
         ApplyFont(r, header, font);
         return header;
     }

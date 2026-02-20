@@ -38,6 +38,16 @@
   - File: `hook/ContentPages.cs`
 - **Theme-immune warning cards** — Experimental plugins banner and restart-required banner use hardcoded colors (`#2A2415` bg, `#E0A030` border, white text) with `uprooted-no-recolor` tag. Developer/Stable channel badge also hardcoded.
   - File: `hook/ContentPages.cs`
+- **Cards-in-a-card layout** — Preset and custom theme sections wrapped in outer container cards (`BackgroundSecondary` bg, `Border` border, corner radius 12). Inner theme cards use 2nd-order styling: slightly lighter bg (`AdjustForHighlight(CardBg, 4.5)`), `CardBorder` rest border, `Lighten(CardBorder, 60)` hover border, 1.5px thickness. Equal-width Grid columns replace fixed-width cards.
+  - File: `hook/ContentPages.cs`
+- **Radio indicators (Root native style)** — Theme card radio selectors use neutral `TextWhite` color only (16×16, 1.0px border, 10×10 inner dot with 1px margin). Never accent-colored, border unaffected by selection state.
+  - File: `hook/ContentPages.cs`
+- **Typography (Root native style)** — Page titles bumped to 20px Bold, section headers to 14px Bold `TextPrimary`. About page renamed to "About Uprooted". Uses `SetFontWeight("Bold")` (string-based) as `SetFontWeightNumeric` silently fails.
+  - File: `hook/ContentPages.cs`
+- **Button borders and text** — Accent buttons (version badge, Check for Updates, Developer/Stable, Go) use `AdjustForHighlight(btnColor, 30)` 1.5px borders with Bold text. Non-accent buttons (Open Logs) use `AdjustForHighlight(bg, 15)`. Developer/Stable border updates dynamically on toggle.
+  - File: `hook/ContentPages.cs`
+- **Restart button color** — Deeper burnt orange (`#D06818`) for better visibility.
+  - File: `hook/ContentPages.cs`
 
 ### Fixed
 

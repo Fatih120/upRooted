@@ -23,6 +23,11 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Plugin sort** — Stability tier prioritized over enabled/disabled (Stable always before Beta)
 - **Themes "Open" button** — Sized to match toggle switches (44×24)
 - **Theme-immune cards** — Experimental banner, restart banner, and Developer/Stable badge use hardcoded colors with `uprooted-no-recolor`
+- **Cards-in-a-card layout** — Preset and custom theme sections use Root-native two-level card hierarchy (outer container + inner 2nd-order cards with lighter bg, thicker borders, Grid column layout)
+- **Radio indicators** — Neutral `TextWhite` only (no accent color), 16×16, 1px border, 10×10 inner dot
+- **Typography** — Page titles 20px Bold, section headers 14px Bold TextPrimary, About page → "About Uprooted"
+- **Button borders** — Accent buttons get `AdjustForHighlight(color, 30)` 1.5px borders with Bold text; Developer/Stable border updates on toggle
+- **Restart button** — Deeper burnt orange (`#D06818`)
 
 ### Fixed
 
