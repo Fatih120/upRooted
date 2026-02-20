@@ -22,6 +22,14 @@ internal static class ContentPages
     private const string DefaultTextDim = "#66f2f2f2";
     private const string DefaultAccentGreen = "#2A5A40";
 
+    // SVG path data for vector icons (20x20 viewbox)
+    // Gear/settings icon — Fluent UI style cog
+    private const string GearIconPath =
+        "M8.61 2.26a1.5 1.5 0 0 1 2.78 0l.28.67a1.5 1.5 0 0 0 1.83.83l.67-.28a1.5 1.5 0 0 1 1.97 1.96l-.28.68a1.5 1.5 0 0 0 .83 1.83l.67.28a1.5 1.5 0 0 1 0 2.78l-.67.28a1.5 1.5 0 0 0-.83 1.83l.28.67a1.5 1.5 0 0 1-1.96 1.97l-.68-.28a1.5 1.5 0 0 0-1.83.83l-.28.67a1.5 1.5 0 0 1-2.78 0l-.28-.67a1.5 1.5 0 0 0-1.83-.83l-.67.28a1.5 1.5 0 0 1-1.97-1.96l.28-.68a1.5 1.5 0 0 0-.83-1.83l-.67-.28a1.5 1.5 0 0 1 0-2.78l.67-.28a1.5 1.5 0 0 0 .83-1.83l-.28-.67A1.5 1.5 0 0 1 5.83 2.3l.68.28a1.5 1.5 0 0 0 1.83-.83l.28-.67ZM10 13a3 3 0 1 0 0-6 3 3 0 0 0 0 6Z";
+    // Info circle icon — circle with "i" inside
+    private const string InfoIconPath =
+        "M10 2a8 8 0 1 0 0 16 8 8 0 0 0 0-16Zm0 1a7 7 0 1 1 0 14 7 7 0 0 1 0-14Zm0 5.5a.75.75 0 0 1 .75.75v4a.75.75 0 0 1-1.5 0v-4A.75.75 0 0 1 10 8.5ZM10 7a.75.75 0 1 0 0-1.5.75.75 0 0 0 0 1.5Z";
+
     // Themed colors derived from the active theme engine (set per-build)
     internal static string CardBg = DefaultCardBg;
     internal static string CardBorder = DefaultCardBorder;
@@ -567,38 +575,48 @@ internal static class ContentPages
                 var updateBannerOuter = r.CreatePanel();
                 if (updateBannerOuter != null)
                 {
-                    var restartRow = r.CreateStackPanel(vertical: false, spacing: 8);
+                    var restartRow = r.CreateStackPanel(vertical: false, spacing: 10);
                     if (restartRow != null)
                     {
                         r.SetVerticalAlignment(restartRow, "Center");
-                        var restartIcon = r.CreateTextBlock("\u26A0", 14, AccentGreen);
+                        var restartIcon = r.CreateTextBlock("\u26A0", 20, "#D06818");
                         ApplyFont(r, restartIcon, font);
                         r.AddChild(restartRow, restartIcon);
 
-                        var restartText = r.CreateTextBlock("Restart Root to use the new version", 13, AccentGreen);
-                        r.SetFontWeightNumeric(restartText, 500);
-                        ApplyFont(r, restartText, font);
-                        r.AddChild(restartRow, restartText);
+                        var restartTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
+                        if (restartTextStack != null)
+                        {
+                            var restartTitle = r.CreateTextBlock("Restart Root to install the new version", 13, "#F0F0F0");
+                            r.SetFontWeight(restartTitle, "Medium");
+                            ApplyFont(r, restartTitle, font);
+                            r.AddChild(restartTextStack, restartTitle);
+
+                            var restartDesc = r.CreateTextBlock("The update has been downloaded and will be applied on next launch.", 11, "#A0A0B0");
+                            ApplyFont(r, restartDesc, font);
+                            r.AddChild(restartTextStack, restartDesc);
+
+                            r.AddChild(restartRow, restartTextStack);
+                        }
                     }
 
-                    var innerBorder = r.CreateBorder(AccentGreen + "15", 8, restartRow);
+                    var innerBorder = r.CreateBorder("#2A1D15", 8, restartRow);
                     if (innerBorder != null)
                     {
                         r.SetPadding(innerBorder, 14, 10, 14, 10);
-                        SetBorderStroke(r, innerBorder, AccentGreen + "40", 1);
+                        SetBorderStroke(r, innerBorder, "#D06818", 1);
                     }
 
-                    // Restart button
-                    var updateRestartBtnText = CreateBoundText(r, "Restart", 12, TextWhite, "TextPrimary");
-                    r.SetFontWeightNumeric(updateRestartBtnText, 500);
+                    // Restart button — accent button format: Bold, border, AdjustForHighlight
+                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, "#FFFFFF");
+                    r.SetFontWeight(updateRestartBtnText, "Bold");
                     ApplyFont(r, updateRestartBtnText, font);
                     r.SetHorizontalAlignment(updateRestartBtnText, "Center");
+                    r.SetVerticalAlignment(updateRestartBtnText, "Center");
                     var updateRestartBtn = r.CreateBorder(AccentGreen, 6, updateRestartBtnText);
                     if (updateRestartBtn != null)
                     {
-                        r.SetTag(updateRestartBtn, "dyn-bg:BrandPrimary");
-                        r.BindToDynamicResource(updateRestartBtn, "Background", "BrandPrimary");
                         r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
+                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 30), 1.5);
                         r.SetHorizontalAlignment(updateRestartBtn, "Right");
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
@@ -615,6 +633,7 @@ internal static class ContentPages
                     if (updateRestartBtn != null) r.AddChild(updateBannerOuter, updateRestartBtn);
 
                     r.SetMargin(updateBannerOuter, 0, 14, 0, 0);
+                    r.SetTag(updateBannerOuter, "uprooted-no-recolor");
                     r.AddChild(updatesContent, updateBannerOuter);
                 }
             }
@@ -734,28 +753,37 @@ internal static class ContentPages
         Action? rebuildGrid = null;
 
         // "Show experimental plugins" toggle banner
+        // When OFF: theme colors (normal card), no warning icon
+        // When ON: hardcoded warning colors (#2A2415 bg, #E0A030 border), warning icon visible
         bool[] showExperimental = { settings.ShowExperimentalPlugins };
         {
             var expOuter = r.CreatePanel();
             if (expOuter != null)
             {
-                var expContent = r.CreateStackPanel(vertical: false, spacing: 8);
+                object? expIcon = null;
+                object? expLabel = null;
+                object? expDesc = null;
+
+                var expContent = r.CreateStackPanel(vertical: false, spacing: 10);
                 if (expContent != null)
                 {
                     r.SetVerticalAlignment(expContent, "Center");
-                    var expIcon = r.CreateTextBlock("\u26A0", 14, "#E0A030");
+                    expIcon = r.CreateTextBlock("\u26A0", 20, "#E0A030");
                     ApplyFont(r, expIcon, font);
+                    r.SetIsVisible(expIcon, showExperimental[0]);
                     r.AddChild(expContent, expIcon);
 
                     var expTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                     if (expTextStack != null)
                     {
-                        var expLabel = r.CreateTextBlock("Show experimental plugins", 13, "#F0F0F0");
-                        r.SetFontWeightNumeric(expLabel, 500);
+                        var initLabelColor = showExperimental[0] ? "#F0F0F0" : TextWhite;
+                        expLabel = r.CreateTextBlock("Show experimental plugins", 13, initLabelColor);
+                        r.SetFontWeight(expLabel, "Medium");
                         ApplyFont(r, expLabel, font);
                         r.AddChild(expTextStack, expLabel);
 
-                        var expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, "#A0A0B0");
+                        var initDescColor = showExperimental[0] ? "#A0A0B0" : TextMuted;
+                        expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, initDescColor);
                         ApplyFont(r, expDesc, font);
                         r.AddChild(expTextStack, expDesc);
 
@@ -763,15 +791,17 @@ internal static class ContentPages
                     }
                 }
 
-                var expInner = r.CreateBorder("#2A2415", 8, expContent);
+                var initBannerBg = showExperimental[0] ? "#2A2415" : CardBg;
+                var initBannerBorder = showExperimental[0] ? "#E0A030" : CardBorder;
+                var expInner = r.CreateBorder(initBannerBg, 8, expContent);
                 if (expInner != null)
                 {
                     r.SetPadding(expInner, 14, 10, 14, 10);
-                    SetBorderStroke(r, expInner, "#E0A030", 1);
+                    SetBorderStroke(r, expInner, initBannerBorder, 1);
                 }
 
-                // Toggle pill (right-aligned) — hardcoded colors for theme immunity
-                var expToggleBg = showExperimental[0] ? AccentGreen : "#2A2A44";
+                // Toggle pill (right-aligned)
+                var expToggleBg = showExperimental[0] ? AccentGreen : AdjustForHighlight(CardBg, 8);
                 var expPill = r.CreateBorder(expToggleBg, 13);
                 if (expPill != null)
                 {
@@ -793,12 +823,34 @@ internal static class ContentPages
 
                         var pillRef = expPill;
                         var dotRef = expDot;
+                        var iconRef = expIcon;
+                        var innerRef = expInner;
+                        var labelRef = expLabel;
+                        var descRef = expDesc;
                         r.SubscribeEvent(expPill, "PointerPressed", () =>
                         {
                             showExperimental[0] = !showExperimental[0];
-                            r.SetBackground(pillRef, showExperimental[0] ? AccentGreen : "#2A2A44");
-                            r.SetHorizontalAlignment(dotRef, showExperimental[0] ? "Right" : "Left");
-                            settings.ShowExperimentalPlugins = showExperimental[0];
+                            var isOn = showExperimental[0];
+
+                            // Toggle pill color + dot position
+                            r.SetBackground(pillRef, isOn ? AccentGreen : AdjustForHighlight(CardBg, 8));
+                            r.SetHorizontalAlignment(dotRef, isOn ? "Right" : "Left");
+
+                            // Warning icon visibility
+                            r.SetIsVisible(iconRef, isOn);
+
+                            // Banner bg + border: warning colors when on, theme colors when off
+                            if (innerRef != null)
+                            {
+                                r.SetBackground(innerRef, isOn ? "#2A2415" : CardBg);
+                                r.SetBorderBrush(innerRef, isOn ? "#E0A030" : CardBorder);
+                            }
+
+                            // Text colors: hardcoded when on, theme when off
+                            if (labelRef != null) r.SetForeground(labelRef, isOn ? "#F0F0F0" : TextWhite);
+                            if (descRef != null) r.SetForeground(descRef, isOn ? "#A0A0B0" : TextMuted);
+
+                            settings.ShowExperimentalPlugins = isOn;
                             settings.Save();
                             rebuildGrid?.Invoke();
                         });
@@ -809,7 +861,6 @@ internal static class ContentPages
                 if (expInner != null) r.AddChild(expOuter, expInner);
                 if (expPill != null) r.AddChild(expOuter, expPill);
                 r.SetMargin(expOuter, 0, 12, 0, 0);
-                r.SetTag(expOuter, "uprooted-no-recolor");
                 r.AddChild(page, expOuter);
             }
         }
@@ -834,29 +885,41 @@ internal static class ContentPages
             var bannerOuter = r.CreatePanel();
             if (bannerOuter != null)
             {
-                var bannerContent = r.CreateStackPanel(vertical: false, spacing: 8);
+                var bannerContent = r.CreateStackPanel(vertical: false, spacing: 10);
                 if (bannerContent != null)
                 {
                     r.SetVerticalAlignment(bannerContent, "Center");
-                    var icon = r.CreateTextBlock("\u26A0", 16, "#FFFFFF");
+                    var icon = r.CreateTextBlock("\u26A0", 20, "#D06818");
                     ApplyFont(r, icon, font);
                     r.AddChild(bannerContent, icon);
 
-                    var bannerText = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#FFFFFF");
-                    r.SetFontWeightNumeric(bannerText, 500);
-                    ApplyFont(r, bannerText, font);
-                    r.AddChild(bannerContent, bannerText);
+                    var bannerTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
+                    if (bannerTextStack != null)
+                    {
+                        var bannerTitle = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#F0F0F0");
+                        r.SetFontWeight(bannerTitle, "Medium");
+                        ApplyFont(r, bannerTitle, font);
+                        r.AddChild(bannerTextStack, bannerTitle);
+
+                        var bannerDesc = r.CreateTextBlock("Changed plugins will not take effect until you restart.", 11, "#A0A0B0");
+                        ApplyFont(r, bannerDesc, font);
+                        r.AddChild(bannerTextStack, bannerDesc);
+
+                        r.AddChild(bannerContent, bannerTextStack);
+                    }
                 }
 
-                // Restart button (right-aligned)
+                // Restart button (right-aligned) — accent button format: Bold, border, AdjustForHighlight
                 var restartBtnText = r.CreateTextBlock("Restart", 12, "#FFFFFF");
-                r.SetFontWeightNumeric(restartBtnText, 500);
+                r.SetFontWeight(restartBtnText, "Bold");
                 ApplyFont(r, restartBtnText, font);
                 r.SetHorizontalAlignment(restartBtnText, "Center");
+                r.SetVerticalAlignment(restartBtnText, "Center");
                 var restartBtn = r.CreateBorder("#D06818", 6, restartBtnText);
                 if (restartBtn != null)
                 {
                     r.SetPadding(restartBtn, 12, 5, 12, 5);
+                    SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 30), 1.5);
                     r.SetHorizontalAlignment(restartBtn, "Right");
                     r.SetVerticalAlignment(restartBtn, "Center");
                     r.SetCursorHand(restartBtn);
@@ -867,11 +930,11 @@ internal static class ContentPages
                         r.SetBackground(restartBtn, "#D06818"));
                 }
 
-                var innerBorder = r.CreateBorder("#4A3010", 8, bannerContent);
+                var innerBorder = r.CreateBorder("#2A1D15", 8, bannerContent);
                 if (innerBorder != null)
                 {
-                    r.SetPadding(innerBorder, 14, 14, 14, 14);
-                    SetBorderStroke(r, innerBorder, "#E0A030", 1);
+                    r.SetPadding(innerBorder, 14, 10, 14, 10);
+                    SetBorderStroke(r, innerBorder, "#D06818", 1);
                 }
 
                 // Use Panel overlay: banner content stretches, restart button right-aligned
@@ -940,7 +1003,7 @@ internal static class ContentPages
                 r.SetForeground(searchBox, TextWhite);
                 ApplyFont(r, searchBox, font);
                 r.SetHorizontalAlignment(searchBox, "Stretch");
-                r.SetMargin(searchBox, 0, 0, 100, 0);
+                r.SetMargin(searchBox, 0, 0, 125, 0);
                 if (r.CornerRadiusType != null)
                 {
                     var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
@@ -961,7 +1024,7 @@ internal static class ContentPages
             var filterLabels = new[] { "All Plugins", "Enabled", "Disabled" };
             var filterColors = new[] { "#404050", AccentGreen, "#E04040" };
             var filterBadgeText = r.CreateTextBlock(filterLabels[filterMode[0]], 13, "#FFFFFF");
-            r.SetFontWeightNumeric(filterBadgeText, 500);
+            r.SetFontWeight(filterBadgeText, "Bold");
             ApplyFont(r, filterBadgeText, font);
             r.SetHorizontalAlignment(filterBadgeText, "Center");
             r.SetVerticalAlignment(filterBadgeText, "Center");
@@ -971,10 +1034,12 @@ internal static class ContentPages
             {
                 r.SetPadding(filterBadge, 12, 0, 12, 0);
                 r.SetHeight(filterBadge, 36);
+                // Fixed MinWidth prevents width jitter when cycling labels
+                filterBadge.GetType().GetProperty("MinWidth")?.SetValue(filterBadge, 115.0);
                 r.SetHorizontalAlignment(filterBadge, "Right");
                 r.SetVerticalAlignment(filterBadge, "Center");
                 r.SetCursorHand(filterBadge);
-                SetBorderStroke(r, filterBadge, CardBorder, 1);
+                SetBorderStroke(r, filterBadge, AdjustForHighlight(filterColors[filterMode[0]], 30), 1.5);
                 r.SetTag(filterBadge, "uprooted-no-recolor");
 
                 var badgeRef = filterBadge;
@@ -984,6 +1049,7 @@ internal static class ContentPages
                     filterMode[0] = (filterMode[0] + 1) % 3;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
                     r.SetBackground(badgeRef, filterColors[filterMode[0]]);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(filterColors[filterMode[0]], 30), 1.5);
                     rebuildGrid?.Invoke();
                 });
                 r.SubscribeEvent(filterBadge, "PointerEntered", () =>
@@ -1239,7 +1305,7 @@ internal static class ContentPages
         {
             // Plugin name - left aligned
             var nameText = CreateBoundText(r, displayName, 14, TextWhite, "TextPrimary");
-            r.SetFontWeightNumeric(nameText, 600);
+            r.SetFontWeight(nameText, "Bold");
             ApplyFont(r, nameText, font);
             r.SetHorizontalAlignment(nameText, "Left");
             r.SetVerticalAlignment(nameText, "Center");
@@ -1254,6 +1320,7 @@ internal static class ContentPages
                 r.SetVerticalAlignment(rightIcons, "Center");
 
                 // Gear icon - opens settings lightbox (only for plugins with settings)
+                // SVG path: Fluent UI Settings (20x20 viewbox)
                 if (hasSettings)
                 {
                     var gearBtnBg = AdjustForHighlight(CardBg, 12);
@@ -1264,11 +1331,13 @@ internal static class ContentPages
                         r.SetHeight(gearBtn, 22);
                         r.SetCursorHand(gearBtn);
 
-                        var gearText = CreateBoundText(r, "\u2699", 13, TextMuted, "TextSecondary");
-                        ApplyFont(r, gearText, font);
-                        r.SetHorizontalAlignment(gearText, "Center");
-                        r.SetVerticalAlignment(gearText, "Center");
-                        r.SetBorderChild(gearBtn, gearText);
+                        var gearIcon = r.CreatePathIcon(GearIconPath, 14, TextMuted);
+                        if (gearIcon != null)
+                        {
+                            r.SetHorizontalAlignment(gearIcon, "Center");
+                            r.SetVerticalAlignment(gearIcon, "Center");
+                            r.SetBorderChild(gearBtn, gearIcon);
+                        }
 
                         var gearBtnRef = gearBtn;
                         var capturedId = pluginId;
@@ -1287,6 +1356,7 @@ internal static class ContentPages
                 }
 
                 // Info icon - opens lightbox with plugin details
+                // SVG path: circle-i info icon (20x20 viewbox)
                 {
                     var infoBtnBg = AdjustForHighlight(CardBg, 12);
                     var infoBtn = r.CreateBorder(infoBtnBg, 11);
@@ -1296,12 +1366,13 @@ internal static class ContentPages
                         r.SetHeight(infoBtn, 22);
                         r.SetCursorHand(infoBtn);
 
-                        var infoText = CreateBoundText(r, "i", 12, TextMuted, "TextSecondary");
-                        r.SetFontWeightNumeric(infoText, 600);
-                        ApplyFont(r, infoText, font);
-                        r.SetHorizontalAlignment(infoText, "Center");
-                        r.SetVerticalAlignment(infoText, "Center");
-                        r.SetBorderChild(infoBtn, infoText);
+                        var infoIcon = r.CreatePathIcon(InfoIconPath, 14, TextMuted);
+                        if (infoIcon != null)
+                        {
+                            r.SetHorizontalAlignment(infoIcon, "Center");
+                            r.SetVerticalAlignment(infoIcon, "Center");
+                            r.SetBorderChild(infoBtn, infoIcon);
+                        }
 
                         var infoBtnRef = infoBtn;
                         var capturedName = displayName;
@@ -1437,10 +1508,10 @@ internal static class ContentPages
                 r.SetMargin(badge, 0, 10, 0, 0);
                 r.SetHorizontalAlignment(badge, "Left");
                 r.SetPadding(badge, 8, 3, 8, 3);
-                SetBorderStroke(r, badge, ColorUtils.WithAlpha(statusColor, 0x60), 0.5);
+                SetBorderStroke(r, badge, ColorUtils.WithAlpha(statusColor, 0x60), 1);
 
                 var badgeText = r.CreateTextBlock(statusLabel, 11, statusColor);
-                r.SetFontWeightNumeric(badgeText, 500);
+                r.SetFontWeight(badgeText, "Bold");
                 ApplyFont(r, badgeText, font);
                 r.SetBorderChild(badge, badgeText);
 

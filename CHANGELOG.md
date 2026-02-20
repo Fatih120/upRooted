@@ -19,10 +19,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
 - **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color
 - **ScrollViewer** — `HorizontalScrollBarVisibility = Disabled` on content ScrollViewers for correct width
-- **Plugin filter** — Dropdown overlay replaced with cycling toggle pill (All Plugins → Enabled → Disabled)
+- **Plugin filter** — Cycling toggle pill with Bold text, `AdjustForHighlight` 1.5px border, `MinWidth` to prevent width jitter
 - **Plugin sort** — Stability tier prioritized over enabled/disabled (Stable always before Beta)
 - **Themes "Open" button** — Sized to match toggle switches (44×24)
-- **Theme-immune cards** — Experimental banner, restart banner, and Developer/Stable badge use hardcoded colors with `uprooted-no-recolor`
+- **Experimental banner** — Theme-aware toggle: theme colors when off, amber warning when on; 20px icon hidden when off
+- **Restart banners** — Title + subtitle layout, burnt orange tint (`#2A1D15`/`#D06818`), accent-format restart buttons
+- **Vector icons** — Plugin card gear/info icons use `PathIcon` with SVG path data instead of Unicode text
+- **Plugin card text** — Bold plugin names (was silently failing), Bold status badges with 1px border
 - **Cards-in-a-card layout** — Preset and custom theme sections use Root-native two-level card hierarchy (outer container + inner 2nd-order cards with lighter bg, thicker borders, Grid column layout)
 - **Radio indicators** — Neutral `TextWhite` only (no accent color), 16×16, 1px border, 10×10 inner dot
 - **Typography** — Page titles 20px Bold, section headers 14px Bold TextPrimary, About page → "About Uprooted"

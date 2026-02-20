@@ -27,6 +27,8 @@ internal class AvaloniaReflection
     public Type? TextBoxType { get; private set; }
     public Type? EllipseType { get; private set; }
     public Type? CanvasType { get; private set; }
+    public Type? PathIconType { get; private set; }  // Avalonia.Controls.PathIcon
+    public Type? GeometryType { get; private set; }  // Avalonia.Media.Geometry
 
     // Image types
     public Type? ImageType { get; private set; }     // Avalonia.Controls.Image
@@ -204,6 +206,9 @@ internal class AvaloniaReflection
         ToggleSwitchType = Find("Avalonia.Controls.ToggleSwitch");
         TextBoxType = Find("Avalonia.Controls.TextBox");
         EllipseType = Find("Avalonia.Controls.Shapes.Ellipse");
+
+        PathIconType = Find("Avalonia.Controls.PathIcon");
+        GeometryType = Find("Avalonia.Media.Geometry");
 
         // Fallback: search by name if namespace differs
         EllipseType ??= typeMap.Values.FirstOrDefault(t =>
@@ -697,6 +702,47 @@ internal class AvaloniaReflection
         if (fontWeight != null) SetFontWeight(tb, fontWeight);
 
         return tb;
+    }
+
+    /// <summary>
+    /// Create a PathIcon from SVG path data string. Uses Geometry.Parse() for the path
+    /// and sets Foreground + Width/Height on the resulting PathIcon control.
+    /// </summary>
+    public object? CreatePathIcon(string pathData, double size, string? foregroundHex = null)
+    {
+        if (PathIconType == null || GeometryType == null) return null;
+        try
+        {
+            // Geometry.Parse(string) is a static method on Avalonia.Media.Geometry
+            var parseMethod = GeometryType.GetMethod("Parse", BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+            if (parseMethod == null) return null;
+
+            var geometry = parseMethod.Invoke(null, new object[] { pathData });
+            if (geometry == null) return null;
+
+            var icon = Activator.CreateInstance(PathIconType);
+            if (icon == null) return null;
+
+            // PathIcon.Data = geometry
+            PathIconType.GetProperty("Data")?.SetValue(icon, geometry);
+
+            // Set size
+            icon.GetType().GetProperty("Width")?.SetValue(icon, size);
+            icon.GetType().GetProperty("Height")?.SetValue(icon, size);
+
+            if (foregroundHex != null)
+            {
+                var brush = CreateBrush(foregroundHex);
+                if (brush != null) icon.GetType().GetProperty("Foreground")?.SetValue(icon, brush);
+            }
+
+            return icon;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"CreatePathIcon failed: {ex.Message}");
+            return null;
+        }
     }
 
     public object? CreateStackPanel(bool vertical = true, double spacing = 0)
