@@ -455,6 +455,50 @@ internal class StartupHook
                 Logger.Log("Startup", "Phase 4.5g: NSFW filter disabled or no API key, skipping");
             }
 
+            // Phase 4.5h: Rootcord (experimental, Discord-style vertical server strip)
+            var rootcordSettings = UprootedSettings.Load();
+            var wantRootcord = rootcordSettings.ShowExperimentalPlugins
+                && rootcordSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
+            if (wantRootcord)
+            {
+                var rcWindow = mainWindow!;
+                var rcResolver = resolver;
+                var rcThemeEngine = themeEngine;
+                ThreadPool.QueueUserWorkItem(_ =>
+                {
+                    try
+                    {
+                        Thread.Sleep(8_000); // Wait for HomeView to fully render
+                        Logger.Log("Startup", "Phase 4.5h: Starting Rootcord engine...");
+                        var engine = new RootcordEngine(rcResolver, rcWindow, rcThemeEngine);
+                        RootcordEngine.Instance = engine;
+                        rcResolver.RunOnUIThread(() =>
+                        {
+                            try
+                            {
+                                engine.Apply();
+                                Logger.Log("Startup", "Phase 4.5h OK: Rootcord active");
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log("Startup", $"Phase 4.5h error (UI): {ex.Message}");
+                            }
+                        });
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Startup", $"Phase 4.5h error: {ex.Message}");
+                    }
+                });
+            }
+            else
+            {
+                // Still create a dormant instance so the toggle can apply at runtime
+                var rcEngine = new RootcordEngine(resolver, mainWindow!, themeEngine);
+                RootcordEngine.Instance = rcEngine;
+                Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
+            }
+
             // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
             {
                 var capturedWindow = mainWindow!;

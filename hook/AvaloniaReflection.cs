@@ -2101,4 +2101,277 @@ internal class AvaloniaReflection
             Logger.Log("Reflection", $"EnumerateResources error: {ex.Message}");
         }
     }
+
+    // ===== Grid column manipulation (for Rootcord layout surgery) =====
+
+    /// <summary>
+    /// Gets the ColumnDefinitions collection from a Grid.
+    /// </summary>
+    public IList? GetColumnDefinitions(object? grid)
+    {
+        if (grid == null) return null;
+        try
+        {
+            return grid.GetType().GetProperty("ColumnDefinitions")?.GetValue(grid) as IList;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Gets the RowDefinitions collection from a Grid.
+    /// </summary>
+    public IList? GetRowDefinitions(object? grid)
+    {
+        if (grid == null) return null;
+        try
+        {
+            return grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid) as IList;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Gets the Width (GridLength) of a ColumnDefinition.
+    /// Returns (value, unitType) where unitType is "Auto", "Pixel", or "Star".
+    /// </summary>
+    public (double Value, string UnitType)? GetColumnDefinitionWidth(object? colDef)
+    {
+        if (colDef == null) return null;
+        try
+        {
+            var widthProp = colDef.GetType().GetProperty("Width");
+            var gridLength = widthProp?.GetValue(colDef);
+            if (gridLength == null) return null;
+            var glType = gridLength.GetType();
+            var value = (double)(glType.GetProperty("Value")?.GetValue(gridLength) ?? 0.0);
+            var unitType = glType.GetProperty("GridUnitType")?.GetValue(gridLength);
+            return (value, unitType?.ToString() ?? "Pixel");
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Sets the Width of a ColumnDefinition to a pixel value.
+    /// </summary>
+    public void SetColumnDefinitionPixelWidth(object? colDef, double pixels)
+    {
+        if (colDef == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var pixelUnit = Enum.Parse(GridUnitTypeEnum, "Pixel");
+            var gridLength = Activator.CreateInstance(GridLengthType, pixels, pixelUnit);
+            colDef.GetType().GetProperty("Width")?.SetValue(colDef, gridLength);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetColumnDefinitionPixelWidth error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Sets Grid.ColumnSpan attached property on a control.
+    /// </summary>
+    public void SetGridColumnSpan(object? control, int span)
+    {
+        if (control == null || GridType == null) return;
+        try
+        {
+            var setSpan = GridType.GetMethod("SetColumnSpan", BindingFlags.Public | BindingFlags.Static);
+            setSpan?.Invoke(null, new[] { control, (object)span });
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Gets Grid.ColumnSpan attached property from a control.
+    /// </summary>
+    public int GetGridColumnSpan(object? control)
+    {
+        if (control == null || GridType == null) return 1;
+        try
+        {
+            var getSpan = GridType.GetMethod("GetColumnSpan", BindingFlags.Public | BindingFlags.Static);
+            return (int)(getSpan?.Invoke(null, new[] { control }) ?? 1);
+        }
+        catch { return 1; }
+    }
+
+    /// <summary>
+    /// Gets Grid.RowSpan attached property from a control.
+    /// </summary>
+    public int GetGridRowSpan(object? control)
+    {
+        if (control == null || GridType == null) return 1;
+        try
+        {
+            var getSpan = GridType.GetMethod("GetRowSpan", BindingFlags.Public | BindingFlags.Static);
+            return (int)(getSpan?.Invoke(null, new[] { control }) ?? 1);
+        }
+        catch { return 1; }
+    }
+
+    /// <summary>
+    /// Sets Grid.RowSpan attached property on a control.
+    /// </summary>
+    public void SetGridRowSpan(object? control, int span)
+    {
+        if (control == null || GridType == null) return;
+        try
+        {
+            var setSpan = GridType.GetMethod("SetRowSpan", BindingFlags.Public | BindingFlags.Static);
+            setSpan?.Invoke(null, new[] { control, (object)span });
+        }
+        catch { }
+    }
+
+    // ===== DataContext / ViewModel access =====
+
+    /// <summary>
+    /// Gets the DataContext (ViewModel) of a control.
+    /// </summary>
+    public object? GetDataContext(object? control)
+    {
+        if (control == null) return null;
+        try
+        {
+            return control.GetType().GetProperty("DataContext")?.GetValue(control);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Gets a property value from any object by property name (useful for ViewModel access).
+    /// </summary>
+    public object? GetPropertyValue(object? obj, string propertyName)
+    {
+        if (obj == null) return null;
+        try
+        {
+            return obj.GetType().GetProperty(propertyName,
+                BindingFlags.Public | BindingFlags.Instance)?.GetValue(obj);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Sets a property value on any object by property name (useful for ViewModel access).
+    /// </summary>
+    public bool SetPropertyValue(object? obj, string propertyName, object? value)
+    {
+        if (obj == null) return false;
+        try
+        {
+            var prop = obj.GetType().GetProperty(propertyName,
+                BindingFlags.Public | BindingFlags.Instance);
+            if (prop == null || !prop.CanWrite) return false;
+            prop.SetValue(obj, value);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    // ===== INotifyPropertyChanged / INotifyCollectionChanged =====
+
+    /// <summary>
+    /// Subscribe to PropertyChanged on an INotifyPropertyChanged object.
+    /// Callback receives the property name that changed.
+    /// </summary>
+    public object? SubscribePropertyChanged(object? obj, Action<string> callback)
+    {
+        if (obj == null) return null;
+        try
+        {
+            var inpcType = obj.GetType().GetInterface("System.ComponentModel.INotifyPropertyChanged");
+            if (inpcType == null) return null;
+
+            var eventInfo = inpcType.GetEvent("PropertyChanged");
+            if (eventInfo == null) return null;
+
+            var handlerType = eventInfo.EventHandlerType!;
+            var paramTypes = handlerType.GetMethod("Invoke")!.GetParameters()
+                .Select(p => p.ParameterType).ToArray();
+
+            var p0 = Expression.Parameter(paramTypes[0], "sender");
+            var p1 = Expression.Parameter(paramTypes[1], "e");
+            var propNameExpr = Expression.Property(p1, "PropertyName");
+            var callbackExpr = Expression.Constant(callback);
+            var invokeExpr = Expression.Invoke(callbackExpr, propNameExpr);
+            var lambda = Expression.Lambda(handlerType, invokeExpr, p0, p1);
+            var handler = lambda.Compile();
+
+            eventInfo.AddEventHandler(obj, (Delegate)handler);
+            return handler;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SubscribePropertyChanged error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Unsubscribe a previously returned PropertyChanged handler.
+    /// </summary>
+    public void UnsubscribePropertyChanged(object? obj, object? handler)
+    {
+        if (obj == null || handler == null) return;
+        try
+        {
+            var inpcType = obj.GetType().GetInterface("System.ComponentModel.INotifyPropertyChanged");
+            var eventInfo = inpcType?.GetEvent("PropertyChanged");
+            eventInfo?.RemoveEventHandler(obj, (Delegate)handler);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Subscribe to CollectionChanged on an INotifyCollectionChanged object.
+    /// Callback fires on any collection change.
+    /// </summary>
+    public object? SubscribeCollectionChanged(object? collection, Action callback)
+    {
+        if (collection == null) return null;
+        try
+        {
+            var inccType = collection.GetType().GetInterface("System.Collections.Specialized.INotifyCollectionChanged");
+            if (inccType == null) return null;
+
+            var eventInfo = inccType.GetEvent("CollectionChanged");
+            if (eventInfo == null) return null;
+
+            var handlerType = eventInfo.EventHandlerType!;
+            var paramTypes = handlerType.GetMethod("Invoke")!.GetParameters()
+                .Select(p => p.ParameterType).ToArray();
+
+            var p0 = Expression.Parameter(paramTypes[0], "sender");
+            var p1 = Expression.Parameter(paramTypes[1], "e");
+            var callbackExpr = Expression.Constant(callback);
+            var invokeExpr = Expression.Invoke(callbackExpr);
+            var lambda = Expression.Lambda(handlerType, invokeExpr, p0, p1);
+            var handler = lambda.Compile();
+
+            eventInfo.AddEventHandler(collection, (Delegate)handler);
+            return handler;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SubscribeCollectionChanged error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Unsubscribe a previously returned CollectionChanged handler.
+    /// </summary>
+    public void UnsubscribeCollectionChanged(object? collection, object? handler)
+    {
+        if (collection == null || handler == null) return;
+        try
+        {
+            var inccType = collection.GetType().GetInterface("System.Collections.Specialized.INotifyCollectionChanged");
+            var eventInfo = inccType?.GetEvent("CollectionChanged");
+            eventInfo?.RemoveEventHandler(collection, (Delegate)handler);
+        }
+        catch { }
+    }
 }
