@@ -15,21 +15,15 @@ namespace Uprooted;
 /// Rootcord Recon Logger — DEBUG/DEV ONLY.
 ///
 /// HOW TO USE:
-///   1. Set env var ROOTCORD_RECON=1 before launching Root.
-///         PowerShell: $env:ROOTCORD_RECON = "1"
-///         Launcher:   add ROOTCORD_RECON=1 to the env block before launching Root.exe
-///   2. Launch Root — check uprooted-hook.log for:
-///         [Startup] Phase 4.5h: ReconLogger attached (ROOTCORD_RECON=1)
+///   1. Switch to the Developer update channel in Uprooted Settings → About.
+///   2. On the Plugins page, enable "Recon Logger". Activates immediately.
 ///   3. Click/hover around the Rootcord UI (server icons, member list, expand arrows,
 ///      user bar, community member cards, the 4 popup buttons, etc.)
-///   4. After each click a 800ms "session window" opens. All changes (bounds, popups,
+///   4. After each click an 800ms "session window" opens. All changes (bounds, popups,
 ///      RenderTransform rotations) are recorded. SESSION_END prints a summary.
 ///   5. Log file:
 ///         %LOCALAPPDATA%\Root Communications\Root\profile\default\rootcord_recon.log
-///   6. Live tail:
-///         tail -f "$env:LOCALAPPDATA\Root Communications\Root\profile\default\rootcord_recon.log"
-///
-/// NEVER ships enabled — only activates when ROOTCORD_RECON=1 is set.
+///   6. Toggle off to stop logging immediately; toggle on to start a fresh log.
 /// </summary>
 internal static class ReconLogger
 {
@@ -37,7 +31,8 @@ internal static class ReconLogger
     private static object?             _mainWindow;
     private static StreamWriter?       _logWriter;
     private static readonly object     _logLock = new();
-    private static bool                _attached;
+    private static bool                _initialized;  // set once by Init(), guards against double-subscription
+    private static bool                _enabled;      // toggled by Enable()/Disable(), checked by all handlers
 
     // ── Session (800ms window from last PointerPressed) ──────────────────────
     private static volatile bool     _inSession;
@@ -70,69 +65,68 @@ internal static class ReconLogger
     // =========================================================================
 
     /// <summary>
-    /// Attach the recon logger to the given main window.
-    /// Called from StartupHook Phase 4.5h when ROOTCORD_RECON=1.
+    /// Subscribe events once. Must be called before Enable(). Safe to call multiple times.
+    /// Called from StartupHook Phase 4.5i on developer channel.
     /// </summary>
-    internal static void Attach(AvaloniaReflection r, object mainWindow)
+    internal static void Init(AvaloniaReflection r, object mainWindow)
     {
-        if (_attached) return;
+        if (_initialized) return;
         _r          = r;
         _mainWindow = mainWindow;
-
         try
         {
-            var logPath = Path.Combine(PlatformPaths.GetProfileDir(), "rootcord_recon.log");
-            _logWriter = new StreamWriter(logPath, append: false) { AutoFlush = true };
-
-            WriteLog("=== Rootcord ReconLogger attached " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
-            WriteLog("Click around the UI — each click starts an 800ms session window.");
-            WriteLog("Log: " + logPath);
-            WriteLog("");
-
             CacheGridMethods();
-
-            // Section A: global pointer events on TopLevel
             r.SubscribePointerEvent(mainWindow, "PointerPressed",  OnPointerPressed);
             r.SubscribePointerEvent(mainWindow, "PointerReleased", OnPointerReleased);
-
-            // Section B: overlay layer monitor
             var overlay = r.GetOverlayLayer(mainWindow);
             if (overlay != null)
             {
                 var children = r.GetChildren(overlay);
                 if (children != null)
-                {
                     _overlayHandler = r.SubscribeCollectionChanged(children, () =>
                         r.RunOnUIThread(() => { try { OnOverlayChanged(overlay); } catch { } }));
-                }
             }
-
             _lastTopLevelCount = r.GetAllTopLevels().Count;
-            _attached = true;
-
-            var status = $"[Recon] Attached → window={mainWindow.GetType().Name}"
-                       + $" overlay={(_overlayHandler != null ? "OK" : "null")}"
-                       + $" toplevels={_lastTopLevelCount}";
-            WriteLog(status);
-            Console.WriteLine("[ReconLogger] " + status);
-            Console.WriteLine("[ReconLogger] Log: " + logPath);
+            _initialized = true;
+            Logger.Log("ReconLogger", $"Init OK — overlay={(_overlayHandler != null ? "OK" : "null")}");
         }
-        catch (Exception ex)
-        {
-            WriteLog("[Recon] Attach error: " + ex.Message);
-        }
+        catch (Exception ex) { Logger.Log("ReconLogger", $"Init error: {ex.Message}"); }
     }
 
-    internal static void Detach()
+    /// <summary>
+    /// Open log file and start recording. Requires Init() to have been called first.
+    /// </summary>
+    internal static void Enable()
     {
-        _attached  = false;
+        if (!_initialized || _enabled) return;
+        try
+        {
+            var logPath = Path.Combine(PlatformPaths.GetProfileDir(), "rootcord_recon.log");
+            _logWriter = new StreamWriter(logPath, append: false) { AutoFlush = true };
+            _enabled = true;
+            WriteLog("=== Rootcord ReconLogger enabled " + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
+            WriteLog("Click around the UI — each click starts an 800ms session window.");
+            WriteLog("Log: " + logPath);
+            WriteLog("");
+            Logger.Log("ReconLogger", "Enabled — log at " + logPath);
+        }
+        catch (Exception ex) { Logger.Log("ReconLogger", $"Enable error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Stop recording and close the log file immediately.
+    /// </summary>
+    internal static void Disable()
+    {
+        _enabled   = false;   // must be first — stops all handlers immediately
         _inSession = false;
-        _sessionTimer?.Dispose();
-        _scanTimer?.Dispose();
-        _sessionTimer = null;
+        _sessionTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _scanTimer?.Change(Timeout.Infinite, Timeout.Infinite);
+        _sessionTimer = null;  // null so ??= creates fresh timers on next Enable
         _scanTimer    = null;
         try { _logWriter?.Flush(); _logWriter?.Dispose(); } catch { }
         _logWriter = null;
+        Logger.Log("ReconLogger", "Disabled");
     }
 
     // =========================================================================
@@ -141,7 +135,7 @@ internal static class ReconLogger
 
     private static void OnPointerPressed(double x, double y)
     {
-        if (!_attached) return;
+        if (!_enabled) return;
         try
         {
             StartSession(x, y);
@@ -196,7 +190,7 @@ internal static class ReconLogger
 
     private static void OnPointerReleased(double x, double y)
     {
-        if (!_attached) return;
+        if (!_enabled) return;
         var line = $"EVENT=PointerReleased Pos=({x:F0},{y:F0})";
         WriteLogTs(line);
         LogSession(line);
@@ -208,7 +202,7 @@ internal static class ReconLogger
 
     private static void OnOverlayChanged(object overlay)
     {
-        if (!_attached || _r == null) return;
+        if (!_enabled || _r == null) return;
         try
         {
             var children = _r.GetChildren(overlay);
@@ -332,7 +326,7 @@ internal static class ReconLogger
 
     private static void ScanBoundsChanges()
     {
-        if (!_inSession || _r == null || _mainWindow == null) return;
+        if (!_enabled || !_inSession || _r == null || _mainWindow == null) return;
 
         var wb    = _r.GetBounds(_mainWindow);
         double winW = wb?.W ?? 1920;

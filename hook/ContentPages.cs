@@ -667,9 +667,9 @@ internal static class ContentPages
         public int TestingStatus;
     }
 
-    // Testing status levels: 0=Experimental (red), 1=Alpha (orange), 2=Beta (yellow), 3=Stable (green)
-    private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable" };
-    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050" };
+    // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue)
+    private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev" };
+    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0" };
 
     // Known plugins metadata
     private static PluginInfo[]? KnownPlugins;
@@ -705,6 +705,9 @@ internal static class ContentPages
                 new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.4.2",
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
+                new() { Id = "recon-logger", DisplayName = "Recon Logger", Version = "0.4.2",
+                    Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
@@ -954,7 +957,7 @@ internal static class ContentPages
                 {
                     foreach (var kv in initialPluginStates)
                     {
-                        if (kv.Key == "themes" || kv.Key == "rootcord") continue; // live-toggle plugins
+                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger") continue; // live-toggle plugins
                         bool currentVal = kv.Key == "content-filter"
                             ? settings.NsfwFilterEnabled
                             : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -1150,6 +1153,9 @@ internal static class ContentPages
             {
                 // Hide experimental plugins unless the toggle is on
                 if (!showExperimental[0] && cardStatuses[ci] == 0)
+                    continue;
+                // Hide dev-tier plugins unless on developer channel
+                if (cardStatuses[ci] == 4 && !settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                     continue;
                 if (!string.IsNullOrEmpty(searchText[0]))
                 {
@@ -1454,6 +1460,17 @@ internal static class ContentPages
                             catch (Exception rex) { Logger.Log("Plugins", $"Rootcord toggle error: {rex.Message}"); }
                         }
 
+                        // Recon Logger: enable/disable live (dev plugin)
+                        if (pluginId == "recon-logger")
+                        {
+                            try
+                            {
+                                if (enabled) ReconLogger.Enable();
+                                else         ReconLogger.Disable();
+                            }
+                            catch (Exception rex) { Logger.Log("Plugins", $"ReconLogger toggle error [{rex.GetType().Name}]: {rex.Message} | {rex.StackTrace?.Split('\n')[0].Trim()}"); }
+                        }
+
                         try { settings.Save(); }
                         catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
                         Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
@@ -1464,7 +1481,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes" || kv.Key == "rootcord") continue; // live-toggle plugins
+                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);

@@ -63,19 +63,13 @@ internal class RootcordEngine
 
     // Profile pane control
     private bool _wasProfilePaneOpen;
-    private object? _profileInterceptHandler;
-    private bool _allowProfileOnce;
 
     // User bar (Discord-style bottom-left bar, overlaps channel list via ZIndex)
     private object? _userBar;
 
-    // User bar — SystemTray reparent state
+    // User bar — PanePlacement guard state
     private string? _originalPanePlacement;  // for Revert of PanePlacement
-    private object? _userBarTrayHost;         // StackPanel inside User Card that holds reparented SystemTray
-    private int _savedTrayRow;
-    private int _savedTrayCol;
-    private int _savedTrayColSpan;
-    private int _savedTrayRowSpan;
+    private object? _panePlacementGuardHandler; // PropertyChanged guard to re-assert Left
 
     // ToolTip placement flip (member hover name tooltips) — cached via EnsureToolTipMethods()
     private MethodInfo? _toolTipGetTipMethod;
@@ -91,6 +85,7 @@ internal class RootcordEngine
     private readonly HashSet<int> _flippedFlyoutIds = new();
     private object? _membersLayoutUpdatedHandler;
     private object? _membersPanel; // Members panel reference for LayoutUpdated unsub
+    private object? _overlayMonitorHandler; // Monitors overlay layer for right-side popups
 
     // State
     public bool IsApplied { get; private set; }
@@ -531,6 +526,36 @@ internal class RootcordEngine
             var leftVal = Enum.Parse(pp.PropertyType, "Left");
             pp.SetValue(_rootSplitView, leftVal);
             Logger.Log(Tag, $"SplitView PanePlacement → Left (was {_originalPanePlacement})");
+
+            // Guard: if Root resets PanePlacement to Right, immediately re-assert Left
+            var capturedSplitView = _rootSplitView;
+            _panePlacementGuardHandler = _r.SubscribePropertyChanged(_rootSplitView, (propName) =>
+            {
+                if (propName == "PanePlacement" && IsApplied)
+                {
+                    var current = capturedSplitView.GetType().GetProperty("PanePlacement")
+                        ?.GetValue(capturedSplitView)?.ToString() ?? "";
+                    if (!current.Equals("Left", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _r.RunOnUIThread(() =>
+                        {
+                            try
+                            {
+                                var ppInner = capturedSplitView.GetType().GetProperty("PanePlacement");
+                                if (ppInner != null)
+                                {
+                                    var lv = Enum.Parse(ppInner.PropertyType, "Left");
+                                    ppInner.SetValue(capturedSplitView, lv);
+                                    Logger.Log(Tag, "PanePlacement guard: re-asserted Left");
+                                }
+                            }
+                            catch { }
+                        });
+                    }
+                }
+            });
+            if (_panePlacementGuardHandler != null)
+                Logger.Log(Tag, "PanePlacement guard subscribed");
         }
         catch (Exception ex) { Logger.Log(Tag, $"ApplyUtilityPanePlacement error: {ex.Message}"); }
     }
@@ -540,6 +565,14 @@ internal class RootcordEngine
     /// </summary>
     private void RevertUtilityPanePlacement()
     {
+        // Unsubscribe guard first so it doesn't fight the restore
+        if (_panePlacementGuardHandler != null && _rootSplitView != null)
+        {
+            try { _r.UnsubscribePropertyChanged(_rootSplitView, _panePlacementGuardHandler); }
+            catch { }
+            _panePlacementGuardHandler = null;
+        }
+
         if (_rootSplitView == null || _originalPanePlacement == null) return;
         try
         {
@@ -825,19 +858,65 @@ internal class RootcordEngine
                 $"{c.child.GetType().Name}@{c.col}→{columns[(idx + n - 1) % n]}"));
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {nonSplitters.Count} children: {names}");
 
-            // Remove right margin on content host to flush members to the right edge
+            // Deep-clear right-side margins/paddings from SplitView down to the members column host
+            // Level 1+2: SplitView immediate visual children (content template wrapper + their children)
             try
             {
-                foreach (var node in _r.GetVisualChildren(_rootSplitView))
+                foreach (var child in _r.GetVisualChildren(_rootSplitView))
                 {
-                    _r.SetMargin(node, 0, 0, 0, 0);
-                    break; // only the immediate content host
+                    _r.SetMargin(child, 0, 0, 0, 0);
+                    _r.SetPadding(child, 0, 0, 0, 0);
+                    foreach (var grandchild in _r.GetVisualChildren(child))
+                    {
+                        _r.SetMargin(grandchild, 0, 0, 0, 0);
+                        _r.SetPadding(grandchild, 0, 0, 0, 0);
+                    }
+                    break; // only the content-side host
                 }
             }
             catch { }
 
-            // Also remove any trailing margin on the communityView itself
-            try { _r.SetMargin(communityView, 0, 0, 0, 0); } catch { }
+            // CommunityView and its immediate children
+            try
+            {
+                _r.SetMargin(communityView, 0, 0, 0, 0);
+                _r.SetPadding(communityView, 0, 0, 0, 0);
+                foreach (var child in _r.GetVisualChildren(communityView))
+                {
+                    _r.SetMargin(child, 0, 0, 0, 0);
+                    _r.SetPadding(child, 0, 0, 0, 0);
+                }
+            }
+            catch { }
+
+            // Members column host: rightmost non-splitter child; walk its tree to clear ScrollViewer padding
+            try
+            {
+                object? membersHost = null;
+                int maxMemberCol = -1;
+                foreach (var child in _r.GetVisualChildren(layoutGrid))
+                {
+                    if (child.GetType().Name.Contains("GridSplitter")) continue;
+                    int col = _r.GetGridColumn(child);
+                    if (col > maxMemberCol) { maxMemberCol = col; membersHost = child; }
+                }
+                if (membersHost != null)
+                {
+                    _r.SetMargin(membersHost, 0, 0, 0, 0);
+                    _r.SetPadding(membersHost, 0, 0, 0, 0);
+                    var deepWalker = new VisualTreeWalker(_r);
+                    foreach (var node in deepWalker.DescendantsDepthFirst(membersHost))
+                    {
+                        var tn = node.GetType().Name;
+                        if (tn.Contains("ScrollViewer") || tn.Contains("ScrollContentPresenter"))
+                        {
+                            _r.SetPadding(node, 0, 0, 0, 0);
+                            _r.SetMargin(node, 0, 0, 0, 0);
+                        }
+                    }
+                }
+            }
+            catch { }
 
             // Zero out any extra column definitions beyond the rightmost non-splitter column
             try
@@ -940,7 +1019,7 @@ internal class RootcordEngine
             }
 
             _membersPanel = membersPanel;
-            int flipped = FlipFlyoutsInTree(membersPanel, "RightEdgeAlignedTop", "LeftEdgeAlignedTop");
+            int flipped = FlipFlyoutsInTree(membersPanel, "", "");
             Logger.Log(Tag, $"FlipMemberFlyouts: initial scan flipped {flipped} flyouts");
 
             // Also flip ToolTip placements for member name hover pills (Left so they open to the left)
@@ -956,7 +1035,12 @@ internal class RootcordEngine
                     var capturedPanel = membersPanel;
                     EventHandler handler = (_, _) =>
                     {
-                        try { FlipFlyoutsInTree(capturedPanel, "RightEdgeAlignedTop", "LeftEdgeAlignedTop"); }
+                        try
+                        {
+                            // Clear HashSet so controls whose placement was reset by Root get re-flipped
+                            _flippedFlyoutIds.Clear();
+                            FlipFlyoutsInTree(capturedPanel, "", "");
+                        }
                         catch { }
                         try { FlipTooltipsInTree(capturedPanel); }
                         catch { }
@@ -970,6 +1054,9 @@ internal class RootcordEngine
             {
                 Logger.Log(Tag, $"FlipMemberFlyouts: LayoutUpdated subscription failed: {ex2.Message}");
             }
+
+            // Subscribe overlay monitor to catch dynamically created profile popouts
+            SubscribeOverlayPopupMonitor();
         }
         catch (Exception ex)
         {
@@ -1011,18 +1098,31 @@ internal class RootcordEngine
                                 var placementType = placementProp.PropertyType;
                                 if (placementType.IsEnum)
                                 {
-                                    try
+                                    // Flip any "Right*" placement to its Left equivalent
+                                    var currentStr = currentPlacement.ToString() ?? "";
+                                    if (currentStr.Contains("Right", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        var fromValue = Enum.Parse(placementType, fromPlacement);
-                                        if (currentPlacement.Equals(fromValue))
+                                        try
                                         {
-                                            var toValue = Enum.Parse(placementType, toPlacement);
+                                            string flippedName = currentStr.Replace("Right", "Left",
+                                                StringComparison.OrdinalIgnoreCase);
+                                            var toValue = Enum.Parse(placementType, flippedName);
                                             placementProp.SetValue(flyout, toValue);
                                             flipped = true;
                                             count++;
                                         }
+                                        catch
+                                        {
+                                            try
+                                            {
+                                                var leftVal = Enum.Parse(placementType, "Left");
+                                                placementProp.SetValue(flyout, leftVal);
+                                                flipped = true;
+                                                count++;
+                                            }
+                                            catch { }
+                                        }
                                     }
-                                    catch { }
                                 }
                             }
                         }
@@ -1109,6 +1209,101 @@ internal class RootcordEngine
 
         _flippedFlyoutIds.Clear();
         _membersPanel = null;
+
+        // Unsubscribe overlay popup monitor
+        if (_overlayMonitorHandler != null)
+        {
+            try
+            {
+                var mainWindow = _r.GetMainWindow();
+                if (mainWindow != null)
+                {
+                    var overlay = _r.GetOverlayLayer(mainWindow);
+                    if (overlay != null)
+                    {
+                        var children = _r.GetChildren(overlay);
+                        if (children != null)
+                            _r.UnsubscribeCollectionChanged(children, _overlayMonitorHandler);
+                    }
+                }
+            }
+            catch { }
+            _overlayMonitorHandler = null;
+        }
+    }
+
+    /// <summary>
+    /// Subscribe to the OverlayLayer's children collection to catch dynamically created profile
+    /// popouts that appear on the right side and reposition them leftward.
+    /// </summary>
+    private void SubscribeOverlayPopupMonitor()
+    {
+        try
+        {
+            var mainWindow = _r.GetMainWindow();
+            if (mainWindow == null) { Logger.Log(Tag, "OverlayMonitor: mainWindow not found"); return; }
+            var overlay = _r.GetOverlayLayer(mainWindow);
+            if (overlay == null) { Logger.Log(Tag, "OverlayMonitor: overlay layer not found"); return; }
+
+            var children = _r.GetChildren(overlay);
+            if (children == null) { Logger.Log(Tag, "OverlayMonitor: overlay children not accessible"); return; }
+
+            _overlayMonitorHandler = _r.SubscribeCollectionChanged(children, () =>
+            {
+                _r.RunOnUIThread(() =>
+                {
+                    try { RepositionOverlayPopupsLeft(overlay); }
+                    catch { }
+                });
+            });
+
+            if (_overlayMonitorHandler != null)
+                Logger.Log(Tag, "OverlayMonitor: subscribed to overlay children changes");
+            else
+                Logger.Log(Tag, "OverlayMonitor: subscription returned null (INCC not supported?)");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"OverlayMonitor subscribe error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Walk the overlay layer children; any popup that appears in the right half of the window
+    /// gets repositioned so it opens leftward toward the center.
+    /// Skips our own rootcord-tagged overlays.
+    /// </summary>
+    private void RepositionOverlayPopupsLeft(object overlay)
+    {
+        var windowBounds = _r.GetBounds(_mainWindow);
+        double winW = windowBounds?.W ?? 1920;
+
+        var children = _r.GetChildren(overlay);
+        if (children == null) return;
+
+        // Snapshot the list to avoid mutation issues during iteration
+        var snapshot = new List<object>();
+        foreach (var c in children) if (c != null) snapshot.Add(c);
+
+        foreach (var child in snapshot)
+        {
+            // Skip our own overlays
+            var tag = child.GetType().GetProperty("Tag")?.GetValue(child) as string ?? "";
+            if (tag.StartsWith("rootcord-")) continue;
+
+            var bounds = _r.GetBounds(child);
+            if (bounds == null) continue;
+
+            double x = bounds.Value.X;
+            double popupW = bounds.Value.W;
+            if (popupW <= 0) continue;
+
+            // If the popup's right edge is beyond 60% of the window width, move it left
+            if (x + popupW > winW * 0.6)
+            {
+                double newX = x - popupW - 8; // shift left by its own width + 8px gap
+                if (newX < 8) newX = 8;
+                _r.SetCanvasPosition(child, newX, bounds.Value.Y);
+                Logger.Log(Tag, $"OverlayMonitor: repositioned popup from X={x:F0} → X={newX:F0}");
+            }
+        }
     }
 
     /// <summary>
@@ -1328,7 +1523,8 @@ internal class RootcordEngine
             var rowDefs = _r.GetRowDefinitions(_homeViewGrid);
             int rowCount = rowDefs?.Count ?? 4;
             _r.SetGridRowSpan(_userBar, rowCount);
-            _r.SetGridColumnSpan(_userBar, 2); // spans server strip + channel list
+            var allCols = _r.GetColumnDefinitions(_homeViewGrid)?.Count ?? 6;
+            _r.SetGridColumnSpan(_userBar, allCols); // spans full window width so Width=240+Left renders correctly
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
             _userBar.GetType().GetProperty("ZIndex")?.SetValue(_userBar, 10);
@@ -1366,7 +1562,8 @@ internal class RootcordEngine
                 {
                     var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
                     var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit)!;
-                    colDefs[2].GetType().GetProperty("Width")?.SetValue(colDefs[2], autoLen);
+                    var colDef2 = colDefs[2];
+                    colDef2?.GetType().GetProperty("Width")?.SetValue(colDef2, autoLen);
                 }
                 catch (Exception ex) { Logger.Log(Tag, $"UserBar: Auto col set error: {ex.Message}"); }
             }
@@ -1414,6 +1611,9 @@ internal class RootcordEngine
                     _r.SetVerticalAlignment(statusDot, "Bottom");
                     _r.AddChild(avatarGrid, statusDot);
                 }
+                // Clicking the avatar opens the profile pane
+                _r.SetCursorHand(avatarGrid);
+                _r.SubscribeEvent(avatarGrid, "PointerPressed", () => InvokeHomeCommand("ProfilePaneToggleCommand"));
                 _r.AddChild(contentGrid, avatarGrid);
             }
 
@@ -1451,10 +1651,13 @@ internal class RootcordEngine
                     catch { }
                     _r.AddChild(textPanel, statusText);
                 }
+                // Clicking the text area also opens the profile pane
+                _r.SetCursorHand(textPanel);
+                _r.SubscribeEvent(textPanel, "PointerPressed", () => InvokeHomeCommand("ProfilePaneToggleCommand"));
                 _r.AddChild(contentGrid, textPanel);
             }
 
-            // --- Col 2: Native SystemTray (reparented) or fallback buttons ---
+            // --- Col 2: 4 action buttons (People / DMs / Notifications / Settings) ---
             var trayHost = _r.CreateStackPanel(vertical: false, spacing: 0);
             if (trayHost != null)
             {
@@ -1462,55 +1665,14 @@ internal class RootcordEngine
                 _r.SetVerticalAlignment(trayHost, "Center");
                 _r.SetMargin(trayHost, 0, 0, 4, 0);
 
-                bool trayReparented = false;
-                if (_systemTrayBorder != null && _homeViewGrid != null)
-                {
-                    try
-                    {
-                        // Save current grid position of the system tray
-                        _savedTrayRow     = _r.GetGridRow(_systemTrayBorder);
-                        _savedTrayCol     = _r.GetGridColumn(_systemTrayBorder);
-                        _savedTrayColSpan = _r.GetGridColumnSpan(_systemTrayBorder);
-                        _savedTrayRowSpan = _r.GetGridRowSpan(_systemTrayBorder);
-
-                        // Detach from HomeView Grid
-                        _r.RemoveChild(_homeViewGrid, _systemTrayBorder);
-
-                        // Clear grid attached props to avoid layout issues
-                        _r.SetGridColumn(_systemTrayBorder, 0);
-                        _r.SetGridRow(_systemTrayBorder, 0);
-                        _r.SetGridColumnSpan(_systemTrayBorder, 1);
-                        _r.SetGridRowSpan(_systemTrayBorder, 1);
-
-                        // Make it visible (was hidden by CollapseTabBarRow)
-                        _r.SetIsVisible(_systemTrayBorder, true);
-
-                        // Add to our user card tray host
-                        _r.AddChild(trayHost, _systemTrayBorder);
-                        _userBarTrayHost = trayHost;
-                        trayReparented = true;
-                        Logger.Log(Tag, $"UserBar: SystemTray reparented (was Row={_savedTrayRow} Col={_savedTrayCol} ColSpan={_savedTrayColSpan} RowSpan={_savedTrayRowSpan})");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log(Tag, $"UserBar: SystemTray reparent failed: {ex.Message}");
-                        trayReparented = false;
-                    }
-                }
-
-                if (!trayReparented)
-                {
-                    // Fallback: 4 text-symbol buttons invoking the 4 native commands
-                    Logger.Log(Tag, "UserBar: using fallback action buttons");
-                    var btnP = BuildActionButton("P", () => InvokeHomeCommand("FriendsPaneToggleCommand"));
-                    var btnM = BuildActionButton("M", () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
-                    var btnN = BuildActionButton("N", () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
-                    var btnS = BuildActionButton("S", () => InvokeHomeCommand("ProfilePaneToggleCommand"));
-                    if (btnP != null) _r.AddChild(trayHost, btnP);
-                    if (btnM != null) _r.AddChild(trayHost, btnM);
-                    if (btnN != null) _r.AddChild(trayHost, btnN);
-                    if (btnS != null) _r.AddChild(trayHost, btnS);
-                }
+                var btnP = BuildActionButton("P", () => InvokeHomeCommand("FriendsPaneToggleCommand"));
+                var btnD = BuildActionButton("D", () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
+                var btnN = BuildActionButton("N", () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
+                var btnS = BuildActionButton("\u2699", () => InvokeHomeCommand("ProfilePaneToggleCommand")); // ⚙ Settings/gear
+                if (btnP != null) _r.AddChild(trayHost, btnP);
+                if (btnD != null) _r.AddChild(trayHost, btnD);
+                if (btnN != null) _r.AddChild(trayHost, btnN);
+                if (btnS != null) _r.AddChild(trayHost, btnS);
 
                 _r.AddChild(contentGrid, trayHost);
             }
@@ -1520,7 +1682,7 @@ internal class RootcordEngine
             _r.SetBorderChild(_userBar, outerStack);
 
             _r.AddChild(_homeViewGrid, _userBar);
-            Logger.Log(Tag, "User bar injected: 240px wide, ColSpan=2, ZIndex=10, 3-col layout");
+            Logger.Log(Tag, "User bar injected: 240px wide, ColSpan=2, ZIndex=10, avatar+text+4buttons");
         }
         catch (Exception ex)
         {
@@ -1574,24 +1736,6 @@ internal class RootcordEngine
     /// </summary>
     private void RevertUserBar()
     {
-        // Reparent SystemTray back to HomeView Grid
-        if (_systemTrayBorder != null && _homeViewGrid != null && _userBarTrayHost != null)
-        {
-            try
-            {
-                _r.RemoveChild(_userBarTrayHost, _systemTrayBorder);
-                _r.SetGridColumn(_systemTrayBorder, _savedTrayCol);
-                _r.SetGridRow(_systemTrayBorder, _savedTrayRow);
-                _r.SetGridColumnSpan(_systemTrayBorder, _savedTrayColSpan);
-                _r.SetGridRowSpan(_systemTrayBorder, _savedTrayRowSpan);
-                _r.AddChild(_homeViewGrid, _systemTrayBorder);
-                // Visibility is restored by RestoreTabBarRow() called after RevertUserBar()
-                Logger.Log(Tag, "SystemTray reparented back to HomeView Grid");
-            }
-            catch (Exception ex) { Logger.Log(Tag, $"SystemTray revert error: {ex.Message}"); }
-        }
-        _userBarTrayHost = null;
-
         if (_userBar != null && _homeViewGrid != null)
         {
             try { _r.RemoveChild(_homeViewGrid, _userBar); } catch { }
@@ -2336,7 +2480,6 @@ internal class RootcordEngine
                 else
                 {
                     // Fallback: open Profile pane (which contains Settings access)
-                    _allowProfileOnce = true;
                     var profileCmd = _r.GetPropertyValue(_homeViewModel, "ProfilePaneToggleCommand");
                     if (profileCmd != null) InvokeCommand(profileCmd);
                     Logger.Log(Tag, "Settings: no direct command, opened Profile pane as fallback");
@@ -2352,7 +2495,6 @@ internal class RootcordEngine
             _r.SubscribeEvent(profileBtn, "PointerPressed", () =>
             {
                 DismissUserCardPopup();
-                _allowProfileOnce = true; // Let the next ProfileOpen through the intercept
                 var cmd = _r.GetPropertyValue(_homeViewModel, "ProfilePaneToggleCommand");
                 if (cmd != null) InvokeCommand(cmd);
             });
@@ -2953,29 +3095,6 @@ internal class RootcordEngine
         if (_selectionHandler != null)
             Logger.Log(Tag, "Subscribed to SelectedTabViewModel changes");
 
-        // Intercept Profile pane from reopening while Rootcord is active
-        // (except when user explicitly clicks our Profile button → _allowProfileOnce)
-        _profileInterceptHandler = _r.SubscribePropertyChanged(_homeViewModel, (prop) =>
-        {
-            if (prop == "ProfileOpen" && IsApplied &&
-                _r.GetPropertyValue(_homeViewModel, "ProfileOpen") is true)
-            {
-                if (_allowProfileOnce)
-                {
-                    _allowProfileOnce = false;
-                    return; // Allow this one through (user clicked our Profile button)
-                }
-                _r.RunOnUIThread(() =>
-                {
-                    _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);
-                    _r.SetPropertyValue(_homeViewModel, "PaneOpen", false);
-                });
-            }
-        });
-
-        if (_profileInterceptHandler != null)
-            Logger.Log(Tag, "Subscribed to ProfileOpen intercept");
-
         // Watch for Tabs collection changes (tab added/removed)
         _tabsCollection = _r.GetPropertyValue(_homeViewModel, "Tabs");
         if (_tabsCollection != null)
@@ -3003,13 +3122,6 @@ internal class RootcordEngine
 
     private void UnsubscribeTabChanges()
     {
-        // Unsubscribe profile intercept first (before restoring pane state)
-        if (_profileInterceptHandler != null && _homeViewModel != null)
-        {
-            _r.UnsubscribePropertyChanged(_homeViewModel, _profileInterceptHandler);
-            _profileInterceptHandler = null;
-        }
-
         if (_selectionHandler != null && _homeViewModel != null)
         {
             _r.UnsubscribePropertyChanged(_homeViewModel, _selectionHandler);

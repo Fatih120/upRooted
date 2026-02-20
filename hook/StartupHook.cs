@@ -504,21 +504,42 @@ internal class StartupHook
                     Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
                 }
 
-                // Recon logger: ROOTCORD_RECON=1 env var activates debug instrumentation (dev only)
-                if (Environment.GetEnvironmentVariable("ROOTCORD_RECON") == "1")
+            }
+
+            // Phase 4.5i: Recon Logger (dev channel only, dev plugin tier)
+            {
+                var reconSettings = UprootedSettings.Load();
+                if (reconSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                 {
+                    var reconResolver = resolver;
+                    var reconWindow   = mainWindow!;
                     resolver.RunOnUIThread(() =>
                     {
                         try
                         {
-                            ReconLogger.Attach(resolver, mainWindow!);
-                            Logger.Log("Startup", "Phase 4.5h: ReconLogger attached (ROOTCORD_RECON=1)");
+                            ReconLogger.Init(reconResolver, reconWindow);
+                            Logger.Log("Startup", "Phase 4.5i: ReconLogger initialized");
+
+                            var autoSettings = UprootedSettings.Load();
+                            if (autoSettings.Plugins.TryGetValue("recon-logger", out var rlEnabled) && rlEnabled)
+                            {
+                                ReconLogger.Enable();
+                                Logger.Log("Startup", "Phase 4.5i: ReconLogger auto-started (plugin enabled)");
+                            }
+                            else
+                            {
+                                Logger.Log("Startup", "Phase 4.5i: ReconLogger dormant (plugin disabled)");
+                            }
                         }
                         catch (Exception ex)
                         {
-                            Logger.Log("Startup", $"ReconLogger.Attach error: {ex.Message}");
+                            Logger.Log("Startup", $"Phase 4.5i error: {ex.Message}");
                         }
                     });
+                }
+                else
+                {
+                    Logger.Log("Startup", "Phase 4.5i: skipped (not on developer channel)");
                 }
             }
 
