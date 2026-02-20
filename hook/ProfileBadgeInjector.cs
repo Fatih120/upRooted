@@ -7,7 +7,7 @@ namespace Uprooted;
 /// directly below the username.
 ///
 /// Two badge types:
-/// - "Uprooted Dev" (gold): shown only on developer channel, gated to DeveloperUsernames (username match)
+/// - "Uprooted Dev" (gold): shown only on developer channel, gated to DeveloperUsernames (username) or DeveloperUserIds (UUID)
 /// - "Alpha User" (blue): shown on ALL channels, gated to AlphaUserIds (UUID match — stable across renames)
 ///
 /// UUID is read from MemberProfileView.DataContext → MessageContainerMember.GlobalUser.Id.ToString().
@@ -33,13 +33,21 @@ internal class ProfileBadgeInjector
 
     /// <summary>
     /// Known developer usernames who should display the "Uprooted Dev" badge.
-    /// Dev badge is username-based (developers don't change their usernames).
     /// </summary>
     private static readonly HashSet<string> DeveloperUsernames = new(StringComparer.OrdinalIgnoreCase)
     {
         "watchthelight",
         "agomusio",
         "terrydavis",
+    };
+
+    /// <summary>
+    /// Developer UUIDs for cases where matching by username isn't possible.
+    /// Checked in addition to DeveloperUsernames — either match grants the dev badge.
+    /// </summary>
+    private static readonly HashSet<string> DeveloperUserIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "002cf301-7d02-8601-9a1e-348cabc6cf6b",
     };
 
     /// <summary>
@@ -84,6 +92,12 @@ internal class ProfileBadgeInjector
         "002d0034-c6ea-8901-bb10-cff05e34b266",
         "002cffc5-c637-8901-ba08-fb8806e937b9",
         "002d1993-8ac5-8c01-8079-e2034f69f230",
+        "002d04f1-d744-8501-ae58-c19b7ad3e516",
+        "002d0e00-c2bd-8101-b328-8ac2effba2f6",
+        "002d0380-c0f9-8a01-af73-b51172fb1493",
+        "002cf301-7d02-8601-9a1e-348cabc6cf6b",
+        "002d0a06-8ba0-8501-9bb7-5766b44407e8",
+        "002c8d10-b651-8301-b062-39ebcbdb68bb",
     };
 
     private readonly AvaloniaReflection _r;
@@ -443,7 +457,7 @@ internal class ProfileBadgeInjector
         var username = _r.GetText(usernameBlock) ?? "";
         Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
 
-        bool isDevUser = _isDevChannel && DeveloperUsernames.Contains(username);
+        bool isDevUser = _isDevChannel && (DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)));
 
         if (!isDevUser && !isAlphaUser)
         {
