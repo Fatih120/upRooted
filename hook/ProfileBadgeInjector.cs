@@ -73,6 +73,12 @@ internal class ProfileBadgeInjector
         "002d0606-6469-8a01-96b4-2f6524c5ff91",
         "002ce6ef-6d3a-8101-ab2d-77895a58c9ef",
         "002c7dc3-c9ba-8101-b981-1564e838ddc2",
+        "002ceaf6-71e0-8701-b13a-ca678ca79787",
+        "002d1425-4ec6-8801-b38e-4c09c5ff0e6e",
+        "0029fae6-91e1-8a01-a6df-b38b1e9c0893",
+        "002d130c-27b2-8701-8a90-a63fc955e833",
+        "002d1057-5156-8201-9f6d-b76dda6cba0c",
+        "002ce7ed-fbe5-8801-bf3d-52a47ba31fc1",
     };
 
     private readonly AvaloniaReflection _r;
