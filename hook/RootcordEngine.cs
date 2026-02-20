@@ -69,6 +69,14 @@ internal class RootcordEngine
     // User bar (Discord-style bottom-left bar, overlaps channel list via ZIndex)
     private object? _userBar;
 
+    // User bar — SystemTray reparent state
+    private string? _originalPanePlacement;  // for Revert of PanePlacement
+    private object? _userBarTrayHost;         // StackPanel inside User Card that holds reparented SystemTray
+    private int _savedTrayRow;
+    private int _savedTrayCol;
+    private int _savedTrayColSpan;
+    private int _savedTrayRowSpan;
+
     // ToolTip placement flip (member hover name tooltips) — cached via EnsureToolTipMethods()
     private MethodInfo? _toolTipGetTipMethod;
     private MethodInfo? _toolTipSetPlacementMethod;
@@ -191,6 +199,9 @@ internal class RootcordEngine
             BuildAndInjectServerStrip();
             BuildAndInjectUserBar();
 
+            // Step 6b: Flip SplitView pane to open on the left (utility pane between strip + channel list)
+            ApplyUtilityPanePlacement();
+
             // Step 7: Subscribe to tab changes + intercept Profile pane reopens
             SubscribeTabChanges();
 
@@ -235,6 +246,9 @@ internal class RootcordEngine
 
             // Remove user bar overlay
             RevertUserBar();
+
+            // Restore SplitView PanePlacement
+            RevertUtilityPanePlacement();
 
             // Remove server strip from grid
             if (_serverStripBorder != null && _homeViewGrid != null)
@@ -498,6 +512,45 @@ internal class RootcordEngine
             _r.SetGridColumn(control, 0);
             // ColSpan restored separately below
         }
+    }
+
+    // ===== Utility pane placement (SplitView PanePlacement = Left) =====
+
+    /// <summary>
+    /// Flip SplitView.PanePlacement to Left so utility panes (people, DMs, notifications)
+    /// open to the LEFT of the SplitView content — between the server strip and channel list.
+    /// </summary>
+    private void ApplyUtilityPanePlacement()
+    {
+        if (_rootSplitView == null) return;
+        try
+        {
+            var pp = _rootSplitView.GetType().GetProperty("PanePlacement");
+            if (pp == null) { Logger.Log(Tag, "PanePlacement not found on SplitView"); return; }
+            _originalPanePlacement = pp.GetValue(_rootSplitView)?.ToString();
+            var leftVal = Enum.Parse(pp.PropertyType, "Left");
+            pp.SetValue(_rootSplitView, leftVal);
+            Logger.Log(Tag, $"SplitView PanePlacement → Left (was {_originalPanePlacement})");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"ApplyUtilityPanePlacement error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Restore SplitView.PanePlacement to its original value.
+    /// </summary>
+    private void RevertUtilityPanePlacement()
+    {
+        if (_rootSplitView == null || _originalPanePlacement == null) return;
+        try
+        {
+            var pp = _rootSplitView.GetType().GetProperty("PanePlacement");
+            if (pp == null) return;
+            var val = Enum.Parse(pp.PropertyType, _originalPanePlacement);
+            pp.SetValue(_rootSplitView, val);
+            Logger.Log(Tag, $"SplitView PanePlacement restored → {_originalPanePlacement}");
+            _originalPanePlacement = null;
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RevertUtilityPanePlacement error: {ex.Message}"); }
     }
 
     // ===== Row 1 collapse (tab bar row) =====
@@ -772,6 +825,36 @@ internal class RootcordEngine
                 $"{c.child.GetType().Name}@{c.col}→{columns[(idx + n - 1) % n]}"));
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {nonSplitters.Count} children: {names}");
 
+            // Remove right margin on content host to flush members to the right edge
+            try
+            {
+                foreach (var node in _r.GetVisualChildren(_rootSplitView))
+                {
+                    _r.SetMargin(node, 0, 0, 0, 0);
+                    break; // only the immediate content host
+                }
+            }
+            catch { }
+
+            // Also remove any trailing margin on the communityView itself
+            try { _r.SetMargin(communityView, 0, 0, 0, 0); } catch { }
+
+            // Zero out any extra column definitions beyond the rightmost non-splitter column
+            try
+            {
+                int maxUsedCol = columns.Max();
+                if (gridColDefs != null)
+                {
+                    for (int i = maxUsedCol + 1; i < gridColDefs.Count; i++)
+                    {
+                        var w = _r.GetColumnDefinitionWidth(gridColDefs[i]);
+                        if (w != null && w.Value.Value > 0 && w.Value.UnitType == "Pixel")
+                            _r.SetColumnDefinitionPixelWidth(gridColDefs[i], 0);
+                    }
+                }
+            }
+            catch { }
+
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
         }
@@ -895,7 +978,7 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Walk a visual tree and flip flyout placements from one mode to another.
+    /// Walk a visual tree and flip flyout + context menu placements from one mode to another.
     /// Uses a HashSet to skip already-processed flyouts. Returns count of newly flipped.
     /// </summary>
     private int FlipFlyoutsInTree(object root, string fromPlacement, string toPlacement)
@@ -908,38 +991,81 @@ internal class RootcordEngine
             int nodeId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(node);
             if (_flippedFlyoutIds.Contains(nodeId)) continue;
 
+            bool flipped = false;
+
             try
             {
                 // Check if this control has a Flyout property
                 var flyoutProp = node.GetType().GetProperty("Flyout");
-                if (flyoutProp == null) continue;
-
-                var flyout = flyoutProp.GetValue(node);
-                if (flyout == null) continue;
-
-                // Get Placement property from the flyout
-                var placementProp = flyout.GetType().GetProperty("Placement");
-                if (placementProp == null) continue;
-
-                var currentPlacement = placementProp.GetValue(flyout);
-                if (currentPlacement == null) continue;
-
-                // Resolve the PlacementMode enum type from the flyout's assembly
-                var placementType = placementProp.PropertyType;
-                if (!placementType.IsEnum) continue;
-
-                // Check if current placement matches the "from" value
-                var fromValue = Enum.Parse(placementType, fromPlacement);
-                if (!currentPlacement.Equals(fromValue)) continue;
-
-                // Flip to the "to" value
-                var toValue = Enum.Parse(placementType, toPlacement);
-                placementProp.SetValue(flyout, toValue);
-
-                _flippedFlyoutIds.Add(nodeId);
-                count++;
+                if (flyoutProp != null)
+                {
+                    var flyout = flyoutProp.GetValue(node);
+                    if (flyout != null)
+                    {
+                        var placementProp = flyout.GetType().GetProperty("Placement");
+                        if (placementProp != null)
+                        {
+                            var currentPlacement = placementProp.GetValue(flyout);
+                            if (currentPlacement != null)
+                            {
+                                var placementType = placementProp.PropertyType;
+                                if (placementType.IsEnum)
+                                {
+                                    try
+                                    {
+                                        var fromValue = Enum.Parse(placementType, fromPlacement);
+                                        if (currentPlacement.Equals(fromValue))
+                                        {
+                                            var toValue = Enum.Parse(placementType, toPlacement);
+                                            placementProp.SetValue(flyout, toValue);
+                                            flipped = true;
+                                            count++;
+                                        }
+                                    }
+                                    catch { }
+                                }
+                            }
+                        }
+                    }
+                }
             }
             catch { }
+
+            // Also flip ContextMenu.PlacementMode / ContextMenu.Placement (Change D)
+            try
+            {
+                var contextMenuProp = node.GetType().GetProperty("ContextMenu");
+                if (contextMenuProp != null)
+                {
+                    var cm = contextMenuProp.GetValue(node);
+                    if (cm != null)
+                    {
+                        var placementProp = cm.GetType().GetProperty("PlacementMode")
+                            ?? cm.GetType().GetProperty("Placement");
+                        if (placementProp != null)
+                        {
+                            var val = placementProp.GetValue(cm)?.ToString() ?? "";
+                            if (val.Contains("Right", StringComparison.OrdinalIgnoreCase))
+                            {
+                                try
+                                {
+                                    // Build the "to" name by replacing Right → Left
+                                    string toName = val.Replace("Right", "Left",
+                                        StringComparison.OrdinalIgnoreCase);
+                                    var leftVal = Enum.Parse(placementProp.PropertyType, toName);
+                                    placementProp.SetValue(cm, leftVal);
+                                    if (!flipped) { flipped = true; count++; }
+                                }
+                                catch { }
+                            }
+                        }
+                    }
+                }
+            }
+            catch { }
+
+            if (flipped)
+                _flippedFlyoutIds.Add(nodeId);
         }
 
         return count;
@@ -1175,9 +1301,8 @@ internal class RootcordEngine
 
     /// <summary>
     /// Build and inject a Discord-style user bar at the bottom-left of the HomeView Grid.
-    /// 240px wide, ZIndex=10 — overlaps the channel list column. Fully opaque background.
-    /// Contains: avatar (32px circle) | username + status label.
-    /// Click opens the user card popup.
+    /// 240px wide (spans strip col + channel list col), ZIndex=10, fully opaque background.
+    /// 3-column layout: [56px avatar+dot] [*star username/status] [Auto native SystemTray].
     /// </summary>
     private void BuildAndInjectUserBar()
     {
@@ -1189,25 +1314,23 @@ internal class RootcordEngine
             string initial = username.Length > 0 ? username[0].ToString().ToUpper() : "U";
             object? avatarBitmap = TryGetProfileBitmap();
             string onlineColor = "#43b581";
-            var cardHover = AdjustForHighlight(_cardBg, 8);
+            string statusLabel = GetCurrentStatusLabel();
 
-            // Outer Border: 56px wide (matches strip), ZIndex=10 so it floats above the strip content
+            // Outer Border: 240px wide, ColSpan=2 (server strip + channel list col)
             _userBar = _r.CreateBorder(_bg, 0);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            _r.SetWidth(_userBar, StripWidth);
+            _r.SetWidth(_userBar, 240);
 
-            // Position in HomeView Grid: Col=0 only (server strip column), span all rows, bottom-aligned
+            // Position in HomeView Grid: Col=0, spanning all rows, bottom-aligned, ZIndex=10
             _r.SetGridColumn(_userBar, 0);
             _r.SetGridRow(_userBar, 0);
             var rowDefs = _r.GetRowDefinitions(_homeViewGrid);
             int rowCount = rowDefs?.Count ?? 4;
             _r.SetGridRowSpan(_userBar, rowCount);
-            _r.SetGridColumnSpan(_userBar, 1);
+            _r.SetGridColumnSpan(_userBar, 2); // spans server strip + channel list
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
-
-            // ZIndex=10: render above the server strip icons
             _userBar.GetType().GetProperty("ZIndex")?.SetValue(_userBar, 10);
 
             // Top separator line
@@ -1218,18 +1341,37 @@ internal class RootcordEngine
             if (sepLine != null)
             {
                 _r.SetHeight(sepLine, 1);
-                _r.SetWidth(sepLine, StripWidth);
                 _r.AddChild(outerStack, sepLine);
             }
 
-            // Card: 56px wide, 52px tall, avatar centered
+            // Inner card: 240px wide, 52px tall
             var innerCard = _r.CreateBorder(_cardBg, 0);
             if (innerCard == null) return;
             _r.SetHeight(innerCard, 52);
-            _r.SetWidth(innerCard, StripWidth);
-            _r.SetCursorHand(innerCard);
 
-            // Avatar: 32x32 circle with online status dot, centered in the 56px card
+            // 3-column content Grid: [56px avatar] [* text] [Auto tray]
+            var contentGrid = _r.CreateGrid();
+            if (contentGrid == null) return;
+
+            _r.AddGridColumn(contentGrid, 1.0); // Col 0 → will be set to 56px
+            _r.AddGridColumn(contentGrid, 1.0); // Col 1 → star (fills middle)
+            _r.AddGridColumn(contentGrid, 1.0); // Col 2 → will be set to Auto
+
+            var colDefs = _r.GetColumnDefinitions(contentGrid);
+            if (colDefs?.Count >= 1)
+                _r.SetColumnDefinitionPixelWidth(colDefs[0], StripWidth); // 56px
+            if (colDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            {
+                try
+                {
+                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                    var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit)!;
+                    colDefs[2].GetType().GetProperty("Width")?.SetValue(colDefs[2], autoLen);
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"UserBar: Auto col set error: {ex.Message}"); }
+            }
+
+            // --- Col 0: Avatar circle + online dot ---
             var avatarGrid = _r.CreateGrid();
             if (avatarGrid != null)
             {
@@ -1237,6 +1379,7 @@ internal class RootcordEngine
                 _r.SetHeight(avatarGrid, 32);
                 _r.SetHorizontalAlignment(avatarGrid, "Center");
                 _r.SetVerticalAlignment(avatarGrid, "Center");
+                _r.SetGridColumn(avatarGrid, 0);
 
                 var avBorder = _r.CreateBorder(_bg, 16);
                 if (avBorder != null)
@@ -1262,7 +1405,6 @@ internal class RootcordEngine
                     _r.AddChild(avatarGrid, avBorder);
                 }
 
-                // Online status dot (bottom-right of avatar)
                 var statusDot = _r.CreateBorder(onlineColor, 5);
                 if (statusDot != null)
                 {
@@ -1272,20 +1414,113 @@ internal class RootcordEngine
                     _r.SetVerticalAlignment(statusDot, "Bottom");
                     _r.AddChild(avatarGrid, statusDot);
                 }
+                _r.AddChild(contentGrid, avatarGrid);
             }
 
-            _r.SetBorderChild(innerCard, avatarGrid);
+            // --- Col 1: Username + status label ---
+            var textPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
+            if (textPanel != null)
+            {
+                _r.SetGridColumn(textPanel, 1);
+                _r.SetVerticalAlignment(textPanel, "Center");
+                _r.SetMargin(textPanel, 8, 0, 4, 0);
+
+                var nameText = _r.CreateTextBlock(username, 13, _text);
+                if (nameText != null)
+                {
+                    _r.SetFontWeight(nameText, "Bold");
+                    try
+                    {
+                        nameText.GetType().GetProperty("TextWrapping")?.SetValue(nameText,
+                            Enum.Parse(nameText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
+                        nameText.GetType().GetProperty("TextTrimming")?.SetValue(nameText,
+                            Enum.Parse(nameText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
+                    }
+                    catch { }
+                    _r.AddChild(textPanel, nameText);
+                }
+
+                var statusText = _r.CreateTextBlock(statusLabel, 11, _muted);
+                if (statusText != null)
+                {
+                    try
+                    {
+                        statusText.GetType().GetProperty("TextWrapping")?.SetValue(statusText,
+                            Enum.Parse(statusText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
+                    }
+                    catch { }
+                    _r.AddChild(textPanel, statusText);
+                }
+                _r.AddChild(contentGrid, textPanel);
+            }
+
+            // --- Col 2: Native SystemTray (reparented) or fallback buttons ---
+            var trayHost = _r.CreateStackPanel(vertical: false, spacing: 0);
+            if (trayHost != null)
+            {
+                _r.SetGridColumn(trayHost, 2);
+                _r.SetVerticalAlignment(trayHost, "Center");
+                _r.SetMargin(trayHost, 0, 0, 4, 0);
+
+                bool trayReparented = false;
+                if (_systemTrayBorder != null && _homeViewGrid != null)
+                {
+                    try
+                    {
+                        // Save current grid position of the system tray
+                        _savedTrayRow     = _r.GetGridRow(_systemTrayBorder);
+                        _savedTrayCol     = _r.GetGridColumn(_systemTrayBorder);
+                        _savedTrayColSpan = _r.GetGridColumnSpan(_systemTrayBorder);
+                        _savedTrayRowSpan = _r.GetGridRowSpan(_systemTrayBorder);
+
+                        // Detach from HomeView Grid
+                        _r.RemoveChild(_homeViewGrid, _systemTrayBorder);
+
+                        // Clear grid attached props to avoid layout issues
+                        _r.SetGridColumn(_systemTrayBorder, 0);
+                        _r.SetGridRow(_systemTrayBorder, 0);
+                        _r.SetGridColumnSpan(_systemTrayBorder, 1);
+                        _r.SetGridRowSpan(_systemTrayBorder, 1);
+
+                        // Make it visible (was hidden by CollapseTabBarRow)
+                        _r.SetIsVisible(_systemTrayBorder, true);
+
+                        // Add to our user card tray host
+                        _r.AddChild(trayHost, _systemTrayBorder);
+                        _userBarTrayHost = trayHost;
+                        trayReparented = true;
+                        Logger.Log(Tag, $"UserBar: SystemTray reparented (was Row={_savedTrayRow} Col={_savedTrayCol} ColSpan={_savedTrayColSpan} RowSpan={_savedTrayRowSpan})");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log(Tag, $"UserBar: SystemTray reparent failed: {ex.Message}");
+                        trayReparented = false;
+                    }
+                }
+
+                if (!trayReparented)
+                {
+                    // Fallback: 4 text-symbol buttons invoking the 4 native commands
+                    Logger.Log(Tag, "UserBar: using fallback action buttons");
+                    var btnP = BuildActionButton("P", () => InvokeHomeCommand("FriendsPaneToggleCommand"));
+                    var btnM = BuildActionButton("M", () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
+                    var btnN = BuildActionButton("N", () => InvokeHomeCommand("NotificationsPaneToggleCommand"));
+                    var btnS = BuildActionButton("S", () => InvokeHomeCommand("ProfilePaneToggleCommand"));
+                    if (btnP != null) _r.AddChild(trayHost, btnP);
+                    if (btnM != null) _r.AddChild(trayHost, btnM);
+                    if (btnN != null) _r.AddChild(trayHost, btnN);
+                    if (btnS != null) _r.AddChild(trayHost, btnS);
+                }
+
+                _r.AddChild(contentGrid, trayHost);
+            }
+
+            _r.SetBorderChild(innerCard, contentGrid);
             _r.AddChild(outerStack, innerCard);
             _r.SetBorderChild(_userBar, outerStack);
 
-            // Click directly opens the native profile pane (Settings/Support/Sign out)
-            var cardRef = innerCard;
-            _r.SubscribeEvent(innerCard, "PointerPressed", () => OpenProfilePane());
-            _r.SubscribeEvent(innerCard, "PointerEntered", () => _r.SetBackground(cardRef, cardHover));
-            _r.SubscribeEvent(innerCard, "PointerExited", () => _r.SetBackground(cardRef, _cardBg));
-
             _r.AddChild(_homeViewGrid, _userBar);
-            Logger.Log(Tag, "User bar injected: 240px wide, ZIndex=10, overlaps channel list");
+            Logger.Log(Tag, "User bar injected: 240px wide, ColSpan=2, ZIndex=10, 3-col layout");
         }
         catch (Exception ex)
         {
@@ -1294,10 +1529,69 @@ internal class RootcordEngine
     }
 
     /// <summary>
+    /// Invoke a named command on HomeViewModel (for fallback user bar buttons).
+    /// </summary>
+    private void InvokeHomeCommand(string commandName)
+    {
+        if (_homeViewModel == null) return;
+        try
+        {
+            var cmd = _r.GetPropertyValue(_homeViewModel, commandName);
+            if (cmd != null) InvokeCommand(cmd);
+            else Logger.Log(Tag, $"InvokeHomeCommand: '{commandName}' not found");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"InvokeHomeCommand '{commandName}' error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Build a small icon button for the user bar fallback mode.
+    /// </summary>
+    private object? BuildActionButton(string label, Action onClick)
+    {
+        var btn = _r.CreateBorder(_bg, 4);
+        if (btn == null) return null;
+        _r.SetWidth(btn, 24);
+        _r.SetHeight(btn, 24);
+        _r.SetCursorHand(btn);
+        var icon = _r.CreateTextBlock(label, 11, _muted);
+        if (icon != null)
+        {
+            _r.SetHorizontalAlignment(icon, "Center");
+            _r.SetVerticalAlignment(icon, "Center");
+            _r.SetBorderChild(btn, icon);
+        }
+        var btnRef = btn;
+        var hoverColor = AdjustForHighlight(_bg, 8);
+        _r.SubscribeEvent(btn, "PointerPressed", onClick);
+        _r.SubscribeEvent(btn, "PointerEntered", () => _r.SetBackground(btnRef, hoverColor));
+        _r.SubscribeEvent(btn, "PointerExited",  () => _r.SetBackground(btnRef, _bg));
+        return btn;
+    }
+
+    /// <summary>
     /// Remove the user bar overlay from the HomeView Grid.
+    /// Reparents SystemTray back to its original location if it was moved.
     /// </summary>
     private void RevertUserBar()
     {
+        // Reparent SystemTray back to HomeView Grid
+        if (_systemTrayBorder != null && _homeViewGrid != null && _userBarTrayHost != null)
+        {
+            try
+            {
+                _r.RemoveChild(_userBarTrayHost, _systemTrayBorder);
+                _r.SetGridColumn(_systemTrayBorder, _savedTrayCol);
+                _r.SetGridRow(_systemTrayBorder, _savedTrayRow);
+                _r.SetGridColumnSpan(_systemTrayBorder, _savedTrayColSpan);
+                _r.SetGridRowSpan(_systemTrayBorder, _savedTrayRowSpan);
+                _r.AddChild(_homeViewGrid, _systemTrayBorder);
+                // Visibility is restored by RestoreTabBarRow() called after RevertUserBar()
+                Logger.Log(Tag, "SystemTray reparented back to HomeView Grid");
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SystemTray revert error: {ex.Message}"); }
+        }
+        _userBarTrayHost = null;
+
         if (_userBar != null && _homeViewGrid != null)
         {
             try { _r.RemoveChild(_homeViewGrid, _userBar); } catch { }
