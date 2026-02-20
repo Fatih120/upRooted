@@ -1070,15 +1070,32 @@ PROFILE
 
 create_wrapper() {
     local wrapper="$INSTALL_DIR/launch-root.sh"
+    # Bake in the AppImage dir so the wrapper can detect squashfs-root/ at
+    # runtime — this means extraction order doesn't matter (extract before or
+    # after install, the wrapper just works).
+    local appimage_dir
+    appimage_dir="$(dirname "$(realpath "$ROOT_PATH")")"
+
     {
         echo '#!/bin/bash'
-        echo '# Uprooted launcher — sets CLR profiler env vars and launches Root'
-        if [[ -n "$SQUASHFS_ROOT" ]]; then
-            echo ''
-            echo '# Extracted AppImage — set up library paths'
-            echo "export LD_LIBRARY_PATH='$SQUASHFS_ROOT/usr/lib:\${LD_LIBRARY_PATH:-}'"
-            echo "export APPDIR='$SQUASHFS_ROOT'"
-        fi
+        echo '# Uprooted launcher — sets CLR profiler env vars and launches Root.'
+        echo '# Detects squashfs-root/ at runtime so extraction order does not matter.'
+        echo ''
+        echo "APPIMAGE='$ROOT_PATH'"
+        echo "APPIMAGE_DIR='$appimage_dir'"
+        echo ''
+        echo '# Prefer extracted AppImage (required on systems without FUSE).'
+        echo '# AppRun adds usr/bin/ to PATH and execs Root via the .desktop Exec= field.'
+        echo '# Fall through to the AppImage itself if no extraction is found.'
+        echo 'if [[ -f "$APPIMAGE_DIR/squashfs-root/AppRun" ]]; then'
+        echo '    ROOT_EXEC="$APPIMAGE_DIR/squashfs-root/AppRun"'
+        echo '    export APPDIR="$APPIMAGE_DIR/squashfs-root"'
+        echo 'elif [[ -f "$APPIMAGE_DIR/squashfs-root/usr/bin/Root" ]]; then'
+        echo '    ROOT_EXEC="$APPIMAGE_DIR/squashfs-root/usr/bin/Root"'
+        echo '    export PATH="$APPIMAGE_DIR/squashfs-root/usr/bin:$PATH"'
+        echo 'else'
+        echo '    ROOT_EXEC="$APPIMAGE"'
+        echo 'fi'
         echo ''
         echo '# .NET 10+ (DOTNET_ prefix)'
         echo 'export DOTNET_EnableDiagnostics=1'
@@ -1090,13 +1107,11 @@ create_wrapper() {
         echo 'export CORECLR_ENABLE_PROFILING=1'
         echo "export CORECLR_PROFILER='$PROFILER_GUID'"
         echo "export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'"
-        echo "exec '$ROOT_EXEC' \"\$@\""
+        echo ''
+        echo 'exec "$ROOT_EXEC" "$@"'
     } > "$wrapper"
     chmod +x "$wrapper"
     log "Wrapper script created: $wrapper"
-    if [[ -n "$SQUASHFS_ROOT" ]]; then
-        log "  (extracted AppImage mode — LD_LIBRARY_PATH configured for $SQUASHFS_ROOT)"
-    fi
 }
 
 # ── Create .desktop file (opt-in via --desktop) ──
