@@ -692,9 +692,6 @@ internal static class ContentPages
     }
 
     // Filter dropdown state (singleton, like ColorPickerPopup)
-    private static object? _filterOverlay;
-    private static object? _filterBackdrop;
-    private static object? _filterPanel;
 
     // Plugin info lightbox state
     private static object? _infoOverlay;
@@ -741,19 +738,19 @@ internal static class ContentPages
                 if (expContent != null)
                 {
                     r.SetVerticalAlignment(expContent, "Center");
-                    var expIcon = r.CreateTextBlock("\u26A0", 14, "#E04040");
+                    var expIcon = r.CreateTextBlock("\u26A0", 14, "#E0A030");
                     ApplyFont(r, expIcon, font);
                     r.AddChild(expContent, expIcon);
 
                     var expTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                     if (expTextStack != null)
                     {
-                        var expLabel = CreateBoundText(r, "Show experimental plugins", 13, TextWhite, "TextPrimary");
+                        var expLabel = r.CreateTextBlock("Show experimental plugins", 13, "#F0F0F0");
                         r.SetFontWeightNumeric(expLabel, 500);
                         ApplyFont(r, expLabel, font);
                         r.AddChild(expTextStack, expLabel);
 
-                        var expDesc = CreateBoundText(r, "These plugins are untested and may cause unexpected behavior or crashes.", 11, TextMuted, "TextSecondary");
+                        var expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, "#A0A0B0");
                         ApplyFont(r, expDesc, font);
                         r.AddChild(expTextStack, expDesc);
 
@@ -761,15 +758,15 @@ internal static class ContentPages
                     }
                 }
 
-                var expInner = r.CreateBorder("#E0404015", 8, expContent);
+                var expInner = r.CreateBorder("#2A2415", 8, expContent);
                 if (expInner != null)
                 {
                     r.SetPadding(expInner, 14, 10, 14, 10);
-                    SetBorderStroke(r, expInner, "#E0404040", 1);
+                    SetBorderStroke(r, expInner, "#E0A030", 1);
                 }
 
-                // Toggle pill (right-aligned)
-                var expToggleBg = showExperimental[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20);
+                // Toggle pill (right-aligned) — hardcoded colors for theme immunity
+                var expToggleBg = showExperimental[0] ? AccentGreen : "#2A2A44";
                 var expPill = r.CreateBorder(expToggleBg, 13);
                 if (expPill != null)
                 {
@@ -794,7 +791,7 @@ internal static class ContentPages
                         r.SubscribeEvent(expPill, "PointerPressed", () =>
                         {
                             showExperimental[0] = !showExperimental[0];
-                            r.SetBackground(pillRef, showExperimental[0] ? AccentGreen : ColorUtils.Lighten(CardBg, 20));
+                            r.SetBackground(pillRef, showExperimental[0] ? AccentGreen : "#2A2A44");
                             r.SetHorizontalAlignment(dotRef, showExperimental[0] ? "Right" : "Left");
                             settings.ShowExperimentalPlugins = showExperimental[0];
                             settings.Save();
@@ -807,6 +804,7 @@ internal static class ContentPages
                 if (expInner != null) r.AddChild(expOuter, expInner);
                 if (expPill != null) r.AddChild(expOuter, expPill);
                 r.SetMargin(expOuter, 0, 12, 0, 0);
+                r.SetTag(expOuter, "uprooted-no-recolor");
                 r.AddChild(page, expOuter);
             }
         }
@@ -835,22 +833,22 @@ internal static class ContentPages
                 if (bannerContent != null)
                 {
                     r.SetVerticalAlignment(bannerContent, "Center");
-                    var icon = r.CreateTextBlock("\u26A0", 14, "#E0A030");
+                    var icon = r.CreateTextBlock("\u26A0", 16, "#FFFFFF");
                     ApplyFont(r, icon, font);
                     r.AddChild(bannerContent, icon);
 
-                    var bannerText = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#E0A030");
+                    var bannerText = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#FFFFFF");
                     r.SetFontWeightNumeric(bannerText, 500);
                     ApplyFont(r, bannerText, font);
                     r.AddChild(bannerContent, bannerText);
                 }
 
                 // Restart button (right-aligned)
-                var restartBtnText = CreateBoundText(r, "Restart", 12, TextWhite, "TextPrimary");
+                var restartBtnText = r.CreateTextBlock("Restart", 12, "#FFFFFF");
                 r.SetFontWeightNumeric(restartBtnText, 500);
                 ApplyFont(r, restartBtnText, font);
                 r.SetHorizontalAlignment(restartBtnText, "Center");
-                var restartBtn = r.CreateBorder("#E0A030", 6, restartBtnText);
+                var restartBtn = r.CreateBorder("#E88A1A", 6, restartBtnText);
                 if (restartBtn != null)
                 {
                     r.SetPadding(restartBtn, 12, 5, 12, 5);
@@ -859,16 +857,16 @@ internal static class ContentPages
                     r.SetCursorHand(restartBtn);
                     r.SubscribeEvent(restartBtn, "PointerPressed", RestartRoot);
                     r.SubscribeEvent(restartBtn, "PointerEntered", () =>
-                        r.SetBackground(restartBtn, ColorUtils.Lighten("#E0A030", 10)));
+                        r.SetBackground(restartBtn, ColorUtils.Lighten("#E88A1A", 10)));
                     r.SubscribeEvent(restartBtn, "PointerExited", () =>
-                        r.SetBackground(restartBtn, "#E0A030"));
+                        r.SetBackground(restartBtn, "#E88A1A"));
                 }
 
-                var innerBorder = r.CreateBorder("#E0A03015", 8, bannerContent);
+                var innerBorder = r.CreateBorder("#4A3010", 8, bannerContent);
                 if (innerBorder != null)
                 {
-                    r.SetPadding(innerBorder, 14, 10, 14, 10);
-                    SetBorderStroke(r, innerBorder, "#E0A03040", 1);
+                    r.SetPadding(innerBorder, 14, 14, 14, 14);
+                    SetBorderStroke(r, innerBorder, "#E0A030", 1);
                 }
 
                 // Use Panel overlay: banner content stretches, restart button right-aligned
@@ -880,6 +878,7 @@ internal static class ContentPages
                 }
 
                 r.SetMargin(bannerOuter, 0, 12, 0, 0);
+                r.SetTag(bannerOuter, "uprooted-no-recolor");
 
                 // Check if any plugin already diverges from launch state
                 bool alreadyDiverged = false;
@@ -916,7 +915,6 @@ internal static class ContentPages
 
         // Search + Filter row using Panel (overlay layout: search stretches, filter right-aligned)
         var searchFilterRow = r.CreatePanel();
-        object? filterTextBlock = null;
         if (searchFilterRow != null)
         {
             r.SetMargin(searchFilterRow, 0, 10, 0, 0);
@@ -937,7 +935,7 @@ internal static class ContentPages
                 r.SetForeground(searchBox, TextWhite);
                 ApplyFont(r, searchBox, font);
                 r.SetHorizontalAlignment(searchBox, "Stretch");
-                r.SetMargin(searchBox, 0, 0, 120, 0);
+                r.SetMargin(searchBox, 0, 0, 100, 0);
                 if (r.CornerRadiusType != null)
                 {
                     var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
@@ -954,33 +952,41 @@ internal static class ContentPages
                 r.AddChild(searchFilterRow, searchBox);
             }
 
-            // Filter button
-            filterTextBlock = CreateBoundText(r, "Show All \u25BE", 13, TextMuted, "TextSecondary");
-            ApplyFont(r, filterTextBlock, font);
-            var filterBtnBg = AdjustForHighlight(CardBg, 5);
-            var filterBtn = r.CreateBorder(filterBtnBg, 8);
-            if (filterBtn != null)
+            // Filter toggle: single cycling pill (All Plugins → Enabled → Disabled)
+            var filterLabels = new[] { "All Plugins", "Enabled", "Disabled" };
+            var filterColors = new[] { "#404050", AccentGreen, "#E04040" };
+            var filterBadgeText = r.CreateTextBlock(filterLabels[filterMode[0]], 13, "#FFFFFF");
+            r.SetFontWeightNumeric(filterBadgeText, 500);
+            ApplyFont(r, filterBadgeText, font);
+            r.SetHorizontalAlignment(filterBadgeText, "Center");
+            r.SetVerticalAlignment(filterBadgeText, "Center");
+
+            var filterBadge = r.CreateBorder(filterColors[filterMode[0]], 8, filterBadgeText);
+            if (filterBadge != null)
             {
-                r.SetPadding(filterBtn, 14, 8, 14, 8);
-                r.SetBorderChild(filterBtn, filterTextBlock);
-                r.SetHorizontalAlignment(filterBtn, "Right");
-                r.SetVerticalAlignment(filterBtn, "Center");
-                r.SetCursorHand(filterBtn);
-                SetBorderStroke(r, filterBtn, CardBorder, 0.5);
+                r.SetPadding(filterBadge, 12, 0, 12, 0);
+                r.SetHeight(filterBadge, 36);
+                r.SetHorizontalAlignment(filterBadge, "Right");
+                r.SetVerticalAlignment(filterBadge, "Center");
+                r.SetCursorHand(filterBadge);
+                SetBorderStroke(r, filterBadge, CardBorder, 1);
+                r.SetTag(filterBadge, "uprooted-no-recolor");
 
-                var btnRef = filterBtn;
-                var txtRef = filterTextBlock;
-                r.SubscribeEvent(filterBtn, "PointerPressed", () =>
+                var badgeRef = filterBadge;
+                var badgeTextRef = filterBadgeText;
+                r.SubscribeEvent(filterBadge, "PointerPressed", () =>
                 {
-                    ShowFilterDropdown(r, btnRef, txtRef, filterMode,
-                        () => rebuildGrid?.Invoke(), font);
+                    filterMode[0] = (filterMode[0] + 1) % 3;
+                    r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
+                    r.SetBackground(badgeRef, filterColors[filterMode[0]]);
+                    rebuildGrid?.Invoke();
                 });
-                r.SubscribeEvent(filterBtn, "PointerEntered", () =>
-                    r.SetBackground(btnRef, ColorUtils.Lighten(filterBtnBg, 6)));
-                r.SubscribeEvent(filterBtn, "PointerExited", () =>
-                    r.SetBackground(btnRef, filterBtnBg));
+                r.SubscribeEvent(filterBadge, "PointerEntered", () =>
+                    r.SetBackground(badgeRef, ColorUtils.Lighten(filterColors[filterMode[0]], 10)));
+                r.SubscribeEvent(filterBadge, "PointerExited", () =>
+                    r.SetBackground(badgeRef, filterColors[filterMode[0]]));
 
-                r.AddChild(searchFilterRow, filterBtn);
+                r.AddChild(searchFilterRow, filterBadge);
             }
 
             r.AddChild(page, searchFilterRow);
@@ -1090,16 +1096,17 @@ internal static class ContentPages
                 visibleIndices.Add(ci);
             }
 
-            // Sort: 1st enabled > disabled, 2nd Stable > Experimental, 3rd A-Z
+            // Sort: 1st Stable > Experimental, 2nd enabled > disabled, 3rd A-Z
             visibleIndices.Sort((a, b) =>
             {
+                var cmp = cardStatuses[b].CompareTo(cardStatuses[a]);
+                if (cmp != 0) return cmp;
                 bool aOn = cardIds[a] == "content-filter" ? settings.NsfwFilterEnabled
                     : (settings.Plugins.TryGetValue(cardIds[a], out var ea) && ea);
                 bool bOn = cardIds[b] == "content-filter" ? settings.NsfwFilterEnabled
                     : (settings.Plugins.TryGetValue(cardIds[b], out var eb) && eb);
                 if (aOn != bOn) return aOn ? -1 : 1;
-                var cmp = cardStatuses[b].CompareTo(cardStatuses[a]);
-                return cmp != 0 ? cmp : string.Compare(cardNames[a], cardNames[b], StringComparison.OrdinalIgnoreCase);
+                return string.Compare(cardNames[a], cardNames[b], StringComparison.OrdinalIgnoreCase);
             });
 
             var visible = visibleIndices.ConvertAll(i => cardObjects[i]);
@@ -1312,16 +1319,19 @@ internal static class ContentPages
                 if (pluginId == "themes" && onNavigate != null)
                 {
                     var openBtnBg = AdjustForHighlight(CardBg, 10);
-                    var openBtn = r.CreateBorder(openBtnBg, 8);
+                    var openBtn = r.CreateBorder(openBtnBg, 12);
                     if (openBtn != null)
                     {
                         r.SetCursorHand(openBtn);
-                        r.SetPadding(openBtn, 12, 4, 12, 4);
+                        r.SetWidth(openBtn, 44);
+                        r.SetHeight(openBtn, 24);
                         r.SetVerticalAlignment(openBtn, "Center");
 
-                        var openLabel = CreateBoundText(r, "Open", 12, TextWhite, "TextPrimary");
+                        var openLabel = CreateBoundText(r, "Open", 11, TextWhite, "TextPrimary");
                         r.SetFontWeightNumeric(openLabel, 500);
                         ApplyFont(r, openLabel, font);
+                        r.SetHorizontalAlignment(openLabel, "Center");
+                        r.SetVerticalAlignment(openLabel, "Center");
                         r.SetBorderChild(openBtn, openLabel);
 
                         var btnRef = openBtn;
@@ -1435,134 +1445,6 @@ internal static class ContentPages
 
         r.SetBorderChild(card, cardContent);
         return card;
-    }
-
-    /// <summary>
-    /// Show filter dropdown overlay below the filter button.
-    /// </summary>
-    private static void ShowFilterDropdown(AvaloniaReflection r, object filterBtn,
-        object? filterTextBlock, int[] filterMode, Action rebuildGrid, object? font)
-    {
-        DismissFilterDropdown(r);
-
-        var mainWindow = r.GetMainWindow();
-        if (mainWindow == null) return;
-
-        var overlay = r.GetOverlayLayer(mainWindow);
-        if (overlay == null) return;
-
-        _filterOverlay = overlay;
-
-        // Position below filter button
-        var btnBounds = r.GetBounds(filterBtn);
-        var translated = r.TranslatePoint(filterBtn, 0, 0, overlay);
-        if (btnBounds == null || translated == null) return;
-
-        double btnX = translated.Value.X;
-        double btnY = translated.Value.Y;
-        double btnH = btnBounds.Value.H;
-        double btnW = btnBounds.Value.W;
-
-        var windowBounds = r.GetBounds(mainWindow);
-        double windowW = windowBounds?.W ?? 800;
-        double windowH = windowBounds?.H ?? 600;
-
-        // Backdrop (click to dismiss)
-        _filterBackdrop = r.CreateBorder("#01000000", 0);
-        if (_filterBackdrop != null)
-        {
-            r.SetWidth(_filterBackdrop, windowW);
-            r.SetHeight(_filterBackdrop, windowH);
-            r.SetCanvasPosition(_filterBackdrop, 0, 0);
-            r.SetTag(_filterBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_filterBackdrop, "PointerPressed", () => DismissFilterDropdown(r));
-            r.AddToOverlay(overlay, _filterBackdrop);
-        }
-
-        // Dropdown panel
-        _filterPanel = CreateBoundBorder(r, CardBg, 8, "BackgroundSecondary");
-        if (_filterPanel == null) return;
-        r.SetTag(_filterPanel, "uprooted-no-recolor");
-        SetBorderStroke(r, _filterPanel, CardBorder, 0.5);
-
-        // Position: right-aligned with button, below it
-        double dropW = 160;
-        double dropX = btnX + btnW - dropW;
-        if (dropX < 8) dropX = 8;
-        double dropY = btnY + btnH + 4;
-
-        r.SetCanvasPosition(_filterPanel, dropX, dropY);
-
-        var options = r.CreateStackPanel(vertical: true, spacing: 0);
-        if (options == null) return;
-        r.SetMargin(options, 4, 4, 4, 4);
-
-        var filterOptions = new[] { ("Show All", 0), ("Show Enabled", 1), ("Show Disabled", 2) };
-        foreach (var (label, mode) in filterOptions)
-        {
-            var isActive = filterMode[0] == mode;
-            var optBg = isActive ? AdjustForHighlight(CardBg, 8) : CardBg;
-            var optBorder = r.CreateBorder(optBg, 6);
-            if (optBorder == null) continue;
-            r.SetCursorHand(optBorder);
-            r.SetPadding(optBorder, 12, 8, 12, 8);
-            r.SetWidth(optBorder, 152);
-
-            var optColor = isActive ? TextWhite : TextMuted;
-            var optWeight = isActive ? 600 : 400;
-            var optText = r.CreateTextBlock(label, 13, optColor);
-            r.SetFontWeightNumeric(optText, optWeight);
-            ApplyFont(r, optText, font);
-            r.SetBorderChild(optBorder, optText);
-
-            var capturedMode = mode;
-            var capturedLabel = label;
-            var optBorderRef = optBorder;
-            var optBgRef = optBg;
-
-            r.SubscribeEvent(optBorder, "PointerPressed", () =>
-            {
-                filterMode[0] = capturedMode;
-                if (filterTextBlock != null)
-                {
-                    var btnText = capturedLabel + " \u25BE";
-                    r.TextBlockType?.GetProperty("Text")?.SetValue(filterTextBlock, btnText);
-                }
-                rebuildGrid();
-                DismissFilterDropdown(r);
-            });
-
-            r.SubscribeEvent(optBorder, "PointerEntered", () =>
-                r.SetBackground(optBorderRef, AdjustForHighlight(CardBg, 10)));
-            r.SubscribeEvent(optBorder, "PointerExited", () =>
-                r.SetBackground(optBorderRef, optBgRef));
-
-            r.AddChild(options, optBorder);
-        }
-
-        r.SetBorderChild(_filterPanel, options);
-        r.AddToOverlay(overlay, _filterPanel);
-    }
-
-    /// <summary>
-    /// Dismiss the filter dropdown overlay.
-    /// </summary>
-    private static void DismissFilterDropdown(AvaloniaReflection r)
-    {
-        if (_filterOverlay == null) return;
-
-        if (_filterBackdrop != null)
-        {
-            r.RemoveFromOverlay(_filterOverlay, _filterBackdrop);
-            _filterBackdrop = null;
-        }
-        if (_filterPanel != null)
-        {
-            r.RemoveFromOverlay(_filterOverlay, _filterPanel);
-            _filterPanel = null;
-        }
-
-        _filterOverlay = null;
     }
 
     /// <summary>
@@ -3367,7 +3249,7 @@ internal static class ContentPages
         var badgeColor = isDev ? "#8B6914" : AccentGreen;
         var badgeLabel = isDev ? "Developer" : "Stable";
 
-        var badgeText = CreateBoundText(r, badgeLabel, 12, TextWhite, "TextPrimary");
+        var badgeText = r.CreateTextBlock(badgeLabel, 12, "#FFFFFF");
         r.SetFontWeightNumeric(badgeText, 500);
         ApplyFont(r, badgeText, font);
         r.SetHorizontalAlignment(badgeText, "Center");
@@ -3379,6 +3261,7 @@ internal static class ContentPages
             r.SetHorizontalAlignment(badge, "Right");
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
+            r.SetTag(badge, "uprooted-no-recolor");
 
             var badgeRef = badge;
             var badgeTextRef = badgeText;
