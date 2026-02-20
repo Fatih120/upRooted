@@ -434,6 +434,7 @@ internal class ProfileBadgeInjector
         Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
 
         bool isDevUser = DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)) || HasRoleId(dc, DeveloperRoleId);
+        if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
         if (!isDevUser && !isAlphaUser)
         {
