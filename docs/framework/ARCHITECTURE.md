@@ -36,7 +36,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 
 ## 1. Project Overview
 
-**Uprooted** is a client modification framework for [Root Communications](https://rootapp.com) desktop (v0.9.86+), analogous to [Vencord](https://vencord.dev/) for Discord. It provides a plugin and theme system that hooks into Root's desktop app at runtime, allowing users to customize the UI and intercept internal bridge calls without permanently modifying the application binary.
+**Uprooted** is a client modification framework for [Root Communications](https://rootapp.com) desktop (v0.9.92+), analogous to [Vencord](https://vencord.dev/) for Discord. It provides a plugin and theme system that hooks into Root's desktop app at runtime, allowing users to customize the UI and intercept internal bridge calls without permanently modifying the application binary.
 
 ### What it does
 
@@ -45,6 +45,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 - Provides a theme engine that overrides Root's Avalonia resource dictionaries and CSS variable system.
 - Ships a lightweight console TUI installer (~600KB) that deploys all artifacts and configures CLR profiler injection.
 - Self-heals HTML patches when Root auto-updates overwrite them (via `FileSystemWatcher`).
+- Maintains a large ILSpy corpus for Root internals (`research/ilspy-dumps/`): 273 decompiled files, with findings distilled into `ROOT_CONTROL_REFERENCE.md` and related docs.
 
 ### What it is not
 
@@ -129,8 +130,9 @@ Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (adm
        |   (ManualResetEventSlim, 90s timeout)
        |   +-- DotNetBrowserReflection (type cache)
        |   +-- IBrowser discovery via ViewModel chain
-       |   +-- NsfwFilter JS injection (needs redesign)
+       |   +-- Browser-assisted features (e.g. video thumbnails)
        +-- Phase 4.5b: LinkEmbedEngine (Avalonia-native)
+       +-- Phase 4.5g: NsfwFilter (Avalonia-native)
        |
   UI thread dispatch via RunOnUIThread()
 ```
@@ -160,24 +162,26 @@ uprooted-private/
 |-- hook/                             # C# .NET hook (CLR profiler injection layer)
 |   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
 |   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs         (518)  # Multi-phase startup orchestrator, version migration.
+|   |-- StartupHook.cs         (~577) # Multi-phase startup orchestrator, version migration, deferred features (Phase 4.5a-h).
 |   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
-|   |-- AvaloniaReflection.cs (2030)  # Reflection cache for Avalonia types, props, methods.
+|   |-- AvaloniaReflection.cs (~2383) # Reflection cache for Avalonia types, props, methods.
 |   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
-|   |-- SidebarInjector.cs    (1366)  # Timer-based sidebar monitor, injection, click events.
+|   |-- SidebarInjector.cs    (~1729) # LayoutUpdated + timer-based sidebar monitor, injection, click events.
 |   |-- ContentPages.cs     (~3400)  # Settings page builders (Uprooted, Plugins, Themes).
-|   |-- ThemeEngine.cs       (~2510)  # Native Avalonia theme: ResourceDictionary overrides + custom ping color.
+|   |-- ThemeEngine.cs       (~1280)  # ThemeEngine v2: resource-first ThemeDictionaries overrides + OKLCH palette + custom ping color.
 |   |-- ColorPickerPopup.cs    (533)  # HSL color picker popup for custom theme colors.
 |   |-- ColorUtils.cs          (262)  # Color parsing, HSL conversion, contrast calculation.
 |   |-- UprootedSettings.cs   (~170)  # INI-based settings (System.Text.Json workaround).
 |   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
 |   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
 |   |-- BrowserDiscovery.cs    (496)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
-|   |-- LinkEmbedEngine.cs    (1763)  # Avalonia-native link embed engine (OG fetch + visual tree injection).
+|   |-- LinkEmbedEngine.cs    (~2409) # Avalonia-native link embed engine (OG/oEmbed/video + visual tree injection).
 |   |-- AnimatedImage.cs       (795)  # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection).
-|   |-- MessageLogger.cs     (1185)  # Message logger: edit/delete detection, visual indicators.
+|   |-- MessageLogger.cs     (~2100) # Message logger (WIP): INPC-driven edit/delete detection, dedup, persistence, visual indicators.
 |   |-- MessageStore.cs        (232)  # Flat-file message log persistence (pipe-delimited, append-only).
-|   |-- NsfwFilter.cs          (305)  # NSFW filter JS injection (needs redesign for Avalonia-native chat).
+|   |-- NsfwFilter.cs          (473)  # Avalonia-native NSFW content filter (visual tree scan + blur/reveal overlay), pending production validation.
+|   |-- SilentTypingEngine.cs   (~90) # DiagnosticListener-based SetTypingIndicator interception (redirect to localhost:0).
+|   |-- RootcordEngine.cs    (~2873) # Experimental Discord-style vertical server sidebar replacement.
 |   |-- Logger.cs               (46)  # Thread-safe file logging to uprooted-hook.log.
 |   |-- UprootedHook.csproj          # .NET 10.0 project file, nullable enabled.
 |   `-- SESSION_STATE.md              # Session state handoff between dev sessions.
@@ -242,10 +246,13 @@ uprooted-private/
 |   |-- chromium_wrapper.cs           # Chromium wrapper utility.
 |   |-- chromium_wrapper.exe          # Compiled Chromium wrapper.
 |   `-- (other build scripts, DLLs, and diagnostic tools)
-|-- tests/                            # C# unit tests
+|-- tests/                            # C# unit tests (170 tests passing as of 2026-02-20)
 |   `-- UprootedTests/
 |       |-- ColorUtilsTests.cs        # ColorUtils test coverage.
 |       |-- GradientBrushTests.cs     # Gradient brush test coverage.
+|       |-- ClearUrlsEngineTests.cs   # Compose URL sanitizer coverage.
+|       |-- UprootedSettingsTests.cs  # INI settings/cache coverage.
+|       |-- MessageStoreTests.cs      # Flat-file message persistence coverage.
 |       `-- UprootedTests.csproj      # Test project file.
 |-- hook-test/                        # .NET hook integration test harness
 |-- site/                             # Marketing website (Astro)
@@ -314,16 +321,16 @@ This section describes the key classes and modules that form the framework's bac
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
 | `SidebarInjector` | `hook/SidebarInjector.cs` | Settings page monitor. 200ms timer polls the visual tree, detects settings page open/close, injects the UPROOTED sidebar section, manages content page overlays, handles click events and cleanup. |
 | `ContentPages` | `hook/ContentPages.cs` | Page builders for the Uprooted, Plugins, and Themes settings pages. Creates native Avalonia controls via reflection, matching Root's exact card styling (background, corner radius, border, padding, typography). |
-| `ThemeEngine` | `hook/ThemeEngine.cs` | Native Avalonia theme engine. Overrides resources in `Application.Styles[0].Resources` and injects a `ResourceDictionary` into `Application.Resources.MergedDictionaries`. Supports named themes, custom accent/background, custom ping color override, and full revert to originals. ~2510 lines. |
+| `ThemeEngine` | `hook/ThemeEngine.cs` | Native Avalonia theme engine (v2, resource-first). Applies overrides in `Application.Resources.ThemeDictionaries[variant]` for Root's 32 keys, supports named themes and custom accent/background, custom ping color override, variant switching, and full revert. |
 | `ColorPickerPopup` | `hook/ColorPickerPopup.cs` | HSL color picker popup for selecting custom theme accent and background colors. Presented as an overlay on the Themes settings page. |
 | `ColorUtils` | `hook/ColorUtils.cs` | Color parsing, HSL conversion, luminance calculation, and contrast ratio computation. Used by `ThemeEngine` and `ContentPages`. |
 | `UprootedSettings` | `hook/UprootedSettings.cs` | INI-based settings persistence. Loads and saves key=value pairs from `uprooted-settings.ini` in the profile directory. Uses INI format instead of JSON because `System.Text.Json` is broken in the profiler-injected context. |
 | `PlatformPaths` | `hook/PlatformPaths.cs` | Cross-platform path resolution. Returns profile directory and Uprooted install directory for Windows and Linux. |
 | `DotNetBrowserReflection` | `hook/DotNetBrowserReflection.cs` | Reflection cache for DotNetBrowser types (IBrowser, IFrame, IEngine). Discovers IBrowser via ViewModel chain walking. Provides `ExecuteJavaScript` wrapper. |
 | `BrowserDiscovery` | `hook/BrowserDiscovery.cs` | Phase 4.5 diagnostic scanner. Dumps full visual tree structure and loaded assemblies after 10s delay to aid in architecture discovery. |
-| `LinkEmbedEngine` | `hook/LinkEmbedEngine.cs` | Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes with URLs, fetches OG metadata via reflection-based HttpClient, builds native embed cards. YouTube fully working; generic sites need improvement (bot-hostile UAs, no image-only path). |
+| `LinkEmbedEngine` | `hook/LinkEmbedEngine.cs` | Avalonia-native link embed engine. Scans visual tree for CTextBlock nodes with URLs, fetches OG/oEmbed metadata via reflection-based HTTP, and builds native embed cards (including direct image fast path, Reddit, and video placeholders). |
 | `AnimatedImage` | `hook/AnimatedImage.cs` | Animated GIF/WebP decoder using SkiaSharp `SKCodec` reflection. Extracts frames with disposal method handling, per-frame delay timers, and automatic cleanup on card removal. Falls back to static first frame if frame APIs unavailable. |
-| `MessageLogger` | `hook/MessageLogger.cs` | Message logger plugin. Phase 1 data model discovery, `ObservableCollection` subscription via `Expression.Lambda`, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup. |
+| `MessageLogger` | `hook/MessageLogger.cs` | Message logger plugin (WIP). DateTimeOffset property fixes (`DeletedAt`/`EditedAt`), INPC event-driven detection, self-delete fallback via collection presence checks, author name resolution, dedup, visual indicators, and `MessageStore` persistence. |
 | `MessageStore` | `hook/MessageStore.cs` | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits. |
 | `AutoUpdater` | `hook/AutoUpdater.cs` | In-process auto-updater with two channels. **Stable** checks `The-Uprooted-Project/uprooted` (public) via `/releases/latest`. **Developer** checks `The-Uprooted-Project/uprooted-private` (private) via `/releases?per_page=1` (includes pre-releases) with XOR-encrypted PAT for auth. Downloads encrypted `.uprpkg` package, decrypts (multi-layer XOR: 64-byte master key + 32-byte nonce + position-dependent derivation), unpacks 6 files to staging, verifies, overwrites in-place. Hash-based same-version hotfix detection on manual checks. HTTP via reflection (trimming-safe). See [Hook Reference § AutoUpdater](HOOK_REFERENCE.md#autoupdater-update-channels-and-package-system). |
 | `ClearUrlsEngine` | `hook/ClearUrlsEngine.cs` | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor on send. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
@@ -446,7 +453,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 
 - **Thread:** UI thread (dispatched via `RunOnUIThread()`)
 - **File:** `hook/ThemeEngine.cs`
-- **Action:** Creates `ThemeEngine` instance, loads settings from `uprooted-settings.ini`, applies saved theme (named theme or custom accent/background). The current implementation overrides `Application.Styles[0].Resources` and injects into `Application.Resources.MergedDictionaries` as a compatibility layer. Root's actual theme keys live in `Application.Resources.ThemeDictionaries[variant]` (32 custom keys like `BrandPrimary`, `TextPrimary`, etc.) — see [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
+- **Action:** Creates `ThemeEngine` instance, loads settings from `uprooted-settings.ini`, applies saved theme (named theme or custom accent/background). ThemeEngine v2 is resource-first: it writes overrides into `Application.Resources.ThemeDictionaries[variant]` (Root's 32 keys like `BrandPrimary`, `TextPrimary`, etc.) and keeps custom ping color overrides in sync — see [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
 - **Failure mode:** Non-fatal. Theme errors are caught and logged; startup continues.
 
 ### Phase 4: Settings Page Monitoring
@@ -454,7 +461,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 **Purpose:** Begin monitoring Root's visual tree for the settings page, ready to inject the UPROOTED section when the user opens Settings.
 
 - **File:** `hook/SidebarInjector.cs`
-- **Action:** Creates `SidebarInjector` with references to `AvaloniaReflection`, the main window, and the `ThemeEngine`. Calls `StartMonitoring()` which starts a 200ms `Timer`. Each tick dispatches to the UI thread, performs a lightweight check for the "APP SETTINGS" TextBlock, and injects/removes the sidebar section as needed.
+- **Action:** Creates `SidebarInjector` with references to `AvaloniaReflection`, the main window, and the `ThemeEngine`. Calls `StartMonitoring()` which uses `LayoutUpdated` detection with a throttled fast path plus a 200ms timer safety poll; work dispatches to the UI thread and injects/removes the sidebar section as needed.
 - **Ongoing:** This phase runs for the lifetime of the process.
 
 ### Phase 4.5: Browser Discovery (Diagnostic)
@@ -473,18 +480,26 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 - **File:** `hook/StartupHook.cs`, `hook/LinkEmbedEngine.cs`
 - **Thread:** Background (15s delay for chat to populate, then 500ms poll timer)
 - **Mechanism:** `LinkEmbedEngine` scans the visual tree for `CTextBlock` / `RootMarkdownTextBlock` nodes containing URLs, fetches OG metadata via reflection-based HttpClient, and injects native Avalonia embed cards below messages.
-- **Status:** YouTube fully working (oEmbed + predictable thumbnails). Generic sites need improvement: bot-hostile User-Agents cause Twitter/X failures, direct image URLs are rejected, some sites need JS rendering for OG tags.
+- **Status:** Broadly functional: YouTube/oEmbed, direct image fast path, animated GIF/WebP, Reddit provider labeling, Twitter/X embed-fixer normalization, and extension or content-type detected video placeholders.
+
+### Phase 4.5g: Avalonia-Native NSFW Filter
+
+**Purpose:** Start NSFW image classification/blurring in the native Avalonia message tree.
+
+- **File:** `hook/StartupHook.cs`, `hook/NsfwFilter.cs`
+- **Thread:** Background (deferred startup delay), work dispatched to UI as needed
+- **Mechanism:** DFS visual tree scan for `Image` controls, classify with Vision API (bounded concurrency), blur with click-to-reveal overlay.
+- **Status:** Avalonia-native redesign is deployed; production validation is still pending.
 
 ### Phase 5: DotNetBrowser Feature Loading
 
-**Purpose:** Detect DotNetBrowser assemblies and initialize browser-dependent features (NSFW filter).
+**Purpose:** Detect DotNetBrowser assemblies and initialize browser-dependent features.
 
-- **File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`, `hook/NsfwFilter.cs`
+- **File:** `hook/StartupHook.cs`, `hook/DotNetBrowserReflection.cs`
 - **Thread:** Background
 - **Detection:** Event-driven via `AppDomain.CurrentDomain.AssemblyLoad` event + `ManualResetEventSlim`. Waits for an assembly matching `DotNetBrowser` or `DotNetBrowser.Core` (NOT `DotNetBrowser.AvaloniaUi`, which Root does not ship).
 - **Timeout:** 90 seconds
-- **On success:** Resolves DotNetBrowser types via `DotNetBrowserReflection`, discovers `IBrowser` via ViewModel chain walking (`MainWindow.DataContext` → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`), then initializes `NsfwFilter`.
-- **Known limitation:** NSFW filter uses JS injection into DotNetBrowser which cannot affect chat (chat is Avalonia-native). Needs Avalonia-native redesign.
+- **On success:** Resolves DotNetBrowser types via `DotNetBrowserReflection`, discovers `IBrowser` via ViewModel chain walking (`MainWindow.DataContext` → `BrowserService` → `BrowserEngineManager` → `IEngine` → `Profiles[0].Browsers._values`), then enables browser-assisted features.
 
 ### TypeScript Startup (Independent)
 
@@ -766,10 +781,10 @@ The CLR profiler environment variables are set as user-scoped environment variab
 
 Root's chat UI, channel lists, and community views are rendered entirely in native Avalonia controls (1647+ visual tree nodes, 0 browser controls). DotNetBrowser is auxiliary -- used for WebRTC voice/video, OAuth flows, and sub-app iframes (polls, task tracker, etc.). The shell page at `rootapp://app/__index.html` contains an `<iframe id="app-iframe">` that permanently stays at `about:blank`.
 
-Link embeds have been redesigned: `LinkEmbedEngine.cs` (Phase 4.5b) scans the Avalonia visual tree for URL-containing CTextBlocks and injects native embed cards. YouTube works; generic sites need improvement. `NsfwFilter` still uses DotNetBrowser JS injection and cannot modify chat — it needs Avalonia-native redesign.
+Link embeds are Avalonia-native (`LinkEmbedEngine.cs`, Phase 4.5b): the engine scans the visual tree for URL-containing CTextBlocks and injects native embed cards. `NsfwFilter` is also Avalonia-native now (`NsfwFilter.cs`, Phase 4.5g), with visual-tree image classification and blur/reveal overlays.
 
-- **Link embeds (done):** `hook/LinkEmbedEngine.cs` — Avalonia-native, visual tree scan + OG fetch + native card injection
-- **NSFW filter (needs redesign):** `hook/NsfwFilter.cs` — still JS injection, must move to visual tree image interception
+- **Link embeds:** `hook/LinkEmbedEngine.cs` — Avalonia-native, visual tree scan + OG/oEmbed + native card injection
+- **NSFW filter:** `hook/NsfwFilter.cs` — Avalonia-native, visual tree image interception + blur/reveal (validation in progress)
 
 ### `after` Patch Handler Not Implemented
 
@@ -815,7 +830,7 @@ Guidance for AI-assisted development sessions working on the Uprooted codebase. 
 
 When onboarding to this codebase, read these files in order:
 
-1. **This document** (`docs/ARCHITECTURE.md`) -- System overview, layer boundaries, critical rules.
+1. **This document** (`docs/framework/ARCHITECTURE.md`) -- System overview, layer boundaries, critical rules.
 2. **`hook/StartupHook.cs`** -- Understand the C# entry point and initialization flow.
 3. **`src/core/preload.ts`** -- Understand the TypeScript entry point and plugin bootstrap.
 4. **`src/types/plugin.ts`** -- Understand the plugin contract.
@@ -893,4 +908,4 @@ These are the fragile integration points that must be checked when Root releases
 
 **Canonical for:** system design, layer boundaries, 12 critical rules, threading model, error handling patterns, startup phase overview, known limitations, security considerations, AI contributor guide
 **Not canonical for:** per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | native profiler → [CLR_PROFILER.md](CLR_PROFILER.md)
-*Architecture reference for Uprooted v0.4.2. Last updated 2026-02-19.*
+*Architecture reference for Uprooted v0.4.2. Last updated 2026-02-20.*
