@@ -60,7 +60,45 @@ import Layout from "../layouts/Layout.astro";
   </div>
 
   <div class="mobile-block">
-    <p>sorry, uprooted is only available on windows and linux.</p>
+    <div class="mobile-content">
+      <div class="mobile-header">
+        <h1>uprooted <span class="version">0.4.2</span></h1>
+        <p class="sub">a client mod framework for root communications.</p>
+      </div>
+
+      <p class="mobile-blurb">
+        <strong>working beta.</strong> themes, plugins, and sentry blocker ship by default.
+        all features configurable from root's native settings panel.
+      </p>
+
+      <div class="mobile-features">
+        <div class="feature"><span>custom themes</span><span class="tag">working</span></div>
+        <div class="feature"><span>sentry blocker</span><span class="tag">working</span></div>
+        <div class="feature"><span>plugins</span><span class="tag">working</span></div>
+        <div class="feature"><span>link embeds</span><span class="tag tag-beta">beta</span></div>
+        <div class="feature"><span>message logger</span><span class="tag tag-beta">beta</span></div>
+        <div class="feature"><span>silent typing</span><span class="tag tag-beta">beta</span></div>
+        <div class="feature"><span>clearurls</span><span class="tag">working</span></div>
+        <div class="feature"><span>auto-updater</span><span class="tag">working</span></div>
+      </div>
+
+      <div class="mobile-platform-note">
+        <span>currently available on windows and linux.</span>
+      </div>
+
+      <div class="mobile-links">
+        <a href="https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw" class="server-btn">join the server</a>
+        <nav>
+          <a href="https://github.com/watchthelight/uprooted/releases/latest">download</a>
+          <span class="dot">&middot;</span>
+          <a href="https://github.com/watchthelight/uprooted">source</a>
+          <span class="dot">&middot;</span>
+          <a href="https://github.com/watchthelight/uprooted/blob/main/LICENSE" class="dim">license</a>
+        </nav>
+      </div>
+
+      <p class="footer dim">not affiliated with root communications.</p>
+    </div>
   </div>
 </Layout>
 
@@ -260,13 +298,86 @@ import Layout from "../layouts/Layout.astro";
       display: flex;
       align-items: center;
       justify-content: center;
-      height: 100vh;
-      padding: 32px;
-      text-align: center;
-      font-size: 14px;
-      color: var(--dim);
+      min-height: 100vh;
+      padding: 32px 24px;
       position: relative;
       z-index: 1;
+    }
+
+    .mobile-content {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      max-width: 400px;
+      width: 100%;
+    }
+
+    .mobile-content .mobile-header {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .mobile-content h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      color: var(--text);
+    }
+
+    .mobile-blurb {
+      font-size: 13px;
+      line-height: 1.7;
+      color: var(--dim);
+    }
+
+    .mobile-blurb strong {
+      color: var(--text);
+    }
+
+    .mobile-features {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      border-left: 1px solid var(--faint);
+      padding-left: 16px;
+    }
+
+    .mobile-platform-note {
+      font-size: 11px;
+      color: var(--dim);
+      border: 1px solid var(--faint);
+      padding: 8px 12px;
+    }
+
+    .mobile-links {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 12px;
+    }
+
+    .server-btn {
+      display: inline-block;
+      background: var(--green);
+      color: #08080c;
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+      padding: 8px 22px;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+
+    .server-btn:hover {
+      background: #7fb882;
+      text-decoration: none;
+    }
+
+    .mobile-links nav {
+      font-size: 13px;
     }
   }
 
