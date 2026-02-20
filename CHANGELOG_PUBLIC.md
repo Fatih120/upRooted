@@ -4,10 +4,18 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## [v0.4.2](https://github.com/watchthelight/uprooted/releases/tag/v0.4.2) — 2026-02-19
+## [v0.4.2](https://github.com/watchthelight/uprooted/releases/tag/v0.4.2) — 2026-02-20
+
+### New
+
+- **Light and PureDark theme support** — Uprooted's settings UI now fully adapts to Root's Light and PureDark theme variants. Previously, the settings pages were only designed for Dark mode — switching to Light theme resulted in white text on white backgrounds. All pages, cards, sidebar nav items, and version text now read Root's live color system.
+- **Rootcord** — Experimental plugin that adds a Discord-style vertical server sidebar. Toggle it live from Plugin Settings — no restart required.
+- **Desktop notifications for updates** — When an update is automatically applied in the background, you now get an OS notification (Windows toast or Linux `notify-send`) in addition to the in-app banner. Respects your notification preference in Update Settings.
 
 ### Improvements
 
+- **Plugin page** — Opens showing just 4 cards (2 rows) so you don't have to scroll. A "Show More" button expands the full list. Plugins sort enabled-first, then by stability (Stable before Experimental), then A-Z.
+- **About page** — Removed the Links and Diagnostics cards. Added a compact "Open Logs" button to the header row. The page no longer requires scrolling.
 - **Silent Typing rewrite** — Completely rewritten from scratch using a cleaner, more reliable approach (contributed by Kurumi Nanase)
 - **Themes tab** — The Themes plugin now has an "Open" button in Plugin Settings that takes you directly to the Themes tab
 
@@ -15,6 +23,15 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 - Fixed a crash on startup when a theme was active (InvalidCastException: Color/IBrush type mismatch)
 - Online status indicators (green dots next to usernames) no longer change color when using a custom theme
+- Fixed UI freeze when quickly switching between Root's settings tabs (rapid navigation stacked visual tree walks on the UI thread)
+- Fixed the "Show experimental plugins" toggle being unclickable (z-order issue — banner was covering the toggle)
+- Fixed theme color issues on Light variant (named color crash, ResourceDictionary lookup not resolving merged entries)
+
+### Testing status changes
+
+- ClearURLs promoted to **Stable**
+- Themes demoted to **Beta**
+- SilentTyping demoted to **Experimental**
 
 ---
 

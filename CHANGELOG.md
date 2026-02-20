@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [Unreleased]
+## [0.4.2] - 2026-02-20
 
 ### Added
 
@@ -15,11 +15,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - `ContentPages.AdjustForHighlight()` — luminance-aware highlight (darkens on light bg, lightens on dark bg)
   - `SidebarInjector.SyncContentPagesFromNativeTree()` — captures native fg/bg from visual tree at injection time
   - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`, `hook/AvaloniaReflection.cs`
-- **SVG path swap for Uprooted themes** — When an Uprooted dark theme is active on Root's Light variant, ~220 SVG asset paths are swapped from `Light Theme/` to `Dark Theme/` folder. Determined automatically by background luminance. Prevents light-colored icons on dark backgrounds.
+- **SVG path swap for Uprooted themes** — When an Uprooted dark theme is active on Root's Light variant, ~220 SVG asset paths are swapped from `Light Theme/` to `Dark Theme/` folder. Determined automatically by background luminance.
   - File: `hook/ThemeEngine.cs`
+- **Experimental plugins opt-in toggle** — New toggle in Plugin Settings opts into showing plugins with Experimental testing status. Hidden by default to reduce clutter.
+  - File: `hook/ContentPages.cs`
+- **Desktop notifications** — Auto-updater shows an OS-level toast (Windows via WinRT) or `notify-send` (Linux) when a background update is applied, in addition to the in-app overlay. Respects the `AutoUpdateNotify` setting (previously ignored).
+  - Files: `hook/DesktopNotification.cs` (new), `hook/StartupHook.cs`
+- **Rootcord plugin** — Discord-style vertical server sidebar added as an experimental plugin. Supports live toggle without restart.
+  - File: `hook/RootcordEngine.cs` (new)
+- **Plugin Show More** — Plugin page opens with 4 cards (2 rows) to avoid scrolling. A "Show N More" button expands the full list; search and filter bypass the limit.
+  - File: `hook/ContentPages.cs`
 
 ### Changed
 
+- **SilentTypingEngine: DiagnosticListener rewrite** (by Kurumi Nanase) — Replaced the 482-line HttpClient/GrpcChannel handler injection with ~90-line DiagnosticListener approach. Subscribes to .NET's built-in HTTP diagnostics (`DiagnosticListener.AllListeners`), intercepts `System.Net.Http.HttpRequestOut.Start` events, and redirects SetTypingIndicator requests to `localhost:0`. No discovery, no field walking, no handler patching.
+  - File: `hook/SilentTypingEngine.cs`
+- **Themes tab: Open button** — Replaced the Themes plugin toggle in Plugin Settings with an "Open" button that navigates directly to the Themes settings tab.
+  - File: `hook/ContentPages.cs`
 - **Sidebar re-injects on variant change** — When Root switches Dark↔Light↔PureDark, the sidebar removes its injected controls (UnwrapScrollViewer + remove nav items + RemoveVersionText + NullState) and lets the next LayoutUpdated pass re-inject with fresh native colors. Does not try to restore Root's controls (they use DynamicResource).
   - File: `hook/SidebarInjector.cs`
 - **Auto-revert Uprooted theme on Root variant change** — If an Uprooted theme is active and the user switches Root's native variant, the Uprooted theme auto-reverts. Respects the user's choice of Root theme.
@@ -32,36 +44,27 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/SidebarInjector.cs`
 - **Version text matches Root's native color** — Reads foreground from Root's existing "Root Version" TextBlock instead of hardcoded `#66f2f2f2`.
   - File: `hook/SidebarInjector.cs`
+- **Plugin sort order** — Plugins sort enabled-first, then Stable → Experimental, then A-Z. Sort is dynamic and updates on every toggle.
+  - File: `hook/ContentPages.cs`
+- **Auto-update interval** — Background check interval reduced from 6 hours to 1 minute.
+  - File: `hook/AutoUpdater.cs`
+- **About page** — Removed Links and Diagnostics cards. Added compact "Open Logs" button to the page title row. No more scrolling required.
+  - File: `hook/ContentPages.cs`
+- **Testing status changes** — ClearURLs promoted to Stable, Themes demoted to Beta, SilentTyping demoted to Experimental.
+  - File: `hook/ContentPages.cs`
 
 ### Fixed
 
+- **Settings navigation freeze** — `ScheduleWalkBurst` now debounces to a single 150ms delayed walk instead of firing `WalkVisualTreeNow` immediately on every tab switch. Rapid navigation no longer stacks UI-thread tree walks.
+  - File: `hook/ThemeEngine.cs`
+- **Experimental toggle unclickable** — Fixed z-order in the Plugin Settings experimental banner so the toggle pill renders on top of the banner and receives pointer events.
+  - File: `hook/ContentPages.cs`
 - **Named color crash** — `Color.ToString()` returns `"White"` for `#FFFFFFFF` in Avalonia, crashing `ColorUtils.ParseHex()`. Now extracts via `Color.A`/`R`/`G`/`B` byte properties.
   - File: `hook/ThemeEngine.cs`
 - **ResourceDictionary indexer miss** — `dict["key"]` only returns direct entries, not MergedDictionaries. Switched to `Application.TryGetResource` for full resolution chain.
   - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`
 - **Preview swatch breaks hover** — Transparent background on theme preview caused `PointerExited` when mouse moved over it. Fixed with `IsHitTestVisible=false`.
   - File: `hook/ContentPages.cs`
-
-### Documentation
-
-- **AVALONIA_PATTERNS.md** — 6 new pitfalls + UI Standards section
-- **HOOK_REFERENCE.md** — ContentPages color theming rewritten, sidebar variant change sections
-- **ROOT_THEME_SYSTEM_FINDINGS.md** — Live-testing confirmations
-- **THEME_ENGINE_DEEP_DIVE.md** — ThemeDictionaries re-entrancy trap
-
----
-
-## [0.4.2] - 2026-02-19
-
-### Changed
-
-- **SilentTypingEngine: DiagnosticListener rewrite** (by Kurumi Nanase) — Replaced the 482-line HttpClient/GrpcChannel handler injection with ~90-line DiagnosticListener approach. Subscribes to .NET's built-in HTTP diagnostics (`DiagnosticListener.AllListeners`), intercepts `System.Net.Http.HttpRequestOut.Start` events, and redirects SetTypingIndicator requests to `localhost:0`. No discovery, no field walking, no handler patching.
-  - File: `hook/SilentTypingEngine.cs`
-- **Themes tab: Open button** — Replaced the Themes plugin toggle in Plugin Settings with an "Open" button that navigates directly to the Themes settings tab.
-  - File: `hook/ContentPages.cs`
-
-### Fixed
-
 - **ThemeEngine crash: InvalidCastException on startup** — Fixed ThemeEngine storing `Avalonia.Media.Color` objects in ThemeDictionaries where Root's converters expect `Avalonia.Media.IBrush`. Only `DropShadow` is stored as Color; all other keys now correctly stored as `SolidColorBrush` (or `LinearGradientBrush` for `ScrollShadow`).
   - File: `hook/ThemeEngine.cs`
 - **Online status indicators recolored by themes** — ThemeEngine no longer overrides `BrandSecondary` in ThemeDictionaries. Root uses this key for online status dots (green `#A8FF5D`); overriding it caused all online indicators to show the theme accent color instead.
@@ -73,6 +76,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Documentation
 
+- **AVALONIA_PATTERNS.md** — 6 new pitfalls + UI Standards section
+- **HOOK_REFERENCE.md** — ContentPages color theming rewritten, sidebar variant change sections
+- **ROOT_THEME_SYSTEM_FINDINGS.md** — Live-testing confirmations
+- **THEME_ENGINE_DEEP_DIVE.md** — ThemeDictionaries re-entrancy trap
 - Documented ThemeDictionaries re-entrancy trap (confirmed live)
 - Updated docs for MessageLogger overhaul and SilentTyping rewrite
 

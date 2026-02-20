@@ -472,22 +472,49 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(8_000); // Wait for HomeView to fully render
+                        Thread.Sleep(2_000); // Short initial wait for HomeView layout
                         Logger.Log("Startup", "Phase 4.5h: Starting Rootcord engine...");
                         var engine = new RootcordEngine(rcResolver, rcWindow, rcThemeEngine);
                         RootcordEngine.Instance = engine;
-                        rcResolver.RunOnUIThread(() =>
+
+                        // Try Apply, retry up to 3 times if HomeView isn't ready yet
+                        for (int attempt = 1; attempt <= 4; attempt++)
                         {
-                            try
+                            using var mre = new ManualResetEventSlim(false);
+                            bool applied = false;
+                            rcResolver.RunOnUIThread(() =>
                             {
-                                engine.Apply();
-                                Logger.Log("Startup", "Phase 4.5h OK: Rootcord active");
-                            }
-                            catch (Exception ex)
+                                try
+                                {
+                                    if (!engine.IsApplied) engine.Apply();
+                                    applied = engine.IsApplied;
+                                }
+                                catch (Exception ex)
+                                {
+                                    Logger.Log("Startup", $"Phase 4.5h attempt {attempt} error: {ex.Message}");
+                                }
+                                finally { mre.Set(); }
+                            });
+                            mre.Wait(5_000);
+
+                            if (applied)
                             {
-                                Logger.Log("Startup", $"Phase 4.5h error (UI): {ex.Message}");
+                                Logger.Log("Startup", attempt > 1
+                                    ? $"Phase 4.5h OK: Rootcord active (attempt {attempt})"
+                                    : "Phase 4.5h OK: Rootcord active");
+                                break;
                             }
-                        });
+
+                            if (attempt < 4)
+                            {
+                                Logger.Log("Startup", $"Phase 4.5h: HomeView not ready, retrying in 1.5s (attempt {attempt})");
+                                Thread.Sleep(1_500);
+                            }
+                            else
+                            {
+                                Logger.Log("Startup", "Phase 4.5h: Rootcord failed after 4 attempts");
+                            }
+                        }
                     }
                     catch (Exception ex)
                     {

@@ -63,9 +63,11 @@ uprooted-private/
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
+│   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
 │   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
+│   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)
 │   ├── Entry.cs                       # Profiler injection entry point
 │   ├── Logger.cs                      # File-based logging
 │   └── SESSION_STATE.md               # Session state/context handoff

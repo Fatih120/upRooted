@@ -29,8 +29,7 @@ internal class RootcordEngine
     private object? _serverStrip;         // The vertical StackPanel
     private object? _serverStripBorder;   // Border wrapping the strip (placed in grid)
     private object? _homeButton;          // Home icon container (top of strip)
-    private object? _userCard;            // User card at bottom of strip
-    private object? _stripGrid;           // Inner Grid (3 rows) inside the strip border
+    private object? _stripGrid;           // Inner Grid (2 rows) inside the strip border
 
     // SystemTray (Row 1 collapse)
     private object? _systemTrayBorder;    // The SystemTray border at Row 1, Col 4
@@ -65,6 +64,25 @@ internal class RootcordEngine
     // Profile pane control
     private bool _wasProfilePaneOpen;
     private object? _profileInterceptHandler;
+    private bool _allowProfileOnce;
+
+    // User bar (wide bottom-left bar with SystemTray)
+    private object? _userBar;               // Wide user bar Border in HomeView Grid
+    private int _systemTrayOriginalCol;     // SystemTray's original Grid.Column
+    private int _systemTrayOriginalColSpan; // SystemTray's original ColumnSpan
+    private object? _savedTrayBackground;   // Original Background to restore
+    private object? _savedTrayBorderBrush;  // Original BorderBrush to restore
+    private object? _savedTrayBorderThickness; // Original BorderThickness to restore
+
+    // Community members sidebar rotation
+    private object? _communityGrid;
+    private List<(object child, int originalCol)>? _originalChildColumns;
+    private List<(int colIdx, double width, string unit)>? _originalColWidths;
+
+    // Flyout placement flip (member profile popups)
+    private readonly HashSet<int> _flippedFlyoutIds = new();
+    private object? _membersLayoutUpdatedHandler;
+    private object? _membersPanel; // Members panel reference for LayoutUpdated unsub
 
     // State
     public bool IsApplied { get; private set; }
@@ -172,8 +190,14 @@ internal class RootcordEngine
             // Step 6: Build and inject server strip
             BuildAndInjectServerStrip();
 
+            // Step 6.5: Build and inject wide user bar (bottom-left, with SystemTray)
+            BuildAndInjectUserBar();
+
             // Step 7: Subscribe to tab changes + intercept Profile pane reopens
             SubscribeTabChanges();
+
+            // Step 8: Swap community members sidebar to right (Discord-style)
+            SwapCommunityMembersToRight();
 
             IsApplied = true;
             Logger.Log(Tag, "Apply complete — Discord-style layout active");
@@ -196,6 +220,9 @@ internal class RootcordEngine
             DismissIconTooltip();
             DismissUserCardPopup();
 
+            // Revert community members sidebar swap
+            RevertCommunityMembersSwap();
+
             // Unsubscribe tab monitoring + profile intercept
             UnsubscribeTabChanges();
 
@@ -208,6 +235,9 @@ internal class RootcordEngine
             }
             _wasProfilePaneOpen = false;
 
+            // Remove user bar + reparent SystemTray back to HomeView Grid
+            RevertUserBar();
+
             // Remove server strip from grid
             if (_serverStripBorder != null && _homeViewGrid != null)
             {
@@ -217,10 +247,9 @@ internal class RootcordEngine
             _serverStrip = null;
             _serverStripBorder = null;
             _homeButton = null;
-            _userCard = null;
             _stripGrid = null;
 
-            // Restore Row 1 and SystemTray position
+            // Restore Row 1 height
             RestoreTabBarRow();
 
             // Restore column widths
@@ -477,7 +506,7 @@ internal class RootcordEngine
 
     /// <summary>
     /// Collapse Row 1 (the 60px tab bar row) to reclaim vertical space.
-    /// Moves the SystemTray to Row 2 so its buttons remain accessible.
+    /// Hides the SystemTray entirely — our user card popup replaces all its functions.
     /// </summary>
     private void CollapseTabBarRow()
     {
@@ -495,27 +524,7 @@ internal class RootcordEngine
             Logger.Log(Tag, $"Original Row 1: {_originalRow1Height} ({_originalRow1UnitType})");
         }
 
-        // Move SystemTray from Row 1 to Row 2 (content row) so it stays accessible
-        if (_systemTrayBorder != null)
-        {
-            int splitViewRow = _rootSplitView != null ? _r.GetGridRow(_rootSplitView) : 2;
-            _r.SetGridRow(_systemTrayBorder, splitViewRow);
-
-            // VerticalAlignment = Top so it appears at the top of the content area
-            _r.SetVerticalAlignment(_systemTrayBorder, "Top");
-
-            // Set ZIndex so it renders above the SplitView content
-            try
-            {
-                _systemTrayBorder.GetType().GetProperty("ZIndex")?.SetValue(_systemTrayBorder, 10);
-            }
-            catch { }
-
-            // Hide UserProfileButton within the SystemTray (our strip card replaces it)
-            HideUserProfileButton();
-
-            Logger.Log(Tag, $"SystemTray moved from Row {_originalSystemTrayRow} to Row {splitViewRow}");
-        }
+        // SystemTray is reparented into the user bar (BuildAndInjectUserBar), not hidden here
 
         // Collapse Row 1 to 0px
         _r.SetRowDefinitionPixelHeight(rowDefs[1], 0);
@@ -523,30 +532,12 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Restore Row 1 and SystemTray to original positions.
+    /// Restore Row 1 height to original state.
+    /// SystemTray reparenting is handled in Revert() via RevertUserBar().
     /// </summary>
     private void RestoreTabBarRow()
     {
         if (_homeViewGrid == null) return;
-
-        // Restore hidden profile button
-        if (_hiddenProfilePanel != null)
-        {
-            _r.SetIsVisible(_hiddenProfilePanel, true);
-            _hiddenProfilePanel = null;
-        }
-
-        // Restore SystemTray to original row
-        if (_systemTrayBorder != null)
-        {
-            _r.SetGridRow(_systemTrayBorder, _originalSystemTrayRow);
-            try
-            {
-                _systemTrayBorder.GetType().GetProperty("ZIndex")?.SetValue(_systemTrayBorder, 0);
-            }
-            catch { }
-            Logger.Log(Tag, $"SystemTray restored to Row {_originalSystemTrayRow}");
-        }
 
         // Restore Row 1 height
         var rowDefs = _r.GetRowDefinitions(_homeViewGrid);
@@ -633,13 +624,379 @@ internal class RootcordEngine
         }
     }
 
+    // ===== Community members sidebar swap =====
+
+    /// <summary>
+    /// Swap the community sidebar (col 0) and chat content (last col) so members appear on the right.
+    /// Walks from SplitView to find CommunityView Grid, then swaps column positions + widths.
+    /// No-op when a DM tab is selected (no CommunityView in the tree).
+    /// </summary>
+    private void SwapCommunityMembersToRight()
+    {
+        if (_rootSplitView == null) return;
+
+        // Revert any previous swap before applying new one
+        RevertCommunityMembersSwap();
+
+        try
+        {
+            var walker = new VisualTreeWalker(_r);
+
+            // Walk from SplitView to find the CommunityView
+            object? communityView = null;
+            foreach (var node in walker.DescendantsDepthFirst(_rootSplitView))
+            {
+                var dc = _r.GetDataContext(node);
+                if (dc == null) continue;
+                if (dc.GetType().Name.Contains("CommunityViewModel"))
+                {
+                    communityView = node;
+                    break;
+                }
+            }
+
+            if (communityView == null)
+            {
+                Logger.Log(Tag, "SwapCommunityMembers: no CommunityView found (DM tab?)");
+                return;
+            }
+
+            // Find the main layout Grid inside CommunityView (2+ column definitions)
+            // Use deep tree walk — the Grid may be several levels down
+            object? layoutGrid = null;
+
+            Logger.Log(Tag, $"SwapCommunityMembers: CommunityView is {communityView.GetType().Name}");
+
+            foreach (var descendant in walker.DescendantsDepthFirst(communityView))
+            {
+                if (_r.IsGrid(descendant))
+                {
+                    var colDefs = _r.GetColumnDefinitions(descendant);
+                    int colCount = colDefs?.Count ?? 0;
+                    if (colCount >= 2)
+                    {
+                        layoutGrid = descendant;
+                        Logger.Log(Tag, $"SwapCommunityMembers: found Grid ({descendant.GetType().Name}) with {colCount} cols");
+                        break;
+                    }
+                }
+            }
+
+            if (layoutGrid == null)
+            {
+                // Diagnostic: log what controls exist in the CommunityView
+                int childCount = 0;
+                foreach (var child in _r.GetVisualChildren(communityView))
+                {
+                    Logger.Log(Tag, $"SwapCommunityMembers: child[{childCount}] = {child.GetType().Name}");
+                    childCount++;
+                }
+                Logger.Log(Tag, $"SwapCommunityMembers: no layout Grid found in CommunityView ({childCount} direct children)");
+                return;
+            }
+
+            var gridColDefs = _r.GetColumnDefinitions(layoutGrid);
+            if (gridColDefs == null || gridColDefs.Count < 2)
+            {
+                Logger.Log(Tag, $"SwapCommunityMembers: Grid has {gridColDefs?.Count ?? 0} cols, need 2+");
+                return;
+            }
+
+            // Gather non-GridSplitter children sorted by column
+            var nonSplitters = new List<(object child, int col)>();
+            foreach (var child in _r.GetVisualChildren(layoutGrid))
+            {
+                if (child.GetType().Name.Contains("GridSplitter")) continue;
+                int col = _r.GetGridColumn(child);
+                nonSplitters.Add((child, col));
+            }
+            nonSplitters.Sort((a, b) => a.col.CompareTo(b.col));
+
+            if (nonSplitters.Count < 2)
+            {
+                Logger.Log(Tag, $"SwapCommunityMembers: only {nonSplitters.Count} non-splitter children, need 2+");
+                return;
+            }
+
+            // Save original state for revert
+            _communityGrid = layoutGrid;
+            _originalChildColumns = nonSplitters.Select(c => (c.child, c.col)).ToList();
+            _originalColWidths = new List<(int, double, string)>();
+            for (int i = 0; i < gridColDefs.Count; i++)
+            {
+                var w = _r.GetColumnDefinitionWidth(gridColDefs[i]);
+                _originalColWidths.Add(w != null
+                    ? (i, w.Value.Value, w.Value.UnitType)
+                    : (i, 0, "Auto"));
+            }
+
+            // Rotate: move members sidebar (col 0) to rightmost, shift others left.
+            // Original: [Members(col A)] [Channels(col B)] [Chat(col C)]
+            // Target:   [Channels(col A)] [Chat(col B)]    [Members(col C)]
+            var columns = nonSplitters.Select(c => c.col).ToList();
+
+            int n = nonSplitters.Count;
+            for (int i = 0; i < n; i++)
+            {
+                // Each child gets the column of the PREVIOUS child (wrapping last to first)
+                // Members(0)→col2, Channels(1)→col0, Chat(2)→col1
+                int newCol = columns[(i + n - 1) % n];
+                _r.SetGridColumn(nonSplitters[i].child, newCol);
+            }
+
+            // Rotate column definition widths the same way
+            var savedWidths = new List<(double value, string unit)>();
+            foreach (var col in columns)
+            {
+                if (col < gridColDefs.Count)
+                {
+                    var w = _originalColWidths.FirstOrDefault(x => x.colIdx == col);
+                    savedWidths.Add((w.width, w.unit));
+                }
+                else savedWidths.Add((1, "Star"));
+            }
+            for (int i = 0; i < n; i++)
+            {
+                int targetCol = columns[(i + n - 1) % n];
+                if (targetCol < gridColDefs.Count)
+                    SetColumnDefinitionWidth(gridColDefs[targetCol], savedWidths[i].value, savedWidths[i].unit);
+            }
+
+            var names = string.Join("  ", nonSplitters.Select((c, idx) =>
+                $"{c.child.GetType().Name}@{c.col}→{columns[(idx + n - 1) % n]}"));
+            Logger.Log(Tag, $"SwapCommunityMembers: rotated {nonSplitters.Count} children: {names}");
+
+            // Flip member profile flyout placements (Right → Left) after rotation
+            FlipMemberFlyoutPlacements();
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"SwapCommunityMembers error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Revert the community sidebar column rotation to original positions.
+    /// </summary>
+    private void RevertCommunityMembersSwap()
+    {
+        // Revert flyout placements before restoring column positions
+        RevertMemberFlyoutPlacements();
+
+        if (_communityGrid == null) return;
+
+        try
+        {
+            // Restore child column assignments
+            if (_originalChildColumns != null)
+            {
+                foreach (var (child, originalCol) in _originalChildColumns)
+                    _r.SetGridColumn(child, originalCol);
+            }
+
+            // Restore column definition widths
+            var colDefs = _r.GetColumnDefinitions(_communityGrid);
+            if (colDefs != null && _originalColWidths != null)
+            {
+                foreach (var (colIdx, width, unit) in _originalColWidths)
+                {
+                    if (colIdx < colDefs.Count)
+                        SetColumnDefinitionWidth(colDefs[colIdx], width, unit);
+                }
+            }
+
+            Logger.Log(Tag, "SwapCommunityMembers: reverted to original layout");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"RevertCommunityMembersSwap error: {ex.Message}");
+        }
+
+        _communityGrid = null;
+        _originalChildColumns = null;
+        _originalColWidths = null;
+    }
+
+    // ===== Flyout placement flip (member profile popups) =====
+
+    /// <summary>
+    /// Flip member profile flyout placements from RightEdgeAlignedTop to LeftEdgeAlignedTop.
+    /// After rotating members to the right side, profiles would open further right / off-screen.
+    /// Subscribes LayoutUpdated on the members panel to handle virtualized rows.
+    /// </summary>
+    private void FlipMemberFlyoutPlacements()
+    {
+        if (_communityGrid == null) return;
+
+        try
+        {
+            // Find the rightmost child (members panel after rotation)
+            object? membersPanel = null;
+            int maxCol = -1;
+            foreach (var child in _r.GetVisualChildren(_communityGrid))
+            {
+                if (child.GetType().Name.Contains("GridSplitter")) continue;
+                int col = _r.GetGridColumn(child);
+                if (col > maxCol)
+                {
+                    maxCol = col;
+                    membersPanel = child;
+                }
+            }
+
+            if (membersPanel == null)
+            {
+                Logger.Log(Tag, "FlipMemberFlyouts: no members panel found");
+                return;
+            }
+
+            _membersPanel = membersPanel;
+            int flipped = FlipFlyoutsInTree(membersPanel, "RightEdgeAlignedTop", "LeftEdgeAlignedTop");
+            Logger.Log(Tag, $"FlipMemberFlyouts: initial scan flipped {flipped} flyouts");
+
+            // Subscribe LayoutUpdated to catch virtualized rows appearing on scroll.
+            // LayoutUpdated uses EventHandler (not RoutedEvent), so we can subscribe via reflection.
+            try
+            {
+                var eventInfo = membersPanel.GetType().GetEvent("LayoutUpdated");
+                if (eventInfo != null)
+                {
+                    var capturedPanel = membersPanel;
+                    EventHandler handler = (_, _) =>
+                    {
+                        try { FlipFlyoutsInTree(capturedPanel, "RightEdgeAlignedTop", "LeftEdgeAlignedTop"); }
+                        catch { }
+                    };
+                    eventInfo.AddEventHandler(membersPanel, handler);
+                    _membersLayoutUpdatedHandler = handler;
+                    Logger.Log(Tag, "FlipMemberFlyouts: subscribed LayoutUpdated for virtualized rows");
+                }
+            }
+            catch (Exception ex2)
+            {
+                Logger.Log(Tag, $"FlipMemberFlyouts: LayoutUpdated subscription failed: {ex2.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"FlipMemberFlyouts error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Walk a visual tree and flip flyout placements from one mode to another.
+    /// Uses a HashSet to skip already-processed flyouts. Returns count of newly flipped.
+    /// </summary>
+    private int FlipFlyoutsInTree(object root, string fromPlacement, string toPlacement)
+    {
+        int count = 0;
+        var walker = new VisualTreeWalker(_r);
+
+        foreach (var node in walker.DescendantsDepthFirst(root))
+        {
+            int nodeId = System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(node);
+            if (_flippedFlyoutIds.Contains(nodeId)) continue;
+
+            try
+            {
+                // Check if this control has a Flyout property
+                var flyoutProp = node.GetType().GetProperty("Flyout");
+                if (flyoutProp == null) continue;
+
+                var flyout = flyoutProp.GetValue(node);
+                if (flyout == null) continue;
+
+                // Get Placement property from the flyout
+                var placementProp = flyout.GetType().GetProperty("Placement");
+                if (placementProp == null) continue;
+
+                var currentPlacement = placementProp.GetValue(flyout);
+                if (currentPlacement == null) continue;
+
+                // Resolve the PlacementMode enum type from the flyout's assembly
+                var placementType = placementProp.PropertyType;
+                if (!placementType.IsEnum) continue;
+
+                // Check if current placement matches the "from" value
+                var fromValue = Enum.Parse(placementType, fromPlacement);
+                if (!currentPlacement.Equals(fromValue)) continue;
+
+                // Flip to the "to" value
+                var toValue = Enum.Parse(placementType, toPlacement);
+                placementProp.SetValue(flyout, toValue);
+
+                _flippedFlyoutIds.Add(nodeId);
+                count++;
+            }
+            catch { }
+        }
+
+        return count;
+    }
+
+    /// <summary>
+    /// Revert member flyout placements back to RightEdgeAlignedTop and unsubscribe LayoutUpdated.
+    /// </summary>
+    private void RevertMemberFlyoutPlacements()
+    {
+        // Unsubscribe LayoutUpdated handler
+        if (_membersLayoutUpdatedHandler != null && _membersPanel != null)
+        {
+            try
+            {
+                // LayoutUpdated is an EventHandler, unsubscribe via reflection
+                var eventInfo = _membersPanel.GetType().GetEvent("LayoutUpdated");
+                if (eventInfo != null && _membersLayoutUpdatedHandler is Delegate del)
+                    eventInfo.RemoveEventHandler(_membersPanel, del);
+            }
+            catch { }
+            _membersLayoutUpdatedHandler = null;
+        }
+
+        // Flip any LeftEdgeAlignedTop back to RightEdgeAlignedTop
+        if (_membersPanel != null)
+        {
+            try
+            {
+                // Clear the HashSet so we re-scan everything
+                _flippedFlyoutIds.Clear();
+                int reverted = FlipFlyoutsInTree(_membersPanel, "LeftEdgeAlignedTop", "RightEdgeAlignedTop");
+                Logger.Log(Tag, $"RevertMemberFlyouts: reverted {reverted} flyouts");
+            }
+            catch { }
+        }
+
+        _flippedFlyoutIds.Clear();
+        _membersPanel = null;
+    }
+
+    /// <summary>
+    /// Set a ColumnDefinition's Width to a GridLength with the given value and unit type.
+    /// unitType should be "Pixel", "Star", or "Auto".
+    /// </summary>
+    private void SetColumnDefinitionWidth(object? colDef, double value, string unitType)
+    {
+        if (colDef == null || _r.GridLengthType == null || _r.GridUnitTypeEnum == null) return;
+        try
+        {
+            var unit = Enum.Parse(_r.GridUnitTypeEnum, unitType);
+            var gridLength = Activator.CreateInstance(_r.GridLengthType, value, unit);
+            colDef.GetType().GetProperty("Width")?.SetValue(colDef, gridLength);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"SetColumnDefinitionWidth error: {ex.Message}");
+        }
+    }
+
     // ===== Server strip =====
 
     private void BuildAndInjectServerStrip()
     {
         if (_homeViewGrid == null) return;
 
-        // Create the inner 3-row Grid: [Home+separator] [servers scroll] [user card]
+        // Create the inner 2-row Grid: [Home+separator] [servers scroll]
+        // User card is now in the separate user bar (BuildAndInjectUserBar)
         _stripGrid = _r.CreateGrid();
         if (_stripGrid == null)
         {
@@ -648,7 +1005,6 @@ internal class RootcordEngine
         }
         _r.AddGridRowAuto(_stripGrid);   // Row 0: Home button + separator
         _r.AddGridRowStar(_stripGrid);   // Row 1: Scrollable server icons
-        _r.AddGridRowAuto(_stripGrid);   // Row 2: User card
 
         // --- Row 0: Home button + separator ---
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
@@ -699,15 +1055,7 @@ internal class RootcordEngine
         _r.SetGridRow(scrollContent, 1);
         _r.AddChild(_stripGrid, scrollContent);
 
-        // --- Row 2: User card ---
-        _userCard = BuildUserCard();
-        if (_userCard != null)
-        {
-            _r.SetGridRow(_userCard, 2);
-            _r.AddChild(_stripGrid, _userCard);
-        }
-
-        // Wrap the 3-row Grid in a Border for background styling
+        // Wrap the 2-row Grid in a Border for background styling
         _serverStripBorder = _r.CreateBorder(_bg, 0, _stripGrid);
         if (_serverStripBorder == null)
         {
@@ -725,7 +1073,266 @@ internal class RootcordEngine
         _r.SetGridRowSpan(_serverStripBorder, rowCount);
 
         _r.AddChild(_homeViewGrid, _serverStripBorder);
-        Logger.Log(Tag, $"Server strip injected: Col=0, RowSpan={rowCount} (3-row layout with Home + UserCard)");
+        Logger.Log(Tag, $"Server strip injected: Col=0, RowSpan={rowCount} (2-row layout: Home + servers)");
+    }
+
+    // ===== User bar (wide bottom-left, overlaps channel list) =====
+
+    /// <summary>
+    /// Build a wide (~296px) Discord-style user bar at the bottom-left of the HomeView Grid.
+    /// Contains avatar, username, status, and the reparented SystemTray Border.
+    /// Overlaps the channel list via Grid positioning + high ZIndex.
+    /// </summary>
+    private void BuildAndInjectUserBar()
+    {
+        if (_homeViewGrid == null || _homeViewModel == null) return;
+
+        var onlineColor = "#43b581";
+        string username = GetCurrentUsername() ?? "User";
+        string initial = username.Length > 0 ? username[0].ToString().ToUpper() : "U";
+        object? avatarBitmap = TryGetProfileBitmap();
+        string statusLabel = GetCurrentStatusLabel();
+        string statusColor = GetStatusColor(statusLabel);
+
+        // Outer Border: user bar container
+        _userBar = _r.CreateBorder(_cardBg, 0);
+        if (_userBar == null) return;
+        _r.SetTag(_userBar, "rootcord-userbar");
+        _r.SetWidth(_userBar, 296);
+        _r.SetHeight(_userBar, 52);
+        SetBorderStroke(_userBar, AdjustForHighlight(_cardBg, 12), 1);
+
+        // Internal layout: horizontal Grid with 2 columns
+        var barGrid = _r.CreateGrid();
+        if (barGrid == null) return;
+        _r.AddGridColumn(barGrid, 0); // Col 0: 56px avatar (Auto via content)
+        _r.AddGridColumn(barGrid);    // Col 1: rest (Star)
+
+        // --- Left column (56px): Avatar + status dot ---
+        var avatarGrid = _r.CreateGrid();
+        if (avatarGrid != null)
+        {
+            _r.SetWidth(avatarGrid, 56);
+            _r.SetHeight(avatarGrid, 52);
+            _r.SetGridColumn(avatarGrid, 0);
+            _r.SetCursorHand(avatarGrid);
+
+            var avatarBorder = _r.CreateBorder(_bg, 16);
+            if (avatarBorder != null)
+            {
+                _r.SetWidth(avatarBorder, 32);
+                _r.SetHeight(avatarBorder, 32);
+                _r.SetHorizontalAlignment(avatarBorder, "Center");
+                _r.SetVerticalAlignment(avatarBorder, "Center");
+                _r.SetClipToBounds(avatarBorder, true);
+
+                if (avatarBitmap != null)
+                {
+                    var img = _r.CreateImage("UniformToFill");
+                    if (img != null)
+                    {
+                        _r.SetImageSource(img, avatarBitmap);
+                        _r.SetWidth(img, 32);
+                        _r.SetHeight(img, 32);
+                        _r.SetBorderChild(avatarBorder, img);
+                    }
+                    else SetAvatarInitial(avatarBorder, initial, _text);
+                }
+                else SetAvatarInitial(avatarBorder, initial, _text);
+
+                _r.AddChild(avatarGrid, avatarBorder);
+            }
+
+            // Online status dot
+            var statusDot = _r.CreateBorder(onlineColor, 5);
+            if (statusDot != null)
+            {
+                _r.SetWidth(statusDot, 10);
+                _r.SetHeight(statusDot, 10);
+                _r.SetHorizontalAlignment(statusDot, "Right");
+                _r.SetVerticalAlignment(statusDot, "Bottom");
+                _r.SetMargin(statusDot, 0, 0, 8, 8);
+                _r.AddChild(avatarGrid, statusDot);
+            }
+
+            // Click on avatar → show user card popup
+            var avatarRef = avatarGrid;
+            _r.SubscribeEvent(avatarGrid, "PointerPressed", () => ShowUserCardPopup(avatarRef));
+
+            _r.AddChild(barGrid, avatarGrid);
+        }
+
+        // --- Right column: name/status + SystemTray ---
+        var rightSection = _r.CreateGrid();
+        if (rightSection != null)
+        {
+            _r.SetGridColumn(rightSection, 1);
+            _r.SetVerticalAlignment(rightSection, "Center");
+            _r.AddGridColumn(rightSection);    // Col 0: name + status (Star)
+            _r.AddGridColumn(rightSection, 0); // Col 1: SystemTray (Auto)
+
+            // Name + status stacked vertically
+            var nameStack = _r.CreateStackPanel(vertical: true, spacing: 0);
+            if (nameStack != null)
+            {
+                _r.SetGridColumn(nameStack, 0);
+                _r.SetVerticalAlignment(nameStack, "Center");
+                _r.SetMargin(nameStack, 0, 0, 4, 0);
+
+                var nameText = _r.CreateTextBlock(username, 13, _text);
+                if (nameText != null)
+                {
+                    _r.SetFontWeight(nameText, "SemiBold");
+                    try
+                    {
+                        var trimProp = nameText.GetType().GetProperty("TextTrimming");
+                        if (trimProp != null)
+                            trimProp.SetValue(nameText, Enum.Parse(trimProp.PropertyType, "CharacterEllipsis"));
+                    }
+                    catch { }
+                    _r.AddChild(nameStack, nameText);
+                }
+
+                // Status row: dot + label
+                var statusRow = _r.CreateStackPanel(vertical: false, spacing: 4);
+                if (statusRow != null)
+                {
+                    var dotText = _r.CreateTextBlock("\u25CF", 8, statusColor);
+                    if (dotText != null) { _r.SetVerticalAlignment(dotText, "Center"); _r.AddChild(statusRow, dotText); }
+
+                    var statusText = _r.CreateTextBlock(statusLabel, 11, _muted);
+                    if (statusText != null) { _r.SetVerticalAlignment(statusText, "Center"); _r.AddChild(statusRow, statusText); }
+
+                    _r.AddChild(nameStack, statusRow);
+                }
+
+                // Click on name area → show user card popup
+                _r.SetCursorHand(nameStack);
+                var nameRef = nameStack;
+                _r.SubscribeEvent(nameStack, "PointerPressed", () => ShowUserCardPopup(nameRef));
+
+                _r.AddChild(rightSection, nameStack);
+            }
+
+            // Reparent SystemTray into user bar
+            if (_systemTrayBorder != null && _homeViewGrid != null)
+            {
+                // Save original positioning + styling for revert
+                _systemTrayOriginalCol = _r.GetGridColumn(_systemTrayBorder);
+                _systemTrayOriginalColSpan = _r.GetGridColumnSpan(_systemTrayBorder);
+
+                try
+                {
+                    _savedTrayBackground = _systemTrayBorder.GetType().GetProperty("Background")?.GetValue(_systemTrayBorder);
+                    _savedTrayBorderBrush = _systemTrayBorder.GetType().GetProperty("BorderBrush")?.GetValue(_systemTrayBorder);
+                    _savedTrayBorderThickness = _systemTrayBorder.GetType().GetProperty("BorderThickness")?.GetValue(_systemTrayBorder);
+                }
+                catch { }
+
+                // Remove from HomeView Grid
+                _r.RemoveChild(_homeViewGrid, _systemTrayBorder);
+
+                // Clear Grid attached properties
+                _r.SetGridRow(_systemTrayBorder, 0);
+                _r.SetGridColumn(_systemTrayBorder, 1);
+                _r.SetGridColumnSpan(_systemTrayBorder, 1);
+                _r.SetGridRowSpan(_systemTrayBorder, 1);
+
+                // Clear border styling for clean embed
+                _r.SetBackground(_systemTrayBorder, "#00000000");
+                _r.SetBorderBrush(_systemTrayBorder, "#00000000");
+                _r.SetBorderThickness(_systemTrayBorder, 0);
+
+                // Add to right section of user bar
+                _r.AddChild(rightSection, _systemTrayBorder);
+                _r.SetIsVisible(_systemTrayBorder, true);
+
+                Logger.Log(Tag, $"SystemTray reparented into user bar (was Row={_originalSystemTrayRow} Col={_systemTrayOriginalCol} Span={_systemTrayOriginalColSpan})");
+            }
+
+            _r.AddChild(barGrid, rightSection);
+        }
+
+        _r.SetBorderChild(_userBar, barGrid);
+
+        // Place in HomeView Grid: bottom-left, overlapping channel list
+        _r.SetGridRow(_userBar, 0);
+        var rowDefs = _r.GetRowDefinitions(_homeViewGrid);
+        int rowCount = rowDefs?.Count ?? 4;
+        _r.SetGridRowSpan(_userBar, rowCount);
+        _r.SetGridColumn(_userBar, 0);
+        _r.SetGridColumnSpan(_userBar, 2);
+        _r.SetVerticalAlignment(_userBar, "Bottom");
+        _r.SetHorizontalAlignment(_userBar, "Left");
+
+        // Set high ZIndex so it overlaps channel list
+        try { _r.SetPropertyValue(_userBar, "ZIndex", 10); } catch { }
+
+        _r.AddChild(_homeViewGrid, _userBar);
+        Logger.Log(Tag, "User bar injected: 296x52, bottom-left, Col 0-1, ZIndex=10");
+    }
+
+    /// <summary>
+    /// Revert user bar: remove from HomeView Grid, reparent SystemTray back.
+    /// </summary>
+    private void RevertUserBar()
+    {
+        // Remove user bar from HomeView Grid
+        if (_userBar != null && _homeViewGrid != null)
+        {
+            // Before removing user bar, reparent SystemTray back to HomeView Grid
+            if (_systemTrayBorder != null)
+            {
+                // Remove SystemTray from user bar's internal grid
+                try
+                {
+                    // Walk: _userBar → Border.Child (barGrid) → child at col 1 (rightSection)
+                    var barChild = _r.GetBorderChild(_userBar);
+                    if (barChild != null)
+                    {
+                        foreach (var child in _r.GetVisualChildren(barChild))
+                        {
+                            if (_r.GetGridColumn(child) == 1) // rightSection
+                            {
+                                _r.RemoveChild(child, _systemTrayBorder);
+                                break;
+                            }
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(Tag, $"RevertUserBar: error removing SystemTray from bar: {ex.Message}");
+                }
+
+                // Restore original Grid positioning
+                _r.SetGridRow(_systemTrayBorder, _originalSystemTrayRow);
+                _r.SetGridColumn(_systemTrayBorder, _systemTrayOriginalCol);
+                _r.SetGridColumnSpan(_systemTrayBorder, _systemTrayOriginalColSpan);
+
+                // Restore original styling
+                try
+                {
+                    if (_savedTrayBackground != null)
+                        _systemTrayBorder.GetType().GetProperty("Background")?.SetValue(_systemTrayBorder, _savedTrayBackground);
+                    if (_savedTrayBorderBrush != null)
+                        _systemTrayBorder.GetType().GetProperty("BorderBrush")?.SetValue(_systemTrayBorder, _savedTrayBorderBrush);
+                    if (_savedTrayBorderThickness != null)
+                        _systemTrayBorder.GetType().GetProperty("BorderThickness")?.SetValue(_systemTrayBorder, _savedTrayBorderThickness);
+                }
+                catch { }
+
+                // Add back to HomeView Grid
+                _r.AddChild(_homeViewGrid, _systemTrayBorder);
+                _r.SetIsVisible(_systemTrayBorder, true);
+
+                Logger.Log(Tag, $"SystemTray reparented back to HomeView Grid (Row={_originalSystemTrayRow} Col={_systemTrayOriginalCol})");
+            }
+
+            _r.RemoveChild(_homeViewGrid, _userBar);
+            Logger.Log(Tag, "User bar removed");
+        }
+        _userBar = null;
     }
 
     /// <summary>
@@ -1021,53 +1628,43 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Handle Home button click: open the Direct Messages pane (like Discord's Home icon).
-    /// Checks if DMs are already showing to avoid toggle-close behavior.
+    /// Handle Home button click: select the first DM tab directly (replaces community view).
+    /// Falls back to DirectMessagesPaneToggleCommand if no DM tab exists.
     /// </summary>
     private void OnHomeButtonClicked()
     {
         if (_homeViewModel == null) return;
         try
         {
-            // Check if DM pane is already open — if so, don't toggle (would close it)
-            bool paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen") is true;
-            var paneVm = _r.GetPropertyValue(_homeViewModel, "PaneViewModel");
-            bool isShowingDms = paneOpen && paneVm != null &&
-                paneVm.GetType().Name.Contains("DirectMessage");
-
-            if (isShowingDms)
+            // Primary: find a DM tab and select it directly.
+            // This triggers SubscribeTabChanges → RevertCommunityMembersSwap() → clean DM view.
+            var tabs = _r.GetPropertyValue(_homeViewModel, "Tabs") as IEnumerable;
+            if (tabs != null)
             {
-                Logger.Log(Tag, "Home button: DM pane already open, no action needed");
-                return;
-            }
-
-            // Invoke DirectMessagesPaneToggleCommand to open the DM list pane
-            var dmCommand = _r.GetPropertyValue(_homeViewModel, "DirectMessagesPaneToggleCommand");
-            if (dmCommand != null)
-            {
-                InvokeCommand(dmCommand);
-                Logger.Log(Tag, "Home button: opened DM pane");
-                RefreshSelectedHighlight();
-                return;
-            }
-
-            // Fallback: select the first DM tab directly
-            var tabs = _r.GetPropertyValue(_homeViewModel, "Tabs");
-            if (tabs is IEnumerable tabsEnum)
-            {
-                foreach (var tabVm in tabsEnum)
+                foreach (var tab in tabs)
                 {
-                    if (tabVm == null) continue;
-                    if (IsDmTab(tabVm))
+                    if (tab != null && IsDmTab(tab))
                     {
-                        _r.SetPropertyValue(_homeViewModel, "SelectedTabViewModel", tabVm);
-                        Logger.Log(Tag, $"Home button: selected DM tab '{GetTabDisplayName(tabVm)}'");
+                        _r.SetPropertyValue(_homeViewModel, "SelectedTabViewModel", tab);
+                        Logger.Log(Tag, $"Home: selected DM tab '{GetTabDisplayName(tab)}'");
                         RefreshSelectedHighlight();
                         return;
                     }
                 }
             }
-            Logger.Log(Tag, "Home button: no DM command or tab found");
+
+            // Fallback: toggle DM pane command
+            var cmd = _r.GetPropertyValue(_homeViewModel, "DirectMessagesPaneToggleCommand");
+            if (cmd != null)
+            {
+                InvokeCommand(cmd);
+                Logger.Log(Tag, "Home: opened DM pane (fallback)");
+                RefreshSelectedHighlight();
+            }
+            else
+            {
+                Logger.Log(Tag, "Home: no DM tab or command found");
+            }
         }
         catch (Exception ex)
         {
@@ -1101,7 +1698,7 @@ internal class RootcordEngine
 
     /// <summary>
     /// Build the user card pinned to the bottom of the strip.
-    /// Shows current user's avatar (or initial) and username.
+    /// Large, opaque card overlay: centered avatar, username below, solid background.
     /// </summary>
     private object? BuildUserCard()
     {
@@ -1114,35 +1711,49 @@ internal class RootcordEngine
         string initial = username.Length > 0 ? username[0].ToString().ToUpper() : "U";
         object? avatarBitmap = TryGetProfileBitmap();
 
-        // Outer wrapper fills full strip width with opaque background
+        // Outer wrapper: solid opaque background, full strip width
         var wrapper = _r.CreateBorder(_bg, 0);
         if (wrapper == null) return null;
         _r.SetTag(wrapper, "rootcord-usercard");
 
-        // Inner card with rounded corners and padding
+        // Top separator line
+        var separatorCard = _r.CreateStackPanel(vertical: true, spacing: 0);
+        if (separatorCard == null) return wrapper;
+
+        var separator = _r.CreateBorder(AdjustForHighlight(_cardBg, 15), 0);
+        if (separator != null)
+        {
+            _r.SetHeight(separator, 1);
+            _r.SetMargin(separator, 6, 0, 6, 0);
+            _r.AddChild(separatorCard, separator);
+        }
+
+        // Inner card: solid opaque background, rounded corners
         var card = _r.CreateBorder(_cardBg, 8);
         if (card == null) return wrapper;
-        _r.SetMargin(card, 4, 2, 4, 6);
+        _r.SetMargin(card, 4, 4, 4, 8);
         _r.SetCursorHand(card);
+        SetBorderStroke(card, AdjustForHighlight(_cardBg, 12), 1);
 
-        // Horizontal layout: avatar + username
-        var layout = _r.CreateStackPanel(vertical: false, spacing: 6);
+        // Vertical layout: avatar centered, then username below
+        var layout = _r.CreateStackPanel(vertical: true, spacing: 4);
         if (layout == null) return wrapper;
-        _r.SetMargin(layout, 6, 6, 6, 6);
-        _r.SetVerticalAlignment(layout, "Center");
+        _r.SetMargin(layout, 6, 8, 6, 8);
+        _r.SetHorizontalAlignment(layout, "Center");
 
-        // Avatar: 28x28 circle with online status dot
+        // Avatar: 36x36 circle with online status dot
         var avatarContainer = _r.CreateGrid();
         if (avatarContainer != null)
         {
-            _r.SetWidth(avatarContainer, 28);
-            _r.SetHeight(avatarContainer, 28);
+            _r.SetWidth(avatarContainer, 36);
+            _r.SetHeight(avatarContainer, 36);
+            _r.SetHorizontalAlignment(avatarContainer, "Center");
 
-            var avatarBorder = _r.CreateBorder(_bg, 14);
+            var avatarBorder = _r.CreateBorder(_bg, 18);
             if (avatarBorder != null)
             {
-                _r.SetWidth(avatarBorder, 28);
-                _r.SetHeight(avatarBorder, 28);
+                _r.SetWidth(avatarBorder, 36);
+                _r.SetHeight(avatarBorder, 36);
                 _r.SetClipToBounds(avatarBorder, true);
 
                 if (avatarBitmap != null)
@@ -1151,8 +1762,8 @@ internal class RootcordEngine
                     if (img != null)
                     {
                         _r.SetImageSource(img, avatarBitmap);
-                        _r.SetWidth(img, 28);
-                        _r.SetHeight(img, 28);
+                        _r.SetWidth(img, 36);
+                        _r.SetHeight(img, 36);
                         _r.SetBorderChild(avatarBorder, img);
                     }
                     else
@@ -1165,11 +1776,11 @@ internal class RootcordEngine
             }
 
             // Online dot
-            var statusDot = _r.CreateBorder(onlineColor, 5);
+            var statusDot = _r.CreateBorder(onlineColor, 6);
             if (statusDot != null)
             {
-                _r.SetWidth(statusDot, 10);
-                _r.SetHeight(statusDot, 10);
+                _r.SetWidth(statusDot, 12);
+                _r.SetHeight(statusDot, 12);
                 _r.SetHorizontalAlignment(statusDot, "Right");
                 _r.SetVerticalAlignment(statusDot, "Bottom");
                 _r.AddChild(avatarContainer, statusDot);
@@ -1177,10 +1788,11 @@ internal class RootcordEngine
             _r.AddChild(layout, avatarContainer);
         }
 
-        // Username text
-        var nameText = _r.CreateTextBlock(username, 11, _text);
+        // Username text (centered, 12px)
+        var nameText = _r.CreateTextBlock(username, 12, _text);
         if (nameText != null)
         {
+            _r.SetFontWeight(nameText, "SemiBold");
             try
             {
                 var trimProp = nameText.GetType().GetProperty("TextTrimming");
@@ -1188,12 +1800,14 @@ internal class RootcordEngine
                     trimProp.SetValue(nameText, Enum.Parse(trimProp.PropertyType, "CharacterEllipsis"));
             }
             catch { }
+            _r.SetHorizontalAlignment(nameText, "Center");
             _r.SetVerticalAlignment(nameText, "Center");
             _r.AddChild(layout, nameText);
         }
 
         _r.SetBorderChild(card, layout);
-        _r.SetBorderChild(wrapper, card);
+        _r.AddChild(separatorCard, card);
+        _r.SetBorderChild(wrapper, separatorCard);
 
         // Click: show user card popup above this card
         var cardBgCapture = _cardBg;
@@ -1348,13 +1962,41 @@ internal class RootcordEngine
         var divider = _r.CreateBorder(dividerColor, 0);
         if (divider != null) { _r.SetHeight(divider, 1); _r.SetMargin(divider, 8, 2, 8, 2); _r.AddChild(content, divider); }
 
-        // Profile button — opens Root's Profile pane (contains Settings, Support, Sign out)
+        // Settings button — opens Root's settings page directly
+        var settingsBtn = BuildPopupButton("\u2699  Settings", _text, _cardBg);
+        if (settingsBtn != null)
+        {
+            _r.SubscribeEvent(settingsBtn, "PointerPressed", () =>
+            {
+                DismissUserCardPopup();
+                var cmd = _r.GetPropertyValue(_homeViewModel, "SettingsPaneToggleCommand")
+                    ?? _r.GetPropertyValue(_homeViewModel, "SettingsCommand")
+                    ?? _r.GetPropertyValue(_homeViewModel, "OpenSettingsCommand");
+                if (cmd != null)
+                {
+                    InvokeCommand(cmd);
+                    Logger.Log(Tag, "Settings opened via command");
+                }
+                else
+                {
+                    // Fallback: open Profile pane (which contains Settings access)
+                    _allowProfileOnce = true;
+                    var profileCmd = _r.GetPropertyValue(_homeViewModel, "ProfilePaneToggleCommand");
+                    if (profileCmd != null) InvokeCommand(profileCmd);
+                    Logger.Log(Tag, "Settings: no direct command, opened Profile pane as fallback");
+                }
+            });
+            _r.AddChild(content, settingsBtn);
+        }
+
+        // Profile button — opens Root's Profile pane
         var profileBtn = BuildPopupButton("Profile", _text, _cardBg);
         if (profileBtn != null)
         {
             _r.SubscribeEvent(profileBtn, "PointerPressed", () =>
             {
                 DismissUserCardPopup();
+                _allowProfileOnce = true; // Let the next ProfileOpen through the intercept
                 var cmd = _r.GetPropertyValue(_homeViewModel, "ProfilePaneToggleCommand");
                 if (cmd != null) InvokeCommand(cmd);
             });
@@ -1446,43 +2088,67 @@ internal class RootcordEngine
 
     // ===== Status selector =====
 
-    private static readonly (string Label, string Color, string[] CommandNames)[] StatusOptions =
+    // Root only supports Active / Inactive / Disconnected (no DND or Invisible).
+    // We map them to user-friendly labels: Online → Active, Away → Inactive.
+    private static readonly (string Label, string Color, string EnumValue)[] StatusOptions =
     {
-        ("Online",         "#43b581", new[] { "SetOnlineStatusCommand", "GoOnlineCommand", "OnlineCommand" }),
-        ("Idle",           "#faa61a", new[] { "SetIdleStatusCommand", "GoIdleCommand", "IdleCommand" }),
-        ("Do Not Disturb", "#f04747", new[] { "SetDndStatusCommand", "SetDoNotDisturbCommand", "DndCommand", "DoNotDisturbCommand" }),
-        ("Invisible",      "#747f8d", new[] { "SetInvisibleStatusCommand", "GoInvisibleCommand", "InvisibleCommand", "SetOfflineStatusCommand" }),
+        ("Online", "#43b581", "Active"),
+        ("Away",   "#faa61a", "Inactive"),
     };
 
     private object? _statusSelectorPanel; // inline dropdown within the popup
 
     /// <summary>
-    /// Get the current user status label by probing HomeViewModel properties.
+    /// Get the current user status label by probing session/user properties.
+    /// Root uses UserOnlineStatus enum: Active, Inactive, Disconnected.
     /// </summary>
     private string GetCurrentStatusLabel()
     {
         if (_homeViewModel == null) return "Online";
         try
         {
-            // Try common property names for current status
+            // Walk: HomeViewModel → RootSessionAccessor → Session → UserInfoService → SessionUser → OnlineStatus
+            // Also try GlobalUser.OnlineStatus
+            foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
+            {
+                var accessor = _r.GetPropertyValue(_homeViewModel, accProp);
+                if (accessor == null) continue;
+                var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
+                if (session == null) continue;
+
+                // Try UserInfoService.SessionUser.OnlineStatus
+                var userInfoService = _r.GetPropertyValue(session, "UserInfoService");
+                if (userInfoService != null)
+                {
+                    var sessionUser = _r.GetPropertyValue(userInfoService, "SessionUser");
+                    if (sessionUser != null)
+                    {
+                        var onlineStatus = _r.GetPropertyValue(sessionUser, "OnlineStatus")
+                            ?? _r.GetPropertyValue(sessionUser, "MaxOnlineStatus")
+                            ?? _r.GetPropertyValue(sessionUser, "DeviceOnlineStatus");
+                        if (onlineStatus != null)
+                        {
+                            var s = onlineStatus.ToString() ?? "";
+                            Logger.Log(Tag, $"GetCurrentStatusLabel: raw='{s}' from UserInfoService.SessionUser");
+                            if (s.Contains("Inactive", StringComparison.OrdinalIgnoreCase)) return "Away";
+                            if (s.Contains("Disconnected", StringComparison.OrdinalIgnoreCase)) return "Away";
+                            return "Online"; // Active or anything else
+                        }
+                    }
+                }
+            }
+
+            // Fallback: try common property names directly on HomeViewModel
             var status = _r.GetPropertyValue(_homeViewModel, "UserStatus")
                 ?? _r.GetPropertyValue(_homeViewModel, "Status")
-                ?? _r.GetPropertyValue(_homeViewModel, "PresenceStatus")
-                ?? _r.GetPropertyValue(_homeViewModel, "CurrentStatus");
-
+                ?? _r.GetPropertyValue(_homeViewModel, "PresenceStatus");
             if (status != null)
             {
                 var s = status.ToString() ?? "";
-                // Map enum/string values to our labels
-                if (s.Contains("Idle", StringComparison.OrdinalIgnoreCase)) return "Idle";
-                if (s.Contains("Dnd", StringComparison.OrdinalIgnoreCase) ||
-                    s.Contains("DoNotDisturb", StringComparison.OrdinalIgnoreCase) ||
-                    s.Contains("Busy", StringComparison.OrdinalIgnoreCase)) return "Do Not Disturb";
-                if (s.Contains("Invisible", StringComparison.OrdinalIgnoreCase) ||
-                    s.Contains("Offline", StringComparison.OrdinalIgnoreCase)) return "Invisible";
-                if (s.Contains("Online", StringComparison.OrdinalIgnoreCase) ||
-                    s.Contains("Available", StringComparison.OrdinalIgnoreCase)) return "Online";
-                Logger.Log(Tag, $"GetCurrentStatusLabel: unrecognized status '{s}'");
+                if (s.Contains("Inactive", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Idle", StringComparison.OrdinalIgnoreCase) ||
+                    s.Contains("Away", StringComparison.OrdinalIgnoreCase)) return "Away";
+                return "Online";
             }
         }
         catch (Exception ex)
@@ -1494,10 +2160,8 @@ internal class RootcordEngine
 
     private static string GetStatusColor(string label) => label switch
     {
-        "Idle"           => "#faa61a",
-        "Do Not Disturb" => "#f04747",
-        "Invisible"      => "#747f8d",
-        _                => "#43b581",
+        "Away" => "#faa61a",
+        _      => "#43b581",
     };
 
     /// <summary>
@@ -1523,9 +2187,9 @@ internal class RootcordEngine
         var div = _r.CreateBorder(divColor, 0);
         if (div != null) { _r.SetHeight(div, 1); _r.SetMargin(div, 0, 2, 0, 4); _r.AddChild(_statusSelectorPanel, div); }
 
-        foreach (var (label, color, cmdNames) in StatusOptions)
+        foreach (var (label, color, enumValue) in StatusOptions)
         {
-            var row = BuildStatusRow(label, color, _text, _cardBg, cmdNames, popupContent);
+            var row = BuildStatusRow(label, color, _text, _cardBg, enumValue, popupContent);
             if (row != null) _r.AddChild(_statusSelectorPanel, row);
         }
 
@@ -1545,7 +2209,7 @@ internal class RootcordEngine
     }
 
     private object? BuildStatusRow(string label, string dotColor, string textColor,
-        string bgColor, string[] cmdNames, object popupContent)
+        string bgColor, string enumValue, object popupContent)
     {
         var rowBg = "#00000000"; // transparent default
         var rowHover = AdjustForHighlight(bgColor, 10);
@@ -1575,54 +2239,95 @@ internal class RootcordEngine
         _r.SubscribeEvent(row, "PointerEntered", () => _r.SetBackground(rowRef, rowHover));
         _r.SubscribeEvent(row, "PointerExited", () => _r.SetBackground(rowRef, rowBg));
 
-        // Click: try to invoke the status command, then dismiss
+        // Click: set status via UserInfoService.SetMaxOnlineStatusAsync()
         var capturedLabel = label;
-        var capturedCmdNames = cmdNames;
+        var capturedEnum = enumValue;
         _r.SubscribeEvent(row, "PointerPressed", () =>
         {
-            if (_homeViewModel == null) return;
-            bool invoked = false;
-
-            // Try each command name on HomeViewModel
-            foreach (var name in capturedCmdNames)
-            {
-                var cmd = _r.GetPropertyValue(_homeViewModel, name);
-                if (cmd != null)
-                {
-                    InvokeCommand(cmd);
-                    Logger.Log(Tag, $"Status changed to '{capturedLabel}' via {name}");
-                    invoked = true;
-                    break;
-                }
-            }
-
-            // Fallback: try SetStatus(string) / SetPresence method
-            if (!invoked)
-            {
-                try
-                {
-                    var setStatus = _homeViewModel.GetType().GetMethod("SetStatus",
-                        BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance);
-                    if (setStatus != null)
-                    {
-                        setStatus.Invoke(_homeViewModel, new object[] { capturedLabel });
-                        Logger.Log(Tag, $"Status changed to '{capturedLabel}' via SetStatus()");
-                        invoked = true;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log(Tag, $"SetStatus fallback error: {ex.Message}");
-                }
-            }
-
-            if (!invoked)
-                Logger.Log(Tag, $"Status '{capturedLabel}': no command found (visual-only change)");
-
+            SetUserOnlineStatus(capturedEnum, capturedLabel);
             DismissUserCardPopup();
         });
 
         return row;
+    }
+
+    /// <summary>
+    /// Set the user's online status via RootSession.UserInfoService.SetMaxOnlineStatusAsync().
+    /// Root uses UserOnlineStatus enum: Active, Inactive, Disconnected.
+    /// Falls back to SetDeviceOnlineStatusAsync (UserDeviceOnlineStatus: Active, Disconnected).
+    /// </summary>
+    private void SetUserOnlineStatus(string enumValue, string label)
+    {
+        if (_homeViewModel == null) return;
+        try
+        {
+            // Walk: HomeViewModel → RootSessionAccessor → Session → UserInfoService
+            object? userInfoService = null;
+            foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
+            {
+                var accessor = _r.GetPropertyValue(_homeViewModel, accProp);
+                if (accessor == null) continue;
+                var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
+                if (session == null) continue;
+                userInfoService = _r.GetPropertyValue(session, "UserInfoService");
+                if (userInfoService != null) break;
+            }
+
+            if (userInfoService == null)
+            {
+                Logger.Log(Tag, $"Status '{label}': UserInfoService not found");
+                return;
+            }
+
+            // Try each method name, find one where the enum value parses
+            var serviceType = userInfoService.GetType();
+            var methodNames = new[] { "SetMaxOnlineStatusAsync", "SetDeviceOnlineStatusAsync" };
+
+            foreach (var methodName in methodNames)
+            {
+                // Search type + all interfaces for the method
+                var candidates = new List<MethodInfo>();
+                foreach (var m in serviceType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
+                    if (m.Name == methodName) candidates.Add(m);
+                foreach (var iface in serviceType.GetInterfaces())
+                    foreach (var m in iface.GetMethods())
+                        if (m.Name == methodName) candidates.Add(m);
+
+                foreach (var method in candidates)
+                {
+                    var parms = method.GetParameters();
+                    if (parms.Length == 0) continue;
+
+                    var enumType = parms[0].ParameterType;
+                    if (!enumType.IsEnum) continue;
+
+                    // Check if our enum value exists in this enum type
+                    if (!Enum.IsDefined(enumType, enumValue))
+                    {
+                        // For "Inactive" on UserDeviceOnlineStatus (which only has Active/Disconnected),
+                        // skip this method and try the next one
+                        continue;
+                    }
+
+                    var statusValue = Enum.Parse(enumType, enumValue);
+
+                    // Invoke with just the enum param (skip overloads with CancellationToken)
+                    object?[] args = parms.Length == 1
+                        ? new[] { statusValue }
+                        : new[] { statusValue, System.Threading.CancellationToken.None };
+
+                    method.Invoke(userInfoService, args);
+                    Logger.Log(Tag, $"Status changed to '{label}' ({enumValue}) via {methodName}");
+                    return;
+                }
+            }
+
+            Logger.Log(Tag, $"Status '{label}': no compatible Set*OnlineStatusAsync method found on {serviceType.Name}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"Status '{label}' error: {ex.Message}");
+        }
     }
 
     private void SetAvatarInitial(object avatarBorder, string initial, string textColor)
@@ -1850,7 +2555,17 @@ internal class RootcordEngine
             {
                 _r.RunOnUIThread(() =>
                 {
-                    try { RefreshSelectedHighlight(); }
+                    try
+                    {
+                        RefreshSelectedHighlight();
+
+                        // Re-apply community members swap based on current tab type
+                        var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+                        if (sel != null && !IsDmTab(sel))
+                            SwapCommunityMembersToRight();
+                        else
+                            RevertCommunityMembersSwap();
+                    }
                     catch (Exception ex) { Logger.Log(Tag, $"Selection change handler error: {ex.Message}"); }
                 });
             }
@@ -1860,11 +2575,17 @@ internal class RootcordEngine
             Logger.Log(Tag, "Subscribed to SelectedTabViewModel changes");
 
         // Intercept Profile pane from reopening while Rootcord is active
+        // (except when user explicitly clicks our Profile button → _allowProfileOnce)
         _profileInterceptHandler = _r.SubscribePropertyChanged(_homeViewModel, (prop) =>
         {
             if (prop == "ProfileOpen" && IsApplied &&
                 _r.GetPropertyValue(_homeViewModel, "ProfileOpen") is true)
             {
+                if (_allowProfileOnce)
+                {
+                    _allowProfileOnce = false;
+                    return; // Allow this one through (user clicked our Profile button)
+                }
                 _r.RunOnUIThread(() =>
                 {
                     _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);

@@ -1,28 +1,25 @@
-# Uprooted Hook - Session State (2026-02-19)
+# Uprooted Hook - Session State (2026-02-20)
 
-## Release: v0.4.2
+## Release: v0.4.2 (in progress)
 
-## In-Progress: Light Theme Compatibility + Theme UX Refactor
+## Shipped This Cycle
 
-### Uncommitted changes (ready for testing)
-- **ThemeEngine**: `ReadLiveRootColors()` / `ReadLiveRootColor(key)` — reads Root's 29 color keys via `Application.TryGetResource`, returns proper `#AARRGGBB` hex (handles named colors like "White")
-- **ThemeEngine**: Auto-reverts Uprooted theme when Root variant changes (Dark↔Light↔PureDark)
-- **ThemeEngine**: `EnsureVariantChangeSubscribed()` called unconditionally from startup
-- **ThemeEngine**: SVG path swap (Light→Dark SVGs when Uprooted dark theme active on Light variant)
-- **ContentPages**: `ApplyThemedColors` reads live `TextPrimary`/`TextSecondary`/`TextTertiary`/`BackgroundSecondary`/`Border`/`BrandPrimary` from ThemeDictionaries — fixes Light theme colors
-- **ContentPages**: `AdjustForHighlight()` — luminance-aware highlight (darkens on light bg, lightens on dark bg). Replaced all 30 `Lighten(CardBg, N)` calls
-- **ContentPages**: Page background reads live `BackgroundPrimary`
-- **ContentPages**: Plugin cards have border+bg hover highlights
-- **ContentPages**: Themes plugin card shows "Open" button instead of toggle
-- **SidebarInjector**: Variant change callback removes injected controls + unwraps ScrollViewer + re-injects fresh
-- **SidebarInjector**: `SyncContentPagesFromNativeTree()` reads native fg/bg from visual tree at injection time
-- **SidebarInjector**: Nav hover uses live `HighlightLight`, selection uses live `HighlightNormal`
-- **SidebarInjector**: Version text color matches Root's native version TextBlock foreground
+All changes committed and pushed. Preparing v0.4.2 release.
+
+### Key features shipped
+- **Light/PureDark theme compatibility** — Settings UI adapts to all Root theme variants; live color system
+- **Rootcord plugin** — Discord-style vertical server sidebar, live toggle (experimental)
+- **Desktop notifications** — OS-level toast/notify-send when background update applied; respects AutoUpdateNotify
+- **Plugin UI overhaul** — Sort (enabled-first → Stable→Experimental → A-Z), Show More button (4 card limit), experimental opt-in toggle
+- **About page** — Links + Diagnostics cards removed; Open Logs button in title row
+- **ScheduleWalkBurst debounce** — No more freeze when rapidly navigating Root's real settings tabs
+- **AutoUpdater interval** — 6 hours → 1 minute
+- **Testing statuses** — ClearURLs→Stable, Themes→Beta, SilentTyping→Experimental
+- **Experimental toggle z-order fix** — Toggle pill now renders on top of banner
 
 ### Known issues / TODOs
 - **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
 - **SVG swap** not yet confirmed working (user hasn't tested Light+Uprooted dark theme SVGs)
-- Debug logging still present in `ReadLiveRootColors` and `ApplyThemedColors` — strip before commit
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
@@ -98,10 +95,11 @@ Key details:
 | 4.5a | ClearUrlsEngine | Strip tracking params from compose editor on Enter (14s delay) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
 | 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
-| 4.5d | AutoUpdater | Background update check (every 6 hours), encrypted .uprpkg download + decrypt + apply |
+| 4.5d | AutoUpdater | Background update check (every 1 minute), encrypted .uprpkg download + decrypt + apply; DesktopNotification on apply |
 | 4.5e | ProfileBadgeInjector | "Uprooted Dev" badge on profile popup (dev channel + hardcoded usernames, 5s delay, event-driven + 500ms fallback) |
 | 4.5f | SilentTypingEngine | DiagnosticListener-based interception: subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0 (12s delay). ~90 lines, by Kurumi Nanase. |
 | 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
+| 4.5h | RootcordEngine | Rootcord sidebar plugin (8s delay, dormant if disabled) |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution (video thumbnails for LinkEmbedEngine) |
 
 ## Link Embed Engine (v0.3.3–0.4.0)
