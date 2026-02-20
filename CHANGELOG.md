@@ -6,6 +6,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
+- **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
+
+### Changed
+
+- **Card border thickness** — 1.5px → 1.0px to match Root's native divider lines; color from Root's `Border` resource
+- **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
+- **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color
+- **ScrollViewer** — `HorizontalScrollBarVisibility = Disabled` on content ScrollViewers for correct width
+- **Plugin filter** — Dropdown overlay replaced with cycling toggle pill (All Plugins → Enabled → Disabled)
+- **Plugin sort** — Stability tier prioritized over enabled/disabled (Stable always before Beta)
+- **Themes "Open" button** — Sized to match toggle switches (44×24)
+- **Theme-immune cards** — Experimental banner, restart banner, and Developer/Stable badge use hardcoded colors with `uprooted-no-recolor`
+
+### Fixed
+
+- **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
+- **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
+
+---
+
 ## [0.4.2] - 2026-02-20
 
 ### Added
