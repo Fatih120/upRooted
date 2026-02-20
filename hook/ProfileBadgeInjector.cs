@@ -10,9 +10,10 @@ namespace Uprooted;
 /// - "Uprooted Dev" (gold): shown only on developer channel, gated to DeveloperUsernames (username) or DeveloperUserIds (UUID)
 /// - "Alpha User" (blue): shown on ALL channels. A user qualifies if:
 ///     (a) their UUID is in AlphaUserIds, OR
-///     (b) they have AlphaRoleId in their Roles collection (community context only)
-///   Role-based detection works automatically for all current role holders without UUID management.
-///   UUID list supplements for cross-server / DM contexts where roles aren't visible.
+///     (b) they appear in the session role cache (_confirmedAlphaIds), OR
+///     (c) they have AlphaRoleId in their Roles collection (community context — live check)
+///   On first sighting in the alpha community the UUID is cached; all subsequent opens
+///   (DMs, other communities) use the cache so the badge appears globally.
 ///
 /// UUID is read from MemberProfileView.DataContext → MessageContainerMember.GlobalUser.Id.ToString().
 /// Roles read from MemberProfileView.DataContext → Roles (ReadOnlyObservableCollection&lt;IViewModelBase&gt;).
@@ -86,6 +87,12 @@ internal class ProfileBadgeInjector
     private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
+
+    // Session-scoped role cache: UUIDs confirmed via role detection in community context.
+    // Populated on first sighting; used for all subsequent profile opens regardless of context
+    // (DMs, other communities) so badges appear globally, not just inside the alpha community.
+    private readonly HashSet<string> _confirmedAlphaIds = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _confirmedDevIds   = new(StringComparer.OrdinalIgnoreCase);
 
     public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null)
     {
@@ -395,7 +402,14 @@ internal class ProfileBadgeInjector
         // Get DataContext once — used for both UUID lookup and role check
         var dc = FindProfileDataContext(popup);
         var userId = TryGetUserIdFromDc(dc);
-        bool isAlphaUser = (userId != null && AlphaUserIds.Contains(userId)) || HasRoleId(dc, AlphaRoleId);
+
+        // Alpha: static UUID list OR session cache OR live role check (community context only).
+        // When live role check succeeds, UUID is added to session cache so the badge appears
+        // globally on future opens (DMs, other communities) — not just inside the alpha community.
+        bool alphaByRole = HasRoleId(dc, AlphaRoleId);
+        if (alphaByRole && userId != null) _confirmedAlphaIds.Add(userId);
+        bool isAlphaUser = (userId != null && (AlphaUserIds.Contains(userId) || _confirmedAlphaIds.Contains(userId)))
+                           || alphaByRole;
 
         if (alphaBadgePresent && devBadgePresent)
         {
@@ -437,7 +451,12 @@ internal class ProfileBadgeInjector
         var username = _r.GetText(usernameBlock) ?? "";
         Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
 
-        bool isDevUser = DeveloperUsernames.Contains(username) || (userId != null && DeveloperUserIds.Contains(userId)) || HasRoleId(dc, DeveloperRoleId);
+        // Dev: same pattern — live role check populates session cache for global badge display.
+        bool devByRole = HasRoleId(dc, DeveloperRoleId);
+        if (devByRole && userId != null) _confirmedDevIds.Add(userId);
+        bool isDevUser = DeveloperUsernames.Contains(username)
+                         || (userId != null && (DeveloperUserIds.Contains(userId) || _confirmedDevIds.Contains(userId)))
+                         || devByRole;
         if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
         // Inject presence icon inline next to username (beacon check — independent of badge logic)
