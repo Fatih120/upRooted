@@ -4,9 +4,15 @@
 
 ## Shipped This Cycle
 
-All changes committed and pushed. Preparing v0.4.2 release.
+### Post-v0.4.2 (custom theme overhaul)
+- **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range, smooth derivation, custom text color input, tag-based visual tree walker, variant switching
+- **Card border fix** — 1.5px → 1.0px, color from Root's `Border` resource (matches native divider lines)
+- **Nav item borders** — Visible 1px borders using Root's highlight resources
+- **Auto-nav fix** — `_hasAutoNavigated` flag prevents re-navigation on variant change
+- **Ping toggle island fix** — Hardcoded off-color for no-recolor island
+- **ScrollViewer width fix** — `HorizontalScrollBarVisibility = Disabled` for correct content stretch
 
-### Key features shipped
+### v0.4.2 features
 - **Light/PureDark theme compatibility** — Settings UI adapts to all Root theme variants; live color system
 - **Rootcord plugin** — Discord-style vertical server sidebar, live toggle (experimental)
 - **Desktop notifications** — OS-level toast/notify-send when background update applied; respects AutoUpdateNotify
@@ -18,8 +24,11 @@ All changes committed and pushed. Preparing v0.4.2 release.
 - **Experimental toggle z-order fix** — Toggle pill now renders on top of banner
 
 ### Known issues / TODOs
+- **DynamicResource binding via reflection silently fails** — `BindToDynamicResource` code present but doesn't propagate changes; tag-based walker is the real mechanism
+- **Root "Online" indicator and some sub-tabs** don't live-update with custom text color changes
+- **SVG style UI removed** — Root resolves SVGs at variant-load time; variant switching handles common case
+- **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text)
 - **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
-- **SVG swap** not yet confirmed working (user hasn't tested Light+Uprooted dark theme SVGs)
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 

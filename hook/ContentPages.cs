@@ -1900,11 +1900,11 @@ internal static class ContentPages
     /// ON: AccentGreen pill, thumb right. OFF: dim pill, thumb left.
     /// </summary>
     private static object? BuildToggleSwitch(AvaloniaReflection r, bool initialState, object? font,
-        Action<bool>? onToggled = null)
+        Action<bool>? onToggled = null, string? offColor = null, string? onColor = null)
     {
         bool state = initialState;
 
-        var dimColor = AdjustForHighlight(CardBg, 18);
+        var dimColor = offColor ?? AdjustForHighlight(CardBg, 18);
         var pillColor = state ? AccentGreen : dimColor;
 
         // Outer pill
@@ -1928,7 +1928,7 @@ internal static class ContentPages
         r.SetBorderChild(pill, thumb);
 
         // Capture the current accent for closures
-        var accentColor = AccentGreen;
+        var accentColor = onColor ?? AccentGreen;
 
         // Click handler
         r.SubscribeEvent(pill, "PointerPressed", () =>
@@ -2270,7 +2270,7 @@ internal static class ContentPages
                 r.AddChild(pingHeaderPanel, pingTextStack);
             }
 
-            var pingToggle = BuildToggleSwitch(r, pingActive, font, enabled =>
+            var pingToggle = BuildToggleSwitch(r, pingActive, font, offColor: "#2A2A44", onToggled: enabled =>
             {
                 try
                 {
@@ -2503,8 +2503,7 @@ internal static class ContentPages
         bool isActive, object? font, ThemeEngine? themeEngine,
         UprootedSettings settings, Action? onThemeChanged)
     {
-        var restingBorder = AdjustForHighlight(CardBg, 15);
-        var borderColor = isActive ? accentColor : restingBorder;
+        var borderColor = isActive ? accentColor : CardBorder;
         var card = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (card == null) return null;
         SetBorderStroke(r, card, borderColor, CardBorderThickness);
@@ -2625,7 +2624,7 @@ internal static class ContentPages
 
         // Hover effect — card border + radio border + inner dot highlight (no bg change)
         var hoverBorder = AdjustForHighlight(CardBg, 35);
-        var radioDimBorder = AdjustForHighlight(CardBg, 25);
+        var radioRestBorder = AdjustForHighlight(CardBg, 25);
         var radioHoverBorder = AdjustForHighlight(CardBg, 50);
         var dotHoverColor = AdjustForHighlight(CardBg, 40);
         var radioRef = radioOuter;
@@ -2645,9 +2644,9 @@ internal static class ContentPages
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, restingBorder, CardBorderThickness);
+                SetBorderStroke(r, card, CardBorder, CardBorderThickness);
                 if (radioRef != null)
-                    SetBorderStroke(r, radioRef, radioDimBorder, 2.0);
+                    SetBorderStroke(r, radioRef, radioRestBorder, 2.0);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }
@@ -3622,22 +3621,18 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Create a card: BG=#0f1923, CornerRadius=12, BorderThickness=0.5
-    /// </summary>
-    /// <summary>
-    /// Constant border thickness for all cards — prevents layout shift on hover/selection.
+    /// Constant border thickness for all cards — matches Root's native divider lines.
     /// Color changes only, never thickness.
     /// </summary>
-    private const double CardBorderThickness = 1.5;
+    private const double CardBorderThickness = 1.0;
 
     private static object? CreateCard(AvaloniaReflection r, bool withHoverHighlight = false)
     {
         var card = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (card == null) return null;
 
-        // Visible resting border — constant thickness, color changes on hover
-        var restingBorder = AdjustForHighlight(CardBg, 15);
-        SetBorderStroke(r, card, restingBorder, CardBorderThickness);
+        // Visible resting border — uses Root's Border resource for divider-matching color
+        SetBorderStroke(r, card, CardBorder, CardBorderThickness);
 
         // Combine bg + border tags for live walker recoloring
         r.SetTag(card, "dyn-bg:BackgroundSecondary,dyn-bb:Border");

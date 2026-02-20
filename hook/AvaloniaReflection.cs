@@ -888,6 +888,17 @@ internal class AvaloniaReflection
         var sv = Activator.CreateInstance(ScrollViewerType);
         if (content != null)
             _scrollViewerContent?.SetValue(sv, content);
+
+        // Disable horizontal scrollbar so content stretches to fill available width
+        // (without this, ScrollViewer may give content infinite horizontal space)
+        try
+        {
+            var visType = ScrollViewerType.Assembly.GetType("Avalonia.Controls.Primitives.ScrollBarVisibility");
+            if (visType != null)
+                sv?.GetType().GetProperty("HorizontalScrollBarVisibility")?.SetValue(sv, Enum.Parse(visType, "Disabled"));
+        }
+        catch { }
+
         return sv;
     }
 
