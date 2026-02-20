@@ -203,6 +203,8 @@ The Avalonia-native link embed engine is broadly functional:
 | `hook/ContentPages.cs` | Fixed About > Status enabled plugin count: iterates `KnownPlugins` with same enabled-check as Plugins page (was counting ghost entries like `settings-panel` from legacy migration). Also: `Logger.Enable()` call on developer channel switch, `Logger.Disable()` + log reorder on stable channel switch. |
 | `hook/Logger.cs` | Added `Enable()` method for runtime re-enable when switching to developer channel. |
 | `hook/SidebarInjector.cs` | Save bar: replaced all `SetIsVisible`/`ClearValue` calls with `Opacity=0`/`MaxHeight=0`/`IsHitTestVisible=false` — avoids corrupting Root's `IsVisible` binding. `CollapseSaveBar()`/`RestoreSaveBar()` methods with `_saveBarCollapsed` flag for efficient LayoutUpdated intercept. |
+| `hook/RootcordEngine.cs` | User card overhaul (2026-02-20): removed `_profileInterceptHandler` + `_allowProfileOnce` (blocked all ProfileOpen events — counterproductive with PanePlacement=Left guard active). Avatar grid + textPanel now have PointerPressed → ProfilePaneToggleCommand. Replaced SystemTray reparenting with always-on 4-button cluster: P (FriendsPaneToggle), D (DirectMessagesPaneToggle), N (NotificationsPaneToggle), ⚙ (ProfilePaneToggle). Dead fields removed: `_userBarTrayHost`, `_savedTrayRow/Col/ColSpan/RowSpan`. RevertUserBar simplified. |
+| `hook/RootcordEngine.cs` | RefreshSelectedHighlight hardening (2026-02-20): "Object type Avalonia.Controls.Decorator does not match target type Avalonia.Controls.Grid" crash on every server icon click. Root cause: `GetBorderChild` has no try/catch; `_borderChild.GetValue()` throws when child[1] in strip container is a Decorator, not Border. Added IsBorder() guard before every GetBorderChild call + try/catch around each RefreshSelectedHighlight section. Logs diagnostic type name when non-Border is encountered. |
 | `hook/SidebarInjector.cs` | Settings reload on nav click: `_settings` changed from `readonly` to mutable; `OnNavItemClicked` calls `UprootedSettings.Load()` before building page so channel badge reflects runtime changes. |
 | `hook/ContentPages.cs` | Restart banner persists across tab switches: static `_launchPluginStates` snapshots once on first build (not re-snapshotted on rebuild). Banner starts visible on rebuild if any plugin already diverges from launch state. |
 | `hook/UprootedSettings.cs` | Fixed: added `case "Version":` to INI parser — Version was never read from disk, breaking version migration detection |
@@ -263,10 +265,68 @@ See `docs/dev/TESTING.md` for full reference.
 
 ## Next Steps
 
-1. **MessageLogger: validate async pollers + edit detection** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position and edit indicators deployed. Need real-world validation: test actual deletions + edits, run `scripts/analyze-msglogger.ps1`. Confirm HasBeenDeleted fires within 3s, confirm edit cards appear after grace period.
-2. **SilentTyping: verify with second account** — C# engine confirmed blocking SetTypingIndicator in log (GrpcChannel patching working). Need second-account test to verify the typing indicator is actually suppressed on the receiving end.
-3. **Avalonia-native NSFW filter** — Phase 4.5g deployed; verify Avalonia-native redesign is working
-4. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
+1. **Rootcord: validate tab-switch highlight fix** — Enable Rootcord from Uprooted plugins page, then click several server icons. Check hook log for either `RefreshHL: strip[N] child[1] is Decorator` (guard fired, crash prevented) or `RefreshHL strip[N] error: ...` (unexpected error). If Decorator guard fires, follow up to understand what Root puts in child[1] of the strip container vs what we expect (Border with TextBlock label).
+2. **Rootcord: validate user card click** — Click avatar and text panel in user card — profile pane should open (PanePlacement=Left). Click P/D/N/⚙ buttons — pane should open on the left side between server strip and channel list.
+3. **MessageLogger: validate async pollers + edit detection** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position and edit indicators deployed. Need real-world validation: test actual deletions + edits, run `scripts/analyze-msglogger.ps1`. Confirm HasBeenDeleted fires within 3s, confirm edit cards appear after grace period.
+4. **SilentTyping: verify with second account** — C# engine confirmed blocking SetTypingIndicator in log (GrpcChannel patching working). Need second-account test to verify the typing indicator is actually suppressed on the receiving end.
+5. **Avalonia-native NSFW filter** — Phase 4.5g deployed; verify Avalonia-native redesign is working
+6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
+
+## Rootcord Plugin (v0.4.2 — 2026-02-20)
+
+**Status:** Functionally rebuilt. User card/button wiring corrected. Tab-switch highlight crash guarded. Awaiting validation with Rootcord actually enabled + server switching.
+
+### Architecture (current)
+
+| Area | Implementation |
+|------|----------------|
+| Server strip | `_serverStrip` StackPanel (vertical), Col 0 of HomeView grid; server icons + DM home button injected |
+| User card | `_userBar` Border, ZIndex=10, ColSpan=all cols, Col 0, Row 1; floats over channel list as 240px overlay |
+| User card — Col 0 | Avatar grid (`avatarGrid`) with PointerPressed → `ProfilePaneToggleCommand` |
+| User card — Col 1 | Text panel (username + discriminator) with PointerPressed → `ProfilePaneToggleCommand` |
+| User card — Col 2 | 4-button StackPanel: P→`FriendsPaneToggleCommand`, D→`DirectMessagesPaneToggleCommand`, N→`NotificationsPaneToggleCommand`, ⚙→`ProfilePaneToggleCommand` |
+| PanePlacement guard | `_panePlacementGuardHandler` re-asserts `SplitView.PanePlacement=Left` if Root resets it |
+| Members swap | `SwapCommunityMembersToRight()` — column rotation in layoutGrid, margin/padding clear |
+| Flyout flip | `FlipMemberFlyoutPlacements()` — flips `RightEdgeAlignedTop`→`LeftEdgeAlignedTop` in tree |
+
+### Key Fixes Applied
+
+**Profile intercept removed**: `_profileInterceptHandler` subscribed to `HomeViewModel.ProfileOpen`
+and reset it to false (closing the pane) on every toggle — UNLESS `_allowProfileOnce=true` was set
+first. The "S" button never set that flag. With `PanePlacement=Left` now enforced by the guard, the
+intercept was counterproductive. Removed entirely.
+
+**4-button cluster corrected**: Was trying to reparent Root's native `_systemTrayBorder` (Row 1, Col 4
+of HomeView grid) — fragile and error-prone. Now always uses 4 custom buttons with the correct
+HomeViewModel commands. SystemTray reparenting code + save/restore state fully removed.
+
+**Avatar/textPanel click**: Both avatar grid and text panel now have PointerPressed handlers that invoke
+`ProfilePaneToggleCommand`, making the whole left portion of the user card clickable for profile.
+
+### Known Issue — Tab Switch Highlight Crash
+
+`RefreshSelectedHighlight()` throws on every server icon click:
+```
+Object type Avalonia.Controls.Decorator does not match target type Avalonia.Controls.Grid.
+```
+
+**Root cause**: `GetBorderChild(border)` uses `_borderChild = BorderType.GetProperty("Child")` — a
+PropertyInfo whose DeclaringType is `Border`. When `border` is actually a `Decorator` (a supertype),
+`_borderChild.GetValue(Decorator)` fails because `Grid`-specific targets in the PropertyInfo's
+declaring type don't match. The server strip container's `children[1]` is sometimes a Decorator in
+Root's layout rather than a Border.
+
+**Defensive fix applied**: `IsBorder(child)` guard before every `GetBorderChild` call. Each logical
+block wrapped in try/catch. Non-Border types logged as `RefreshHL: strip[N] child[1] is Decorator`.
+
+**Status**: Awaiting test run with Rootcord enabled + server switching to confirm guards fire and which
+visual element type Root uses in those slots.
+
+### Recon Plugin Note
+
+The [Recon] plugin (user's custom plugin) fires on settings page open, not HomeView. Output goes to
+`uprooted-hook.log` as `[Recon]` entries (not a separate file). Useful for capturing style properties
+of nav sidebar controls. Not yet fired during Rootcord-active HomeView interaction.
 
 ## ClearURLs Engine Notes
 

@@ -272,7 +272,7 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 | `MessageView.cs` | 3,602 | `UI.Messages.MessageView` | Y | Chat message control — named controls, updateBackgroundColor(), action bar, context menu, mention/hover highlights, role colors |
 | `MemberProfileView.cs` | 1,582 | `UI.Members.MemberProfileView` | Y | Member profile popup — avatar, badges, online status, notes, quick message, action buttons |
 | `MembersView.cs` | 1,319 | `UI.Community.Members.MembersView` | N | Community members panel |
-| `HomeView.cs` | 1,280 | `UI.Home.HomeView` | N | Main view after login — tab host |
+| `HomeView.cs` | 1,280 | `UI.Home.HomeView` | partial | Main view after login — grid (3 rows: header, TabsControl, RootSplitView), pane bindings, SplitView structure documented in AVALONIA_PATTERNS.md §HomeView Structure |
 | `CommunityTabView.cs` | 1,232 | `UI.Home.CommunityTabView` | N | Community tab — channels, chat, members |
 | `CreateCommunityView.cs` | 1,156 | `UI.Moderation` | N | Create community dialog |
 | `InviteMembersView.cs` | 841 | `UI.Moderation` | N | Invite members dialog |
@@ -305,7 +305,7 @@ AvaloniaEdit (CompiledAvaloniaXaml.!AvaloniaResources.NamespaceInfo)
 
 | File | Lines | Namespace | Analyzed | Description |
 |------|------:|-----------|:--------:|-------------|
-| `HomeViewModel.cs` | 883 | `UI.Home.HomeViewModel` | N | Main view after login: tab management, navigation, DM calls |
+| `HomeViewModel.cs` | 883 | `UI.Home.HomeViewModel` | partial | Main view after login: tab management, navigation, DM calls. Confirmed pane commands: FriendsPaneToggleCommand, DirectMessagesPaneToggleCommand, NotificationsPaneToggleCommand, ProfilePaneToggleCommand. PaneViewModel, PaneOpen, SelectedTabViewModel confirmed. See AVALONIA_PATTERNS.md §HomeView Structure. |
 | `MessageViewModel.cs` | 786 | `UI.Messages.MessageViewModel` | partial | Message data: HasSelfMention, HasLocalPendingReply, content, timestamps, edit state |
 | `CommunityTabViewModel.cs` | 678 | `UI.Home.CommunityTabViewModel` | N | Community tab VM — channel lists, members, chat |
 | `CreateCommunityViewModel.cs` | 464 | `UI.Moderation` | N | Create community VM |

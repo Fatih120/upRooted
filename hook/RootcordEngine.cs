@@ -2980,23 +2980,34 @@ internal class RootcordEngine
         bool isDmSelected = selectedTab != null && IsDmTab(selectedTab);
 
         // Update Home button highlight
-        if (_homeButton != null)
+        try
         {
-            var homeChildren = _r.GetChildren(_homeButton);
-            if (homeChildren != null && homeChildren.Count >= 2)
+            if (_homeButton != null)
             {
-                var pill = homeChildren[0];
-                var iconBorder = homeChildren[1];
+                var homeChildren = _r.GetChildren(_homeButton);
+                if (homeChildren != null && homeChildren.Count >= 2)
+                {
+                    var pill = homeChildren[0];
+                    var iconBorder = homeChildren[1];
 
-                _r.SetBackground(pill, isDmSelected ? _accent : "#00000000");
-                _r.SetHeight(pill, isDmSelected ? PillHeight : 8);
-                _r.SetBackground(iconBorder, isDmSelected ? _accent : _cardBg);
+                    _r.SetBackground(pill, isDmSelected ? _accent : "#00000000");
+                    _r.SetHeight(pill, isDmSelected ? PillHeight : 8);
+                    _r.SetBackground(iconBorder, isDmSelected ? _accent : _cardBg);
 
-                var iconChild = _r.GetBorderChild(iconBorder);
-                if (iconChild != null && _r.IsTextBlock(iconChild))
-                    _r.SetForeground(iconChild, isDmSelected ? "#FFFFFF" : _text);
+                    if (_r.IsBorder(iconBorder))
+                    {
+                        var iconChild = _r.GetBorderChild(iconBorder);
+                        if (iconChild != null && _r.IsTextBlock(iconChild))
+                            _r.SetForeground(iconChild, isDmSelected ? "#FFFFFF" : _text);
+                    }
+                    else
+                    {
+                        Logger.Log(Tag, $"RefreshHL: homeButton iconBorder is {iconBorder?.GetType().Name ?? "null"}, skipping GetBorderChild");
+                    }
+                }
             }
         }
+        catch (Exception ex) { Logger.Log(Tag, $"RefreshHL home button error: {ex.Message}"); }
 
         // Update community server icons
         if (_serverStrip == null) return;
@@ -3022,19 +3033,30 @@ internal class RootcordEngine
             if (container == null) continue;
             bool isSelected = idx < communityTabs.Count && communityTabs[idx] == selectedTab;
 
-            var containerChildren = _r.GetChildren(container);
-            if (containerChildren == null || containerChildren.Count < 2) { idx++; continue; }
+            try
+            {
+                var containerChildren = _r.GetChildren(container);
+                if (containerChildren == null || containerChildren.Count < 2) { idx++; continue; }
 
-            var pill = containerChildren[0];
-            var iconBorder = containerChildren[1];
+                var pill = containerChildren[0];
+                var iconBorder = containerChildren[1];
 
-            _r.SetBackground(pill, isSelected ? _accent : "#00000000");
-            _r.SetHeight(pill, isSelected ? PillHeight : 8);
-            _r.SetBackground(iconBorder, isSelected ? _accent : _cardBg);
+                _r.SetBackground(pill, isSelected ? _accent : "#00000000");
+                _r.SetHeight(pill, isSelected ? PillHeight : 8);
+                _r.SetBackground(iconBorder, isSelected ? _accent : _cardBg);
 
-            var iconChild = _r.GetBorderChild(iconBorder);
-            if (iconChild != null && _r.IsTextBlock(iconChild))
-                _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : _text);
+                if (_r.IsBorder(iconBorder))
+                {
+                    var iconChild = _r.GetBorderChild(iconBorder);
+                    if (iconChild != null && _r.IsTextBlock(iconChild))
+                        _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : _text);
+                }
+                else
+                {
+                    Logger.Log(Tag, $"RefreshHL: strip[{idx}] child[1] is {iconBorder?.GetType().Name ?? "null"}, not Border — skipping text recolor");
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"RefreshHL strip[{idx}] error: {ex.Message}"); }
 
             idx++;
         }

@@ -19,6 +19,12 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **NsfwFilter: validate Avalonia-native redesign** — Phase 4.5g deployed. Verify images are being classified and blurred. Check hook log for scan timer entries and Vision API calls. Confirm overlay + click-to-reveal works.
   - Files: `hook/NsfwFilter.cs`
 
+- [ ] **Rootcord: validate tab-switch highlight fix** — `RefreshSelectedHighlight()` throws "Object type Avalonia.Controls.Decorator does not match target type Avalonia.Controls.Grid" on every server icon click. Defensive IsBorder guards + try/catches added (2026-02-20). Enable Rootcord → click server icons → check hook log for `RefreshHL: strip[N] child[1] is Decorator` (guard firing) or errors. Goal: confirm no crash and correct highlight behavior.
+  - Files: `hook/RootcordEngine.cs`
+
+- [ ] **Rootcord: validate user card + 4-button cluster** — Rebuilt (2026-02-20): profile intercept removed, avatar+textPanel→ProfilePane click, 4-button P/D/N/⚙. Enable Rootcord, verify: (1) clicking avatar/text opens profile pane on left; (2) P/D/N each opens correct pane on left; (3) ⚙ opens settings/profile pane on left; (4) no layout regression.
+  - Files: `hook/RootcordEngine.cs`
+
 - [ ] **Theme Engine v2: validate in production** — ThemeEngine v2 (resource-first, OKLCH) rewrite is deployed but not yet tested in production. Verify: (1) all 3 presets (crimson, cosmic-smoothie, loki) display correctly; (2) custom theme live preview is smooth; (3) theme revert restores all defaults; (4) variant switching (Dark/PureDark/Light) preserves overrides; (5) ping color overrides SelfMention keys correctly.
   - Files: `hook/ThemeEngine.cs`
 
@@ -62,7 +68,8 @@ Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The r
 - [ ] **Analyze RootSvgImage.cs** (144 lines) — SVG image with per-theme path binding
 - [ ] **Analyze RootImageLoader.cs** (178 lines) — Image loading control
 - [ ] **Analyze RootFlyout.cs** (172 lines) — Flyout popup base
-- [ ] **Analyze HomeViewModel.cs** (883 lines) — Main view after login: tab management, navigation, DM calls
+- [ ] **Complete HomeView.cs analysis** (1,280 lines) — Grid/row layout confirmed (header, TabsControl row 1, RootSplitView row 2). Remaining: banner row contents, SystemTrayBorder structure, community switcher column layout.
+- [ ] **Complete HomeViewModel.cs analysis** (883 lines) — Pane commands confirmed (FriendsPaneToggle, DirectMessagesPaneToggle, NotificationsPaneToggle, ProfilePaneToggle), PaneViewModel/PaneOpen/SelectedTabViewModel confirmed. Remaining: Tabs collection type, tab switch logic, RightThumbWidth.
 
 ### Complete partial analysis
 
@@ -104,6 +111,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Rootcord: user card + button wiring overhaul** (2026-02-20) — Removed `_profileInterceptHandler` (was blocking all ProfileOpen events). Removed SystemTray reparenting (fragile, complex). Avatar + textPanel now have PointerPressed → ProfilePaneToggleCommand. 4-button cluster always-custom: P/FriendsPaneToggle, D/DirectMessagesPaneToggle, N/NotificationsPaneToggle, ⚙/ProfilePaneToggle. Dead fields removed. RevertUserBar simplified.
+- [x] **Rootcord: RefreshSelectedHighlight crash guard** (2026-02-20) — Added IsBorder() guard before every GetBorderChild call + try/catch per section. Logs diagnostic type when non-Border found. Prevents the "Object type Avalonia.Controls.Decorator does not match target type" crash on server icon click. Root cause: strip container children[1] can be Decorator in some layouts.
 - [x] **Theme Engine v2: resource-first rewrite with OKLCH** (2026-02-19) — Full rewrite of ThemeEngine.cs (2638 → ~900 lines). Targets Root's actual 32 DynamicResource keys. OKLCH palette generation. Eliminates 11 walk methods + 500ms timer.
 - [x] **Silent Typing: restored JS interception** (2026-02-19) — Replaced no-op stub with Kurumi Nanase's working fetch/XHR intercept. Both C# and JS layers now active.
 - [x] **SilentTyping: fix C# engine to actually block gRPC calls** (2026-02-19) — Root uses `Grpc.Net.Client.GrpcChannel` (not raw HttpClient) for gRPC. Broadened discovery: removed keyword gate from instance walk, removed type-name filter from static scan, increased depth 8→12, added HttpMessageHandler detection, added GrpcChannel-aware patching (extracts internal `HttpInvoker` and patches its `_handler`). Now blocks SetTypingIndicator (confirmed in log). Also: stripped em dashes from plugin descriptions, case-insensitive URL matching.

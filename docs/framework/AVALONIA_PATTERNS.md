@@ -18,7 +18,8 @@
 5. [Threading Model](#threading-model)
 6. [Control Hierarchy](#control-hierarchy)
 7. [Root Custom Control Types](#root-custom-control-types)
-8. [Layout System](#layout-system)
+8. [HomeView Structure](#homeview-structure-confirmed-via-ilspy--2026-02-20)
+9. [Layout System](#layout-system)
 9. [Advanced Patterns](#advanced-patterns)
 10. [Common Reflection Patterns](#common-reflection-patterns)
 11. [Pitfalls](#pitfalls)
@@ -480,6 +481,61 @@ var eventInfo = app.GetType().GetEvent("ActualThemeVariantChanged");
 ```
 
 Note: `RequestedThemeVariant` changes trigger `ActualThemeVariantChanged`. When Root's user picks a different theme via the settings panel, our ThemeEngine needs to re-apply to the new variant's dictionary.
+
+---
+
+## HomeView Structure (Confirmed via ILSpy — 2026-02-20)
+
+Root's main app view after login. Grid layout with rows:
+
+| Row | Content | Grid span |
+|-----|---------|-----------|
+| 0 | Header/banner | Col 0, ColSpan 6 |
+| 1 | `TabsControl` (Tabalonia) + `SystemTrayBorder` (RootBorder, right side) | Col 0–5 |
+| 2 | `RootSplitView` (main content + utility pane) | Col 0, ColSpan 6 |
+
+### TabsControl (native Root tab strip — row 1)
+
+Root uses `TabsControl` from **Tabalonia** (third-party tab library), **not** a plain `TabControl`. Each tab is a `DragTabItem` wrapping a `UserControl` (`CommunityTabView`, `DirectMessageTabView`, or `NewTabView`). Tabs support drag-reorder.
+
+**Key bindings:**
+- `ItemsSource` → `HomeViewModel.Tabs` (collection of `ITabViewModel`)
+- `SelectedItem` ↔ `HomeViewModel.SelectedTabViewModel` (TwoWay)
+- `TabItemWidth` = 200 px; `LeftThumbWidth` = 8 px
+
+> **Rootcord replaces this strip** with a custom StackPanel injected into Col 0 of the outer HomeView grid. The native `TabsControl` remains in the tree but is hidden/overlaid.
+
+### RootSplitView (row 2)
+
+```
+RootSplitView (PanePlacement=Right by default)
+├── Pane = RootBorder → Border (BackgroundPrimary) → ContentControl
+│     bound to HomeViewModel.PaneViewModel
+│     (Friends / DMs / Notifications / Profile panes go here)
+└── Content = ContentControl
+      bound to HomeViewModel.SelectedTabViewModel.ContentViewModel
+      (main chat/community view)
+```
+
+**Pane toggle commands** on `HomeViewModel`:
+| Command | Pane shown |
+|---------|-----------|
+| `FriendsPaneToggleCommand` | Friends list |
+| `DirectMessagesPaneToggleCommand` | DM list |
+| `NotificationsPaneToggleCommand` | Notifications |
+| `ProfilePaneToggleCommand` | User profile / settings |
+
+**Rootcord** sets `PanePlacement=Left` and guards it with a `PropertyChanged` subscription so the pane appears between the server strip and channel list rather than on the right.
+
+### GetBorderChild / PropertyInfo type mismatch pitfall
+
+`AvaloniaReflection.GetBorderChild()` caches `BorderType.GetProperty("Child")`. In Avalonia, `Child` is declared on `Decorator` (which `Border` extends). **However**, calling `GetValue()` on a control that is NOT a Border subtype throws:
+
+```
+Object type Avalonia.Controls.Decorator does not match target type [X]
+```
+
+where `[X]` is the PropertyInfo's reflected declaring class. When walking visual trees where some containers may be plain `Decorator` wrappers (e.g., Avalonia content presenters wrapping injected items), always guard with `IsBorder()` before calling `GetBorderChild()`. The Rootcord `RefreshSelectedHighlight()` method hit this in the server strip container loop.
 
 ---
 
