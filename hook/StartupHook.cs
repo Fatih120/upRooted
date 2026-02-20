@@ -503,6 +503,23 @@ internal class StartupHook
                 {
                     Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
                 }
+
+                // Recon logger: ROOTCORD_RECON=1 env var activates debug instrumentation (dev only)
+                if (Environment.GetEnvironmentVariable("ROOTCORD_RECON") == "1")
+                {
+                    resolver.RunOnUIThread(() =>
+                    {
+                        try
+                        {
+                            ReconLogger.Attach(resolver, mainWindow!);
+                            Logger.Log("Startup", "Phase 4.5h: ReconLogger attached (ROOTCORD_RECON=1)");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Startup", $"ReconLogger.Attach error: {ex.Message}");
+                        }
+                    });
+                }
             }
 
             // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
