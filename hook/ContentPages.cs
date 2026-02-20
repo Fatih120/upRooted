@@ -189,11 +189,39 @@ internal static class ContentPages
         r.SetMargin(page, 24, 24, 24, 0);
         r.SetTag(page, "uprooted-content");
 
-        // Page title
-        var pageTitle = r.CreateTextBlock("Uprooted", 15, TextWhite);
-        r.SetFontWeightNumeric(pageTitle, 600);
-        ApplyFont(r, pageTitle, font);
-        r.AddChild(page, pageTitle);
+        // Page title row: "Uprooted" left, "Open Logs" button right
+        var pageTitleRow = r.CreatePanel();
+        if (pageTitleRow != null)
+        {
+            var pageTitle = r.CreateTextBlock("Uprooted", 15, TextWhite);
+            r.SetFontWeightNumeric(pageTitle, 600);
+            ApplyFont(r, pageTitle, font);
+            r.SetVerticalAlignment(pageTitle, "Center");
+            r.AddChild(pageTitleRow, pageTitle);
+
+            var logBtnText = r.CreateTextBlock("Open Logs", 11, TextMuted);
+            ApplyFont(r, logBtnText, font);
+            r.SetHorizontalAlignment(logBtnText, "Center");
+            var logBtnBg = ColorUtils.Lighten(CardBg, 8);
+            var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
+            if (logBtn != null)
+            {
+                r.SetPadding(logBtn, 10, 4, 10, 4);
+                r.SetHorizontalAlignment(logBtn, "Right");
+                r.SetVerticalAlignment(logBtn, "Center");
+                r.SetCursorHand(logBtn);
+                SetBorderStroke(r, logBtn, CardBorder, 0.5);
+                var logPath = Logger.GetLogPath();
+                r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
+                r.SubscribeEvent(logBtn, "PointerEntered", () =>
+                    r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
+                r.SubscribeEvent(logBtn, "PointerExited", () =>
+                    r.SetBackground(logBtn, logBtnBg));
+            }
+            r.AddChild(pageTitleRow, logBtn);
+
+            r.AddChild(page, pageTitleRow);
+        }
 
         // Card 1: Uprooted identity
         var identityCard = CreateCard(r);
@@ -513,82 +541,6 @@ internal static class ContentPages
         }
     afterUpdates:
 
-        // Card 3: Links
-        var linksCard = CreateCard(r);
-        if (linksCard != null)
-        {
-            r.SetMargin(linksCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var linksTitle = CreateSectionHeader(r, "LINKS", font);
-            r.AddChild(cardContent, linksTitle);
-
-            AddLinkField(r, cardContent, "GitHub", "github.com/watchthelight/uprooted", true, font);
-            AddLinkField(r, cardContent, "Website", "uprooted.sh", false, font);
-
-            r.SetBorderChild(linksCard, cardContent);
-            r.AddChild(page, linksCard);
-        }
-
-        // Card 5: Log file path (diagnostics)
-        var logCard = CreateCard(r);
-        if (logCard != null)
-        {
-            r.SetMargin(logCard, 0, 12, 0, 0);
-            var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
-            r.SetMargin(cardContent, 24, 24, 24, 24);
-
-            var logTitle = CreateSectionHeader(r, "DIAGNOSTICS", font);
-            r.AddChild(cardContent, logTitle);
-
-            // Log file row: path text + Open button
-            var logRow = r.CreatePanel();
-            if (logRow != null)
-            {
-                r.SetMargin(logRow, 0, 12, 0, 0);
-
-                var logPathText = r.CreateTextBlock(
-                    "Log file: " + Logger.GetLogPath(),
-                    12, TextDim);
-                if (logPathText != null)
-                {
-                    ApplyFont(r, logPathText, font);
-                    r.SetTextWrapping(logPathText, "Wrap");
-                    r.SetVerticalAlignment(logPathText, "Center");
-                    r.SetMargin(logPathText, 0, 0, 70, 0); // leave room for button
-                }
-                r.AddChild(logRow, logPathText);
-
-                // "Open" button
-                var openBtnText = r.CreateTextBlock("Open", 12, TextWhite);
-                r.SetFontWeightNumeric(openBtnText, 500);
-                ApplyFont(r, openBtnText, font);
-                r.SetHorizontalAlignment(openBtnText, "Center");
-                var openBtnBg = ColorUtils.Lighten(CardBg, 8);
-                var openBtn = r.CreateBorder(openBtnBg, 6, openBtnText);
-                if (openBtn != null)
-                {
-                    r.SetPadding(openBtn, 12, 5, 12, 5);
-                    r.SetHorizontalAlignment(openBtn, "Right");
-                    r.SetVerticalAlignment(openBtn, "Center");
-                    r.SetCursorHand(openBtn);
-                    SetBorderStroke(r, openBtn, CardBorder, 0.5);
-                    var logPath = Logger.GetLogPath();
-                    r.SubscribeEvent(openBtn, "PointerPressed", () => OpenInExplorer(logPath));
-                    r.SubscribeEvent(openBtn, "PointerEntered", () =>
-                        r.SetBackground(openBtn, ColorUtils.Lighten(openBtnBg, 8)));
-                    r.SubscribeEvent(openBtn, "PointerExited", () =>
-                        r.SetBackground(openBtn, openBtnBg));
-                }
-                r.AddChild(logRow, openBtn);
-
-                r.AddChild(cardContent, logRow);
-            }
-
-            r.SetBorderChild(logCard, cardContent);
-            r.AddChild(page, logCard);
-        }
 
         // Bottom padding
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
@@ -3496,27 +3448,6 @@ internal static class ContentPages
     /// <summary>
     /// Link field matching Root's label pattern.
     /// </summary>
-    private static void AddLinkField(AvaloniaReflection r, object? panel,
-        string label, string url, bool first, object? font)
-    {
-        var row = r.CreateStackPanel(vertical: false, spacing: 0);
-        if (row == null) return;
-        r.SetMargin(row, 0, first ? 16 : 12, 0, 0);
-
-        var labelText = r.CreateTextBlock(label, 13, TextMuted);
-        r.SetFontWeightNumeric(labelText, 450);
-        ApplyFont(r, labelText, font);
-        r.SetMargin(labelText, 0, 0, 12, 0);
-        r.AddChild(row, labelText);
-
-        var urlText = r.CreateTextBlock(url, 13, AccentGreen);
-        r.SetFontWeightNumeric(urlText, 450);
-        ApplyFont(r, urlText, font);
-        r.AddChild(row, urlText);
-
-        r.AddChild(panel, row);
-    }
-
 
     private static void SetBorderStroke(AvaloniaReflection r, object? border, string hex, double width)
     {
