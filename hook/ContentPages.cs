@@ -613,8 +613,8 @@ internal static class ContentPages
         public int TestingStatus;
     }
 
-    // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Closed (green)
-    private static readonly string[] TestingLabels = { "Untested", "Alpha", "Beta", "Closed" };
+    // Testing status levels: 0=Untested (red), 1=Alpha (orange), 2=Beta (yellow), 3=Stable (green)
+    private static readonly string[] TestingLabels = { "Untested", "Alpha", "Beta", "Stable" };
     private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050" };
 
     // Known plugins metadata
