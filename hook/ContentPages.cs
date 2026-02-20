@@ -1310,9 +1310,13 @@ internal static class ContentPages
         if (card == null) return null;
         r.SetTag(card, $"uprooted-item-{pluginId}");
 
-        var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
+        var cardContent = r.CreateGrid();
         if (cardContent == null) return card;
         r.SetMargin(cardContent, 16, 14, 16, 14);
+        r.AddGridRowStar(cardContent);  // Row 0: name + description (fills available height)
+        r.AddGridRowAuto(cardContent);  // Row 1: testing status badge (pinned to bottom)
+
+        var innerContent = r.CreateStackPanel(vertical: true, spacing: 0);
 
         // Top row: name (left) + icons/toggle (right) using Panel overlay
         var topRow = r.CreatePanel();
@@ -1510,7 +1514,7 @@ internal static class ContentPages
                 r.AddChild(topRow, rightIcons);
             }
 
-            r.AddChild(cardContent, topRow);
+            r.AddChild(innerContent, topRow);
         }
 
         // Description
@@ -1521,7 +1525,8 @@ internal static class ContentPages
             r.SetTextWrapping(descText, "Wrap");
             r.SetMargin(descText, 0, 8, 0, 0);
         }
-        r.AddChild(cardContent, descText);
+        r.AddChild(innerContent, descText);
+        r.AddChild(cardContent, innerContent);
 
         // Testing status badge
         if (testingStatus >= 0 && testingStatus < TestingLabels.Length)
@@ -1531,7 +1536,8 @@ internal static class ContentPages
             var badge = r.CreateBorder(ColorUtils.WithAlpha(statusColor, 0x20), 6);
             if (badge != null)
             {
-                r.SetMargin(badge, 0, 10, 0, 0);
+                r.SetMargin(badge, 0, 8, 0, 0);
+                r.SetGridRow(badge, 1);
                 r.SetHorizontalAlignment(badge, "Left");
                 r.SetPadding(badge, 8, 3, 8, 3);
                 SetBorderStroke(r, badge, ColorUtils.WithAlpha(statusColor, 0x60), 1);
@@ -1541,7 +1547,7 @@ internal static class ContentPages
                 ApplyFont(r, badgeText, font);
                 r.SetBorderChild(badge, badgeText);
 
-                r.AddChild(cardContent, badge);
+                r.AddChild(cardContent, badge);  // Row 1 — bottom-left of card
             }
         }
 

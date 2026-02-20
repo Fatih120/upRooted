@@ -58,6 +58,8 @@ internal class LinkEmbedEngine
     private static MethodInfo? s_getByteArrayAsync;  // HttpClient.GetByteArrayAsync(string)
     private static MethodInfo? s_getAsync;           // HttpClient.GetAsync(string) — fallback for bytes
     private static MethodInfo? s_sendAsync;          // HttpClient.SendAsync — core method
+    private static MethodInfo? s_sendAsyncHeadersRead; // SendAsync(HttpRequestMessage, HttpCompletionOption) — for streaming
+    private static object? s_httpCompletionOptionHeadersRead; // HttpCompletionOption.ResponseHeadersRead = 1
     private static Type? s_httpRequestMessageType;   // System.Net.Http.HttpRequestMessage
     private static object? s_httpMethodGet;          // HttpMethod.Get
     private static bool s_httpResolved;
@@ -1042,6 +1044,20 @@ internal class LinkEmbedEngine
                             var p = m.GetParameters();
                             return p.Length >= 1 && p[0].ParameterType.IsAssignableFrom(s_httpRequestMessageType);
                         });
+
+                    // Find SendAsync(HttpRequestMessage, HttpCompletionOption) for ResponseHeadersRead.
+                    // This lets us return as soon as headers arrive without buffering the body —
+                    // critical for extensionless video/binary URLs that would otherwise download
+                    // hundreds of MB before the Content-Type check can bail out.
+                    var httpCompletionOptionType = httpAsm.GetType("System.Net.Http.HttpCompletionOption");
+                    if (httpCompletionOptionType != null)
+                    {
+                        s_sendAsyncHeadersRead = httpClientType.GetMethod("SendAsync",
+                            BindingFlags.Public | BindingFlags.Instance,
+                            null, new[] { s_httpRequestMessageType, httpCompletionOptionType }, null);
+                        if (s_sendAsyncHeadersRead != null)
+                            s_httpCompletionOptionHeadersRead = Enum.ToObject(httpCompletionOptionType, 1); // ResponseHeadersRead = 1
+                    }
                 }
             }
             catch (Exception ex)
@@ -1062,6 +1078,7 @@ internal class LinkEmbedEngine
                 $"GetByteArrayAsync={s_getByteArrayAsync != null}, " +
                 $"GetAsync={s_getAsync != null}, " +
                 $"SendAsync={s_sendAsync != null}, " +
+                $"SendAsyncHR={s_sendAsyncHeadersRead != null}, " +
                 $"HttpRequestMessage={s_httpRequestMessageType != null}, " +
                 $"HttpMethod.Get={s_httpMethodGet != null}");
         }
@@ -1234,7 +1251,7 @@ internal class LinkEmbedEngine
         {
             object? response = null;
 
-            if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
+            if ((s_sendAsync != null || s_sendAsyncHeadersRead != null) && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[1] creating request for {url}");
                 var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
@@ -1253,16 +1270,29 @@ internal class LinkEmbedEngine
                 }
 
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[2] sending");
-                var sendParams = s_sendAsync.GetParameters();
-                object?[] args;
-                if (sendParams.Length == 1)
-                    args = new[] { request };
-                else if (sendParams.Length == 2)
-                    args = new object?[] { request, System.Threading.CancellationToken.None };
+                object? task;
+                // Prefer ResponseHeadersRead: returns as soon as headers arrive without buffering the body.
+                // This prevents downloading large video/binary files before the Content-Type check.
+                if (s_sendAsyncHeadersRead != null && s_httpCompletionOptionHeadersRead != null)
+                {
+                    task = s_sendAsyncHeadersRead.Invoke(s_httpClient, new[] { request, s_httpCompletionOptionHeadersRead });
+                }
+                else if (s_sendAsync != null)
+                {
+                    var sendParams = s_sendAsync.GetParameters();
+                    object?[] args;
+                    if (sendParams.Length == 1)
+                        args = new[] { request };
+                    else if (sendParams.Length == 2)
+                        args = new object?[] { request, System.Threading.CancellationToken.None };
+                    else
+                        args = new[] { request };
+                    task = s_sendAsync.Invoke(s_httpClient, args);
+                }
                 else
-                    args = new[] { request };
-
-                var task = s_sendAsync.Invoke(s_httpClient, args);
+                {
+                    task = null;
+                }
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[3] awaiting result");
                 response = task?.GetType().GetProperty("Result")?.GetValue(task);
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[4] got response: {response != null}");
@@ -1305,6 +1335,20 @@ internal class LinkEmbedEngine
             catch { }
             if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[5] content-type: {contentType}");
 
+            // Content-Type early bail: don't read the body at all for non-HTML responses.
+            // With ResponseHeadersRead this is a zero-byte read for video/binary URLs.
+            // With ResponseContentRead the body is already buffered, but we still skip the allocation.
+            if (contentType != null)
+            {
+                var ct = contentType.ToLowerInvariant();
+                bool isHtml = ct.Contains("text/html") || ct.Contains("text/xhtml") || ct.Contains("application/xhtml");
+                if (!isHtml)
+                {
+                    if (Verbose) Logger.Log("LinkEmbed", $"HGWCT: non-HTML content-type bail: {contentType}");
+                    return (contentType, null);
+                }
+            }
+
             // Read body as string via ReadAsStreamAsync + StreamReader
             // (ReadAsStringAsync triggers trimmed charset/encoding methods on some responses)
             string? body = null;
@@ -1321,8 +1365,13 @@ internal class LinkEmbedEngine
                     if (stream != null)
                     {
                         using var reader = new System.IO.StreamReader(stream);
-                        body = reader.ReadToEnd();
-                        if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[7] body length: {body?.Length}");
+                        // Cap body read at MaxHtmlBytes — prevents OOM for oversized HTML responses
+                        var buf = new char[MaxHtmlBytes];
+                        int total = 0, n;
+                        while (total < MaxHtmlBytes && (n = reader.Read(buf, total, MaxHtmlBytes - total)) > 0)
+                            total += n;
+                        body = new string(buf, 0, total);
+                        if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[7] body length: {body.Length}");
                     }
                 }
             }
@@ -1595,7 +1644,26 @@ internal class LinkEmbedEngine
         }
 
         var (contentType, html) = HttpGetWithContentType(url, botUA);
-        if (html == null) return null;
+        if (html == null)
+        {
+            // HttpGetWithContentType bailed early (non-HTML Content-Type or fetch error).
+            // Still synthesize embed if we know what type it is.
+            if (contentType != null)
+            {
+                var ct = contentType.ToLowerInvariant();
+                if (ct.StartsWith("image/"))
+                {
+                    Logger.Log("LinkEmbed", $"Content-Type image (no-body) for {originalUrl}: {contentType}");
+                    return SynthesizeImageEmbed(originalUrl);
+                }
+                if (ct.StartsWith("video/"))
+                {
+                    Logger.Log("LinkEmbed", $"Content-Type video (no-body) for {originalUrl}: {contentType}");
+                    return SynthesizeVideoEmbed(originalUrl);
+                }
+            }
+            return null;
+        }
 
         // Content-Type gate: only parse HTML-like responses
         if (contentType != null)
