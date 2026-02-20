@@ -50,11 +50,11 @@ Two independent injection layers into one app:
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
 | `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
 | `HtmlPatchVerifier.cs` | 442 | Phase 0: self-healing HTML patches + FileSystemWatcher |
-| `AvaloniaReflection.cs` | ~2104 | Reflection cache for ~80 Avalonia types + ThemeDictionaries access (CRITICAL, largest file) |
+| `AvaloniaReflection.cs` | ~2383 | Reflection cache for ~80 Avalonia types + ThemeDictionaries access (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | 1493 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers, settings reload on nav click |
-| `ContentPages.cs` | 3511 | Settings page builders (Uprooted, Plugins, Themes); background update notification overlay |
-| `ThemeEngine.cs` | ~900 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color |
+| `SidebarInjector.cs` | ~1508 | LayoutUpdated event + timer poll, sidebar injection, header management, click events, theme walk burst triggers, settings reload on nav click |
+| `ContentPages.cs` | ~3602 | Settings page builders (Uprooted, Plugins, Themes); background update notification overlay |
+| `ThemeEngine.cs` | ~1280 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color, live-recoloring tag walker, custom text color, light theme variant switching |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | ~414 | HSL/RGB/OKLCH conversion, contrast calculation, gamut mapping |
 | `UprootedSettings.cs` | 210 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |

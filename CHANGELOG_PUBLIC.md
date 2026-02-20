@@ -14,6 +14,8 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ### Improvements
 
+- **Custom themes overhaul** — Custom themes now apply live as you type — no "Apply" button needed. You can also set a custom text color (or leave it blank to auto-derive from the background). Light-background custom themes now work correctly on Root's Light variant.
+- **Rootcord: member counts in tooltips** — The server icon tooltip now shows online and total member counts below the server name, matching Root's native member pill style.
 - **Plugin page** — Opens showing just 4 cards (2 rows) so you don't have to scroll. A "Show More" button expands the full list. Plugins sort enabled-first, then by stability (Stable before Experimental), then A-Z.
 - **About page** — Removed the Links and Diagnostics cards. Added a compact "Open Logs" button to the header row. The page no longer requires scrolling.
 - **Silent Typing rewrite** — Completely rewritten from scratch using a cleaner, more reliable approach (contributed by Kurumi Nanase)
@@ -21,6 +23,7 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ### Fixes
 
+- Fixed settings auto-navigating to the About tab every time Root switches theme variants (Dark/Light/PureDark)
 - Fixed a crash on startup when a theme was active (InvalidCastException: Color/IBrush type mismatch)
 - Online status indicators (green dots next to usernames) no longer change color when using a custom theme
 - Fixed UI freeze when quickly switching between Root's settings tabs (rapid navigation stacked visual tree walks on the UI thread)

@@ -2648,8 +2648,34 @@ internal class RootcordEngine
     // ===== Hover tooltip =====
 
     /// <summary>
-    /// Show a themed tooltip pill to the right of the hovered icon.
-    /// Matches Root's native card style: CardBg, 12 radius, subtle 1.5px border.
+    /// Resolve member counts from a CommunityTabViewModel.
+    /// Returns (attached/online, total). Both may be 0 for DMs or when unavailable.
+    /// Path: tabViewModel.Members (IMemberService) → AttachedMemberCount / MemberCount.
+    /// Matches CommunityTabView.MemberCountTextBlock binding: Members.AttachedMemberCount.
+    /// </summary>
+    private (int attached, int total) GetTabMemberCounts(object? tabViewModel)
+    {
+        if (tabViewModel == null || IsDmTab(tabViewModel)) return (0, 0);
+        try
+        {
+            var members = _r.GetPropertyValue(tabViewModel, "Members");
+            if (members == null) return (0, 0);
+
+            // AttachedMemberCount = online/attached members (shown in native tab bar)
+            // MemberCount         = total server members
+            int attached = _r.GetPropertyValue(members, "AttachedMemberCount") is int a ? a : 0;
+            int total    = _r.GetPropertyValue(members, "MemberCount")         is int t ? t : 0;
+            return (attached, total);
+        }
+        catch { return (0, 0); }
+    }
+
+    /// <summary>
+    /// Show a native-style tooltip to the right of the hovered server icon.
+    /// Replicates Root's CommunityTabView member count pill exactly:
+    ///   - Name:  13px, SemiBold, TextPrimary (_text)
+    ///   - Count: 11px, Medium(500), TextSecondary (_muted), with 5×5 BrandPrimary dot
+    ///   - Card:  CardBg, 12px radius, 1.5px border (ContentPages.CreateCard style)
     /// </summary>
     private void ShowIconTooltip(object iconBorder, string displayName, object? tabViewModel)
     {
@@ -2671,22 +2697,79 @@ internal class RootcordEngine
         double iconY = translated.Value.Y;
         double iconH = iconBounds.Value.H;
 
-        // Build tooltip: native card — CardBg, 12 radius, subtle border
+        // Member counts (0 for DMs or unavailable)
+        var (attached, total) = GetTabMemberCounts(tabViewModel);
+        bool hasAttached = attached > 0;
+        bool hasTotal    = total > 0;
+        bool hasCounts   = hasAttached || hasTotal;
+
+        // Card: CardBg, 12px radius, 1.5px border — matches ContentPages.CreateCard()
         _tooltipPanel = _r.CreateBorder(_cardBg, 12);
         if (_tooltipPanel == null) return;
         _r.SetTag(_tooltipPanel, "rootcord-tooltip");
         SetBorderStroke(_tooltipPanel, AdjustForHighlight(_cardBg, 15), 1.5);
 
-        // Single line: community name centered in the pill
+        // Outer content stack (vertical, name + optional count row)
+        var content = _r.CreateStackPanel(vertical: true, spacing: 4);
+        if (content == null) return;
+        _r.SetMargin(content, 12, 8, 12, 8);
+
+        // --- Name line: 13px, SemiBold, TextPrimary ---
+        // Matches CommunityNameTextBlock font/weight from CommunityTabView
         var nameText = _r.CreateTextBlock(displayName, 13, _text);
         if (nameText == null) return;
         _r.SetFontWeight(nameText, "SemiBold");
-        _r.SetMargin(nameText, 12, 8, 12, 8);
-        _r.SetBorderChild(_tooltipPanel, nameText);
+        _r.SetVerticalAlignment(nameText, "Center");
+        _r.AddChild(content, nameText);
 
-        // Position tooltip: right of icon with gap, vertically centered on icon
+        // --- Member count row: [●dot] [X online • Y members] ---
+        // Matches Root's native MemberCountTextBlock: 11px, Medium(500), TextSecondary
+        if (hasCounts)
+        {
+            var countRow = _r.CreateStackPanel(vertical: false, spacing: 4);
+            if (countRow != null)
+            {
+                _r.SetVerticalAlignment(countRow, "Center");
+
+                // 5×5 BrandPrimary dot (matches the ellipse in CommunityTabView native pill)
+                var dot = _r.CreateBorder(_accent, 3); // ~3px radius for a 5px circle
+                if (dot != null)
+                {
+                    _r.SetWidth(dot, 5);
+                    _r.SetHeight(dot, 5);
+                    _r.SetVerticalAlignment(dot, "Center");
+                    _r.AddChild(countRow, dot);
+                }
+
+                // Count label: "X online • Y members" or "X online" or "Y members"
+                string countLabel;
+                if (hasAttached && hasTotal && total != attached)
+                    countLabel = $"{attached} online \u2022 {total} members";
+                else if (hasTotal)
+                    countLabel = $"{total} members";
+                else
+                    countLabel = $"{attached} online";
+
+                var countText = _r.CreateTextBlock(countLabel, 11, _muted);
+                if (countText != null)
+                {
+                    // FontWeight.Medium (500) — matches MemberCountTextBlock native style
+                    _r.SetFontWeight(countText, "Medium");
+                    _r.SetVerticalAlignment(countText, "Center");
+                    _r.AddChild(countRow, countText);
+                }
+
+                _r.AddChild(content, countRow);
+            }
+        }
+
+        _r.SetBorderChild(_tooltipPanel, content);
+
+        // Position: right of icon with 12px gap, vertically centered on icon.
+        // Estimated height: 30px (name only) or 46px (name + count)
+        double estH = hasCounts ? 46 : 30;
         double tooltipX = iconX + IconSize + 12;
-        double tooltipY = iconY + (iconH / 2) - 16; // center on icon
+        double tooltipY = iconY + (iconH / 2) - (estH / 2);
         _r.SetCanvasPosition(_tooltipPanel, tooltipX, tooltipY);
 
         _r.AddToOverlay(overlay, _tooltipPanel);

@@ -6,31 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [Unreleased]
-
-### Added
-
-- **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
-- **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
-
-### Changed
-
-- **Card border thickness** — 1.5px → 1.0px to match Root's native divider lines; color from Root's `Border` resource
-- **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
-- **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color
-- **ScrollViewer** — `HorizontalScrollBarVisibility = Disabled` on content ScrollViewers for correct width
-
-### Fixed
-
-- **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
-- **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
-
----
-
 ## [0.4.2] - 2026-02-20
 
 ### Added
 
+- **Custom theme: text color control** — Custom themes now support an explicit text color input. When left empty, text color is auto-derived from background luminance (unchanged behavior). Stored in `CustomText` INI key.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`
 - **Light/PureDark theme compatibility** — Uprooted's injected UI (settings pages, sidebar nav, cards, version text) now adapts to Root's active theme variant. Colors read live from Root's ThemeDictionaries via `Application.TryGetResource` at page build time. Previously hardcoded for Dark only — Light theme was completely unusable (white text on white background).
   - `ThemeEngine.ReadLiveRootColors()` / `ReadLiveRootColor(key)` — reads Root's 20 color keys from live Application resources
   - `ContentPages.AdjustForHighlight()` — luminance-aware highlight (darkens on light bg, lightens on dark bg)
@@ -49,6 +30,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **Custom theme: live recoloring** — Removed the "Apply Custom" button; custom themes now auto-apply on every keystroke. A tag-based visual tree walker (`dyn-fg:`, `dyn-bg:`, `dyn-bb:` tags) recolors injected controls on 100ms intervals; Root native controls use a text-only color map for Foreground matching. Custom theme card is exempt ("no-recolor island"). `ColorPickerPopup.IsOpen` guard prevents rebuild during color picking. Full OKLCH range (0.05–0.93) replaces the previous dark-only lightness clamp, enabling correct light-background custom themes. Smooth direction-aware derivation replaces binary isDark snapping.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/UprootedSettings.cs`
+- **Custom theme: variant switching for light themes** — SVG path swap now activates correctly when a custom theme has a light background and Root is on its Light variant. Revert forces DynamicResource re-resolution via variant toggle. `RestoreTaggedControls` walk restores injected elements after revert.
+  - File: `hook/ThemeEngine.cs`
+- **Rootcord: member count tooltip** — Server icon tooltip now shows member counts below the server name ("N online • M members"). Uses a 5×5 BrandPrimary dot + 11px medium-weight TextSecondary text, matching Root's native `CommunityTabView` pill style. `GetTabMemberCounts()` reads `Members.AttachedMemberCount` / `Members.MemberCount` from `CommunityTabViewModel`.
+  - File: `hook/RootcordEngine.cs`
 - **SilentTypingEngine: DiagnosticListener rewrite** (by Kurumi Nanase) — Replaced the 482-line HttpClient/GrpcChannel handler injection with ~90-line DiagnosticListener approach. Subscribes to .NET's built-in HTTP diagnostics (`DiagnosticListener.AllListeners`), intercepts `System.Net.Http.HttpRequestOut.Start` events, and redirects SetTypingIndicator requests to `localhost:0`. No discovery, no field walking, no handler patching.
   - File: `hook/SilentTypingEngine.cs`
 - **Themes tab: Open button** — Replaced the Themes plugin toggle in Plugin Settings with an "Open" button that navigates directly to the Themes settings tab.
@@ -59,9 +46,13 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/ThemeEngine.cs`
 - **Variant change subscription unconditional** — `EnsureVariantChangeSubscribed()` called from startup, not just when applying a theme. Needed for sidebar re-injection even when no Uprooted theme is active.
   - Files: `hook/ThemeEngine.cs`, `hook/StartupHook.cs`
-- **Card border highlights** — All cards use constant 1.5px border thickness (prevents layout shift). Plugin cards: visible resting border, no hover highlight (not clickable as whole card). Theme preset cards: resting border + radio dot/border highlight on hover + accent border when selected. Theme selection uses `PointerReleased` (matches Root's native selector).
+- **Card border highlights** — Cards use 1.0px border thickness matching Root's native divider lines; border color reads from Root's `Border` resource. Plugin cards: visible resting border, no hover highlight. Theme preset cards: resting border + radio dot/border highlight on hover + accent border when selected. Theme selection uses `PointerReleased` (matches Root's native selector).
   - File: `hook/ContentPages.cs`
-- **Nav item highlights use Root resources** — Hover uses live `HighlightLight`, selection uses `HighlightNormal` from ThemeDictionaries. Automatically adapts to Dark (white alpha) / Light (black alpha).
+- **Custom theme: no-recolor island** — Custom theme card uses hardcoded colors immune to the tag-based walker. Ping color toggle's off-color is hardcoded (`#2A2A44`) so the pill thumb doesn't blend into the card background when disabled.
+  - File: `hook/ContentPages.cs`
+- **ScrollViewer: horizontal scroll disabled** — All content ScrollViewers set `HorizontalScrollBarVisibility = Disabled` so content stretches to fill available width correctly.
+  - File: `hook/AvaloniaReflection.cs`
+- **Nav item highlights use Root resources** — Hover uses live `HighlightLight`, selection uses `HighlightNormal` from ThemeDictionaries. Nav items also have visible 1px resting borders using Root's highlight resources (`HighlightLight`/`HighlightNormal`/`HighlightStrong`). Automatically adapts to Dark (white alpha) / Light (black alpha).
   - File: `hook/SidebarInjector.cs`
 - **Version text matches Root's native color** — Reads foreground from Root's existing "Root Version" TextBlock instead of hardcoded `#66f2f2f2`.
   - File: `hook/SidebarInjector.cs`
@@ -76,6 +67,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Auto-nav on variant change** — Settings page no longer auto-navigates to the About tab when Root's theme variant changes (e.g. switching Dark↔Light). `_hasAutoNavigated` flag ensures auto-nav only fires on the first settings open.
+  - File: `hook/SidebarInjector.cs`
 - **Settings navigation freeze** — `ScheduleWalkBurst` now debounces to a single 150ms delayed walk instead of firing `WalkVisualTreeNow` immediately on every tab switch. Rapid navigation no longer stacks UI-thread tree walks.
   - File: `hook/ThemeEngine.cs`
 - **Experimental toggle unclickable** — Fixed z-order in the Plugin Settings experimental banner so the toggle pill renders on top of the banner and receives pointer events.
