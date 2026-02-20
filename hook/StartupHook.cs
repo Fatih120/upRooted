@@ -465,71 +465,44 @@ internal class StartupHook
             var rootcordSettings = UprootedSettings.Load();
             var wantRootcord = rootcordSettings.ShowExperimentalPlugins
                 && rootcordSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
-            if (wantRootcord)
             {
-                var rcWindow = mainWindow!;
-                var rcResolver = resolver;
-                var rcThemeEngine = themeEngine;
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try
-                    {
-                        Thread.Sleep(2_000); // Short initial wait for HomeView layout
-                        Logger.Log("Startup", "Phase 4.5h: Starting Rootcord engine...");
-                        var engine = new RootcordEngine(rcResolver, rcWindow, rcThemeEngine);
-                        RootcordEngine.Instance = engine;
-
-                        // Try Apply, retry up to 3 times if HomeView isn't ready yet
-                        for (int attempt = 1; attempt <= 4; attempt++)
-                        {
-                            using var mre = new ManualResetEventSlim(false);
-                            bool applied = false;
-                            rcResolver.RunOnUIThread(() =>
-                            {
-                                try
-                                {
-                                    if (!engine.IsApplied) engine.Apply();
-                                    applied = engine.IsApplied;
-                                }
-                                catch (Exception ex)
-                                {
-                                    Logger.Log("Startup", $"Phase 4.5h attempt {attempt} error: {ex.Message}");
-                                }
-                                finally { mre.Set(); }
-                            });
-                            mre.Wait(5_000);
-
-                            if (applied)
-                            {
-                                Logger.Log("Startup", attempt > 1
-                                    ? $"Phase 4.5h OK: Rootcord active (attempt {attempt})"
-                                    : "Phase 4.5h OK: Rootcord active");
-                                break;
-                            }
-
-                            if (attempt < 4)
-                            {
-                                Logger.Log("Startup", $"Phase 4.5h: HomeView not ready, retrying in 1.5s (attempt {attempt})");
-                                Thread.Sleep(1_500);
-                            }
-                            else
-                            {
-                                Logger.Log("Startup", "Phase 4.5h: Rootcord failed after 4 attempts");
-                            }
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5h error: {ex.Message}");
-                    }
-                });
-            }
-            else
-            {
-                // Still create a dormant instance so the toggle can apply at runtime
+                // Always create a dormant/active instance so the toggle can apply at runtime.
                 var rcEngine = new RootcordEngine(resolver, mainWindow!, themeEngine);
                 RootcordEngine.Instance = rcEngine;
-                Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
+
+                if (wantRootcord)
+                {
+                    // Apply via LayoutUpdated — fires on the UI thread after every layout pass.
+                    // This is the same pattern SidebarInjector uses and is far more reliable
+                    // than timed retries: the HomeView is guaranteed to be in the visual tree
+                    // when LayoutUpdated fires, so Apply() will succeed on the first opportunity.
+                    bool applied = false;
+                    resolver.RunOnUIThread(() =>
+                    {
+                        resolver.SubscribeEvent(mainWindow!, "LayoutUpdated", () =>
+                        {
+                            if (applied || rcEngine.IsApplied) { applied = true; return; }
+                            try
+                            {
+                                rcEngine.Apply();
+                                if (rcEngine.IsApplied)
+                                {
+                                    applied = true;
+                                    Logger.Log("Startup", "Phase 4.5h OK: Rootcord active");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log("Startup", $"Phase 4.5h LayoutUpdated error: {ex.Message}");
+                            }
+                        });
+                        Logger.Log("Startup", "Phase 4.5h: Rootcord engine listening via LayoutUpdated");
+                    });
+                }
+                else
+                {
+                    Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
+                }
             }
 
             // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)

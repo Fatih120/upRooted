@@ -1137,7 +1137,12 @@ internal class AvaloniaReflection
 
     public void SetScrollViewerContent(object? sv, object? content) => _scrollViewerContent?.SetValue(sv, content);
 
-    public void SetGridColumn(object? control, int column) => _gridSetColumn?.Invoke(null, new[] { control, (object)column });
+    public void SetGridColumn(object? control, int column)
+    {
+        if (control == null || _gridSetColumn == null) return;
+        try { _gridSetColumn.Invoke(null, new[] { control, (object)column }); }
+        catch { }
+    }
     public int GetGridColumn(object? control)
     {
         if (control == null || _gridGetColumn == null) return 0;
