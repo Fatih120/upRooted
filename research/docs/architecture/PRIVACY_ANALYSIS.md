@@ -118,6 +118,44 @@ This third party has access to audio/video processing context. Not mentioned in 
 - They can modify or discontinue the Service at any time
 - Assignment prohibited without Root's consent
 
+## Root v0.9.93 Policy Update (2026-02-20 Capture)
+
+### Captured policy artifacts
+
+- `artifacts/historical-root/feb2026/RootApp-TOSupdate_v0-9-93_2-20-2026.html`
+- `artifacts/historical-root/feb2026/RootApp-PPolicypatch_v0-9-93_2-20-2026.html`
+- Effective date in both documents: **February 19, 2026**
+
+### Terms of Use impact on Uprooted
+
+The February 2026 Terms of Use remain explicitly incompatible with Uprooted's architecture.
+
+Key clauses in the captured ToS:
+
+- **Section 2.2 (Use Restrictions):** prohibits modification, derivative works, reverse engineering, decompilation, disassembly, and hacking of the Service.
+- **Section 2.5 (Prohibited Conduct):** prohibits automation to monitor/copy the Service, harvesting data, and conduct Root determines harmful or exposing liability.
+- **Section 1.3 / Section 13:** Root reserves broad power to suspend/terminate access when it suspects Terms breaches.
+
+### Compatibility conclusion (Root 0.9.93)
+
+**Result:** Uprooted still appears to violate Root's Terms of Use.
+
+Reasoning:
+
+1. Uprooted modifies runtime behavior/UI via injected C# hook and browser script patching.
+2. Uprooted development and operation rely on reverse engineering and decompilation workflows.
+3. Several features intercept or alter internal client bridge/messaging behavior, which can be characterized as prohibited modification/interference under Section 2.2/2.5.
+
+### Privacy Policy impact
+
+The February 2026 Privacy Policy update does not create an exception for:
+
+- client modification tooling,
+- reverse engineering/decompilation,
+- runtime patching/injection.
+
+Therefore, the Privacy Policy does not reduce or offset the Terms of Use conflict.
+
 ## GDPR/CCPA Specific Violations
 
 1. No lawful basis specified for Sentry data processing (GDPR Art. 6)

@@ -358,6 +358,11 @@ Findings related to data leakage, telemetry, tracking, and PII exposure.
 7. Do-Not-Track signals ignored while PII is transmitted automatically
 8. No age-gating on telemetry -- minors' sessions recorded identically to adults
 
+**Root v0.9.93 legal update (captured 2026-02-20):** February 19, 2026 Terms of Use still
+explicitly prohibit modification/derivative works/reverse engineering/decompilation and broad
+automated monitoring/copying behavior; see `research/docs/architecture/PRIVACY_ANALYSIS.md`
+("Root v0.9.93 Policy Update").
+
 ### 4.5 Supply Chain
 
 Findings related to dependency risks, update mechanism security, and code signing.
