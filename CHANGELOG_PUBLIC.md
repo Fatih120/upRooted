@@ -1,10 +1,10 @@
-# Changelog
+﻿# Changelog
 
-All public-facing notable changes to Uprooted are documented here. This file mirrors the [GitHub release notes](https://github.com/watchthelight/uprooted/releases).
+All public-facing notable changes to Uprooted are documented here. This file mirrors the [GitHub release notes](https://github.com/The-Uprooted-Project/uprooted/releases).
 
 ---
 
-## [v0.4.2](https://github.com/watchthelight/uprooted/releases/tag/v0.4.2) — 2026-02-20
+## [v0.4.2](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.4.2) — 2026-02-20
 
 ### New
 
@@ -38,7 +38,7 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## [v0.4.1](https://github.com/watchthelight/uprooted/releases/tag/v0.4.1) — 2026-02-19
+## [v0.4.1](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.4.1) — 2026-02-19
 
 ### Improvements
 
@@ -53,7 +53,7 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## [v0.4.0](https://github.com/watchthelight/uprooted/releases/tag/v0.4.0) — 2026-02-18
+## [v0.4.0](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.4.0) — 2026-02-18
 
 ### New
 
@@ -114,7 +114,7 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## [v0.3.6-rc](https://github.com/watchthelight/uprooted/releases/tag/v0.3.6-rc) — 2026-02-18
+## [v0.3.6-rc](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.3.6-rc) — 2026-02-18
 
 Pre-release candidate.
 
@@ -132,7 +132,7 @@ Pre-release candidate.
 
 ---
 
-## [v0.3.5](https://github.com/watchthelight/uprooted/releases/tag/v0.3.5) — 2026-02-18
+## [v0.3.5](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.3.5) — 2026-02-18
 
 ### New
 
@@ -166,7 +166,7 @@ Pre-release candidate.
 
 ---
 
-## [v0.3.2](https://github.com/watchthelight/uprooted/releases/tag/v0.3.2) — 2026-02-17
+## [v0.3.2](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.3.2) — 2026-02-17
 
 ### Improvements
 
@@ -176,7 +176,7 @@ Pre-release candidate.
 
 ---
 
-## [v0.3.0](https://github.com/watchthelight/uprooted/releases/tag/v0.3.0) — 2026-02-17
+## [v0.3.0](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.3.0) — 2026-02-17
 
 ### New
 
@@ -192,13 +192,13 @@ Pre-release candidate.
 
 ---
 
-## [v0.2.5](https://github.com/watchthelight/uprooted/releases/tag/v0.2.5) — 2026-02-17
+## [v0.2.5](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.2.5) — 2026-02-17
 
 Bug fixes and improvements.
 
 ---
 
-## [v0.2.3](https://github.com/watchthelight/uprooted/releases/tag/v0.2.3) — 2026-02-16
+## [v0.2.3](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.2.3) — 2026-02-16
 
 ### Fixes
 
@@ -208,7 +208,7 @@ Bug fixes and improvements.
 
 ---
 
-## [v0.2.1](https://github.com/watchthelight/uprooted/releases/tag/v0.2.1) — 2026-02-16
+## [v0.2.1](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.2.1) — 2026-02-16
 
 ### Fixes
 
@@ -221,7 +221,7 @@ Bug fixes and improvements.
 
 ---
 
-## [v0.2.0](https://github.com/watchthelight/uprooted/releases/tag/v0.2.0) — 2026-02-16
+## [v0.2.0](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.2.0) — 2026-02-16
 
 ### New
 
@@ -230,7 +230,7 @@ Bug fixes and improvements.
 
 ---
 
-## [v0.1.9](https://github.com/watchthelight/uprooted/releases/tag/v0.1.9) — 2026-02-16
+## [v0.1.9](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.1.9) — 2026-02-16
 
 ### New
 
@@ -243,13 +243,13 @@ Bug fixes and improvements.
 
 ---
 
-## [v0.1.81](https://github.com/watchthelight/uprooted/releases/tag/v0.1.81) — 2026-02-15 (Pre-release)
+## [v0.1.81](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.1.81) — 2026-02-15 (Pre-release)
 
 Theme engine improvements.
 
 ---
 
-## [v0.1.7](https://github.com/watchthelight/uprooted/releases/tag/v0.1.7) — 2026-02-15 (Pre-release)
+## [v0.1.7](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.1.7) — 2026-02-15 (Pre-release)
 
 ### New
 

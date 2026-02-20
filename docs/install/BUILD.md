@@ -1,4 +1,4 @@
-# Build Pipeline Guide
+﻿# Build Pipeline Guide
 
 > **What this is:** Complete build pipeline — prerequisites, per-component build commands, artifact inventory, full installer pipeline, version management.
 > **Read when:** Building any component; setting up the dev environment; creating a release; understanding the artifact pipeline.
@@ -578,7 +578,7 @@ shortcuts.
 9. Rename output to `Uprooted-{version}-Setup.exe`
 10. Upload as GitHub Actions artifact
 11. Pack `auto-update.uprpkg` (encrypted package of the 6 auto-updater files via `scripts/pack-update.py`)
-12. Publish installer + `auto-update.uprpkg` to public repo (`watchthelight/uprooted`) release
+12. Publish installer + `auto-update.uprpkg` to public repo (`The-Uprooted-Project/uprooted`) release
 
 ### build-linux.yml
 

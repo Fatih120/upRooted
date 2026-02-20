@@ -1,4 +1,4 @@
-# Hook Reference
+﻿# Hook Reference
 
 > **What this is:** Implementation-level reference for all 28 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
 > **Read when:** Modifying or extending any C# hook feature; understanding startup sequence detail; debugging hook behavior.
@@ -740,9 +740,9 @@ Two independent update channels exist, each pulling from a different GitHub repo
 
 | Property | Stable Channel | Developer Channel |
 |----------|---------------|-------------------|
-| **Source repo** | `watchthelight/uprooted` (public) | `The-Uprooted-Project/uprooted-private` (private) |
-| **API endpoint** | `https://api.github.com/repos/watchthelight/uprooted/releases/latest` | `https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1` |
-| **Download base** | `https://github.com/watchthelight/uprooted/releases/download` | `https://github.com/The-Uprooted-Project/uprooted-private/releases/download` |
+| **Source repo** | `The-Uprooted-Project/uprooted` (public) | `The-Uprooted-Project/uprooted-private` (private) |
+| **API endpoint** | `https://api.github.com/repos/The-Uprooted-Project/uprooted/releases/latest` | `https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1` |
+| **Download base** | `https://github.com/The-Uprooted-Project/uprooted/releases/download` | `https://github.com/The-Uprooted-Project/uprooted-private/releases/download` |
 | **Authentication** | None (public repo) | XOR-encrypted GitHub PAT (read-only, scoped to private repo) |
 | **Release type** | Non-prerelease only (`/releases/latest`) | Pre-releases included (`?per_page=1`) |
 | **Access gate** | Open | SHA-256 password validation required to switch to this channel |
@@ -785,7 +785,7 @@ The download URL follows the pattern:
 `{downloadBase}/{tag}/auto-update.uprpkg`
 
 For example:
-- Stable: `https://github.com/watchthelight/uprooted/releases/download/v0.4.2/auto-update.uprpkg`
+- Stable: `https://github.com/The-Uprooted-Project/uprooted/releases/download/v0.4.2/auto-update.uprpkg`
 - Dev: `https://github.com/The-Uprooted-Project/uprooted-private/releases/download/v0.4.2/auto-update.uprpkg`
 
 **Package contents** (6 files — profiler DLL excluded because it's locked on Windows and rarely changes):

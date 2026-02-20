@@ -1,4 +1,4 @@
-# External Integrations
+﻿# External Integrations
 
 **Analysis Date:** 2026-02-17
 
@@ -37,7 +37,7 @@
 
 **GitHub Integration:**
 - Type: Repository + documentation links only
-- Repository: https://github.com/watchthelight/uprooted (public scaffold)
+- Repository: https://github.com/The-Uprooted-Project/uprooted (public scaffold)
 - Issue tracking: GitHub Issues (referenced in UI)
 - CI/CD: GitHub Actions workflows for installer builds
 - No API integration (static links in settings panel)
@@ -130,7 +130,7 @@
 ## CI/CD & Deployment
 
 **Hosting:**
-- GitHub repository hosting (public: watchthelight/uprooted, private: watchthelight/uprooted-private)
+- GitHub repository hosting (public: The-Uprooted-Project/uprooted, private: The-Uprooted-Project/uprooted-private)
 - Desktop application (no cloud backend)
 
 **CI Pipeline:**
@@ -265,7 +265,7 @@
   - No external dependencies (except .NET 10 and MSVC runtime already on system)
 - PowerShell installer script (legacy): `install-hook.ps1` (optional fallback)
 - PowerShell uninstall script: `uninstall-hook.ps1`
-- Git repository clone option: https://github.com/watchthelight/uprooted
+- Git repository clone option: https://github.com/The-Uprooted-Project/uprooted
 
 **Linux:**
 - Self-contained executable: `Uprooted-[version]-linux-amd64`
@@ -273,7 +273,7 @@
   - Console TUI interface
 - Shell script installer (legacy): `install-uprooted-linux.sh`
 - Shell script uninstall: `uninstall-uprooted-linux.sh`
-- Git repository clone option: https://github.com/watchthelight/uprooted
+- Git repository clone option: https://github.com/The-Uprooted-Project/uprooted
 
 ## Installer Mechanics
 

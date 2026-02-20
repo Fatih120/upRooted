@@ -1,11 +1,11 @@
-# Maintainer: watchthelight <admin@watchthelight.org>
+﻿# Maintainer: watchthelight <admin@watchthelight.org>
 _pkgname=uprooted
 pkgname=${_pkgname}-bin
 pkgver=%%VERSION%%
 pkgrel=1
 pkgdesc="A client mod framework for Root Communications"
 arch=('x86_64')
-url="https://github.com/watchthelight/uprooted"
+url="https://github.com/The-Uprooted-Project/uprooted"
 license=('LicenseRef-Uprooted-1.0')
 depends=('cairo' 'desktop-file-utils' 'gdk-pixbuf2' 'glib2' 'gtk3'
          'hicolor-icon-theme' 'libsoup3' 'pango' 'webkit2gtk-4.1')

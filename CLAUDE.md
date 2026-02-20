@@ -1,4 +1,4 @@
-# CLAUDE.md
+﻿# CLAUDE.md
 
 > **Related docs:** [NEW-SESSION.md](NEW-SESSION.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Contributing](CONTRIBUTING.md)
 
@@ -183,5 +183,5 @@ These cause real bugs -- do not violate:
 
 ## Related Repos
 
-- **Public scaffold**: `watchthelight/uprooted` -- TypeScript source, plugin API, theme engine
+- **Public scaffold**: `The-Uprooted-Project/uprooted` -- TypeScript source, plugin API, theme engine
 - These repos are **strictly separate** -- never copy, reference, or leak code/commits between them

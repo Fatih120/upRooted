@@ -1,4 +1,4 @@
-name: Build Installer
+﻿name: Build Installer
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         default: true
         type: boolean
       publish_public:
-        description: 'Also publish to public repo (watchthelight/uprooted)'
+        description: 'Also publish to public repo (The-Uprooted-Project/uprooted)'
         required: false
         default: false
         type: boolean
@@ -200,7 +200,7 @@ jobs:
           $prerelease = "${{ inputs.prerelease }}" -eq "true"
           $exe = Get-Item "installer\src-tauri\target\release\Uprooted-$version-Setup.exe"
           $prereleaseFlag = if ($prerelease) { "--prerelease" } else { "" }
-          gh release create "v$version" --repo watchthelight/uprooted --title "v$version" --notes "Windows installer" $prereleaseFlag 2>&1 | Out-Null
-          gh release upload "v$version" $exe.FullName --repo watchthelight/uprooted --clobber 2>&1
-          gh release upload "v$version" auto-update.uprpkg --repo watchthelight/uprooted --clobber 2>&1
+          gh release create "v$version" --repo The-Uprooted-Project/uprooted --title "v$version" --notes "Windows installer" $prereleaseFlag 2>&1 | Out-Null
+          gh release upload "v$version" $exe.FullName --repo The-Uprooted-Project/uprooted --clobber 2>&1
+          gh release upload "v$version" auto-update.uprpkg --repo The-Uprooted-Project/uprooted --clobber 2>&1
           Write-Host "Uploaded Setup.exe + auto-update.uprpkg to public repo v$version"

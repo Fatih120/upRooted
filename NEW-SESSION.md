@@ -1,4 +1,4 @@
-# New Session Quick-Start
+﻿# New Session Quick-Start
 
 > **Related docs:** [CLAUDE.md](CLAUDE.md) | [Architecture](docs/framework/ARCHITECTURE.md) | [Index](docs/INDEX.md) | [Session State](hook/SESSION_STATE.md) | [Tasks](TASKS.md) | [Root Control Reference](docs/framework/ROOT_CONTROL_REFERENCE.md)
 >
@@ -23,7 +23,7 @@
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
 Version: 0.4.2. Target: Root v0.9.92+.
-This is the **PRIVATE** repo (`watchthelight/uprooted-private`). Never leak code to the public repo (`watchthelight/uprooted`).
+This is the **PRIVATE** repo (`The-Uprooted-Project/uprooted-private`). Never leak code to the public repo (`The-Uprooted-Project/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
 ## 2. Architecture One-Liner

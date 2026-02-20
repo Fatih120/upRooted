@@ -1,4 +1,4 @@
-name: Build Linux Installer
+﻿name: Build Linux Installer
 
 on:
   workflow_dispatch:
@@ -13,7 +13,7 @@ on:
         default: true
         type: boolean
       publish_public:
-        description: 'Also publish to public repo (watchthelight/uprooted)'
+        description: 'Also publish to public repo (The-Uprooted-Project/uprooted)'
         required: false
         default: false
         type: boolean
@@ -198,11 +198,11 @@ jobs:
           VERSION="${{ steps.ver.outputs.version }}"
           PRERELEASE_FLAG=""
           if [ "${{ inputs.prerelease }}" = "true" ]; then PRERELEASE_FLAG="--prerelease"; fi
-          gh release create "v$VERSION" --repo watchthelight/uprooted --title "v$VERSION" --notes "Linux installer" $PRERELEASE_FLAG 2>/dev/null || true
+          gh release create "v$VERSION" --repo The-Uprooted-Project/uprooted --title "v$VERSION" --notes "Linux installer" $PRERELEASE_FLAG 2>/dev/null || true
           for f in installer/src-tauri/target/release/Uprooted-*-linux-amd64 \
                    uprooted-linux-artifacts.tar.gz \
                    auto-update.uprpkg \
                    install-uprooted-linux.sh; do
-            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo watchthelight/uprooted --clobber || true
+            [ -f "$f" ] && gh release upload "v$VERSION" "$f" --repo The-Uprooted-Project/uprooted --clobber || true
           done
           echo "Uploaded Linux assets to public repo v$VERSION"

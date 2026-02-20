@@ -1,4 +1,4 @@
-# Contributing to Uprooted
+﻿# Contributing to Uprooted
 
 > **What this is:** Contribution guidelines — branch rules, code style, PR workflow, commit format, critical rules summary, bug/feature reporting.
 > **Read when:** Before opening a PR; understanding the contribution process; checking code style expectations.
@@ -27,7 +27,7 @@ All contributors must push to the `contrib` branch or a feature branch off `cont
 
 ```bash
 # Standard workflow
-git clone https://github.com/watchthelight/uprooted-private.git
+git clone https://github.com/The-Uprooted-Project/uprooted-private.git
 cd uprooted-private
 git checkout contrib
 # make your changes, then:
@@ -63,7 +63,7 @@ Always pull before starting work -- another contributor may have pushed changes.
 ### Clone and Setup
 
 ```bash
-git clone https://github.com/watchthelight/uprooted-private.git
+git clone https://github.com/The-Uprooted-Project/uprooted-private.git
 cd uprooted-private
 git checkout contrib
 pnpm install
@@ -207,7 +207,7 @@ These constraints exist because violating them causes real, hard-to-diagnose bug
 
 ## Reporting Bugs
 
-Use the [bug report template](https://github.com/watchthelight/uprooted/issues/new?template=bug-report.yml) on GitHub.
+Use the [bug report template](https://github.com/The-Uprooted-Project/uprooted/issues/new?template=bug-report.yml) on GitHub.
 
 Include:
 - Steps to reproduce
@@ -217,7 +217,7 @@ Include:
 
 ## Suggesting Features
 
-Use the [feature request template](https://github.com/watchthelight/uprooted/issues/new?template=feature-request.yml) on GitHub.
+Use the [feature request template](https://github.com/The-Uprooted-Project/uprooted/issues/new?template=feature-request.yml) on GitHub.
 
 Include:
 - Description of the desired behavior

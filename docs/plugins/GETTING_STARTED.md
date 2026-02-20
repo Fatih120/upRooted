@@ -1,4 +1,4 @@
-# Getting Started with Uprooted Plugins
+﻿# Getting Started with Uprooted Plugins
 
 > **What this is:** First plugin tutorial — 5 hands-on examples from "hello world" to bridge interception and settings.
 > **Read when:** Writing your first Uprooted plugin; learning the plugin API basics.
@@ -52,7 +52,7 @@ This guide assumes you are comfortable with TypeScript and basic DOM manipulatio
 1. Clone the Uprooted repository:
 
 ```bash
-git clone https://github.com/watchthelight/uprooted.git
+git clone https://github.com/The-Uprooted-Project/uprooted.git
 cd uprooted
 ```
 

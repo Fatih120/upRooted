@@ -1,4 +1,4 @@
-# Contributing a Plugin to Uprooted
+﻿# Contributing a Plugin to Uprooted
 
 > **What this is:** Plugin PR workflow — quality checklist, code review expectations, naming conventions, testing requirements.
 > **Read when:** Submitting a plugin for inclusion; reviewing a plugin PR; understanding quality expectations.
@@ -83,7 +83,7 @@ If you haven't built a plugin before, work through the [Getting Started](GETTING
 
 ### Step 1: Fork the repository
 
-Go to [github.com/watchthelight/uprooted](https://github.com/watchthelight/uprooted) and click **Fork** in the top-right corner. This creates your own copy of the repository under your GitHub account.
+Go to [github.com/The-Uprooted-Project/uprooted](https://github.com/The-Uprooted-Project/uprooted) and click **Fork** in the top-right corner. This creates your own copy of the repository under your GitHub account.
 
 ### Step 2: Clone your fork
 
@@ -97,7 +97,7 @@ cd uprooted
 Add the original repo as an upstream remote so you can pull in changes later:
 
 ```bash
-git remote add upstream https://github.com/watchthelight/uprooted.git
+git remote add upstream https://github.com/The-Uprooted-Project/uprooted.git
 ```
 
 ### Step 4: Create a working branch off `contrib`

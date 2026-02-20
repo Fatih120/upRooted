@@ -1,4 +1,4 @@
-# Roadmap
+﻿# Roadmap
 
 > **What this is:** Known issues, planned features, and future direction for Uprooted.
 > **Read when:** Checking what's planned; understanding known limitations; looking for things to work on.
@@ -296,9 +296,9 @@ Proactive detection of changes that could break Uprooted:
 
 Have an idea for Uprooted? We track feature requests as GitHub issues.
 
-- **Suggest a feature:** Open a [feature request](https://github.com/watchthelight/uprooted/issues/new?template=feature-request.yml)
-- **Report a bug:** Open a [bug report](https://github.com/watchthelight/uprooted/issues/new?template=bug-report.yml)
-- **Discuss ideas:** Start a conversation in [GitHub Discussions](https://github.com/watchthelight/uprooted/discussions) (if enabled)
+- **Suggest a feature:** Open a [feature request](https://github.com/The-Uprooted-Project/uprooted/issues/new?template=feature-request.yml)
+- **Report a bug:** Open a [bug report](https://github.com/The-Uprooted-Project/uprooted/issues/new?template=bug-report.yml)
+- **Discuss ideas:** Start a conversation in [GitHub Discussions](https://github.com/The-Uprooted-Project/uprooted/discussions) (if enabled)
 
 When suggesting a feature, include:
 - A clear description of the behavior you want

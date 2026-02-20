@@ -1,4 +1,4 @@
-# Installation Guide
+﻿# Installation Guide
 
 > **What this is:** End-user install/uninstall procedures — Windows and Linux, console installer and manual methods, troubleshooting, file locations, verification.
 > **Read when:** Installing or uninstalling Uprooted; diagnosing install issues; checking file deployment locations.
@@ -53,7 +53,7 @@ with no external dependencies.
 ### Steps
 
 1. **Download the installer** from the
-   [latest release](https://github.com/watchthelight/uprooted/releases/latest).
+   [latest release](https://github.com/The-Uprooted-Project/uprooted/releases/latest).
    - Windows: `Uprooted-0.4.2-Setup.exe`
    - Linux: `Uprooted-0.4.2-linux-amd64`
 

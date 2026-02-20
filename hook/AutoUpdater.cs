@@ -1,4 +1,4 @@
-using System.Reflection;
+﻿using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
@@ -16,8 +16,8 @@ namespace Uprooted;
 internal class AutoUpdater
 {
     // Stable channel (public repo)
-    private const string StableApiUrl = "https://api.github.com/repos/watchthelight/uprooted/releases/latest";
-    private const string StableDownloadBase = "https://github.com/watchthelight/uprooted/releases/download";
+    private const string StableApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted/releases/latest";
+    private const string StableDownloadBase = "https://github.com/The-Uprooted-Project/uprooted/releases/download";
 
     // Developer channel (private repo)
     // Use /releases?per_page=1 instead of /releases/latest — the latter only returns

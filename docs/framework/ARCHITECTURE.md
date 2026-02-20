@@ -1,4 +1,4 @@
-# Architecture Reference
+﻿# Architecture Reference
 
 > **What this is:** Authoritative architecture reference — system design, layer boundaries, startup phases, threading, error handling, critical rules, and AI contributor guide.
 > **Read when:** Starting any task; understanding how the system fits together; checking critical rules before writing C# or TypeScript code.
@@ -65,8 +65,8 @@ The C# layer handles native UI integration and Avalonia theming. The TypeScript 
 
 | Repo | Visibility | Purpose |
 |------|------------|---------|
-| [`watchthelight/uprooted`](https://github.com/watchthelight/uprooted) | **Public** | Scaffold, types, documentation, landing page. No working injection code until Root developer approval. |
-| [`watchthelight/uprooted-private`](https://github.com/watchthelight/uprooted-private) | **Private** | Full working codebase: injection code, debug tooling, build artifacts, profiler DLLs, installer, test harnesses. Active development repo. |
+| [`The-Uprooted-Project/uprooted`](https://github.com/The-Uprooted-Project/uprooted) | **Public** | Scaffold, types, documentation, landing page. No working injection code until Root developer approval. |
+| [`The-Uprooted-Project/uprooted-private`](https://github.com/The-Uprooted-Project/uprooted-private) | **Private** | Full working codebase: injection code, debug tooling, build artifacts, profiler DLLs, installer, test harnesses. Active development repo. |
 
 Collaborators on `uprooted-private`: `watchthelight` (owner) and `agomusio` (admin). These repos are strictly separate -- never copy, reference, or leak code between them.
 
@@ -325,7 +325,7 @@ This section describes the key classes and modules that form the framework's bac
 | `AnimatedImage` | `hook/AnimatedImage.cs` | Animated GIF/WebP decoder using SkiaSharp `SKCodec` reflection. Extracts frames with disposal method handling, per-frame delay timers, and automatic cleanup on card removal. Falls back to static first frame if frame APIs unavailable. |
 | `MessageLogger` | `hook/MessageLogger.cs` | Message logger plugin. Phase 1 data model discovery, `ObservableCollection` subscription via `Expression.Lambda`, edit/delete detection with channel switch heuristics, visual indicators (red deletion cards, "(edited)" annotations), tag-based dedup. |
 | `MessageStore` | `hook/MessageStore.cs` | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits. |
-| `AutoUpdater` | `hook/AutoUpdater.cs` | In-process auto-updater with two channels. **Stable** checks `watchthelight/uprooted` (public) via `/releases/latest`. **Developer** checks `The-Uprooted-Project/uprooted-private` (private) via `/releases?per_page=1` (includes pre-releases) with XOR-encrypted PAT for auth. Downloads encrypted `.uprpkg` package, decrypts (multi-layer XOR: 64-byte master key + 32-byte nonce + position-dependent derivation), unpacks 6 files to staging, verifies, overwrites in-place. Hash-based same-version hotfix detection on manual checks. HTTP via reflection (trimming-safe). See [Hook Reference § AutoUpdater](HOOK_REFERENCE.md#autoupdater-update-channels-and-package-system). |
+| `AutoUpdater` | `hook/AutoUpdater.cs` | In-process auto-updater with two channels. **Stable** checks `The-Uprooted-Project/uprooted` (public) via `/releases/latest`. **Developer** checks `The-Uprooted-Project/uprooted-private` (private) via `/releases?per_page=1` (includes pre-releases) with XOR-encrypted PAT for auth. Downloads encrypted `.uprpkg` package, decrypts (multi-layer XOR: 64-byte master key + 32-byte nonce + position-dependent derivation), unpacks 6 files to staging, verifies, overwrites in-place. Hash-based same-version hotfix detection on manual checks. HTTP via reflection (trimming-safe). See [Hook Reference § AutoUpdater](HOOK_REFERENCE.md#autoupdater-update-channels-and-package-system). |
 | `ClearUrlsEngine` | `hook/ClearUrlsEngine.cs` | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor on send. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
 | `ProfileBadgeInjector` | `hook/ProfileBadgeInjector.cs` | Injects "Uprooted Dev" badge into profile popups when update channel is Developer. 500ms timer polls TopLevel windows for popup controls. |
 | `NsfwFilter` | `hook/NsfwFilter.cs` | Avalonia-native NSFW content filter. 500ms scan timer DFS-walks visual tree for `Image` controls, classifies via Vision API with `SemaphoreSlim(3)` concurrency cap, hides NSFW images with overlay (click-to-reveal). Phase 4.5g, no DotNetBrowser dependency. |
@@ -849,7 +849,7 @@ When onboarding to this codebase, read these files in order:
 
 6. **Not handling null from reflection calls.** Every `AvaloniaReflection` method can return null. Types may not exist in a future Avalonia version.
 
-7. **Cross-contaminating repos.** The public repo (`watchthelight/uprooted`) and private repo (`watchthelight/uprooted-private`) are strictly separate. Never copy code, commits, or references between them.
+7. **Cross-contaminating repos.** The public repo (`The-Uprooted-Project/uprooted`) and private repo (`The-Uprooted-Project/uprooted-private`) are strictly separate. Never copy code, commits, or references between them.
 
 ### When to Follow Existing Patterns
 

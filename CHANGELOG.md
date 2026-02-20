@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to Uprooted are documented in this file.
 
@@ -466,10 +466,10 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 [0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0
 [0.3.6-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.5...v0.3.6-rc
-[0.3.5]: https://github.com/watchthelight/uprooted-private/compare/v0.3.2...v0.3.5
-[0.3.2]: https://github.com/watchthelight/uprooted-private/compare/v0.3.0...v0.3.2
-[0.3.0]: https://github.com/watchthelight/uprooted-private/compare/v0.2.3...v0.3.0
-[0.2.3]: https://github.com/watchthelight/uprooted-private/compare/v0.2.2...v0.2.3
-[0.2.2]: https://github.com/watchthelight/uprooted-private/compare/v0.2.1...v0.2.2
-[0.2.1]: https://github.com/watchthelight/uprooted-private/compare/v0.2.0...v0.2.1
-[0.2.0]: https://github.com/watchthelight/uprooted-private/releases/tag/v0.2.0
+[0.3.5]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.2...v0.3.5
+[0.3.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.0...v0.3.2
+[0.3.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.2.3...v0.3.0
+[0.2.3]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.2.2...v0.2.3
+[0.2.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.2.1...v0.2.2
+[0.2.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.2.0...v0.2.1
+[0.2.0]: https://github.com/The-Uprooted-Project/uprooted-private/releases/tag/v0.2.0

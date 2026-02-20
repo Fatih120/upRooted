@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Reusable UI components for the settings panel.
  */
 
@@ -156,7 +156,7 @@ export function buildUprootedPage(): HTMLElement {
   // Links section
   const linksSection = createSection("Links");
 
-  const githubRow = createLinkRow("GitHub", "Source code & issues", "https://github.com/watchthelight/uprooted");
+  const githubRow = createLinkRow("GitHub", "Source code & issues", "https://github.com/The-Uprooted-Project/uprooted");
   linksSection.appendChild(githubRow);
 
   const websiteRow = createLinkRow("Website", "uprooted.sh", "https://uprooted.sh");

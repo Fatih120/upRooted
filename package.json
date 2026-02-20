@@ -1,4 +1,4 @@
-{
+﻿{
   "name": "uprooted",
   "version": "0.4.2",
   "description": "A client mod framework for Root Communications",
@@ -26,7 +26,7 @@
   "license": "SEE LICENSE IN LICENSE",
   "repository": {
     "type": "git",
-    "url": "https://github.com/watchthelight/uprooted"
+    "url": "https://github.com/The-Uprooted-Project/uprooted"
   },
   "pnpm": {
     "onlyBuiltDependencies": ["esbuild", "sharp"]

@@ -1,4 +1,4 @@
-#!/bin/bash
+﻿#!/bin/bash
 # Uprooted Linux Installer v0.4.2
 # Standalone bash installer for systems without the GUI installer.
 #
@@ -46,7 +46,7 @@ resolve_latest_version() {
         return
     fi
 
-    local api_url="https://api.github.com/repos/watchthelight/uprooted/releases/latest"
+    local api_url="https://api.github.com/repos/The-Uprooted-Project/uprooted/releases/latest"
     local response
     response=$(curl -sL --max-time 10 "$api_url" 2>/dev/null) || {
         warn "Could not reach GitHub API, using bundled version v$VERSION"
@@ -799,7 +799,7 @@ check_prereqs() {
 download_prebuilt() {
     resolve_latest_version
 
-    local artifacts_url="https://github.com/watchthelight/uprooted/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
+    local artifacts_url="https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
 
     log "Downloading pre-built artifacts (v$VERSION)..."
 
@@ -818,7 +818,7 @@ download_prebuilt() {
         if [[ "$http_code" == "404" ]]; then
             rm -rf "$tmpdir"
             error "Version v$VERSION not found on GitHub (HTTP 404)."
-            error "  Check available releases: https://github.com/watchthelight/uprooted/releases"
+            error "  Check available releases: https://github.com/The-Uprooted-Project/uprooted/releases"
             die "  Run with --diagnose for more info."
         elif [[ "$http_code" != "200" && "$http_code" != "000" ]]; then
             rm -rf "$tmpdir"
