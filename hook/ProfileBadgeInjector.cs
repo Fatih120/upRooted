@@ -31,6 +31,7 @@ internal class ProfileBadgeInjector
     {
         "watchthelight",
         "agomusio",
+        "terrydavis",
     };
 
     private readonly AvaloniaReflection _r;
