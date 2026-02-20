@@ -604,12 +604,6 @@ internal static class ContentPages
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
             };
-            // Sort: Stable (3) first → Experimental (0) last, then A-Z by name
-            Array.Sort(KnownPlugins, (a, b) =>
-            {
-                var cmp = b.TestingStatus.CompareTo(a.TestingStatus);
-                return cmp != 0 ? cmp : string.Compare(a.DisplayName, b.DisplayName, StringComparison.OrdinalIgnoreCase);
-            });
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
         catch (Exception ex)
@@ -988,7 +982,7 @@ internal static class ContentPages
             }
 
             // Filter cards by search text, filter mode, and experimental toggle
-            var visible = new List<object>();
+            var visibleIndices = new List<int>();
             for (int ci = 0; ci < cardObjects.Count; ci++)
             {
                 // Hide experimental plugins unless the toggle is on
@@ -1002,12 +996,27 @@ internal static class ContentPages
                 }
                 if (filterMode[0] != 0)
                 {
-                    bool enabled = settings.Plugins.TryGetValue(cardIds[ci], out var en2) && en2;
+                    bool enabled = cardIds[ci] == "content-filter" ? settings.NsfwFilterEnabled
+                        : (settings.Plugins.TryGetValue(cardIds[ci], out var en2) && en2);
                     if (filterMode[0] == 1 && !enabled) continue;
                     if (filterMode[0] == 2 && enabled) continue;
                 }
-                visible.Add(cardObjects[ci]);
+                visibleIndices.Add(ci);
             }
+
+            // Sort: 1st enabled > disabled, 2nd Stable > Experimental, 3rd A-Z
+            visibleIndices.Sort((a, b) =>
+            {
+                bool aOn = cardIds[a] == "content-filter" ? settings.NsfwFilterEnabled
+                    : (settings.Plugins.TryGetValue(cardIds[a], out var ea) && ea);
+                bool bOn = cardIds[b] == "content-filter" ? settings.NsfwFilterEnabled
+                    : (settings.Plugins.TryGetValue(cardIds[b], out var eb) && eb);
+                if (aOn != bOn) return aOn ? -1 : 1;
+                var cmp = cardStatuses[b].CompareTo(cardStatuses[a]);
+                return cmp != 0 ? cmp : string.Compare(cardNames[a], cardNames[b], StringComparison.OrdinalIgnoreCase);
+            });
+
+            var visible = visibleIndices.ConvertAll(i => cardObjects[i]);
 
             // Build 2-column rows
             for (int i = 0; i < visible.Count; i += 2)
