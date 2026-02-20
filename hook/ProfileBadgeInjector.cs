@@ -27,7 +27,7 @@ internal class ProfileBadgeInjector
     private const string ScannedTag = "uprooted-profile-scanned";
     private const string BadgeTag = "uprooted-dev-badge";
     private const string AlphaBadgeTag = "uprooted-alpha-badge";
-    private const int FallbackPollMs = 500;
+    private const int FallbackPollMs = 200;
     private const string DevBadgeColor = "#8B6914";   // Gold/amber — developer channel
     private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
 
@@ -81,6 +81,9 @@ internal class ProfileBadgeInjector
         "002ce7ed-fbe5-8801-bf3d-52a47ba31fc1",
         "002cf06f-8bd8-8f01-8209-e4005ccbc67a",
         "0029af3f-0b29-8601-88c7-e130cbecf963",
+        "002d0034-c6ea-8901-bb10-cff05e34b266",
+        "002cffc5-c637-8901-ba08-fb8806e937b9",
+        "002d1993-8ac5-8c01-8079-e2034f69f230",
     };
 
     private readonly AvaloniaReflection _r;
@@ -158,17 +161,35 @@ internal class ProfileBadgeInjector
     /// <summary>
     /// Fires immediately when a child is added/removed from the OverlayLayer.
     /// Runs on the UI thread (Avalonia collection events fire on the UI thread).
+    ///
+    /// Root sets the popup's DataContext asynchronously after adding it to the overlay,
+    /// so we scan immediately and then retry at 80ms + 200ms to catch the window where
+    /// MemberProfileView.DataContext isn't set yet on the first scan.
     /// </summary>
     private void OnOverlayChildrenChanged()
     {
         try
         {
             ScanOverlayLayer();
+            ScheduleOverlayRetry(80);
+            ScheduleOverlayRetry(200);
         }
         catch (Exception ex)
         {
             Logger.Log("ProfileBadge", $"Overlay event scan error: {ex.Message}");
         }
+    }
+
+    private void ScheduleOverlayRetry(int delayMs)
+    {
+        Task.Delay(delayMs).ContinueWith(_ =>
+        {
+            _r.RunOnUIThread(() =>
+            {
+                try { ScanOverlayLayer(); }
+                catch { }
+            });
+        });
     }
 
     /// <summary>
