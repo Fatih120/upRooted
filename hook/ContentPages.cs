@@ -632,7 +632,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "Themes", Version = "0.4.2",
                     Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly, no restart needed.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 3 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.4.2",
                     Description = "Rich link previews right in chat. YouTube videos show a thumbnail with a play button that opens in your browser, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 2 },
