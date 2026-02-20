@@ -10,10 +10,6 @@ allowed-tools:
   - Glob
   - Task
   - AskUserQuestion
-args:
-  - name: version
-    description: Target version number (e.g. 0.5.0, 0.5.0-rc)
-    required: true
 ---
 
 # Release Pipeline
@@ -21,6 +17,24 @@ args:
 Full release preparation, verification, and ship. Combines the work of `/ok` (documentation sweep) and `/nose` (version bump) with build verification, changelog audit, and two explicit user gates before anything is committed or pushed.
 
 **This command does NOT call `/ok` or `/nose`** — it inlines and adapts their logic for release context (broader scope, automatic fixes instead of per-file questions).
+
+## Argument Parsing
+
+The user invokes: `/release <target> <version>`
+
+Parse `$ARGUMENTS` (the raw argument string) into two values:
+- **TARGET** — first word: `private`, `public`, or `all` (which repos get artifacts)
+- **VERSION** — second word: the version number (e.g. `0.4.2`, `0.5.0-rc`)
+
+If `$ARGUMENTS` doesn't contain exactly two space-separated values, or TARGET is not one of `private`/`public`/`all`, stop with:
+```
+Usage: /release <private|public|all> <version>
+Example: /release private 0.4.2
+```
+
+Set **IS_PRERELEASE** = true if VERSION contains a hyphen (e.g. `0.5.0-rc`), false otherwise.
+
+Throughout this document, **TARGET** and **VERSION** refer to these parsed values.
 
 ## Phase 1: Pre-flight
 
@@ -35,9 +49,7 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 
 3. Run `git log --oneline -10` to confirm we are on `main` and see recent history.
 
-4. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const or startup banner). This is the **previous version** — needed for find-and-replace in Phase 3 and for changelog compare links. Verify `$ARGUMENTS.version` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
-
-5. Detect pre-release: if `$ARGUMENTS.version` contains a hyphen (e.g., `0.5.0-rc`, `0.5.0-beta.1`), set `IS_PRERELEASE=true`. This affects the GitHub Actions reminder in Phase 7.
+4. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const or startup banner). This is the **previous version** — needed for find-and-replace in Phase 3 and for changelog compare links. Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
 
 ---
 
@@ -53,7 +65,7 @@ Read `CHANGELOG.md`. Check:
 - Are entries properly categorized (Added, Changed, Fixed, Removed, Infrastructure, Documentation)?
 - Does a compare link exist at the bottom for the current version?
 
-If the top section's version header doesn't match `$ARGUMENTS.version`, note this — it will be updated in Phase 3.
+If the top section's version header doesn't match `VERSION`, note this — it will be updated in Phase 3.
 
 ### 2b. Public changelog
 
@@ -131,7 +143,7 @@ Grep for the previous version string across all source, script, doc, and config 
 
 ### 3c. Update version references
 
-Update all files from the previous version to `$ARGUMENTS.version`:
+Update all files from the previous version to `VERSION`:
 
 #### Source code
 | File | What to update |
@@ -180,7 +192,7 @@ Update all files from the previous version to `$ARGUMENTS.version`:
 ### 3d. Update changelog headers
 
 Update `CHANGELOG.md`:
-- If the top section header doesn't show `$ARGUMENTS.version`, update it.
+- If the top section header doesn't show `VERSION`, update it.
 - Ensure the date is today.
 - Add or update the compare link at the bottom:
   ```
@@ -188,7 +200,7 @@ Update `CHANGELOG.md`:
   ```
 
 Update `CHANGELOG_PUBLIC.md`:
-- Ensure the top section shows `v$ARGUMENTS.version` with today's date.
+- Ensure the top section shows `v{VERSION}` with today's date.
 
 ### 3e. Verify no stale refs
 
@@ -264,7 +276,7 @@ If any expected output is missing, report and stop.
 ### 5a. Changelog final check
 
 Read `CHANGELOG.md` and verify:
-- Top section header matches `$ARGUMENTS.version` with today's date
+- Top section header matches `VERSION` with today's date
 - Section has actual content (not empty)
 - Compare link exists at the bottom for this version
 - Previous version's compare link endpoint uses the correct tag format
@@ -272,12 +284,12 @@ Read `CHANGELOG.md` and verify:
 ### 5b. Public changelog final check
 
 Read `CHANGELOG_PUBLIC.md` and verify:
-- Top section header matches `v$ARGUMENTS.version` with today's date
+- Top section header matches `v{VERSION}` with today's date
 - Content is present
 
 ### 5c. Version consistency spot-check
 
-Read these 4 files and verify the version matches `$ARGUMENTS.version`:
+Read these 4 files and verify the version matches `VERSION`:
 - `hook/StartupHook.cs` — `CurrentVersion` const
 - `hook/UprootedSettings.cs` — `Version` property default
 - `package.json` — `"version"` field
@@ -288,7 +300,7 @@ If any mismatch, **stop and report**.
 ### 5d. Git tag collision check
 
 ```bash
-git tag -l "v$ARGUMENTS.version"
+git tag -l "v{VERSION}"
 ```
 
 If the tag already exists, ask the user via `AskUserQuestion`:
@@ -392,23 +404,26 @@ Proceeding to trigger and monitor CI builds...
 
 This phase triggers both GitHub Actions workflows, monitors them to completion, and verifies all release artifacts are present on both repos.
 
-### 8a. Ask whether to publish to public repo
+### 8a. Determine publish targets from `TARGET`
 
-Ask via `AskUserQuestion`:
-- **Private + Public** — trigger both workflows with `publish_public=true` (releases to both `uprooted-private` and `watchthelight/uprooted`)
-- **Private only** — trigger with `publish_public=false` (only `uprooted-private` gets a release)
-- **Skip CI** — don't trigger workflows (user will do it manually)
+The `target` argument controls which repos receive release artifacts:
 
-If "Skip CI", print the manual instructions and stop:
+| `TARGET` | `publish_public` | Workflows triggered | Artifact verification |
+|----------------------|------------------|--------------------|-----------------------|
+| `private` | `false` | Both (Windows + Linux) | Private repo only |
+| `public` | `true` | Both (Windows + Linux) | Public repo only |
+| `all` | `true` | Both (Windows + Linux) | Both repos |
+
+If TARGET is not one of `private`, `public`, or `all`, this should have been caught during argument parsing. If somehow it wasn't, stop with the usage message.
+
+Log the resolved target:
 ```
-Manual steps:
-  1. GitHub Actions → "Build Installer" → Run workflow (version: <version>, prerelease: <true/false>, publish_public: <true/false>)
-  2. GitHub Actions → "Build Linux Installer" → Run workflow (same inputs)
+Release target: <TARGET value> → publish_public=<true/false>
 ```
 
 ### 8b. Trigger both workflows
 
-Run both workflows via `gh`:
+Run both workflows via `gh`, using the `publish_public` value resolved in 8a:
 
 ```bash
 # Windows installer
@@ -454,7 +469,9 @@ If either run fails:
 
 Timeout: if either build hasn't completed after 20 minutes, warn the user and ask whether to keep waiting or proceed.
 
-### 8d. Verify artifacts on private repo
+### 8d. Verify artifacts on private repo (if target is `private` or `all`)
+
+Skip this step if `TARGET` is `public`.
 
 Once both builds succeed, verify all expected release assets exist on the private repo:
 
@@ -478,9 +495,9 @@ Check each asset:
 
 Report any missing or zero-size assets.
 
-### 8e. Verify artifacts on public repo (if publish_public=true)
+### 8e. Verify artifacts on public repo (if target is `public` or `all`)
 
-If the user chose to publish publicly in step 8a:
+Skip this step if `TARGET` is `private`.
 
 ```bash
 gh release view "v<version>" --repo watchthelight/uprooted --json assets --jq '.assets[].name'
@@ -490,13 +507,15 @@ Verify the same 5 assets exist on the public repo with non-zero sizes.
 
 ### 8f. Verify release metadata
 
-For both repos (as applicable), check:
+For repos matching `TARGET`:
+- `private` or `all` → check private repo
+- `public` or `all` → check public repo
 
 ```bash
-# Private
+# Private (if target is private or all)
 gh release view "v<version>" --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
 
-# Public (if applicable)
+# Public (if target is public or all)
 gh release view "v<version>" --repo watchthelight/uprooted --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
 ```
 
@@ -507,16 +526,16 @@ Verify:
 
 ### 8g. Final report
 
-Present a comprehensive verification report:
+Present a comprehensive verification report. Only include repo sections matching `TARGET`:
 
 ```
-CI Build & Artifact Verification — v<version>
+CI Build & Artifact Verification — v<version> (target: TARGET)
 
 Workflows:
   Windows (Build Installer):     ✓ passed (<duration>)
   Linux (Build Linux Installer): ✓ passed (<duration>)
 
-Private repo (The-Uprooted-Project/uprooted-private):
+Private repo (The-Uprooted-Project/uprooted-private):    [if target is private or all]
   Release: v<version> | prerelease: <yes/no>
   Assets:
     ✓ Uprooted-<version>-Setup.exe       (<size>)
@@ -525,7 +544,7 @@ Private repo (The-Uprooted-Project/uprooted-private):
     ✓ uprooted-linux-artifacts.tar.gz     (<size>)
     ✓ install-uprooted-linux.sh           (<size>)
 
-Public repo (watchthelight/uprooted):          [only if publish_public]
+Public repo (watchthelight/uprooted):                     [if target is public or all]
   Release: v<version> | prerelease: <yes/no>
   Assets:
     ✓ Uprooted-<version>-Setup.exe       (<size>)

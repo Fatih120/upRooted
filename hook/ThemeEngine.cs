@@ -264,14 +264,15 @@ internal class ThemeEngine
         {
             try
             {
+                // Keys to restore: mention colors + Error (left border was overridden with neon)
+                var pingKeys = new[] { "SelfMention", "SelfMentionBackground", "SelfMentionBorder", "Error" };
+
                 if (_activeThemeName != null)
                 {
                     var palette = GetPalette();
                     if (palette != null)
                     {
-                        // Re-apply the theme's default mention colors
-                        var mentionKeys = new[] { "SelfMention", "SelfMentionBackground", "SelfMentionBorder" };
-                        foreach (var key in mentionKeys)
+                        foreach (var key in pingKeys)
                         {
                             if (palette.TryGetValue(key, out var hex))
                                 SetThemeDictValue(key, hex);
@@ -280,10 +281,24 @@ internal class ThemeEngine
                 }
                 else
                 {
-                    // No theme active — remove our overrides entirely
-                    var mentionKeys = new[] { "SelfMention", "SelfMentionBackground", "SelfMentionBorder" };
-                    foreach (var key in mentionKeys)
+                    // No theme active — remove our overrides so Root's defaults reassert
+                    EnsureVariantDictResolved();
+                    foreach (var key in pingKeys)
                         RemoveThemeDictKey(key);
+                }
+
+                // Restore SimpleTheme ErrorColor/ErrorBrush
+                var styleRes = _r.GetStyleResources(0);
+                if (styleRes != null)
+                {
+                    try
+                    {
+                        var errColor = _r.ParseColor("#F03F36");
+                        if (errColor != null) _r.AddResource(styleRes, "ErrorColor", errColor);
+                        var errBrush = _r.CreateBrush("#F03F36");
+                        if (errBrush != null) _r.AddResource(styleRes, "ErrorBrush", errBrush);
+                    }
+                    catch { }
                 }
             }
             catch (Exception ex) { Logger.Log("Theme", "Ping color clear error: " + ex.Message); }
@@ -533,8 +548,14 @@ internal class ThemeEngine
         if (_activeVariantDict == null) return;
 
         int count = 0;
+        int skipped = 0;
         foreach (var (key, hex) in rootKeys)
         {
+            if (PreservedSemanticKeys.Contains(key))
+            {
+                skipped++;
+                continue;
+            }
             try
             {
                 SetThemeDictValue(key, hex);
@@ -546,11 +567,23 @@ internal class ThemeEngine
                 Logger.Log("Theme", "  ThemeDict override failed for " + key + ": " + ex.Message);
             }
         }
+        if (skipped > 0)
+            Logger.Log("Theme", "ThemeDictionaries: " + skipped + " semantic keys preserved");
         Logger.Log("Theme", "ThemeDictionaries: " + count + " keys overridden");
     }
 
     // Keys stored as Color (not brush) in Root's ThemeDictionaries
     private static readonly HashSet<string> ColorTypeKeys = new(StringComparer.OrdinalIgnoreCase) { "DropShadow" };
+
+    // Keys that must NOT be overridden in ThemeDictionaries because Root uses them
+    // for semantic purposes unrelated to branding:
+    //   BrandSecondary → online status indicator color (green #A8FF5D)
+    //                     Used by MemberView, MemberProfileView, CommunityTabView, InviteMembersView
+    //                     Overriding it recolors all online dots to the theme accent
+    private static readonly HashSet<string> PreservedSemanticKeys = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "BrandSecondary"
+    };
 
     private void SetThemeDictValue(string key, string hex)
     {
@@ -696,13 +729,33 @@ internal class ThemeEngine
     {
         if (string.IsNullOrEmpty(_customPingColor)) return;
 
+        // Ping color works standalone (no theme required) — resolve variant dict if needed
+        EnsureVariantDictResolved();
+        if (_activeVariantDict == null)
+        {
+            Logger.Log("Theme", "Ping color: cannot resolve ThemeDictionaries variant — skipping");
+            return;
+        }
+
+        // Subscribe to variant changes so ping color survives Dark/PureDark switches
+        SubscribeToVariantChanges();
+
         var hex = _customPingColor;
+
+        // SelfMention keys — background wash and inline mention pills
         SetThemeDictValue("SelfMention", ColorUtils.WithAlpha(hex, 0x66));
         _overriddenThemeDictKeys.Add("SelfMention");
         SetThemeDictValue("SelfMentionBackground", ColorUtils.WithAlpha(hex, 0x26));
         _overriddenThemeDictKeys.Add("SelfMentionBackground");
         SetThemeDictValue("SelfMentionBorder", ColorUtils.WithAlpha(hex, 0x4D));
         _overriddenThemeDictKeys.Add("SelfMentionBorder");
+
+        // Left border stripe — Root uses DynamicResourceExtension("Error") for the
+        // MessageBackgroundBorder.BorderBrush on mention messages. Override Error with
+        // a neon version of the ping color (OKLCH: boost lightness to 0.75, max chroma).
+        var neonHex = MakeNeon(hex);
+        SetThemeDictValue("Error", neonHex);
+        _overriddenThemeDictKeys.Add("Error");
 
         // Also override SimpleTheme highlight keys for AvaloniaEdit caret/selection
         var styleRes = _r.GetStyleResources(0);
@@ -716,11 +769,28 @@ internal class ThemeEngine
                 if (brush != null) _r.AddResource(styleRes, "HighlightForegroundBrush", brush);
                 var selColor = _r.ParseColor(ColorUtils.WithAlpha(hex, 0x60));
                 if (selColor != null) _r.AddResource(styleRes, "TextSelectionHighlightColor", selColor);
+                // Keep ErrorColor/ErrorBrush in SimpleTheme at neon too for consistency
+                var neonColor = _r.ParseColor(neonHex);
+                if (neonColor != null) _r.AddResource(styleRes, "ErrorColor", neonColor);
+                var neonBrush = _r.CreateBrush(neonHex);
+                if (neonBrush != null) _r.AddResource(styleRes, "ErrorBrush", neonBrush);
             }
             catch { }
         }
 
-        Logger.Log("Theme", "Ping color applied to ThemeDicts: " + hex);
+        Logger.Log("Theme", "Ping color applied to ThemeDicts: " + hex + " (neon border: " + neonHex + ")");
+    }
+
+    /// <summary>
+    /// Create a "neon" version of a color for the mention left border stripe.
+    /// Boosts lightness to 0.75 and maximizes chroma in OKLCH while preserving hue.
+    /// </summary>
+    private static string MakeNeon(string hex)
+    {
+        var (l, c, h) = ColorUtils.HexToOklch(hex);
+        // Neon: bright (L=0.75) with maximum chroma (0.35 is near-max for most hues;
+        // OklchToRgb gamut-maps it down to the sRGB boundary automatically)
+        return ColorUtils.OklchToHex(0.75, Math.Max(c, 0.35), h);
     }
 
     // ===== OKLCH Palette Generation =====
