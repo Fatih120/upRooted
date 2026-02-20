@@ -668,9 +668,10 @@ internal static class ContentPages
         public int TestingStatus;
     }
 
-    // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue)
-    private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev" };
-    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0" };
+    // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue), 5=Planned(grey)
+    // Planned (5) is always sorted last and has no toggle — the plugin does not exist yet.
+    private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev", "Planned" };
+    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0", "#7A7A8A" };
 
     // Known plugins metadata
     private static PluginInfo[]? KnownPlugins;
@@ -710,8 +711,8 @@ internal static class ContentPages
                     Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.4.2",
-                    Description = "Translate received and sent messages. Click the translate button in the compose bar to configure language settings. Right-click the button to toggle AutoTranslate on or off.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
+                    Description = "Translate received and sent messages inline. Planned for a future release.",
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 5 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
@@ -1178,10 +1179,13 @@ internal static class ContentPages
                 visibleIndices.Add(ci);
             }
 
-            // Sort: 1st Stable > Experimental, 2nd enabled > disabled, 3rd A-Z
+            // Sort: Planned (5) always last; others descending by status, then enabled > disabled, then A-Z
             visibleIndices.Sort((a, b) =>
             {
-                var cmp = cardStatuses[b].CompareTo(cardStatuses[a]);
+                // Map Planned (5) to -1 so it sorts below Experimental (0)
+                int sa = cardStatuses[a] == 5 ? -1 : cardStatuses[a];
+                int sb = cardStatuses[b] == 5 ? -1 : cardStatuses[b];
+                var cmp = sb.CompareTo(sa);
                 if (cmp != 0) return cmp;
                 bool aOn = cardIds[a] == "content-filter" ? settings.NsfwFilterEnabled
                     : (settings.Plugins.TryGetValue(cardIds[a], out var ea) && ea);
@@ -1401,6 +1405,7 @@ internal static class ContentPages
                 }
 
                 // Themes: show "Open" button instead of toggle (themes are a core feature, not a plugin toggle)
+                // Planned (5): no toggle at all — the plugin does not exist yet
                 if (pluginId == "themes" && onNavigate != null)
                 {
                     var openBtnBg = AdjustForHighlight(CardBg, 10);
@@ -1433,9 +1438,9 @@ internal static class ContentPages
                         r.AddChild(rightIcons, openBtn);
                     }
                 }
-                else
+                else if (testingStatus != 5)
                 {
-                    // Toggle switch for all other plugins
+                    // Toggle switch for all other plugins (Planned plugins have no toggle)
                     var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
                     {
                         settings.Plugins[pluginId] = enabled;
