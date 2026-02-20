@@ -517,15 +517,9 @@ internal class ThemeEngine
     {
         if (_activeThemeName == null) return;
 
-        // Immediate walk
-        _r.RunOnUIThread(() =>
-        {
-            try { WalkVisualTreeNow(); }
-            catch { }
-        });
-
-        // Single follow-up at 500ms
-        ScheduleDelayedWalk(500);
+        // Debounce: cancel any pending walk and schedule one 150ms out.
+        // Running immediately on every tab switch stacks UI-thread walks during rapid navigation.
+        ScheduleDelayedWalk(150);
     }
 
     // ===== Core Engine =====
