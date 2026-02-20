@@ -133,7 +133,8 @@ internal static class ContentPages
 
     public static object? BuildPage(string pageName, AvaloniaReflection r,
         UprootedSettings settings, object? nativeFontFamily = null,
-        ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
+        ThemeEngine? themeEngine = null, Action? onThemeChanged = null,
+        Action<string>? onNavigate = null)
     {
         Logger.Log("ContentPages", $"BuildPage('{pageName}') called");
         EnsureStaticInit();
@@ -144,7 +145,7 @@ internal static class ContentPages
             page = pageName switch
             {
                 "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
-                "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine),
+                "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine, onNavigate),
                 "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
                 _ => null
             };
@@ -680,7 +681,7 @@ internal static class ContentPages
     private static object? _updateNotifyBackdrop;
     private static object? _updateNotifyPanel;
 
-    private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
+    private static object? BuildPluginsPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null, Action<string>? onNavigate = null)
     {
         ApplyThemedColors(themeEngine);
         var page = r.CreateStackPanel(vertical: true, spacing: 0);
@@ -900,7 +901,7 @@ internal static class ContentPages
                 plugin.Description, isEnabled, font, themeEngine,
                 filterMode, () => r.RunOnUIThread(() => rebuildGrid?.Invoke()),
                 restartBannerRef, initialStatesRef,
-                plugin.HasSettings, plugin.TestingStatus);
+                plugin.HasSettings, plugin.TestingStatus, onNavigate);
             if (card != null)
             {
                 cardIds.Add(plugin.Id);
@@ -1027,7 +1028,8 @@ internal static class ContentPages
         bool isEnabled, object? font, ThemeEngine? themeEngine,
         int[] filterMode, Action? onRebuildNeeded, object? restartBanner = null,
         Dictionary<string, bool>? initialStates = null,
-        bool hasSettings = false, int testingStatus = -1)
+        bool hasSettings = false, int testingStatus = -1,
+        Action<string>? onNavigate = null)
     {
         var card = CreateCard(r);
         if (card == null) return null;
@@ -1124,60 +1126,75 @@ internal static class ContentPages
                     }
                 }
 
-                // Toggle switch
-                var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
+                // Themes: show "Open" button instead of toggle (themes are a core feature, not a plugin toggle)
+                if (pluginId == "themes" && onNavigate != null)
                 {
-                    settings.Plugins[pluginId] = enabled;
-
-                    // Content filter uses NsfwFilterEnabled as canonical toggle
-                    if (pluginId == "content-filter")
+                    var openBtnBg = ColorUtils.Lighten(CardBg, 10);
+                    var openBtn = r.CreateBorder(openBtnBg, 8);
+                    if (openBtn != null)
                     {
-                        settings.NsfwFilterEnabled = enabled;
-                        NsfwFilterInstance?.UpdateConfig();
-                    }
+                        r.SetCursorHand(openBtn);
+                        r.SetPadding(openBtn, 12, 4, 12, 4);
+                        r.SetVerticalAlignment(openBtn, "Center");
 
-                    if (pluginId == "themes" && themeEngine != null)
+                        var openLabel = r.CreateTextBlock("Open", 12, TextWhite);
+                        r.SetFontWeightNumeric(openLabel, 500);
+                        ApplyFont(r, openLabel, font);
+                        r.SetBorderChild(openBtn, openLabel);
+
+                        var btnRef = openBtn;
+                        r.SubscribeEvent(openBtn, "PointerPressed", () =>
+                        {
+                            onNavigate("themes");
+                        });
+                        r.SubscribeEvent(openBtn, "PointerEntered", () =>
+                            r.SetBackground(btnRef, ColorUtils.Lighten(openBtnBg, 8)));
+                        r.SubscribeEvent(openBtn, "PointerExited", () =>
+                            r.SetBackground(btnRef, openBtnBg));
+
+                        r.AddChild(rightIcons, openBtn);
+                    }
+                }
+                else
+                {
+                    // Toggle switch for all other plugins
+                    var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
                     {
-                        if (!enabled)
-                        {
-                            themeEngine.RevertTheme();
-                            settings.ActiveTheme = "default-dark";
-                        }
-                        else if (settings.ActiveTheme != "default-dark")
-                        {
-                            if (settings.ActiveTheme == "custom")
-                                themeEngine.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground);
-                            else
-                                themeEngine.ApplyTheme(settings.ActiveTheme);
-                        }
-                    }
+                        settings.Plugins[pluginId] = enabled;
 
-                    try { settings.Save(); }
-                    catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
-                    Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
-
-                    // Show/hide restart banner based on whether any plugin diverged from initial state
-                    // (themes apply live, so they don't count)
-                    if (restartBanner != null && initialStates != null)
-                    {
-                        bool anyDiverged = false;
-                        foreach (var kv in initialStates)
+                        // Content filter uses NsfwFilterEnabled as canonical toggle
+                        if (pluginId == "content-filter")
                         {
-                            if (kv.Key == "themes") continue;
-                            bool currentVal = kv.Key == "content-filter"
-                                ? settings.NsfwFilterEnabled
-                                : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
-                            if (currentVal != kv.Value) { anyDiverged = true; break; }
+                            settings.NsfwFilterEnabled = enabled;
+                            NsfwFilterInstance?.UpdateConfig();
                         }
-                        r.SetIsVisible(restartBanner, anyDiverged);
-                    }
 
-                    // Rebuild grid if filter is active so toggled plugins appear/disappear
-                    if (filterMode[0] != 0)
-                        onRebuildNeeded?.Invoke();
-                });
-                if (togglePill != null)
-                    r.AddChild(rightIcons, togglePill);
+                        try { settings.Save(); }
+                        catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
+                        Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+
+                        // Show/hide restart banner based on whether any plugin diverged from initial state
+                        if (restartBanner != null && initialStates != null)
+                        {
+                            bool anyDiverged = false;
+                            foreach (var kv in initialStates)
+                            {
+                                if (kv.Key == "themes") continue;
+                                bool currentVal = kv.Key == "content-filter"
+                                    ? settings.NsfwFilterEnabled
+                                    : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
+                                if (currentVal != kv.Value) { anyDiverged = true; break; }
+                            }
+                            r.SetIsVisible(restartBanner, anyDiverged);
+                        }
+
+                        // Rebuild grid if filter is active so toggled plugins appear/disappear
+                        if (filterMode[0] != 0)
+                            onRebuildNeeded?.Invoke();
+                    });
+                    if (togglePill != null)
+                        r.AddChild(rightIcons, togglePill);
+                }
 
                 r.AddChild(topRow, rightIcons);
             }

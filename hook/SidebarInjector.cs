@@ -778,7 +778,7 @@ internal class SidebarInjector
                 _themeEngine.ScheduleWalkBurst();
             };
             var page = ContentPages.BuildPage(pageName, _r, _settings, _nativeFontFamily,
-                _themeEngine, rebuildCurrentPage);
+                _themeEngine, rebuildCurrentPage, onNavigate: OnNavItemClicked);
             if (page == null)
             {
                 Logger.Log("Injector", $"Failed to build page: {pageName}");
