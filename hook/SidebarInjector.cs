@@ -44,7 +44,6 @@ internal class SidebarInjector
     private string? _activePage;                         // "uprooted" | "plugins" | "themes" | null
     private int _lastListBoxIdx = -1;                    // For selection change detection
     private bool _injected;                              // Whether we've injected
-    private int _aliveCheckCounter;                      // Throttle alive checks
     private List<object> _hiddenContentChildren = new(); // Root's content children we hid (to restore later)
 
     // Save bar (freeze prevention for Revert button)
@@ -295,19 +294,16 @@ internal class SidebarInjector
                 }
             }
 
-            // Throttled alive check: every 5 ticks (~1 second), verify settings page still open.
-            // Uses lightweight text search instead of full FindSettingsLayout to avoid chatty logs.
-            _aliveCheckCounter++;
-            if (_aliveCheckCounter % 5 == 0)
+            // Alive check every tick (~1s, since timer slows to 1000ms after injection).
+            // Primary cleanup is DetachedFromVisualTree; this catches leaked state.
+            // Uses lightweight text search instead of full FindSettingsLayout.
+            var appSettings = _walker.FindFirstTextBlockFast(_window, "APP SETTINGS")
+                ?? _walker.FindFirstTextBlockFast(_window, "App Settings");
+            if (appSettings == null)
             {
-                var appSettings = _walker.FindFirstTextBlockFast(_window, "APP SETTINGS")
-                    ?? _walker.FindFirstTextBlockFast(_window, "App Settings");
-                if (appSettings == null)
-                {
-                    Logger.Log("Injector", "Settings page closed (not found in tree), nulling state");
-                    _hasAutoNavigated = false;  // Reset so next settings open auto-navs again
-                    NullState();
-                }
+                Logger.Log("Injector", "Settings page closed (not found in tree), nulling state");
+                _hasAutoNavigated = false;  // Reset so next settings open auto-navs again
+                NullState();
             }
             return;
         }
@@ -481,6 +477,9 @@ internal class SidebarInjector
             }
 
             _injected = true;
+            // Slow the safety-net poll to 1s — events (SelectionChanged, DetachedFromVisualTree)
+            // handle fast transitions; the poll only needs to catch leaked state and run alive checks.
+            _timer?.Change(1000, 1000);
             Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
                 $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
 
@@ -585,10 +584,11 @@ internal class SidebarInjector
         _versionContainer = null;
         _lastListBoxIdx = -1;
         _injected = false;
-        _aliveCheckCounter = 0;
         _lastLayoutCheckMs = 0;                            // Allow instant LayoutUpdated detection on next settings open
         _selectionSuppressedUntilMs = 0;
         Interlocked.Exchange(ref _injecting, 0);           // Clear stale timer lock from previous cycle
+        // Restore fast poll interval so settings-page detection is responsive after close.
+        _timer?.Change(PollIntervalMs, PollIntervalMs);
     }
 
     // ===== NavContainer item building =====
