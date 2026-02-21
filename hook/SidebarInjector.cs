@@ -1295,12 +1295,42 @@ internal class SidebarInjector
             _versionTextBlock = versionText;
             _versionContainer = versionStackPanel;
 
-            // Intercept version copy button to include Uprooted version in clipboard
+            // Intercept version copy button to include Uprooted version in clipboard.
+            // Root's handler calls SetTextAsync (async) so we delay briefly to overwrite after it completes.
             var versionButton = FindAncestorOfType(versionStackPanel, "Button");
             if (versionButton != null)
             {
-                // TODO: version copy intercept — needs investigation to run AFTER Root's native handler
-                // _r.SubscribeEvent(versionButton, "Click", () => { ... });
+                var container = versionStackPanel;
+                _r.SubscribeEvent(versionButton, "Click", () =>
+                {
+                    Task.Delay(150).ContinueWith(_ =>
+                    {
+                        _r.RunOnUIThread(() =>
+                        {
+                            try
+                            {
+                                var lines = new System.Collections.Generic.List<string>();
+                                foreach (var child in _r.GetVisualChildren(container))
+                                {
+                                    if (!_r.IsTextBlock(child)) continue;
+                                    var txt = _r.GetText(child);
+                                    if (!string.IsNullOrWhiteSpace(txt))
+                                        lines.Add(txt);
+                                }
+                                if (lines.Count > 0)
+                                {
+                                    var combined = string.Join("\n", lines);
+                                    _r.CopyToClipboard(_window, combined);
+                                    Logger.Log("Injector", $"Version copy: overwrote clipboard with {lines.Count} lines");
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                Logger.Log("Injector", $"Version copy error: {ex.Message}");
+                            }
+                        });
+                    });
+                });
                 Logger.Log("Injector", "Version copy: subscribed to Button.Click");
             }
 
