@@ -88,9 +88,7 @@ internal class RootcordEngine
     private object? _injectedHeader;       // The header outer stack we built
     private object? _channelsPanelRef;     // The channels panel we modified
     // Tab switcher state for injected header
-    private object? _tabCommunityBtn;      // "Community" tab button
-    private object? _tabChannelBtn;        // "Channel" tab button
-    private object? _headerMembersVm;      // MembersViewModel for ToggleMenuCommand
+    private object? _headerMembersVm;      // MembersViewModel for CommunityMemberFilter sync
 
     // User bar width tracking (matches channels panel width dynamically)
     private object? _userBarLayoutHandler;     // LayoutUpdated handler on community layoutGrid
@@ -1337,8 +1335,6 @@ internal class RootcordEngine
 
         _injectedHeader = null;
         _channelsPanelRef = null;
-        _tabCommunityBtn = null;
-        _tabChannelBtn = null;
         _headerMembersVm = null;
     }
 
@@ -1594,30 +1590,23 @@ internal class RootcordEngine
 
             if (countStr.Length > 0)
             {
-                // Member count row: people glyph + count label (matches native MemberCountTextBlock style)
-                var countRow = _r.CreateStackPanel(vertical: false, spacing: 4);
+                // Member count row: UserSVG icon + count label
+                // MembersView OutMenuPanel uses RootSvgImage("UserSVG", 10×10, Opacity=0.64) + TextBlock(12pt, Medium 450)
+                var countRow = _r.CreateStackPanel(vertical: false, spacing: 6);
                 if (countRow != null)
                 {
                     _r.SetVerticalAlignment(countRow, "Center");
+                    _r.SetMargin(countRow, 0, 1, 0, 0);
 
-                    var peopleIcon = _r.CreateTextBlock(GlyphFriends, 10, _muted);
-                    if (peopleIcon != null)
+                    // Try to use Root's native RootSvgImage with "UserSVG" DynamicResource
+                    var memberIcon = CreateNativeSvgImage("UserSVG", 10, 10, 0.64);
+                    if (memberIcon != null)
                     {
-                        _r.SetVerticalAlignment(peopleIcon, "Center");
-                        try
-                        {
-                            var ffProp = peopleIcon.GetType().GetProperty("FontFamily");
-                            if (ffProp != null)
-                            {
-                                var ff = Activator.CreateInstance(ffProp.PropertyType, GlyphIconFonts);
-                                if (ff != null) ffProp.SetValue(peopleIcon, ff);
-                            }
-                        }
-                        catch { }
-                        _r.AddChild(countRow, peopleIcon);
+                        _r.SetVerticalAlignment(memberIcon, "Center");
+                        _r.AddChild(countRow, memberIcon);
                     }
 
-                    var countText = _r.CreateTextBlock(countStr, 11, _muted);
+                    var countText = _r.CreateTextBlock(countStr, 12, _muted);
                     if (countText != null)
                     {
                         _r.SetVerticalAlignment(countText, "Center");
@@ -1634,7 +1623,9 @@ internal class RootcordEngine
         _r.SetBorderChild(headerBorder, cardGrid);
 
         // ===== COMMUNITY / CHANNEL TAB SWITCHER =====
-        var tabSwitcher = BuildTabSwitcher(nonSplitters, membersIdx);
+        // Use Root's native RootMemberVisibilitySwitch (instantiated via reflection).
+        // It includes the correct SVG icons, HighlightNormal selected state, responsive TallMode.
+        var tabSwitcher = CreateNativeTabSwitcher(nonSplitters, membersIdx);
 
         // ===== OUTER STACK: card + switcher =====
         var headerStack = _r.CreateStackPanel(vertical: true, spacing: 0);
@@ -1698,17 +1689,16 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Build the Community/Channel tab switcher pill matching Root's native MembersView header.
-    /// "Community" = show members panel (MembersViewModel.MenuIn=true via ToggleMenuCommand).
-    /// "Channel"   = hide members panel (MenuIn=false, MembersView.Width collapses to 0).
-    /// From ILSpy MembersView: Width bound to MenuIn via CommunityMembersBoolToWidthConverter;
-    /// InMenuPanel (Row 0) visible when MenuIn=true, OutMenuPanel (Row 3) visible when false.
+    /// Instantiate Root's native RootMemberVisibilitySwitch control via reflection.
+    /// This UserControl has its own XAML template with Community/Channel SVG icons,
+    /// HighlightNormal selected state, and responsive TallMode (&lt;100px width).
+    /// Wired to MembersViewModel.CommunityMemberFilter for filtering the members list.
     /// </summary>
-    private object? BuildTabSwitcher(List<(object child, int col)> nonSplitters, int membersIdx)
+    private object? CreateNativeTabSwitcher(List<(object child, int col)> nonSplitters, int membersIdx)
     {
         try
         {
-            // Find MembersViewModel from the members panel visual tree (DataContext of MembersView)
+            // Find MembersViewModel from the members panel visual tree
             var membersPanel = nonSplitters[membersIdx].child;
             _headerMembersVm = null;
             var walker = new VisualTreeWalker(_r);
@@ -1723,174 +1713,142 @@ internal class RootcordEngine
                 }
             }
 
-            // Read current MenuIn state (true = Community tab selected)
-            bool menuIn = _headerMembersVm != null
-                && _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool b && b;
-
-            var pillBg = AdjustForHighlight(_cardBg, 8);
-            var outerPill = _r.CreateBorder(pillBg, 14);
-            if (outerPill == null) return null;
-            _r.SetMargin(outerPill, 10, 0, 10, 8);
-            _r.SetTag(outerPill, "rootcord-tab-switcher");
-
-            var pillGrid = _r.CreateGrid();
-            if (pillGrid == null) return outerPill;
-            _r.SetMargin(pillGrid, 3, 3, 3, 3);
-
-            // Two equal Star columns
-            _r.AddGridColumn(pillGrid, 1.0);
-            _r.AddGridColumn(pillGrid, 1.0);
-
-            // Community tab (people glyph + "Community")
-            _tabCommunityBtn = BuildTabButton(GlyphFriends, "Community", isSelected: menuIn,  isIconFont: true);
-            if (_tabCommunityBtn != null)
+            // Find the RootMemberVisibilitySwitch type from loaded assemblies
+            Type? switchType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                _r.SetGridColumn(_tabCommunityBtn, 0);
-                _r.AddChild(pillGrid, _tabCommunityBtn);
+                try { switchType = asm.GetType("RootApp.Client.Avalonia.Controls.RootMemberVisibilitySwitch"); }
+                catch { }
+                if (switchType != null) break;
+            }
+            if (switchType == null)
+            {
+                Logger.Log(Tag, "NativeTabSwitcher: RootMemberVisibilitySwitch type not found");
+                return null;
             }
 
-            // Channel tab (# + "Channel")
-            _tabChannelBtn = BuildTabButton("#", "Channel", isSelected: !menuIn, isIconFont: false);
-            if (_tabChannelBtn != null)
-            {
-                _r.SetGridColumn(_tabChannelBtn, 1);
-                _r.AddChild(pillGrid, _tabChannelBtn);
-            }
+            // Create instance (constructor calls InitializeComponent which loads XAML template)
+            var switchControl = Activator.CreateInstance(switchType);
+            if (switchControl == null) return null;
+            _r.SetTag(switchControl, "rootcord-native-tab-switcher");
+            _r.SetMargin(switchControl, 10, 0, 10, 8);
 
-            _r.SetBorderChild(outerPill, pillGrid);
-
-            // Wire click: invoke ToggleMenuCommand only if not already in the target state
-            if (_tabCommunityBtn != null)
+            // Read initial CommunityMemberFilter from MembersViewModel and set SelectedOption
+            if (_headerMembersVm != null)
             {
-                _r.SubscribeEvent(_tabCommunityBtn, "PointerPressed", () =>
+                var filterValue = _r.GetPropertyValue(_headerMembersVm, "CommunityMemberFilter");
+                if (filterValue != null)
                 {
-                    if (_headerMembersVm != null)
-                    {
-                        bool cur = _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool bc && bc;
-                        if (!cur)
-                        {
-                            var cmd = _r.GetPropertyValue(_headerMembersVm, "ToggleMenuCommand");
-                            if (cmd != null) InvokeCommand(cmd);
-                        }
-                    }
-                    UpdateTabSwitcherState(communitySelected: true);
-                });
+                    var selectedProp = switchType.GetProperty("SelectedOption");
+                    selectedProp?.SetValue(switchControl, filterValue);
+                    Logger.Log(Tag, $"NativeTabSwitcher: initial SelectedOption = {filterValue}");
+                }
             }
 
-            if (_tabChannelBtn != null)
+            // Two-way sync: when switch SelectedOption changes → update MembersViewModel.CommunityMemberFilter
+            // AvaloniaObject implements INotifyPropertyChanged, so _r.SubscribePropertyChanged works
+            var capturedSwitch = switchControl;
+            var capturedSwitchType = switchType;
+            _r.SubscribePropertyChanged(switchControl, (propName) =>
             {
-                _r.SubscribeEvent(_tabChannelBtn, "PointerPressed", () =>
+                if (propName == "SelectedOption" && _headerMembersVm != null)
                 {
-                    if (_headerMembersVm != null)
+                    try
                     {
-                        bool cur = _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool bc && bc;
-                        if (cur)
-                        {
-                            var cmd = _r.GetPropertyValue(_headerMembersVm, "ToggleMenuCommand");
-                            if (cmd != null) InvokeCommand(cmd);
-                        }
+                        var newVal = capturedSwitchType.GetProperty("SelectedOption")?.GetValue(capturedSwitch);
+                        if (newVal != null)
+                            _r.SetPropertyValue(_headerMembersVm, "CommunityMemberFilter", newVal);
                     }
-                    UpdateTabSwitcherState(communitySelected: false);
-                });
-            }
+                    catch { }
+                }
+            });
 
-            if (_headerMembersVm == null)
-                Logger.Log(Tag, "BuildTabSwitcher: MembersViewModel not found — toggle disabled");
-            else
-                Logger.Log(Tag, $"BuildTabSwitcher: ready (MenuIn={menuIn})");
-
-            return outerPill;
+            Logger.Log(Tag, $"NativeTabSwitcher: RootMemberVisibilitySwitch created (MembersVM={_headerMembersVm != null})");
+            return switchControl;
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"BuildTabSwitcher error: {ex.Message}");
+            Logger.Log(Tag, $"NativeTabSwitcher error: {ex.Message}");
             return null;
         }
     }
 
     /// <summary>
-    /// Build one tab button for the Community/Channel switcher pill.
-    /// Selected: filled AdjustForHighlight background, primary text color, SemiBold label.
-    /// Unselected: transparent background, muted text, Normal weight.
+    /// Instantiate Root's native RootSvgImage control and set its SvgPath via DynamicResource key.
+    /// Reads the resource value from Application.Current using the active theme variant.
+    /// Falls back to null if the type or resource is not found.
     /// </summary>
-    private object? BuildTabButton(string icon, string label, bool isSelected, bool isIconFont)
+    private object? CreateNativeSvgImage(string resourceKey, double width, double height, double opacity)
     {
-        var selectedBg = AdjustForHighlight(_cardBg, 20);
-        var btn = _r.CreateBorder(isSelected ? selectedBg : "#00000000", 11);
-        if (btn == null) return null;
-        _r.SetCursorHand(btn);
-
-        var row = _r.CreateStackPanel(vertical: false, spacing: 5);
-        if (row != null)
-        {
-            _r.SetMargin(row, 8, 5, 8, 5);
-            _r.SetHorizontalAlignment(row, "Center");
-            _r.SetVerticalAlignment(row, "Center");
-
-            var iconText = _r.CreateTextBlock(icon, 10, isSelected ? _text : _muted);
-            if (iconText != null)
-            {
-                _r.SetVerticalAlignment(iconText, "Center");
-                if (isIconFont)
-                {
-                    try
-                    {
-                        var ffProp = iconText.GetType().GetProperty("FontFamily");
-                        if (ffProp != null)
-                        {
-                            var ff = Activator.CreateInstance(ffProp.PropertyType, GlyphIconFonts);
-                            if (ff != null) ffProp.SetValue(iconText, ff);
-                        }
-                    }
-                    catch { }
-                }
-                _r.AddChild(row, iconText);
-            }
-
-            var labelText = _r.CreateTextBlock(label, 11, isSelected ? _text : _muted);
-            if (labelText != null)
-            {
-                _r.SetVerticalAlignment(labelText, "Center");
-                if (isSelected) _r.SetFontWeight(labelText, "SemiBold");
-                _r.AddChild(row, labelText);
-            }
-
-            _r.SetBorderChild(btn, row);
-        }
-
-        return btn;
-    }
-
-    /// <summary>
-    /// Update Community/Channel tab button visual states after a toggle.
-    /// Called from click handlers to keep visuals in sync with MenuIn state.
-    /// </summary>
-    private void UpdateTabSwitcherState(bool communitySelected)
-    {
-        if (_tabCommunityBtn == null || _tabChannelBtn == null) return;
         try
         {
-            var selectedBg = AdjustForHighlight(_cardBg, 20);
-
-            // Helper: update a tab button's bg, icon color, label color + weight
-            void SetTab(object btn, bool selected)
+            // Find RootSvgImage type
+            Type? svgType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                _r.SetBackground(btn, selected ? selectedBg : "#00000000");
-                var content = _r.GetBorderChild(btn);
-                if (content == null) return;
-                var kids = _r.GetChildren(content);
-                if (kids == null || kids.Count < 2) return;
-                string color = selected ? _text : _muted;
-                _r.SetForeground(kids[0], color);  // icon
-                _r.SetForeground(kids[1], color);  // label
-                if (_r.IsTextBlock(kids[1]))
-                    _r.SetFontWeight(kids[1], selected ? "SemiBold" : "Normal");
+                try { svgType = asm.GetType("RootApp.Client.Avalonia.Controls.RootSvgImage"); }
+                catch { }
+                if (svgType != null) break;
+            }
+            if (svgType == null) return null;
+
+            // Create instance
+            var svgImage = Activator.CreateInstance(svgType);
+            if (svgImage == null) return null;
+
+            svgType.GetProperty("Width")?.SetValue(svgImage, width);
+            svgType.GetProperty("Height")?.SetValue(svgImage, height);
+            svgType.GetProperty("Opacity")?.SetValue(svgImage, opacity);
+
+            // Read the SVG path from Application resources using the active theme variant
+            var app = _r.GetAppCurrent();
+            if (app != null)
+            {
+                var themeVariant = app.GetType().GetProperty("ActualThemeVariant")?.GetValue(app);
+
+                // Try FindResource(ThemeVariant, object key) overload
+                object? svgPath = null;
+                if (themeVariant != null)
+                {
+                    var findRes = app.GetType().GetMethod("FindResource",
+                        new[] { themeVariant.GetType(), typeof(object) });
+                    if (findRes != null)
+                        svgPath = findRes.Invoke(app, new[] { themeVariant, resourceKey });
+                }
+
+                // Fallback: try TryFindResource(object key, out object value)
+                if (svgPath == null)
+                {
+                    foreach (var m in app.GetType().GetMethods())
+                    {
+                        if (m.Name == "TryFindResource" && m.GetParameters().Length >= 2)
+                        {
+                            var parms = new object?[] { resourceKey, null };
+                            try { m.Invoke(app, parms); svgPath = parms[^1]; } catch { }
+                            if (svgPath != null) break;
+                        }
+                    }
+                }
+
+                if (svgPath != null)
+                {
+                    // Set SvgPath property (it's a string containing the SVG file path)
+                    var svgPathProp = svgType.GetProperty("SvgPath");
+                    svgPathProp?.SetValue(svgImage, svgPath);
+                }
+                else
+                {
+                    Logger.Log(Tag, $"CreateNativeSvgImage: resource '{resourceKey}' not found");
+                }
             }
 
-            SetTab(_tabCommunityBtn, communitySelected);
-            SetTab(_tabChannelBtn,   !communitySelected);
+            return svgImage;
         }
-        catch (Exception ex) { Logger.Log(Tag, $"UpdateTabSwitcherState error: {ex.Message}"); }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"CreateNativeSvgImage('{resourceKey}') error: {ex.Message}");
+            return null;
+        }
     }
 
     // ===== Flyout placement flip (member profile popups) =====
