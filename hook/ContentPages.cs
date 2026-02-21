@@ -100,6 +100,7 @@ internal static class ContentPages
 
         // Keep any live embed cards in sync with the new palette
         LinkEmbedEngine.Instance?.NotifyThemeChanged();
+        RootcordEngine.Instance?.NotifyThemeChanged();
     }
 
     /// <summary>Ensure hex is in #AARRGGBB format for consistent walker matching.</summary>
@@ -174,6 +175,7 @@ internal static class ContentPages
 
         // Keep any live embed cards in sync with the updated palette
         LinkEmbedEngine.Instance?.NotifyThemeChanged();
+        RootcordEngine.Instance?.NotifyThemeChanged();
     }
 
     // NSFW filter reference for live config updates from settings UI

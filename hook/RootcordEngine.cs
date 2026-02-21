@@ -49,6 +49,7 @@ internal class RootcordEngine
     private object? _tabsCollectionHandler;
     private object? _selectionHandler;
     private object? _tabsCollection; // INotifyCollectionChanged source
+    private object? _previousTabVm; // Previous SelectedTabViewModel for home button toggle-back
 
     // Hover tooltip state
     private object? _tooltipOverlay;  // OverlayLayer reference
@@ -96,6 +97,7 @@ internal class RootcordEngine
     private object? _channelsWidthPanel;       // Channels panel reference for Bounds reading
     private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
     private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
+    private double _lastUserBarWidth = double.NaN; // Guards SetWidth: skip if value unchanged (prevents layout loop)
     private object? _userBarStatusText;       // TextBlock showing "Online"/"Away" in user bar
     private object? _userBarStatusDot;        // Border (circle) showing status color in user bar
     private object? _sessionUserRef;          // SessionUser object reference for PropertyChanged sub
@@ -117,7 +119,7 @@ internal class RootcordEngine
     private CancellationTokenSource? _applyCts;
 
     private const string Tag = "Rootcord";
-    private const double StripWidth = 56;
+    private const double StripWidth = 70;
     private const double IconSize = 42;
     private const double IconCornerRadius = 21;
     private const double IconSpacing = 4;
@@ -129,6 +131,14 @@ internal class RootcordEngine
     private const string GlyphNotifications = "\uEA8F"; // Ringer / Bell
     private const string GlyphSettings      = "\uE713"; // Settings gear
     private const string GlyphIconFonts     = "Segoe Fluent Icons,Segoe MDL2 Assets,Segoe UI Symbol";
+
+    // Drag-to-reorder state
+    private bool _isDragging;
+    private int _dragStartIndex = -1;
+    private int _dragCurrentIndex = -1;
+    private double _dragStartY;
+    private object? _draggedContainer;     // The StackPanel container being dragged
+    private const double DragThresholdPx = 8;
 
     public RootcordEngine(AvaloniaReflection resolver, object mainWindow, ThemeEngine? themeEngine)
     {
@@ -151,6 +161,117 @@ internal class RootcordEngine
         _muted  = ContentPages.TextMuted;
         _dim    = ContentPages.TextDim;
         _accent = ContentPages.AccentGreen;
+    }
+
+    /// <summary>
+    /// Called by ContentPages when theme colors change (live preview, variant switch, custom palette).
+    /// Re-reads cached colors and updates all Rootcord UI elements in-place.
+    /// </summary>
+    public void NotifyThemeChanged()
+    {
+        if (!IsApplied) return;
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                RefreshColors();
+                RefreshAllUiColors();
+                Logger.Log(Tag, "Theme changed — refreshed all Rootcord UI colors");
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"NotifyThemeChanged error: {ex.Message}"); }
+        });
+    }
+
+    /// <summary>
+    /// Walk all existing Rootcord UI elements and update their colors from cached fields.
+    /// Avoids a full Revert+Apply cycle for smooth live preview.
+    /// </summary>
+    private void RefreshAllUiColors()
+    {
+        // Server strip border: background + border brush
+        if (_serverStripBorder != null)
+        {
+            _r.SetBackground(_serverStripBorder, _bg);
+            _r.SetBorderBrush(_serverStripBorder, _border);
+        }
+
+        // Server icons: refresh backgrounds
+        if (_serverStrip != null)
+        {
+            var children = _r.GetChildren(_serverStrip);
+            if (children != null)
+            {
+                var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+                var tabs = _r.GetPropertyValue(_homeViewModel, "Tabs");
+                var communityTabs = new List<object>();
+                if (tabs is IEnumerable tabsEnum)
+                    foreach (var t in tabsEnum)
+                        if (t != null && !IsDmTab(t) && !IsNewTab(t)) communityTabs.Add(t);
+
+                int idx = 0;
+                foreach (var container in children)
+                {
+                    if (container == null) continue;
+                    var containerChildren = _r.GetChildren(container);
+                    if (containerChildren == null || containerChildren.Count < 2) { idx++; continue; }
+
+                    bool isSelected = idx < communityTabs.Count && communityTabs[idx] == selectedTab;
+                    var iconElement = containerChildren[1];
+                    var iconBorder = iconElement;
+                    if (iconElement != null && _r.IsGrid(iconElement))
+                        foreach (var gc in _r.GetVisualChildren(iconElement))
+                            if (_r.IsBorder(gc)) { iconBorder = gc; break; }
+
+                    _r.SetBackground(iconBorder, isSelected ? _accent : _cardBg);
+                    if (_r.IsBorder(iconBorder))
+                    {
+                        var iconChild = _r.GetBorderChild(iconBorder);
+                        if (iconChild != null && _r.IsTextBlock(iconChild))
+                            _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : _text);
+                    }
+                    idx++;
+                }
+            }
+        }
+
+        // Home button: background
+        if (_homeButton != null)
+        {
+            var homeChildren = _r.GetChildren(_homeButton);
+            if (homeChildren != null && homeChildren.Count >= 2)
+            {
+                var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+                bool isHome = selectedTab != null && (IsDmTab(selectedTab) || IsNewTab(selectedTab));
+                var iconBorder = homeChildren[1];
+                _r.SetBackground(iconBorder, isHome ? _accent : _cardBg);
+            }
+        }
+
+        // User bar: background + border brush
+        if (_userBar != null)
+        {
+            _r.SetBackground(_userBar, _cardBg);
+            _r.SetBorderBrush(_userBar, _border);
+        }
+
+        // Channels header: background + text colors
+        if (_channelsPanelRef != null)
+        {
+            var child = _r.GetBorderChild(_channelsPanelRef);
+            if (child != null && (_r.GetTag(child) as string) == "rootcord-channel-wrapper")
+            {
+                // Walk to find the header border (row 0) inside the wrapper
+                foreach (var gridChild in _r.GetVisualChildren(child))
+                {
+                    if (_r.GetGridRow(gridChild) == 0 && _r.IsBorder(gridChild))
+                    {
+                        _r.SetBackground(gridChild, _cardBg);
+                        SetBorderStroke(gridChild, AdjustForHighlight(_cardBg, 15), 0.5);
+                        break;
+                    }
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -280,6 +401,9 @@ internal class RootcordEngine
 
             // Revert community members sidebar swap
             RevertCommunityMembersSwap();
+
+            // Clean up injected header (not done in RevertCommunityMembersSwap to avoid flash)
+            RemoveInjectedHeader();
 
             // Unsubscribe tab monitoring + profile intercept
             UnsubscribeTabChanges();
@@ -1242,7 +1366,18 @@ internal class RootcordEngine
                     var panel = nonSplitters[pi].child;
                     if (pi == maxAssignedIdx)
                     {
-                        // Members panel (rightmost after rotation) — let it size naturally
+                        // Members panel (rightmost after rotation) — force-expand if collapsed.
+                        // When users collapse members via GridSplitter before enabling Rootcord,
+                        // the panel may have Width=0, IsVisible=false, or MinWidth/MaxWidth=0.
+                        _r.SetIsVisible(panel, true);
+                        try
+                        {
+                            panel.GetType().GetProperty("Width")?.SetValue(panel, double.NaN); // clear explicit width
+                            panel.GetType().GetProperty("MinWidth")?.SetValue(panel, 0.0);
+                            panel.GetType().GetProperty("MaxWidth")?.SetValue(panel, double.PositiveInfinity);
+                        }
+                        catch { }
+                        Logger.Log(Tag, "SwapCommunityMembers: members panel force-expanded (cleared width constraints)");
                         continue;
                     }
                     int origCol = nonSplitters[pi].col;
@@ -1265,26 +1400,95 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: width bounds error: {ex.Message}"); }
 
+            // Add 0.5px left-edge borders on channels and members columns (matching Root's native dividers)
+            try
+            {
+                for (int pi = 0; pi < n; pi++)
+                {
+                    var panel = nonSplitters[pi].child;
+                    if (_r.IsBorder(panel))
+                    {
+                        _r.SetBorderBrush(panel, _border);
+                        _r.SetBorderThickness(panel, 0.5, 0, 0, 0); // left edge only
+                    }
+                    else
+                    {
+                        // Panel isn't a Border — wrap doesn't help here, just set on whatever it is
+                        try
+                        {
+                            var btp = panel.GetType().GetProperty("BorderThickness");
+                            var bbp = panel.GetType().GetProperty("BorderBrush");
+                            if (btp != null && bbp != null && _r.ThicknessType != null)
+                            {
+                                var thickness = Activator.CreateInstance(_r.ThicknessType, 0.5, 0.0, 0.0, 0.0);
+                                btp.SetValue(panel, thickness);
+                                bbp.SetValue(panel, _r.CreateBrush(_border));
+                            }
+                        }
+                        catch { }
+                    }
+                }
+                Logger.Log(Tag, "SwapCommunityMembers: added left-edge borders to columns");
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: border error: {ex.Message}"); }
+
             // Build a custom community header and inject it at the top of the channels column.
             // Also hide the native header in the members column.
-            // Deferred 500ms so the ContentControl→MembersView/ChannelsView visual tree is ready.
+            // Deferred 200ms so the ContentControl→MembersView/ChannelsView visual tree is ready.
             var headerLayoutGrid = layoutGrid;
             var headerNonSplitters = nonSplitters;
             var headerMaxIdx = maxAssignedIdx;
             var headerToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-            Task.Delay(500, headerToken).ContinueWith(_ =>
+            Task.Delay(200, headerToken).ContinueWith(_ =>
             {
                 if (headerToken.IsCancellationRequested) return;
                 _r.RunOnUIThread(() =>
                 {
                     try
                     {
+                        // Remove old header right before injecting new one (prevents visible flash)
+                        RemoveInjectedHeader();
                         InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
                         SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
                     }
                     catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader error: {ex.Message}"); }
                 });
             }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+
+            // Progressive retry: re-inject header when member counts become available.
+            // Checks at 1s, 3s, 6s, 10s — stops as soon as counts are found.
+            _ = Task.Run(async () =>
+            {
+                foreach (var delayMs in new[] { 1000, 3000, 6000, 10000 })
+                {
+                    await Task.Delay(delayMs, headerToken);
+                    if (headerToken.IsCancellationRequested) return;
+                    var tcs = new TaskCompletionSource<bool>();
+                    _r.RunOnUIThread(() =>
+                    {
+                        try
+                        {
+                            var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+                            if (sel != null && !IsDmTab(sel) && !IsNewTab(sel))
+                            {
+                                var (a, t) = GetTabMemberCounts(sel);
+                                if (a > 0 || t > 0)
+                                {
+                                    RemoveInjectedHeader();
+                                    InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                                    SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                                    Logger.Log(Tag, $"InjectChannelsHeader: re-injected with member counts ({t} total, {a} attached) at +{delayMs}ms");
+                                    tcs.TrySetResult(true);
+                                    return;
+                                }
+                            }
+                        }
+                        catch { }
+                        tcs.TrySetResult(false);
+                    });
+                    if (await tcs.Task) return;
+                }
+            }, headerToken);
 
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
@@ -1344,8 +1548,8 @@ internal class RootcordEngine
         _originalColWidths = null;
         _originalSplitterColumns = null;
 
-        // Unwrap the injected header from the channels panel (restores original content)
-        RemoveInjectedHeader();
+        // NOTE: RemoveInjectedHeader is NOT called here — it's deferred to happen
+        // right before InjectChannelsHeader in the 500ms callback, preventing visible flash.
 
         // Unsubscribe user bar width tracking
         TeardownUserBarWidthTracking();
@@ -1511,6 +1715,12 @@ internal class RootcordEngine
                 }
             }
 
+            // Guard: skip SetWidth if value hasn't changed by more than 0.5px.
+            // Without this, SetWidth triggers InvalidateMeasure → LayoutUpdated → UpdateUserBarWidth → loop.
+            // This cascade is especially pronounced with DotNetBrowser (app channels) which causes
+            // continuous layout re-measurement during initialization.
+            if (Math.Abs(targetWidth - _lastUserBarWidth) < 0.5) return;
+            _lastUserBarWidth = targetWidth;
             _r.SetWidth(_userBar, targetWidth);
         }
         catch { }
@@ -1593,6 +1803,7 @@ internal class RootcordEngine
         _userBarLayoutTarget = null;
         _channelsWidthPanel = null;
         _userBarOverPane = false;
+        _lastUserBarWidth = double.NaN;
     }
 
     /// <summary>
@@ -1609,7 +1820,7 @@ internal class RootcordEngine
         if (_homeViewModel == null) return;
 
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-        if (selectedTab == null || IsDmTab(selectedTab)) return;
+        if (selectedTab == null || IsDmTab(selectedTab) || IsNewTab(selectedTab)) return;
 
         string communityName = GetTabDisplayName(selectedTab);
         var (attached, total) = GetTabMemberCounts(selectedTab);
@@ -1736,12 +1947,25 @@ internal class RootcordEngine
                     _r.SetVerticalAlignment(countRow, "Center");
                     _r.SetMargin(countRow, 0, 1, 0, 0);
 
-                    // Try to use Root's native RootSvgImage with "UserSVG" DynamicResource
+                    // Try to use Root's native RootSvgImage with "UserSVG" DynamicResource.
+                    // Falls back to a Unicode people glyph if SVG creation fails.
                     var memberIcon = CreateNativeSvgImage("UserSVG", 10, 10, 0.64);
                     if (memberIcon != null)
                     {
                         _r.SetVerticalAlignment(memberIcon, "Center");
                         _r.AddChild(countRow, memberIcon);
+                    }
+                    else
+                    {
+                        // Fallback: Unicode people glyph (U+1F464 bust in silhouette)
+                        var glyphText = _r.CreateTextBlock("\U0001F464", 9, _muted);
+                        if (glyphText != null)
+                        {
+                            try { glyphText.GetType().GetProperty("Opacity")?.SetValue(glyphText, 0.64); }
+                            catch { }
+                            _r.SetVerticalAlignment(glyphText, "Center");
+                            _r.AddChild(countRow, glyphText);
+                        }
                     }
 
                     var countText = _r.CreateTextBlock(countStr, 12, _muted);
@@ -1968,15 +2192,51 @@ internal class RootcordEngine
                     }
                 }
 
+                // Fallback: try TryGetResource(object key, ThemeVariant, out object value) overload
+                if (svgPath == null && themeVariant != null)
+                {
+                    foreach (var m in app.GetType().GetMethods())
+                    {
+                        if (m.Name == "TryGetResource" && m.GetParameters().Length >= 3)
+                        {
+                            var parms = new object?[] { resourceKey, themeVariant, null };
+                            try
+                            {
+                                var result = m.Invoke(app, parms);
+                                if (result is true) svgPath = parms[^1];
+                            }
+                            catch { }
+                            if (svgPath != null) break;
+                        }
+                    }
+                }
+
                 if (svgPath != null)
                 {
                     // Set SvgPath property (it's a string containing the SVG file path)
                     var svgPathProp = svgType.GetProperty("SvgPath");
                     svgPathProp?.SetValue(svgImage, svgPath);
+                    Logger.Log(Tag, $"CreateNativeSvgImage: '{resourceKey}' resolved to '{svgPath}'");
                 }
                 else
                 {
-                    Logger.Log(Tag, $"CreateNativeSvgImage: resource '{resourceKey}' not found");
+                    // Last resort: try known path directly
+                    var svgPathProp = svgType.GetProperty("SvgPath");
+                    if (svgPathProp != null)
+                    {
+                        var knownPath = resourceKey == "UserSVG"
+                            ? "/Resources/Assets/SVGs/Dark Theme/User.svg"
+                            : null;
+                        if (knownPath != null)
+                        {
+                            svgPathProp.SetValue(svgImage, knownPath);
+                            Logger.Log(Tag, $"CreateNativeSvgImage: '{resourceKey}' using hardcoded path '{knownPath}'");
+                        }
+                        else
+                        {
+                            Logger.Log(Tag, $"CreateNativeSvgImage: resource '{resourceKey}' not found");
+                        }
+                    }
                 }
             }
 
@@ -2435,7 +2695,7 @@ internal class RootcordEngine
 
         // --- Row 0: Home button + separator ---
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-        bool isDmSelected = selectedTab != null && IsDmTab(selectedTab);
+        bool isHomeSelected = selectedTab != null && (IsDmTab(selectedTab) || IsNewTab(selectedTab));
 
         var topPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
         if (topPanel != null)
@@ -2443,7 +2703,7 @@ internal class RootcordEngine
             _r.SetHorizontalAlignment(topPanel, "Center");
             _r.SetMargin(topPanel, 0, 8, 0, 2);
 
-            _homeButton = BuildHomeButton(isDmSelected);
+            _homeButton = BuildHomeButton(isHomeSelected);
             if (_homeButton != null) _r.AddChild(topPanel, _homeButton);
 
             var separator = BuildSeparator();
@@ -2466,9 +2726,9 @@ internal class RootcordEngine
         PopulateServerStrip();
 
         // Delayed refresh: community bitmaps may not be loaded yet on first render.
-        // Re-populate after 2s to pick up async-loaded images.
+        // Re-populate after 1s to pick up async-loaded images.
         var bitmapRefreshToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-        Task.Delay(2000, bitmapRefreshToken).ContinueWith(_ =>
+        Task.Delay(1000, bitmapRefreshToken).ContinueWith(_ =>
         {
             if (bitmapRefreshToken.IsCancellationRequested) return;
             _r.RunOnUIThread(() =>
@@ -2503,6 +2763,11 @@ internal class RootcordEngine
             return;
         }
         _r.SetTag(_serverStripBorder, "rootcord-strip");
+        // Right border separator matching Root's native panel dividers
+        _r.SetBorderBrush(_serverStripBorder, _border);
+        _r.SetBorderThickness(_serverStripBorder, 0, 0, 0.5, 0); // right edge only
+        // Inner padding for breathing room on both sides
+        _r.SetPadding(_serverStripBorder, 8, 0, 8, 0);
 
         // Place in HomeView Grid: Column 0, spanning all rows
         _r.SetGridColumn(_serverStripBorder, 0);
@@ -2537,7 +2802,9 @@ internal class RootcordEngine
             _userBar = _r.CreateBorder(_cardBg, 0);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            // No rounded corners — flush edges on all sides
+            // Top border separator matching Root's native 0.5px panel dividers
+            _r.SetBorderBrush(_userBar, _border);
+            _r.SetBorderThickness(_userBar, 0, 0.5, 0, 0); // top only
             // Width is set dynamically by UpdateUserBarWidth (tracks channels panel bounds)
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
@@ -2878,6 +3145,19 @@ internal class RootcordEngine
     /// <summary>
     /// Populate the server strip with icons for each tab in HomeViewModel.Tabs.
     /// </summary>
+    /// <summary>
+    /// Get the index of a child in the server strip's children list.
+    /// </summary>
+    private int GetStripChildIndex(object? child)
+    {
+        if (_serverStrip == null || child == null) return -1;
+        var children = _r.GetChildren(_serverStrip);
+        if (children == null) return -1;
+        for (int i = 0; i < children.Count; i++)
+            if (children[i] == child) return i;
+        return -1;
+    }
+
     private void PopulateServerStrip()
     {
         if (_serverStrip == null || _homeViewModel == null) return;
@@ -2909,7 +3189,7 @@ internal class RootcordEngine
             foreach (var tabVm in tabsEnum)
             {
                 if (tabVm == null) continue;
-                if (IsDmTab(tabVm)) continue; // DMs handled by Home button
+                if (IsDmTab(tabVm) || IsNewTab(tabVm)) continue; // DMs + NewTab filtered
                 var icon = BuildServerIcon(tabVm, tabVm == selectedTab);
                 if (icon != null)
                 {
@@ -2965,6 +3245,14 @@ internal class RootcordEngine
     private bool IsDmTab(object? tabViewModel)
     {
         return tabViewModel != null && tabViewModel.GetType().Name.Contains("DirectMessage");
+    }
+
+    /// <summary>
+    /// Check if a tab ViewModel represents the NewTab (add server / server discovery) screen.
+    /// </summary>
+    private static bool IsNewTab(object? tabViewModel)
+    {
+        return tabViewModel != null && tabViewModel.GetType().Name.Contains("NewTab");
     }
 
     /// <summary>
@@ -3109,13 +3397,64 @@ internal class RootcordEngine
             SetIconToLetter(iconBorder, initial, isSelected, _text);
         }
 
-        // Click handler: switch tab
+        // Click + drag handler: switch tab on click, reorder on drag
         var capturedVm = tabViewModel;
         var capturedName = displayName;
         var iconRef = iconBorder;
-        _r.SubscribeEvent(iconBorder, "PointerPressed", () =>
+        var containerRef = container;
+        _r.SubscribePointerEvent(container, "PointerPressed", (x, y) =>
         {
-            OnServerIconClicked(capturedVm);
+            _dragStartY = y;
+            _dragStartIndex = GetStripChildIndex(containerRef);
+            _dragCurrentIndex = _dragStartIndex;
+            _draggedContainer = containerRef;
+            _isDragging = false; // not dragging yet, just tracking
+        });
+        _r.SubscribePointerEvent(container, "PointerMoved", (x, y) =>
+        {
+            if (_draggedContainer != containerRef || _dragStartIndex < 0) return;
+            double delta = Math.Abs(y - _dragStartY);
+            if (!_isDragging && delta >= DragThresholdPx)
+            {
+                _isDragging = true;
+                _r.SetOpacity(containerRef, 0.5);
+                DismissIconTooltip();
+            }
+            if (_isDragging)
+            {
+                // Determine target index based on cumulative Y offset from drag start
+                double moved = y - _dragStartY;
+                double slotHeight = IconSize + IconSpacing;
+                int indexDelta = (int)Math.Round(moved / slotHeight);
+                int targetIndex = Math.Clamp(_dragStartIndex + indexDelta, 0, _r.GetChildCount(_serverStrip) - 1);
+                if (targetIndex != _dragCurrentIndex)
+                {
+                    // Swap: remove from current position and insert at target
+                    _r.RemoveChild(_serverStrip, containerRef);
+                    _r.InsertChild(_serverStrip, targetIndex, containerRef);
+                    _dragCurrentIndex = targetIndex;
+                }
+            }
+        });
+        _r.SubscribePointerEvent(container, "PointerReleased", (x, y) =>
+        {
+            if (_draggedContainer != containerRef) return;
+            if (_isDragging)
+            {
+                _r.SetOpacity(containerRef, 1.0);
+                Logger.Log(Tag, $"Drag reorder: '{capturedName}' moved from {_dragStartIndex} to {_dragCurrentIndex}");
+                _isDragging = false;
+                // Re-sync highlight state after reorder
+                RefreshSelectedHighlight();
+            }
+            else
+            {
+                // Was a click, not a drag
+                OnServerIconClicked(capturedVm);
+            }
+            _dragStartIndex = -1;
+            _dragCurrentIndex = -1;
+            _draggedContainer = null;
         });
 
         // Hover: highlight + show tooltip
@@ -3198,12 +3537,27 @@ internal class RootcordEngine
         _r.SetCursorHand(iconBorder);
         _r.SetClipToBounds(iconBorder, true);
 
-        // Home symbol
-        var text = _r.CreateTextBlock("\u2302", 20, isDmSelected ? "#FFFFFF" : _text);
-        _r.SetFontWeight(text, "Bold");
-        _r.SetHorizontalAlignment(text, "Center");
-        _r.SetVerticalAlignment(text, "Center");
-        _r.SetBorderChild(iconBorder, text);
+        // Home icon: try Root's native AddCommunityTabSVG (the "+" icon), then Unicode fallback.
+        // RootSvgImage renders async via SkiaSharp and can sit ~2px low due to Image baseline;
+        // nudge up with negative top margin to visually center within the 42px circle.
+        var svgIcon = CreateNativeSvgImage("AddCommunityTabSVG", 18, 18, isDmSelected ? 1.0 : 0.8);
+        if (svgIcon == null) svgIcon = CreateNativeSvgImage("DiscoverSVG", 18, 18, isDmSelected ? 1.0 : 0.8);
+        if (svgIcon != null)
+        {
+            _r.SetHorizontalAlignment(svgIcon, "Center");
+            _r.SetVerticalAlignment(svgIcon, "Center");
+            _r.SetMargin(svgIcon, 0, -2, 0, 0); // nudge up to compensate for Image baseline offset
+            _r.SetBorderChild(iconBorder, svgIcon);
+        }
+        else
+        {
+            // Unicode fallback
+            var text = _r.CreateTextBlock("+", 22, isDmSelected ? "#FFFFFF" : _text);
+            _r.SetFontWeight(text, "Bold");
+            _r.SetHorizontalAlignment(text, "Center");
+            _r.SetVerticalAlignment(text, "Center");
+            _r.SetBorderChild(iconBorder, text);
+        }
 
         // Click: select first DM tab
         var iconRef = iconBorder;
@@ -3216,14 +3570,14 @@ internal class RootcordEngine
         _r.SubscribeEvent(iconBorder, "PointerEntered", () =>
         {
             var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-            if (sel == null || !IsDmTab(sel))
+            if (sel == null || (!IsDmTab(sel) && !IsNewTab(sel)))
                 _r.SetBackground(iconRef, bgHover);
             ShowIconTooltip(iconRef, "Explore Servers", null);
         });
         _r.SubscribeEvent(iconBorder, "PointerExited", () =>
         {
             var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-            if (sel == null || !IsDmTab(sel))
+            if (sel == null || (!IsDmTab(sel) && !IsNewTab(sel)))
                 _r.SetBackground(iconRef, bgColor);
             DismissIconTooltip();
         });
@@ -3260,14 +3614,36 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Handle Home button click: select the first DM tab directly (replaces community view).
-    /// Falls back to DirectMessagesPaneToggleCommand if no DM tab exists.
+    /// Handle Home button click:
+    /// - If already on the NewTab screen, toggle back to the previous tab.
+    /// - Otherwise, save the current tab and navigate to the NewTab (server discovery) screen.
+    /// - Always closes any open utility pane (Friends/DMs/Notifications/Profile).
     /// </summary>
     private void OnHomeButtonClicked()
     {
         if (_homeViewModel == null) return;
         try
         {
+            var currentTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+
+            // Toggle-back: if already on NewTab, restore previous tab
+            if (currentTab != null && IsNewTab(currentTab) && _previousTabVm != null)
+            {
+                _r.SetPropertyValue(_homeViewModel, "SelectedTabViewModel", _previousTabVm);
+                Logger.Log(Tag, "Home: toggled back to previous tab");
+                _previousTabVm = null;
+                RefreshSelectedHighlight();
+                return;
+            }
+
+            // Save the current tab for toggle-back (only if it's a real community/DM tab)
+            if (currentTab != null && !IsNewTab(currentTab))
+                _previousTabVm = currentTab;
+
+            // Close any open utility pane
+            _r.SetPropertyValue(_homeViewModel, "PaneOpen", false);
+            _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);
+
             // Open the server discovery / new tab page (the "+" button in Root's native tab bar).
             // HomeViewModel.CreateNewTabCommand creates or selects the NewTab page.
             var cmd = _r.GetPropertyValue(_homeViewModel, "CreateNewTabCommand");
@@ -3285,7 +3661,7 @@ internal class RootcordEngine
             {
                 foreach (var tab in tabs)
                 {
-                    if (tab != null && tab.GetType().Name.Contains("NewTab"))
+                    if (tab != null && IsNewTab(tab))
                     {
                         _r.SetPropertyValue(_homeViewModel, "SelectedTabViewModel", tab);
                         Logger.Log(Tag, "Home: selected existing NewTab");
@@ -3318,12 +3694,13 @@ internal class RootcordEngine
     private object? BuildSeparator()
     {
         var sepColor = AdjustForHighlight(_cardBg, 15);
-        var sep = _r.CreateBorder(sepColor, 1);
+        var sep = _r.CreateBorder(sepColor, 0);
         if (sep == null) return null;
-        _r.SetWidth(sep, 32);
-        _r.SetHeight(sep, 2);
+        _r.SetWidth(sep, 28);
+        _r.SetHeight(sep, 1);
         _r.SetHorizontalAlignment(sep, "Center");
-        _r.SetMargin(sep, 0, 6, 0, 6);
+        // Shift right slightly to align with icon center (pill offsets the icon)
+        _r.SetMargin(sep, PillWidth, 6, 0, 6);
         return sep;
     }
 
@@ -4058,7 +4435,7 @@ internal class RootcordEngine
         if (_homeViewModel == null) return;
 
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-        bool isDmSelected = selectedTab != null && IsDmTab(selectedTab);
+        bool isHomeSelected = selectedTab != null && (IsDmTab(selectedTab) || IsNewTab(selectedTab));
 
         // Update Home button highlight
         try
@@ -4071,15 +4448,20 @@ internal class RootcordEngine
                     var pill = homeChildren[0];
                     var iconBorder = homeChildren[1];
 
-                    _r.SetBackground(pill, isDmSelected ? _accent : "#00000000");
-                    _r.SetHeight(pill, isDmSelected ? PillHeight : 8);
-                    _r.SetBackground(iconBorder, isDmSelected ? _accent : _cardBg);
+                    _r.SetBackground(pill, isHomeSelected ? _accent : "#00000000");
+                    _r.SetHeight(pill, isHomeSelected ? PillHeight : 8);
+                    _r.SetBackground(iconBorder, isHomeSelected ? _accent : _cardBg);
 
                     if (_r.IsBorder(iconBorder))
                     {
                         var iconChild = _r.GetBorderChild(iconBorder);
-                        if (iconChild != null && _r.IsTextBlock(iconChild))
-                            _r.SetForeground(iconChild, isDmSelected ? "#FFFFFF" : _text);
+                        if (iconChild != null)
+                        {
+                            if (_r.IsTextBlock(iconChild))
+                                _r.SetForeground(iconChild, isHomeSelected ? "#FFFFFF" : _text);
+                            else
+                                try { iconChild.GetType().GetProperty("Opacity")?.SetValue(iconChild, isHomeSelected ? 1.0 : 0.8); } catch { }
+                        }
                     }
                     else
                     {
@@ -4099,12 +4481,13 @@ internal class RootcordEngine
         if (tabs == null) return;
 
         // Build community-only tab list (matching PopulateServerStrip filter)
+        bool needsBitmapRefresh = false;
         var communityTabs = new List<object>();
         if (tabs is IEnumerable tabsEnum)
         {
             foreach (var t in tabsEnum)
             {
-                if (t != null && !IsDmTab(t)) communityTabs.Add(t);
+                if (t != null && !IsDmTab(t) && !IsNewTab(t)) communityTabs.Add(t);
             }
         }
 
@@ -4120,26 +4503,50 @@ internal class RootcordEngine
                 if (containerChildren == null || containerChildren.Count < 2) { idx++; continue; }
 
                 var pill = containerChildren[0];
-                var iconBorder = containerChildren[1];
+                var iconElement = containerChildren[1];
 
                 _r.SetBackground(pill, isSelected ? _accent : "#00000000");
                 _r.SetHeight(pill, isSelected ? PillHeight : 8);
+
+                // iconElement may be a Border (direct icon) or a Grid (icon wrapper with badge).
+                // Always target the actual Border for accent to avoid square background on Grid.
+                var iconBorder = iconElement;
+                if (iconElement != null && _r.IsGrid(iconElement))
+                {
+                    // Grid wrapper — find the Border child inside
+                    foreach (var gc in _r.GetVisualChildren(iconElement))
+                    {
+                        if (_r.IsBorder(gc)) { iconBorder = gc; break; }
+                    }
+                }
+
                 _r.SetBackground(iconBorder, isSelected ? _accent : _cardBg);
 
                 if (_r.IsBorder(iconBorder))
                 {
                     var iconChild = _r.GetBorderChild(iconBorder);
                     if (iconChild != null && _r.IsTextBlock(iconChild))
+                    {
                         _r.SetForeground(iconChild, isSelected ? "#FFFFFF" : _text);
-                }
-                else
-                {
-                    Logger.Log(Tag, $"RefreshHL: strip[{idx}] child[1] is {iconBorder?.GetType().Name ?? "null"}, not Border — skipping text recolor");
+                        // Check if bitmap is now available but we're showing a letter fallback
+                        if (idx < communityTabs.Count && needsBitmapRefresh == false)
+                        {
+                            var bmp = TryGetTabBitmap(communityTabs[idx]);
+                            if (bmp != null) needsBitmapRefresh = true;
+                        }
+                    }
                 }
             }
             catch (Exception ex) { Logger.Log(Tag, $"RefreshHL strip[{idx}] error: {ex.Message}"); }
 
             idx++;
+        }
+
+        // If any icon is showing a letter but now has a bitmap, rebuild the entire strip
+        if (needsBitmapRefresh)
+        {
+            Logger.Log(Tag, "RefreshHL: bitmap now available for letter-icon — rebuilding strip");
+            PopulateServerStrip();
         }
     }
 
