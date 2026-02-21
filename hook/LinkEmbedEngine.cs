@@ -38,6 +38,10 @@ internal class LinkEmbedEngine : IDisposable
     // URL tracking — metadata cache avoids re-fetching, injectedCards tracks live cards
     // Per-node dedup is via "uprooted-embed-scanned" tag on each CTextBlock
     // Image byte cache survives VirtualizingStackPanel recycling for instant re-injection
+    // All three caches are size-capped to prevent unbounded memory growth in long sessions.
+    private const int MaxMetadataCache = 200;
+    private const int MaxImageBytesCache = 50;  // each entry can be up to 5MB
+    private const int MaxInjectedCards = 200;
     private readonly Dictionary<string, EmbedData?> _metadataCache = new();
     private readonly Dictionary<string, byte[]> _imageBytesCache = new();
     private readonly List<object> _injectedCards = new();
@@ -464,7 +468,8 @@ internal class LinkEmbedEngine : IDisposable
                                 Logger.Log("LinkEmbed", $"Image skipped (size={imgBytes.Length}): {imageUrl}");
                                 return;
                             }
-                            // Cache image bytes for future re-injections
+                            // Cache image bytes for future re-injections (evict if full)
+                            if (_imageBytesCache.Count >= MaxImageBytesCache) _imageBytesCache.Clear();
                             _imageBytesCache[capturedData.Url] = imgBytes;
                             AddImageToExistingCard(capturedData, imgBytes);
                         }
@@ -487,6 +492,7 @@ internal class LinkEmbedEngine : IDisposable
                         var thumbBytes = ExtractVideoThumbnail(capturedData.Url);
                         if (thumbBytes != null && thumbBytes.Length >= 100)
                         {
+                            if (_imageBytesCache.Count >= MaxImageBytesCache) _imageBytesCache.Clear();
                             _imageBytesCache[capturedData.Url] = thumbBytes;
                             ReplaceVideoPlaceholderWithThumbnail(capturedData, thumbBytes);
                         }
@@ -546,6 +552,7 @@ internal class LinkEmbedEngine : IDisposable
                 SetGridColumnSpan(card, colSpan);
 
                 _r.AddChild(grid, card);
+                if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
                 _injectedCards.Add(card);
                 Logger.Log("LinkEmbed", $"Embed re-injected (cached) for: {data.Url}");
             }
@@ -1420,6 +1427,7 @@ internal class LinkEmbedEngine : IDisposable
             if (ImageUrlRegex.IsMatch(url))
             {
                 var data = SynthesizeImageEmbed(url);
+                if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
                 _metadataCache[url] = data;
                 return data;
             }
@@ -1428,6 +1436,7 @@ internal class LinkEmbedEngine : IDisposable
             if (VideoUrlRegex.IsMatch(url))
             {
                 var data = SynthesizeVideoEmbed(url);
+                if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
                 _metadataCache[url] = data;
                 return data;
             }
@@ -1437,6 +1446,7 @@ internal class LinkEmbedEngine : IDisposable
             if (ytMatch.Success)
             {
                 var data = FetchYouTubeMetadata(url, ytMatch.Groups[1].Value);
+                if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
                 _metadataCache[url] = data;
                 return data;
             }
@@ -1447,6 +1457,7 @@ internal class LinkEmbedEngine : IDisposable
                 var redditData = FetchRedditMetadata(url);
                 if (redditData != null)
                 {
+                    if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
                     _metadataCache[url] = redditData;
                     return redditData;
                 }
@@ -1455,12 +1466,14 @@ internal class LinkEmbedEngine : IDisposable
 
             // Generic OG + oEmbed discovery (handles Twitter, any oEmbed site)
             var data2 = FetchOgMetadata(url);
+            if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
             _metadataCache[url] = data2;
             return data2;
         }
         catch (Exception ex)
         {
             Logger.Log("LinkEmbed", $"FetchMetadata error for {url}: {ex.Message}");
+            if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
             _metadataCache[url] = null;
             return null;
         }
@@ -2373,6 +2386,7 @@ internal class LinkEmbedEngine : IDisposable
                 SetGridColumnSpan(card, colSpan);
 
                 _r.AddChild(grid, card);
+                if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
                 _injectedCards.Add(card);
 
                 Logger.Log("LinkEmbed", $"Embed injected for: {data.Url} " +
