@@ -310,22 +310,35 @@ internal class ThemeEngine
     /// <summary>Apply a named preset theme.</summary>
     public bool ApplyTheme(string name)
     {
+        using var ev = WideEvent.Begin("Theme", "apply");
+        ev.Set("theme", name);
+
         var themeName = name.ToLower().Trim();
         if (!PresetThemes.TryGetValue(themeName, out var preset))
         {
-            Logger.Log("Theme", "Unknown theme: " + name);
+            ev.SetError("unknown theme");
             return false;
         }
 
-        return ApplyThemeInternal(themeName, preset.RootKeys, preset.SimpleThemeKeys);
+        ev.Set("root_keys", preset.RootKeys.Count);
+        ev.Set("simple_keys", preset.SimpleThemeKeys.Count);
+        var result = ApplyThemeInternal(themeName, preset.RootKeys, preset.SimpleThemeKeys, ev);
+        ev.Set("result", result ? "ok" : "failed");
+        return result;
     }
 
     /// <summary>Apply a custom theme from user-chosen accent + background.</summary>
     public bool ApplyCustomTheme(string accentHex, string bgHex, string? textHex = null, string svgMode = "auto")
     {
+        using var ev = WideEvent.Begin("Theme", "apply_custom");
+        ev.Set("accent", accentHex);
+        ev.Set("bg", bgHex);
+        ev.Set("text", textHex);
+        ev.Set("svg_mode", svgMode);
+
         if (!ColorUtils.IsValidHex(accentHex) || !ColorUtils.IsValidHex(bgHex))
         {
-            Logger.Log("Theme", "Invalid custom colors: accent=" + accentHex + " bg=" + bgHex);
+            ev.SetError("invalid custom colors");
             return false;
         }
 
@@ -335,7 +348,10 @@ internal class ThemeEngine
         _customAccent = accentHex;
         _customBg = bgHex;
         _customSvgMode = svgMode;
-        return ApplyThemeInternal("custom", rootKeys, simpleKeys);
+        ev.Set("palette_fields", _customPalette.Count);
+        var result = ApplyThemeInternal("custom", rootKeys, simpleKeys, ev);
+        ev.Set("result", result ? "ok" : "failed");
+        return result;
     }
 
     /// <summary>
@@ -351,7 +367,10 @@ internal class ThemeEngine
         // Bootstrap with full apply if not yet active
         if (_activeThemeName != "custom" || _activeVariantDict == null)
         {
-            Logger.Log("Theme", "Live preview: bootstrapping full custom apply");
+            using var bootEv = WideEvent.Begin("Theme", "live_preview");
+            bootEv.Set("accent", accentHex);
+            bootEv.Set("bg", bgHex);
+            bootEv.Set("action", "bootstrap");
             ApplyCustomTheme(accentHex, bgHex, textHex, svgMode);
             _lastLiveUpdateTick = Environment.TickCount64;
             return;
@@ -362,6 +381,11 @@ internal class ThemeEngine
         if (now - _lastLiveUpdateTick < 16) return;
         _lastLiveUpdateTick = now;
 
+        using var ev = WideEvent.Begin("Theme", "live_preview");
+        ev.Set("accent", accentHex);
+        ev.Set("bg", bgHex);
+        ev.Set("svg_mode", svgMode);
+
         // Check if brightness crossed the dark/light threshold — if so, need a full
         // re-apply to switch Root's variant (for correct SVGs).
         var rootKeys = GenerateV2Palette(accentHex, bgHex, textHex);
@@ -370,12 +394,15 @@ internal class ThemeEngine
         bool currentIsDark = currentVariantName != "Light";
         if (themeNeedsDark != currentIsDark)
         {
-            Logger.Log("Theme", $"Live preview: brightness crossed threshold (needsDark={themeNeedsDark}, variant={currentVariantName}) — full re-apply");
+            ev.Set("action", "threshold_reapply");
+            ev.Set("needs_dark", themeNeedsDark);
+            ev.Set("variant", currentVariantName);
             ApplyCustomTheme(accentHex, bgHex, textHex, svgMode);
             _lastLiveUpdateTick = Environment.TickCount64;
             return;
         }
 
+        ev.Set("action", "incremental");
         _customAccent = accentHex;
         _customBg = bgHex;
         _customSvgMode = svgMode;
@@ -393,11 +420,14 @@ internal class ThemeEngine
         // and maps them to the new palette. Walk BEFORE updating statics.
         // Throttled: walk every 100ms max (vs 16ms dict updates).
         long walkNow = Environment.TickCount64;
+        bool walked = false;
         if (walkNow - _lastLiveWalkTick >= 100)
         {
             _lastLiveWalkTick = walkNow;
             WalkAllWindows();
+            walked = true;
         }
+        ev.Set("walked", walked);
 
         // NOW update ContentPages statics to match new palette
         // (so next walk maps from current→new correctly)
@@ -415,6 +445,8 @@ internal class ThemeEngine
     /// <summary>Remove all theme overrides and restore Root defaults.</summary>
     public void RevertTheme()
     {
+        using var ev = WideEvent.Begin("Theme", "revert");
+
         // Cancel walk timer
         _walkTimer?.Dispose();
         _walkTimer = null;
@@ -424,44 +456,44 @@ internal class ThemeEngine
 
         // Phase 2: Restore Styles[0].Resources
         var styleRes = _r.GetStyleResources(0);
+        int stylesRestored = 0;
+        int stylesRemoved = 0;
         if (styleRes != null)
         {
-            int restored = 0;
             foreach (var (key, original) in _savedStyleOriginals)
             {
                 try
                 {
                     _r.AddResource(styleRes, key, original);
-                    restored++;
+                    stylesRestored++;
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("Theme", "  Restore failed for " + key + ": " + ex.Message);
+                    ev.Set("restore_fail_" + key, ex.Message);
                 }
             }
-            if (restored > 0)
-                Logger.Log("Theme", "Restored " + restored + " originals in Styles[0]");
 
-            int removed = 0;
             foreach (var key in _addedStyleKeys)
             {
-                try { if (_r.RemoveResource(styleRes, key)) removed++; }
+                try { if (_r.RemoveResource(styleRes, key)) stylesRemoved++; }
                 catch { }
             }
-            if (removed > 0)
-                Logger.Log("Theme", "Removed " + removed + " added keys from Styles[0]");
         }
+        ev.Set("styles_restored", stylesRestored);
+        ev.Set("styles_removed", stylesRemoved);
 
         _savedStyleOriginals.Clear();
         _addedStyleKeys.Clear();
 
         // Phase 2b: ClearValue on ALL walker-recolored controls to remove LocalValue overrides.
+        int walkerCleared = _walkerRecolored.Count;
         foreach (var (ctrl, propField) in _walkerRecolored)
         {
             try { _r.ClearValue(ctrl, propField); }
             catch { }
         }
         _walkerRecolored.Clear();
+        ev.Set("walker_cleared", walkerCleared);
 
         // Phase 3: Restore default DWM title bar
         UpdateTitleBarColor(DefaultDarkBg);
@@ -473,7 +505,7 @@ internal class ThemeEngine
         // Phase 4: Restore original variant if we switched it
         if (_originalVariantKey != null)
         {
-            Logger.Log("Theme", "Restoring original variant: " + _originalVariantKey);
+            ev.Set("restore_variant", _originalVariantKey.ToString());
             _switchingVariantForTheme = true;
             try
             {
@@ -507,7 +539,7 @@ internal class ThemeEngine
                 {
                     _switchingVariantForTheme = false;
                 }
-                Logger.Log("Theme", "Variant toggled to force DynamicResource re-resolution");
+                ev.Set("variant_toggled", true);
             }
 
             // Restore our injected controls (tagged dyn-*) from Root's now-correct live colors.
@@ -519,8 +551,7 @@ internal class ThemeEngine
                 var topLevels = _r.GetAllTopLevels();
                 foreach (var tl in topLevels)
                     restored += RestoreTaggedControls(tl, liveColors, 0);
-                if (restored > 0)
-                    Logger.Log("Theme", $"Restored {restored} injected controls from live Root colors");
+                ev.Set("tagged_restored", restored);
             }
         }
 
@@ -531,8 +562,6 @@ internal class ThemeEngine
         _walkedCardBg = DefaultCardBg;
         _walkedBorder = DefaultCardBorder;
         _walkedAccent = DefaultAccentGreen;
-
-        Logger.Log("Theme", "Theme reverted — DynamicResource bindings auto-propagate");
     }
 
     /// <summary>Set a custom ping/reply highlight color.</summary>
@@ -663,10 +692,15 @@ internal class ThemeEngine
 
     private bool ApplyThemeInternal(string themeName,
         Dictionary<string, string> rootKeys,
-        Dictionary<string, string> simpleThemeKeys)
+        Dictionary<string, string> simpleThemeKeys,
+        WideEvent? parentEv = null)
     {
-        Logger.Log("Theme", "Applying theme: " + themeName +
-            " (" + rootKeys.Count + " root keys, " + simpleThemeKeys.Count + " simple keys)");
+        using var ev = parentEv != null
+            ? WideEvent.Begin("Theme", "apply_internal", parentEv)
+            : WideEvent.Begin("Theme", "apply_internal");
+        ev.Set("theme", themeName);
+        ev.Set("root_keys", rootKeys.Count);
+        ev.Set("simple_keys", simpleThemeKeys.Count);
 
         // Revert any existing theme first
         RevertTheme();
@@ -677,7 +711,7 @@ internal class ThemeEngine
         // Phase 0: Switch Root's variant if theme brightness requires different SVGs.
         // Dark backgrounds need Dark variant (light-colored SVGs).
         // Light backgrounds need Light variant (dark-colored SVGs).
-        SwitchVariantIfNeeded(rootKeys);
+        SwitchVariantIfNeeded(rootKeys, ev);
 
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
@@ -720,11 +754,11 @@ internal class ThemeEngine
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("Theme", "  Style override failed for " + key + ": " + ex.Message);
+                    ev.Set("style_fail_" + key, ex.Message);
                 }
             }
-            Logger.Log("Theme", "Styles[0]: " + styleOverrides + " overrides applied");
         }
+        ev.Set("style_overrides", styleOverrides);
 
         _activeThemeName = themeName;
 
@@ -758,8 +792,7 @@ internal class ThemeEngine
         if (!string.IsNullOrEmpty(_customPingColor))
             ApplyPingColorToThemeDicts();
 
-        Logger.Log("Theme", "Theme applied: " + themeName +
-            " (" + _overriddenThemeDictKeys.Count + " ThemeDict + " + styleOverrides + " Style)");
+        ev.Set("theme_dict_keys", _overriddenThemeDictKeys.Count);
         return true;
     }
 
@@ -769,7 +802,7 @@ internal class ThemeEngine
     /// Light themes need Light variant (dark-colored SVG icons).
     /// Sets _originalVariantKey so RevertTheme can restore it.
     /// </summary>
-    private void SwitchVariantIfNeeded(Dictionary<string, string> rootKeys)
+    private void SwitchVariantIfNeeded(Dictionary<string, string> rootKeys, WideEvent? ev = null)
     {
         // Determine what variant the theme needs based on background luminance
         bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys); // luminance <= 0.3 → dark SVGs → Dark variant
@@ -784,7 +817,8 @@ internal class ThemeEngine
         if (themeIsDark == currentIsDark)
         {
             // Already on the right variant family — no switch needed
-            Logger.Log("Theme", $"Variant {currentName} matches theme brightness (dark={themeIsDark}), no switch");
+            ev?.Set("variant_switch", "not_needed");
+            ev?.Set("variant", currentName);
             _originalVariantKey = null;
             return;
         }
@@ -793,12 +827,13 @@ internal class ThemeEngine
         var targetKey = _r.GetThemeVariantByName(targetVariant);
         if (targetKey == null)
         {
-            Logger.Log("Theme", $"WARNING: Could not get ThemeVariant.{targetVariant} — skipping variant switch");
+            ev?.Set("variant_switch", "target_not_found");
+            ev?.Set("target_variant", targetVariant);
             _originalVariantKey = null;
             return;
         }
 
-        Logger.Log("Theme", $"Switching variant {currentName} → {targetVariant} for theme SVGs");
+        ev?.Set("variant_switch", currentName + "_to_" + targetVariant);
         _originalVariantKey = currentVariant;
 
         // Guard so our variant change handler skips this switch
