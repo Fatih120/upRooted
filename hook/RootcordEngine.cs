@@ -85,8 +85,12 @@ internal class RootcordEngine
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
     // Custom community header injected into channels panel
-    private object? _injectedHeader;       // The header Border we built
+    private object? _injectedHeader;       // The header outer stack we built
     private object? _channelsPanelRef;     // The channels panel we modified
+    // Tab switcher state for injected header
+    private object? _tabCommunityBtn;      // "Community" tab button
+    private object? _tabChannelBtn;        // "Channel" tab button
+    private object? _headerMembersVm;      // MembersViewModel for ToggleMenuCommand
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -1271,6 +1275,13 @@ internal class RootcordEngine
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
+
+        // Clear injected header tracking (header stays in tree; no unwrap needed here)
+        _injectedHeader = null;
+        _channelsPanelRef = null;
+        _tabCommunityBtn = null;
+        _tabChannelBtn = null;
+        _headerMembersVm = null;
     }
 
     // ===== Community header injection =====
@@ -1279,12 +1290,15 @@ internal class RootcordEngine
     /// Build a custom community header and inject it at the top of the channels panel.
     /// Also hide the native header in the members panel so it's not duplicated.
     /// Uses data from the selected CommunityTabViewModel (name, icon, member count).
+    /// Matches Root's native MembersView header exactly:
+    ///   - Community icon: 40×40, CornerRadius=8 (matches RootImageLoader.CornerRadius in MembersView)
+    ///   - Member count: Members.AttachedMemberCount with people glyph prefix
+    ///   - Community/Channel tab switcher pill (toggles MembersViewModel.MenuIn via ToggleMenuCommand)
     /// </summary>
     private void InjectChannelsHeader(object layoutGrid, List<(object child, int col)> nonSplitters, int membersIdx)
     {
         if (_homeViewModel == null) return;
 
-        // Get the selected tab's data
         var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
         if (selectedTab == null || IsDmTab(selectedTab)) return;
 
@@ -1293,7 +1307,10 @@ internal class RootcordEngine
         object? iconBitmap = TryGetTabBitmap(selectedTab);
         string initial = communityName.Length > 0 ? communityName[0].ToString().ToUpper() : "?";
 
-        // Find the channels panel (leftmost non-chat after rotation)
+        // AttachedMemberCount = all members in the community (matches CommunityTabView.MemberCountTextBlock binding)
+        string countStr = attached > 0 ? $"{attached} members" : (total > 0 ? $"{total} members" : "");
+
+        // Find the channels panel (non-star, non-members column after rotation)
         object? channelsPanel = null;
         for (int i = 0; i < nonSplitters.Count; i++)
         {
@@ -1308,42 +1325,42 @@ internal class RootcordEngine
         }
         if (channelsPanel == null) return;
 
-        // Skip if we already injected a header into this panel
+        // Skip if already injected into this exact panel
         if (_injectedHeader != null && _channelsPanelRef == channelsPanel) return;
 
-        // Build the header: [Icon 40x40] [Name + member count]
+        // ===== COMMUNITY INFO CARD =====
         var headerBorder = _r.CreateBorder(_cardBg, 12);
         if (headerBorder == null) return;
         _r.SetTag(headerBorder, "rootcord-channel-header");
         _r.SetMargin(headerBorder, 10, 10, 10, 6);
         SetBorderStroke(headerBorder, AdjustForHighlight(_cardBg, 15), 0.5);
 
-        var headerGrid = _r.CreateGrid();
-        if (headerGrid == null) return;
-        _r.SetMargin(headerGrid, 10, 8, 10, 8);
+        var cardGrid = _r.CreateGrid();
+        if (cardGrid == null) return;
+        _r.SetMargin(cardGrid, 10, 10, 10, 10);
 
-        // 3 columns: [Auto icon] [8px gap] [* text]
-        _r.AddGridColumn(headerGrid, 1.0); // col 0 — will set to Auto
-        _r.AddGridColumn(headerGrid, 1.0); // col 1 — 8px
-        _r.AddGridColumn(headerGrid, 1.0); // col 2 — Star (text)
-        var hColDefs = _r.GetColumnDefinitions(headerGrid);
-        if (hColDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+        // Columns: [Auto icon] [10px gap] [* text]
+        _r.AddGridColumn(cardGrid, 1.0);
+        _r.AddGridColumn(cardGrid, 1.0);
+        _r.AddGridColumn(cardGrid, 1.0);
+        var cardCols = _r.GetColumnDefinitions(cardGrid);
+        if (cardCols?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
         {
             try
             {
                 var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
                 var pixelUnit = Enum.Parse(_r.GridUnitTypeEnum, "Pixel");
-                hColDefs[0]?.GetType().GetProperty("Width")?.SetValue(hColDefs[0],
+                cardCols[0]?.GetType().GetProperty("Width")?.SetValue(cardCols[0],
                     Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit));
-                hColDefs[1]?.GetType().GetProperty("Width")?.SetValue(hColDefs[1],
-                    Activator.CreateInstance(_r.GridLengthType, 8d, pixelUnit));
+                cardCols[1]?.GetType().GetProperty("Width")?.SetValue(cardCols[1],
+                    Activator.CreateInstance(_r.GridLengthType, 10d, pixelUnit));
                 // Col 2 stays Star
             }
             catch { }
         }
 
-        // Col 0: Community icon (40x40 circle)
-        var iconContainer = _r.CreateBorder(_bg, 6);
+        // Col 0: Community icon — 40×40, CornerRadius=8 matching Root's RootImageLoader in MembersView
+        var iconContainer = _r.CreateBorder(_bg, 8);
         if (iconContainer != null)
         {
             _r.SetWidth(iconContainer, 40);
@@ -1368,11 +1385,11 @@ internal class RootcordEngine
             else
                 SetAvatarInitial(iconContainer, initial, _text);
 
-            _r.AddChild(headerGrid, iconContainer);
+            _r.AddChild(cardGrid, iconContainer);
         }
 
-        // Col 2: Name + member count
-        var textPanel = _r.CreateStackPanel(vertical: true, spacing: 2);
+        // Col 2: Community name + member count row
+        var textPanel = _r.CreateStackPanel(vertical: true, spacing: 3);
         if (textPanel != null)
         {
             _r.SetGridColumn(textPanel, 2);
@@ -1391,33 +1408,72 @@ internal class RootcordEngine
                 _r.AddChild(textPanel, nameText);
             }
 
-            string countStr = total > 0 ? $"{total} members" : (attached > 0 ? $"{attached} online" : "");
             if (countStr.Length > 0)
             {
-                var countText = _r.CreateTextBlock(countStr, 11, _muted);
-                if (countText != null) _r.AddChild(textPanel, countText);
+                // Member count row: people glyph + count label (matches native MemberCountTextBlock style)
+                var countRow = _r.CreateStackPanel(vertical: false, spacing: 4);
+                if (countRow != null)
+                {
+                    _r.SetVerticalAlignment(countRow, "Center");
+
+                    var peopleIcon = _r.CreateTextBlock(GlyphFriends, 10, _muted);
+                    if (peopleIcon != null)
+                    {
+                        _r.SetVerticalAlignment(peopleIcon, "Center");
+                        try
+                        {
+                            var ffProp = peopleIcon.GetType().GetProperty("FontFamily");
+                            if (ffProp != null)
+                            {
+                                var ff = Activator.CreateInstance(ffProp.PropertyType, GlyphIconFonts);
+                                if (ff != null) ffProp.SetValue(peopleIcon, ff);
+                            }
+                        }
+                        catch { }
+                        _r.AddChild(countRow, peopleIcon);
+                    }
+
+                    var countText = _r.CreateTextBlock(countStr, 11, _muted);
+                    if (countText != null)
+                    {
+                        _r.SetVerticalAlignment(countText, "Center");
+                        _r.AddChild(countRow, countText);
+                    }
+
+                    _r.AddChild(textPanel, countRow);
+                }
             }
 
-            _r.AddChild(headerGrid, textPanel);
+            _r.AddChild(cardGrid, textPanel);
         }
 
-        _r.SetBorderChild(headerBorder, headerGrid);
+        _r.SetBorderChild(headerBorder, cardGrid);
 
-        // Inject into the channels panel by wrapping its existing content in a Grid(2 rows)
+        // ===== COMMUNITY / CHANNEL TAB SWITCHER =====
+        var tabSwitcher = BuildTabSwitcher(nonSplitters, membersIdx);
+
+        // ===== OUTER STACK: card + switcher =====
+        var headerStack = _r.CreateStackPanel(vertical: true, spacing: 0);
+        if (headerStack == null) return;
+        _r.SetTag(headerStack, "rootcord-channel-header-outer");
+        _r.AddChild(headerStack, headerBorder);
+        if (tabSwitcher != null) _r.AddChild(headerStack, tabSwitcher);
+
+        // ===== INJECT: wrap channels panel content in [header | channel list] grid =====
         var existingContent = _r.GetBorderChild(channelsPanel);
         if (existingContent != null)
         {
-            _r.SetBorderChild(channelsPanel, null); // detach
+            _r.SetBorderChild(channelsPanel, null);
 
             var wrapperGrid = _r.CreateGrid();
             if (wrapperGrid != null)
             {
                 _r.SetTag(wrapperGrid, "rootcord-channel-wrapper");
-                _r.AddGridRowAuto(wrapperGrid);   // Row 0: header
-                _r.AddGridRowStar(wrapperGrid);   // Row 1: channel list (fills remaining)
+                _r.AddGridRowAuto(wrapperGrid);   // Row 0: header stack
+                _r.AddGridRowStar(wrapperGrid);   // Row 1: channel list
 
-                _r.SetGridRow(headerBorder, 0);
-                _r.AddChild(wrapperGrid, headerBorder);
+                _r.SetGridRow(headerStack, 0);
+                _r.AddChild(wrapperGrid, headerStack);
 
                 _r.SetGridRow(existingContent, 1);
                 _r.AddChild(wrapperGrid, existingContent);
@@ -1430,10 +1486,10 @@ internal class RootcordEngine
             }
         }
 
-        _injectedHeader = headerBorder;
+        _injectedHeader = headerStack;
         _channelsPanelRef = channelsPanel;
 
-        // Hide the native header in the members panel (Row 0-3 of MembersView's inner Grid)
+        // ===== HIDE native header in members panel (MembersView Grid rows 0-3) =====
         var membersPanel = nonSplitters[membersIdx].child;
         var walker = new VisualTreeWalker(_r);
         foreach (var node in walker.DescendantsDepthFirst(membersPanel))
@@ -1442,7 +1498,6 @@ internal class RootcordEngine
             var rowDefs = _r.GetRowDefinitions(node);
             if (rowDefs == null || rowDefs.Count < 4) continue;
 
-            // Found MembersView inner Grid — hide rows 0-3
             foreach (var child in _r.GetVisualChildren(node))
             {
                 int row = _r.GetGridRow(child);
@@ -1455,7 +1510,203 @@ internal class RootcordEngine
             break;
         }
 
-        Logger.Log(Tag, $"InjectChannelsHeader: injected '{communityName}' header into channels panel");
+        Logger.Log(Tag, $"InjectChannelsHeader: '{communityName}' header injected ({countStr})");
+    }
+
+    /// <summary>
+    /// Build the Community/Channel tab switcher pill matching Root's native MembersView header.
+    /// "Community" = show members panel (MembersViewModel.MenuIn=true via ToggleMenuCommand).
+    /// "Channel"   = hide members panel (MenuIn=false, MembersView.Width collapses to 0).
+    /// From ILSpy MembersView: Width bound to MenuIn via CommunityMembersBoolToWidthConverter;
+    /// InMenuPanel (Row 0) visible when MenuIn=true, OutMenuPanel (Row 3) visible when false.
+    /// </summary>
+    private object? BuildTabSwitcher(List<(object child, int col)> nonSplitters, int membersIdx)
+    {
+        try
+        {
+            // Find MembersViewModel from the members panel visual tree (DataContext of MembersView)
+            var membersPanel = nonSplitters[membersIdx].child;
+            _headerMembersVm = null;
+            var walker = new VisualTreeWalker(_r);
+            foreach (var node in walker.DescendantsDepthFirst(membersPanel))
+            {
+                var dc = _r.GetDataContext(node);
+                if (dc == null) continue;
+                if (dc.GetType().Name.Contains("MembersViewModel"))
+                {
+                    _headerMembersVm = dc;
+                    break;
+                }
+            }
+
+            // Read current MenuIn state (true = Community tab selected)
+            bool menuIn = _headerMembersVm != null
+                && _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool b && b;
+
+            var pillBg = AdjustForHighlight(_cardBg, 8);
+            var outerPill = _r.CreateBorder(pillBg, 14);
+            if (outerPill == null) return null;
+            _r.SetMargin(outerPill, 10, 0, 10, 8);
+            _r.SetTag(outerPill, "rootcord-tab-switcher");
+
+            var pillGrid = _r.CreateGrid();
+            if (pillGrid == null) return outerPill;
+            _r.SetMargin(pillGrid, 3, 3, 3, 3);
+
+            // Two equal Star columns
+            _r.AddGridColumn(pillGrid, 1.0);
+            _r.AddGridColumn(pillGrid, 1.0);
+
+            // Community tab (people glyph + "Community")
+            _tabCommunityBtn = BuildTabButton(GlyphFriends, "Community", isSelected: menuIn,  isIconFont: true);
+            if (_tabCommunityBtn != null)
+            {
+                _r.SetGridColumn(_tabCommunityBtn, 0);
+                _r.AddChild(pillGrid, _tabCommunityBtn);
+            }
+
+            // Channel tab (# + "Channel")
+            _tabChannelBtn = BuildTabButton("#", "Channel", isSelected: !menuIn, isIconFont: false);
+            if (_tabChannelBtn != null)
+            {
+                _r.SetGridColumn(_tabChannelBtn, 1);
+                _r.AddChild(pillGrid, _tabChannelBtn);
+            }
+
+            _r.SetBorderChild(outerPill, pillGrid);
+
+            // Wire click: invoke ToggleMenuCommand only if not already in the target state
+            if (_tabCommunityBtn != null)
+            {
+                _r.SubscribeEvent(_tabCommunityBtn, "PointerPressed", () =>
+                {
+                    if (_headerMembersVm != null)
+                    {
+                        bool cur = _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool bc && bc;
+                        if (!cur)
+                        {
+                            var cmd = _r.GetPropertyValue(_headerMembersVm, "ToggleMenuCommand");
+                            if (cmd != null) InvokeCommand(cmd);
+                        }
+                    }
+                    UpdateTabSwitcherState(communitySelected: true);
+                });
+            }
+
+            if (_tabChannelBtn != null)
+            {
+                _r.SubscribeEvent(_tabChannelBtn, "PointerPressed", () =>
+                {
+                    if (_headerMembersVm != null)
+                    {
+                        bool cur = _r.GetPropertyValue(_headerMembersVm, "MenuIn") is bool bc && bc;
+                        if (cur)
+                        {
+                            var cmd = _r.GetPropertyValue(_headerMembersVm, "ToggleMenuCommand");
+                            if (cmd != null) InvokeCommand(cmd);
+                        }
+                    }
+                    UpdateTabSwitcherState(communitySelected: false);
+                });
+            }
+
+            if (_headerMembersVm == null)
+                Logger.Log(Tag, "BuildTabSwitcher: MembersViewModel not found — toggle disabled");
+            else
+                Logger.Log(Tag, $"BuildTabSwitcher: ready (MenuIn={menuIn})");
+
+            return outerPill;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"BuildTabSwitcher error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Build one tab button for the Community/Channel switcher pill.
+    /// Selected: filled AdjustForHighlight background, primary text color, SemiBold label.
+    /// Unselected: transparent background, muted text, Normal weight.
+    /// </summary>
+    private object? BuildTabButton(string icon, string label, bool isSelected, bool isIconFont)
+    {
+        var selectedBg = AdjustForHighlight(_cardBg, 20);
+        var btn = _r.CreateBorder(isSelected ? selectedBg : "#00000000", 11);
+        if (btn == null) return null;
+        _r.SetCursorHand(btn);
+
+        var row = _r.CreateStackPanel(vertical: false, spacing: 5);
+        if (row != null)
+        {
+            _r.SetMargin(row, 8, 5, 8, 5);
+            _r.SetHorizontalAlignment(row, "Center");
+            _r.SetVerticalAlignment(row, "Center");
+
+            var iconText = _r.CreateTextBlock(icon, 10, isSelected ? _text : _muted);
+            if (iconText != null)
+            {
+                _r.SetVerticalAlignment(iconText, "Center");
+                if (isIconFont)
+                {
+                    try
+                    {
+                        var ffProp = iconText.GetType().GetProperty("FontFamily");
+                        if (ffProp != null)
+                        {
+                            var ff = Activator.CreateInstance(ffProp.PropertyType, GlyphIconFonts);
+                            if (ff != null) ffProp.SetValue(iconText, ff);
+                        }
+                    }
+                    catch { }
+                }
+                _r.AddChild(row, iconText);
+            }
+
+            var labelText = _r.CreateTextBlock(label, 11, isSelected ? _text : _muted);
+            if (labelText != null)
+            {
+                _r.SetVerticalAlignment(labelText, "Center");
+                if (isSelected) _r.SetFontWeight(labelText, "SemiBold");
+                _r.AddChild(row, labelText);
+            }
+
+            _r.SetBorderChild(btn, row);
+        }
+
+        return btn;
+    }
+
+    /// <summary>
+    /// Update Community/Channel tab button visual states after a toggle.
+    /// Called from click handlers to keep visuals in sync with MenuIn state.
+    /// </summary>
+    private void UpdateTabSwitcherState(bool communitySelected)
+    {
+        if (_tabCommunityBtn == null || _tabChannelBtn == null) return;
+        try
+        {
+            var selectedBg = AdjustForHighlight(_cardBg, 20);
+
+            // Helper: update a tab button's bg, icon color, label color + weight
+            void SetTab(object btn, bool selected)
+            {
+                _r.SetBackground(btn, selected ? selectedBg : "#00000000");
+                var content = _r.GetBorderChild(btn);
+                if (content == null) return;
+                var kids = _r.GetChildren(content);
+                if (kids == null || kids.Count < 2) return;
+                string color = selected ? _text : _muted;
+                _r.SetForeground(kids[0], color);  // icon
+                _r.SetForeground(kids[1], color);  // label
+                if (_r.IsTextBlock(kids[1]))
+                    _r.SetFontWeight(kids[1], selected ? "SemiBold" : "Normal");
+            }
+
+            SetTab(_tabCommunityBtn, communitySelected);
+            SetTab(_tabChannelBtn,   !communitySelected);
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"UpdateTabSwitcherState error: {ex.Message}"); }
     }
 
     // ===== Flyout placement flip (member profile popups) =====
