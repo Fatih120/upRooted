@@ -236,11 +236,6 @@ internal class ClearUrlsEngine
                     Interlocked.Exchange(ref _scanning, 0);
                 }
             });
-
-            Task.Delay(ScanIntervalMs * 2).ContinueWith(_ =>
-            {
-                Interlocked.CompareExchange(ref _scanning, 0, 1);
-            });
         }
         catch (Exception ex)
         {
