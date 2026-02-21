@@ -34,17 +34,18 @@ internal class HtmlPatchVerifier : IDisposable
     /// </summary>
     internal int VerifyAndRepair()
     {
+        using var ev = WideEvent.Begin("HtmlPatch", "verify_and_repair");
         var repaired = 0;
         var htmlFiles = FindTargetHtmlFiles();
+        ev.Set("files_found", htmlFiles.Count);
 
         if (htmlFiles.Count == 0)
         {
-            Logger.Log("HtmlPatch", "No target HTML files found in profile directory");
+            ev.Set("result", "no_files");
             return 0;
         }
 
-        Logger.Log("HtmlPatch", $"Checking {htmlFiles.Count} HTML file(s) for patches");
-
+        int ok = 0, errors = 0;
         foreach (var file in htmlFiles)
         {
             try
@@ -52,23 +53,24 @@ internal class HtmlPatchVerifier : IDisposable
                 var content = File.ReadAllText(file);
                 if (IsPatched(content))
                 {
-                    Logger.Log("HtmlPatch", $"OK: {GetRelativeName(file)}");
+                    ok++;
                     continue;
                 }
 
-                Logger.Log("HtmlPatch", $"MISSING patches in {GetRelativeName(file)}, repairing...");
                 if (PatchFile(file, content))
-                {
                     repaired++;
-                    Logger.Log("HtmlPatch", $"Repaired: {GetRelativeName(file)}");
-                }
             }
             catch (Exception ex)
             {
+                errors++;
                 Logger.Log("HtmlPatch", $"Error checking {GetRelativeName(file)}: {ex.Message}");
             }
         }
 
+        ev.Set("ok", ok);
+        ev.Set("repaired", repaired);
+        if (errors > 0) ev.Set("errors", errors);
+        ev.Set("result", errors > 0 ? "partial" : "ok");
         return repaired;
     }
 
@@ -79,20 +81,20 @@ internal class HtmlPatchVerifier : IDisposable
     /// </summary>
     internal void StartWatching()
     {
-        // Only watch directories that actually contain target HTML files
+        using var ev = WideEvent.Begin("HtmlPatch", "start_watching");
         var dirsToWatch = FindTargetHtmlFiles()
             .Select(Path.GetDirectoryName)
             .Where(d => d != null)
             .Distinct()
             .ToList();
 
+        ev.Set("dirs", dirsToWatch.Count);
         if (dirsToWatch.Count == 0)
         {
-            Logger.Log("HtmlPatch", "No HTML directories to watch");
+            ev.Set("result", "no_dirs");
             return;
         }
 
-        // Try FSW on first directory; if it fails, skip the rest (same MissingMethodException)
         foreach (var dir in dirsToWatch)
         {
             try
@@ -101,13 +103,15 @@ internal class HtmlPatchVerifier : IDisposable
             }
             catch (Exception ex)
             {
-                Logger.Log("HtmlPatch", $"FileSystemWatcher unavailable ({ex.GetType().Name}), using poll fallback (30s)");
+                ev.Set("result", "poll_fallback");
+                ev.Set("fallback_reason", ex.GetType().Name);
                 _pollTimer = new Timer(PollPatchCheck, null, 10_000, 30_000);
                 return;
             }
         }
 
-        Logger.Log("HtmlPatch", $"FileSystemWatcher active on {_watchers.Count} director(ies)");
+        ev.Set("watchers", _watchers.Count);
+        ev.Set("result", "fsw_active");
     }
 
     public void Dispose()
