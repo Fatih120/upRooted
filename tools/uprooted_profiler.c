@@ -228,6 +228,9 @@ static unsigned int g_tokTypeString = 0;    /* UserString: type name */
 /* Flag: target module tokens are ready */
 static volatile LONG g_targetReady = 0;
 
+/* Forward declaration */
+static void ClearEventMaskAfterInjection(void);
+
 static void** GetInfoVtable(void) {
     return *(void***)g_profilerInfo;
 }
@@ -669,6 +672,7 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
                                 injectedMethod = methods[m];
                                 InterlockedExchange(&g_injectionCount, 1);
                                 PLog("  *** IL INJECTED FROM ModuleLoadFinished ***");
+                                ClearEventMaskAfterInjection();
                             }
                         }
                     }
@@ -705,6 +709,20 @@ fail:
     SafeRelease(pEmit);
     SafeRelease(pImport);
     return FALSE;
+}
+
+/* ---- Post-injection cleanup ---- */
+
+/* After successful injection, clear the event mask to stop all profiler callbacks.
+ * Without this, JITCompilationStarted fires for every method (tens of thousands)
+ * even though the fast-path exit is cheap, the CLR callback overhead adds up. */
+static void ClearEventMaskAfterInjection(void) {
+    if (!g_profilerInfo) return;
+    void** vt = GetInfoVtable();
+    typedef HRESULT (__stdcall *SetEventMaskFn)(void* self, DWORD dwEvents);
+    SetEventMaskFn setMask = (SetEventMaskFn)vt[VT_PI_SetEventMask];
+    HRESULT hr = setMask(g_profilerInfo, 0);
+    PLogFmt("ClearEventMask: hr=0x%08X (stopped all callbacks)", hr);
 }
 
 /* ---- IL Injection ---- */
@@ -995,10 +1013,10 @@ static HRESULT __stdcall Prof_Initialize(UprootedProfiler* self, void* pICorProf
     typedef HRESULT (__stdcall *SetEventMaskFn)(void* self, DWORD dwEvents);
     SetEventMaskFn setMask = (SetEventMaskFn)vt[VT_PI_SetEventMask];
 
-    /* Disable R2R (ReadyToRun) precompilation to force all methods through JIT.
-     * This ensures SetILFunctionBody modifications are actually used.
-     * COR_PRF_DISABLE_ALL_NGEN_IMAGES = 0x00080000 */
-    DWORD mask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_MONITOR_MODULE_LOADS | 0x00080000;
+    /* Monitor JIT + module loads. SetILFunctionBody from ModuleLoadFinished
+     * overrides R2R precompiled code, so COR_PRF_DISABLE_ALL_NGEN_IMAGES is
+     * NOT needed — it would force ~46K JIT compilations during startup. */
+    DWORD mask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_MONITOR_MODULE_LOADS;
     hr = setMask(g_profilerInfo, mask);
     PLogFmt("SetEventMask(0x%08X): hr=0x%08X", mask, hr);
 
@@ -1110,6 +1128,7 @@ static HRESULT __stdcall Prof_JITCompilationStarted(
     }
 
     PLog("=== INJECTION COMPLETE - managed hook will load when method is called ===");
+    ClearEventMaskAfterInjection();
     return 0;
 }
 

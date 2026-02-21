@@ -20,12 +20,22 @@ internal class StartupHook
     // Static reference keeps FileSystemWatcher alive for process lifetime
     private static HtmlPatchVerifier? s_patchVerifier;
 
+    // Guard against double initialization (assembly loaded into multiple contexts)
+    private static int s_initGuard;
+
     public static void Initialize()
     {
         // Process guard: only inject into Root.exe
         var processName = Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "");
         if (!processName.Equals("Root", StringComparison.OrdinalIgnoreCase))
             return;
+
+        // One-shot guard: prevent double init if assembly loaded twice
+        if (Interlocked.CompareExchange(ref s_initGuard, 1, 0) != 0)
+        {
+            Logger.Log("Startup", "Initialize() already called, skipping duplicate");
+            return;
+        }
 
         var thread = new Thread(InjectorLoop)
         {
@@ -251,20 +261,20 @@ internal class StartupHook
                 });
             }
 
-            // Phase 4.5a: ClearURLs
+            // Phase 4.5a: ClearURLs (needs TextArea in compose box)
             StartPluginPhase("phase4_5a_clearurls", parentId, resolver, mainWindow!,
                 savedSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled,
-                7_000, (ev, r, w) =>
+                3_000, (ev, r, w) =>
                 {
                     var engine = new ClearUrlsEngine(r, w);
                     engine.Initialize();
                 });
             if (savedSettings.Plugins.TryGetValue("clear-urls", out var cuE) && cuE) pluginsStarted++;
 
-            // Phase 4.5b: Native link embeds
+            // Phase 4.5b: Native link embeds (needs message panel)
             StartPluginPhase("phase4_5b_link_embeds", parentId, resolver, mainWindow!,
                 savedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled,
-                10_000, (ev, r, w) =>
+                5_000, (ev, r, w) =>
                 {
                     var engine = new LinkEmbedEngine(r, w, themeEngine);
                     LinkEmbedEngine.Instance = engine;
@@ -272,10 +282,10 @@ internal class StartupHook
                 });
             if (savedSettings.Plugins.TryGetValue("link-embeds", out var leE) && leE) pluginsStarted++;
 
-            // Phase 4.5c: Message Logger + Audit Log
+            // Phase 4.5c: Message Logger + Audit Log (needs chat populated)
             StartPluginPhase("phase4_5c_msg_logger", parentId, resolver, mainWindow!,
                 savedSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled,
-                15_000, (ev, r, w) =>
+                5_000, (ev, r, w) =>
                 {
                     var logger = new MessageLogger(r, w);
                     logger.Initialize();
@@ -304,15 +314,15 @@ internal class StartupHook
             };
 
             StartPluginPhase("phase4_5d_auto_update", parentId, resolver, mainWindow!,
-                true, 3_000, (ev, r, w) =>
+                true, 500, (ev, r, w) =>
                 {
                     autoUpdater.Initialize();
                 });
             pluginsStarted++;
 
-            // Phase 4.5e: Presence beacon + profile badge
+            // Phase 4.5e: Presence beacon + profile badge (no visual tree dependency)
             StartPluginPhase("phase4_5e_presence_badge", parentId, resolver, mainWindow!,
-                true, 2_000, (ev, r, w) =>
+                true, 500, (ev, r, w) =>
                 {
                     var beacon = new UprootedPresenceBeacon(r, w);
                     beacon.Initialize();
@@ -321,10 +331,10 @@ internal class StartupHook
                 });
             pluginsStarted++;
 
-            // Phase 4.5f: Silent typing
+            // Phase 4.5f: Silent typing (needs HttpClient/gRPC discovery)
             StartPluginPhase("phase4_5f_silent_typing", parentId, resolver, mainWindow!,
                 savedSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled,
-                7_000, (ev, r, w) =>
+                3_000, (ev, r, w) =>
                 {
                     var engine = new SilentTypingEngine(r, w);
                     engine.Initialize();
@@ -337,7 +347,7 @@ internal class StartupHook
             {
                 var nsfwSettings = savedSettings;
                 StartPluginPhase("phase4_5g_nsfw_filter", parentId, resolver, mainWindow!,
-                    true, 15_000, (ev, r, w) =>
+                    true, 5_000, (ev, r, w) =>
                     {
                         var filter = new NsfwFilter(r, nsfwSettings, w);
                         ContentPages.NsfwFilterInstance = filter;
@@ -414,9 +424,9 @@ internal class StartupHook
                 }
             }
 
-            // Phase 4.5j: Translate engine (always-on, self-gated)
+            // Phase 4.5j: Translate engine (always-on, self-gated, no visual tree dependency)
             StartPluginPhase("phase4_5j_translate", parentId, resolver, mainWindow!,
-                true, 2_000, (ev, r, w) =>
+                true, 500, (ev, r, w) =>
                 {
                     var engine = new TranslateEngine(r, w, themeEngine);
                     TranslateEngine.Instance = engine;
