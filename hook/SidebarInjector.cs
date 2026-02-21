@@ -1044,6 +1044,14 @@ internal class SidebarInjector
         ev.Set("page", pageName);
         try
         {
+            // Handle navigation to Root's native settings tabs
+            if (pageName == "root-themes")
+            {
+                SelectRootTab("Theme");
+                ev.Set("result", "root_native_tab");
+                return;
+            }
+
             // Reload settings so page builds reflect runtime changes (e.g. channel switch)
             _settings = UprootedSettings.Load();
 
@@ -1177,6 +1185,62 @@ internal class SidebarInjector
             RestoreSaveBar();
 
         UpdateNavHighlights();
+    }
+
+    /// <summary>
+    /// Programmatically navigate to a Root native settings tab by matching MenuTitle.
+    /// Uses ListBox.SelectedItem (not SelectedIndex) to trigger the two-way binding
+    /// to RootSettingsContainer.SelectedMenuItemPageContainer, which fires
+    /// OnPropertyChanged → SelectMenuItem() → page content loads via Navigator.
+    /// </summary>
+    private void SelectRootTab(string menuTitleSubstring)
+    {
+        if (_listBox == null)
+        {
+            Logger.Log("Injector", $"SelectRootTab: no ListBox available");
+            return;
+        }
+
+        // Remove Uprooted content first so Root's content area is clean
+        RemoveContentPage();
+
+        // Get the items collection (ObservableCollection<MenuItemPageContainerViewModel>)
+        var itemsSource = _listBox.GetType().GetProperty("ItemsSource")?.GetValue(_listBox)
+            as System.Collections.IEnumerable;
+        if (itemsSource == null)
+        {
+            Logger.Log("Injector", $"SelectRootTab: ItemsSource is null");
+            return;
+        }
+
+        // Find the MenuItemPageContainerViewModel with matching MenuTitle
+        object? targetItem = null;
+        int idx = 0;
+        foreach (var item in itemsSource)
+        {
+            var menuTitle = item.GetType().GetProperty("MenuTitle")?.GetValue(item) as string;
+            var isHeader = item.GetType().GetProperty("IsHeaderItem")?.GetValue(item) as bool? ?? false;
+            if (!isHeader && menuTitle != null &&
+                menuTitle.IndexOf(menuTitleSubstring, StringComparison.OrdinalIgnoreCase) >= 0)
+            {
+                targetItem = item;
+                Logger.Log("Injector", $"SelectRootTab: found '{menuTitle}' at index {idx}");
+                break;
+            }
+            idx++;
+        }
+
+        if (targetItem == null)
+        {
+            Logger.Log("Injector", $"SelectRootTab: no item matching '{menuTitleSubstring}'");
+            return;
+        }
+
+        // Set SelectedItem to trigger the two-way binding chain
+        var selectedItemProp = _listBox.GetType().GetProperty("SelectedItem");
+        selectedItemProp?.SetValue(_listBox, targetItem);
+        _lastListBoxIdx = _r.GetSelectedIndex(_listBox);
+        Logger.Log("Injector", $"SelectRootTab: set SelectedItem, idx now {_lastListBoxIdx}");
     }
 
     // ===== ScrollViewer wrapping =====

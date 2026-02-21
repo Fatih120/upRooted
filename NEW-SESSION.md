@@ -49,8 +49,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `HtmlPatchVerifier.cs` | 443 | Phase 0: self-healing HTML patches |
 | `AvaloniaReflection.cs` | 2920 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 572 | DFS visual tree traversal |
-| `SidebarInjector.cs` | 1779 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 3893 | Settings page builders (Uprooted, Plugins, Themes) |
+| `SidebarInjector.cs` | 1900 | Settings page monitor + sidebar injection |
+| `ContentPages.cs` | 4009 | Settings page builders (Uprooted, Plugins, Themes) |
 | `ThemeEngine.cs` | 2035 | Resource-first theme engine v2, OKLCH palette |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |

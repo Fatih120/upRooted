@@ -165,6 +165,7 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Native theme card settings button** (2026-02-21) — Gear button on "Native" preset card opens Root's native Change Theme page via ViewModel-driven ListBox.SelectedItem binding. SelectRootTab helper for programmatic Root settings navigation.
 - [x] **Structured logging overhaul** (2026-02-21) — WideEvent + TailSampler infrastructure, ~1200 Logger.Log calls migrated to ~100 wide events, 4 scan engines tail-sampled, LogConsole dev terminal.
 - [x] **TranslateEngine shipped** (2026-02-21) — DeepL-powered message translation with language picker, API key config, context menu integration.
 - [x] **UprootedPresenceBeacon shipped** (2026-02-21) — Uprooted user detection via gRPC metadata injection.

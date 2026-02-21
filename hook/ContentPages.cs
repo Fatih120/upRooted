@@ -195,7 +195,7 @@ internal static class ContentPages
             {
                 "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
                 "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine, onNavigate),
-                "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
+                "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged, onNavigate),
                 _ => null
             };
         }
@@ -1984,7 +1984,8 @@ internal static class ContentPages
     }
 
     private static object? BuildThemesPage(AvaloniaReflection r, UprootedSettings settings,
-        object? font, ThemeEngine? themeEngine = null, Action? onThemeChanged = null)
+        object? font, ThemeEngine? themeEngine = null, Action? onThemeChanged = null,
+        Action<string>? onNavigate = null)
     {
         ApplyThemedColors(themeEngine);
         ComputeDpiAwareBorders(r);
@@ -2023,7 +2024,7 @@ internal static class ContentPages
 
                 var allPresets = new[]
                 {
-                    ("Default",  "default-dark", "#0D1521", "#3B6AF8", "Root's default"),
+                    ("Native",  "default-dark", "#0D1521", "#3B6AF8", "Root's app theme"),
                     ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
                     ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
                     ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
@@ -2040,8 +2041,11 @@ internal static class ContentPages
                     {
                         var (displayName, themeId, bgColor, accentColor, description) = allPresets[i];
                         bool isActive = settings.ActiveTheme == themeId;
+                        Action? settingsAction = themeId == "default-dark" && onNavigate != null
+                            ? () => onNavigate("root-themes") : null;
                         var card = BuildThemeCard(r, displayName, themeId, bgColor, accentColor,
-                            description, isActive, font, themeEngine, settings, onThemeChanged);
+                            description, isActive, font, themeEngine, settings, onThemeChanged,
+                            settingsAction);
                         if (card != null)
                         {
                             r.SetGridColumn(card, i);
@@ -2578,7 +2582,8 @@ internal static class ContentPages
     private static object? BuildThemeCard(AvaloniaReflection r, string displayName,
         string themeId, string bgColor, string accentColor, string description,
         bool isActive, object? font, ThemeEngine? themeEngine,
-        UprootedSettings settings, Action? onThemeChanged)
+        UprootedSettings settings, Action? onThemeChanged,
+        Action? onSettings = null)
     {
         // Inner theme cards are "2nd-order" — lighter bg and thicker border than the container
         var innerCardBg = AdjustForHighlight(CardBg, 4.5);
@@ -2662,13 +2667,91 @@ internal static class ContentPages
             r.AddChild(outerLayout, bottomRow);
         }
 
-        r.SetBorderChild(card, outerLayout);
+        // Hover colors (shared between card hover and gear hover suppression)
+        var restBorder = CardBorder;
+        var hoverBorder = ColorUtils.Lighten(CardBorder, 60);
+        var dotHoverColor = AdjustForHighlight(CardBg, 55);
+        var dotRef = radioDot;
+
+        // Gear button for settings (e.g. Native card → Root's Change Theme page)
+        bool gearClicked = false;
+        bool gearHovered = false;
+        if (onSettings != null)
+        {
+            var overlay = r.CreatePanel();
+            if (overlay != null)
+            {
+                r.AddChild(overlay, outerLayout);
+
+                var gearBtnBg = AdjustForHighlight(CardBg, 12);
+                var gearBtn = r.CreateBorder(gearBtnBg, 11);
+                if (gearBtn != null)
+                {
+                    r.SetWidth(gearBtn, 24);
+                    r.SetHeight(gearBtn, 24);
+                    r.SetHorizontalAlignment(gearBtn, "Right");
+                    r.SetVerticalAlignment(gearBtn, "Bottom");
+                    r.SetMargin(gearBtn, 0, 0, 14, 18);
+                    r.SetCursorHand(gearBtn);
+
+                    var gearIcon = r.CreatePathIcon(GearIconPath, 16, TextMuted);
+                    if (gearIcon != null)
+                    {
+                        r.SetHorizontalAlignment(gearIcon, "Center");
+                        r.SetVerticalAlignment(gearIcon, "Center");
+                        r.SetBorderChild(gearBtn, gearIcon);
+                    }
+
+                    var gearBtnRef = gearBtn;
+                    r.SubscribeEvent(gearBtn, "PointerPressed", () =>
+                    {
+                        gearClicked = true;
+                        onSettings();
+                    });
+                    r.SubscribeEvent(gearBtn, "PointerEntered", () =>
+                    {
+                        gearHovered = true;
+                        r.SetBackground(gearBtnRef, ColorUtils.Lighten(gearBtnBg, 8));
+                        // Remove card hover while over gear
+                        if (!isActive)
+                        {
+                            SetBorderStroke(r, card, restBorder, ThickBorder);
+                            if (dotRef != null) r.SetBackground(dotRef, "#00000000");
+                        }
+                    });
+                    r.SubscribeEvent(gearBtn, "PointerExited", () =>
+                    {
+                        gearHovered = false;
+                        r.SetBackground(gearBtnRef, gearBtnBg);
+                        // Re-apply card hover if pointer moved back to card body
+                        if (!isActive)
+                        {
+                            SetBorderStroke(r, card, hoverBorder, ThickBorder);
+                            if (dotRef != null) r.SetBackground(dotRef, dotHoverColor);
+                        }
+                    });
+
+                    r.AddChild(overlay, gearBtn);
+                }
+
+                r.SetBorderChild(card, overlay);
+            }
+            else
+            {
+                r.SetBorderChild(card, outerLayout);
+            }
+        }
+        else
+        {
+            r.SetBorderChild(card, outerLayout);
+        }
 
         // Click handler for theme switching
         r.SubscribeEvent(card, "PointerReleased", () =>
         {
             try
             {
+                if (gearClicked) { gearClicked = false; return; }
                 Logger.Log("Theme", "Theme card clicked: " + themeId);
                 if (themeEngine == null) return;
 
@@ -2704,13 +2787,9 @@ internal static class ContentPages
         });
 
         // Hover effect — card border brightens, radio dot shows preview fill
-        var restBorder = CardBorder;
-        var hoverBorder = ColorUtils.Lighten(CardBorder, 60);
-        var dotHoverColor = AdjustForHighlight(CardBg, 55);
-        var dotRef = radioDot;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
-            if (!isActive)
+            if (!isActive && !gearHovered)
             {
                 SetBorderStroke(r, card, hoverBorder, ThickBorder);
                 if (dotRef != null)
