@@ -26,6 +26,17 @@ internal class TranslateEngine
 {
     private const int ScanIntervalMs = 2_000;
     private const int ReceiveScanIntervalMs = 500;
+    private const int MaxCacheSize = 500;
+
+    // Shared HttpClient — reused across all translation requests to avoid socket exhaustion.
+    private static readonly HttpClient s_httpClient = new()
+    {
+        Timeout = TimeSpan.FromSeconds(8)
+    };
+    static TranslateEngine()
+    {
+        s_httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
+    }
 
     // Singleton for ContentPages access
     internal static TranslateEngine? Instance { get; set; }
@@ -48,11 +59,11 @@ internal class TranslateEngine
     // Send-side: keyed by hooked TextArea identity hash
     private readonly HashSet<int> _hookedEditors = new();
 
-    // Translation cache: raw text → translated text
-    private readonly Dictionary<string, string> _translationCache = new();
+    // Translation cache: raw text → translated text (thread-safe, capped at MaxCacheSize)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _translationCache = new();
 
-    // Receive-side: messageId → translated text
-    private readonly Dictionary<string, string> _receivedCache = new();
+    // Receive-side: messageId → translated text (thread-safe, capped at MaxCacheSize)
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _receivedCache = new();
 
     // AvaloniaEdit types (resolved once)
     private Type? _textEditorType;
@@ -786,7 +797,10 @@ internal class TranslateEngine
                             var translated = await TranslateAsync(rawText, fromLang, toLang)
                                 .ConfigureAwait(false);
                             if (!string.IsNullOrEmpty(translated))
+                            {
+                                if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
                                 _translationCache[rawText] = translated;
+                            }
                         }
                         catch (Exception ex2)
                         {
@@ -923,6 +937,7 @@ internal class TranslateEngine
                     var translated = await TranslateAsync(rawText, fromLang, toLang).ConfigureAwait(false);
                     if (string.IsNullOrEmpty(translated) || translated == rawText) return;
 
+                    if (_receivedCache.Count >= MaxCacheSize) _receivedCache.Clear();
                     _receivedCache[capturedMsgId] = translated;
 
                     _r.RunOnUIThread(() =>
@@ -1093,11 +1108,7 @@ internal class TranslateEngine
                     + "&dt=t"
                     + $"&q={Uri.EscapeDataString(text)}";
 
-            using var client = new HttpClient();
-            client.Timeout = TimeSpan.FromSeconds(8);
-            client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0");
-
-            var resp = await client.GetStringAsync(url).ConfigureAwait(false);
+            var resp = await s_httpClient.GetStringAsync(url).ConfigureAwait(false);
             return ParseGoogleTranslateResponse(resp);
         }
         catch (Exception ex)
