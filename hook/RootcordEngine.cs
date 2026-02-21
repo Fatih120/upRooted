@@ -1276,15 +1276,58 @@ internal class RootcordEngine
         _originalColWidths = null;
         _originalSplitterColumns = null;
 
-        // Clear injected header tracking (header stays in tree; no unwrap needed here)
+        // Unwrap the injected header from the channels panel (restores original content)
+        RemoveInjectedHeader();
+    }
+
+    // ===== Community header injection =====
+
+    /// <summary>
+    /// Remove our injected header wrapper from a channels panel Border, restoring the original content.
+    /// Safe to call even if no header was injected (no-op). Prevents duplicate header stacking.
+    /// </summary>
+    private void RemoveInjectedHeader(object? channelsPanel = null)
+    {
+        // If no specific panel given, use the tracked one
+        var panel = channelsPanel ?? _channelsPanelRef;
+        if (panel == null) return;
+
+        try
+        {
+            var child = _r.GetBorderChild(panel);
+            if (child == null) return;
+            var tag = _r.GetTag(child) as string;
+            if (tag != "rootcord-channel-wrapper") return;
+
+            // child is our wrapper Grid { Row0: headerStack, Row1: originalContent }
+            // Extract Row1 (the original content) and restore it
+            object? originalContent = null;
+            foreach (var gridChild in _r.GetVisualChildren(child))
+            {
+                int row = _r.GetGridRow(gridChild);
+                if (row == 1)
+                {
+                    originalContent = gridChild;
+                    break;
+                }
+            }
+
+            if (originalContent != null)
+            {
+                _r.RemoveChild(child, originalContent);
+                _r.SetGridRow(originalContent, 0); // reset row assignment
+                _r.SetBorderChild(panel, originalContent);
+                Logger.Log(Tag, "RemoveInjectedHeader: unwrapped channels panel");
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RemoveInjectedHeader error: {ex.Message}"); }
+
         _injectedHeader = null;
         _channelsPanelRef = null;
         _tabCommunityBtn = null;
         _tabChannelBtn = null;
         _headerMembersVm = null;
     }
-
-    // ===== Community header injection =====
 
     /// <summary>
     /// Build a custom community header and inject it at the top of the channels panel.
@@ -1307,8 +1350,9 @@ internal class RootcordEngine
         object? iconBitmap = TryGetTabBitmap(selectedTab);
         string initial = communityName.Length > 0 ? communityName[0].ToString().ToUpper() : "?";
 
-        // AttachedMemberCount = all members in the community (matches CommunityTabView.MemberCountTextBlock binding)
-        string countStr = attached > 0 ? $"{attached} members" : (total > 0 ? $"{total} members" : "");
+        // MembersView OutMenuPanel uses Community.Members.MemberCount (total), not AttachedMemberCount
+        // StringFormat=MembersCount resolves to "{0} members"
+        string countStr = total > 0 ? $"{total} members" : (attached > 0 ? $"{attached} members" : "");
 
         // Find the channels panel (non-star, non-members column after rotation)
         object? channelsPanel = null;
@@ -1325,8 +1369,12 @@ internal class RootcordEngine
         }
         if (channelsPanel == null) return;
 
-        // Skip if already injected into this exact panel
-        if (_injectedHeader != null && _channelsPanelRef == channelsPanel) return;
+        // Remove any existing injected header (prevents duplicates on tab-switch retries)
+        RemoveInjectedHeader(channelsPanel);
+
+        // Also skip if somehow still tagged from a prior injection we can't track
+        var existingChild = _r.GetBorderChild(channelsPanel);
+        if (existingChild != null && (_r.GetTag(existingChild) as string) == "rootcord-channel-wrapper") return;
 
         // ===== COMMUNITY INFO CARD =====
         var headerBorder = _r.CreateBorder(_cardBg, 12);
