@@ -37,6 +37,10 @@ internal class ThemeEngine
     // to let DynamicResource reassert. Set of (control, propertyFieldName) pairs.
     private readonly HashSet<(object control, string propertyField)> _walkerRecolored = new();
 
+    // Cache of types that do NOT have a Foreground property, so WalkAndRecolor skips
+    // GetProperty("Foreground") for them on every subsequent node (reflection is slow).
+    private readonly HashSet<Type> _noForegroundTypes = new();
+
     // Single-shot walk timer
     private System.Threading.Timer? _walkTimer;
 
@@ -1578,10 +1582,14 @@ internal class ThemeEngine
             // Untagged controls: color-map matching for TEXT colors only.
             // Uses SetValueStylePriority so DynamicResource can reassert on revert.
             // This recolors Root's native text (settings tabs, profile labels, etc.)
+            // _noForegroundTypes caches types where GetProperty("Foreground")==null to
+            // avoid repeated reflection calls for the many non-text nodes in the tree.
             foreach (var propName in new[] { "Foreground" })
             {
-                var prop = visual.GetType().GetProperty(propName);
-                if (prop == null) continue;
+                var vtype = visual.GetType();
+                if (_noForegroundTypes.Contains(vtype)) continue;
+                var prop = vtype.GetProperty(propName);
+                if (prop == null) { _noForegroundTypes.Add(vtype); continue; }
                 try
                 {
                     var brush = prop.GetValue(visual);
