@@ -110,4 +110,62 @@ internal static class Logger
         }
         Log(category, $"  StackTrace: {ex.StackTrace}");
     }
+
+    // ===== Wide event emission (called by WideEvent.Dispose/Finish) =====
+
+    /// <summary>
+    /// Emit a structured wide event line.
+    /// Format: [HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N
+    /// </summary>
+    internal static void EmitWideEvent(string category, string operation,
+        List<KeyValuePair<string, string>> fields, int durationMs)
+    {
+        string? eager = null;
+        try
+        {
+            var sb = new System.Text.StringBuilder(128);
+            sb.Append($"[{DateTime.Now:HH:mm:ss.fff}] [{category}|{operation}]");
+
+            foreach (var kv in fields)
+            {
+                sb.Append(' ');
+                sb.Append(kv.Key);
+                sb.Append('=');
+                sb.Append(EscapeValue(kv.Value));
+            }
+
+            sb.Append(" dur_ms=");
+            sb.Append(durationMs);
+            sb.Append('\n');
+
+            lock (Lock)
+            {
+                _buffer.Append(sb);
+                if (_buffer.Length > 8192)
+                {
+                    eager = _buffer.ToString();
+                    _buffer.Clear();
+                }
+            }
+        }
+        catch { }
+
+        if (eager != null)
+        {
+            try { File.AppendAllText(LogPath, eager); }
+            catch { }
+        }
+    }
+
+    private static string EscapeValue(string value)
+    {
+        if (value.IndexOfAny(_escapeChars) < 0)
+            return value;
+        return value
+            .Replace("\\", "\\\\")
+            .Replace("\n", "\\n")
+            .Replace("\r", "\\r");
+    }
+
+    private static readonly char[] _escapeChars = { '\\', '\n', '\r' };
 }
