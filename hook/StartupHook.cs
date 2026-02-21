@@ -206,12 +206,12 @@ internal class StartupHook
                         ev.Set("ping_color", savedSettings.CustomPingColor);
                     }
 
-                    // Ping color diagnostic: dev channel only.
+                    // Ping color diagnostic: dev channel only, deferred to avoid UI contention.
                     if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                     {
                         var te = themeEngine;
                         System.Threading.ThreadPool.QueueUserWorkItem(_ => {
-                            Thread.Sleep(10_000);
+                            Thread.Sleep(30_000);
                             resolver.RunOnUIThread(() => {
                                 try { te.DumpVisualTreeColors(); }
                                 catch (Exception dumpEx) { Logger.Log("Startup", "DumpVisualTreeColors error: " + dumpEx.Message); }
@@ -241,7 +241,7 @@ internal class StartupHook
 
             // ===== Async plugin phases (fire-and-forget on ThreadPool) =====
 
-            // Phase 4.5: Browser discovery (diagnostic scan, dev channel only)
+            // Phase 4.5: Browser discovery (diagnostic scan, dev channel only, deferred)
             if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
             {
                 var discoveryWindow = mainWindow!;
@@ -250,7 +250,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(10_000);
+                        Thread.Sleep(30_000); // deferred to avoid UI thread contention during startup
                         discoveryResolver.RunOnUIThread(() =>
                         {
                             try { new BrowserDiscovery(discoveryResolver, discoveryWindow).DumpAllFindings(); }
@@ -370,23 +370,28 @@ internal class StartupHook
                 if (wantRootcord)
                 {
                     bool applied = false;
+                    int rcAttempts = 0;
+                    const int maxRcAttempts = 50; // ~5-10 seconds of layout passes
                     resolver.RunOnUIThread(() =>
                     {
                         resolver.SubscribeEvent(mainWindow!, "LayoutUpdated", () =>
                         {
                             if (applied || rcEngine.IsApplied) { applied = true; return; }
+                            if (rcAttempts >= maxRcAttempts) return; // give up silently
+                            rcAttempts++;
                             try
                             {
                                 rcEngine.Apply();
                                 if (rcEngine.IsApplied)
                                 {
                                     applied = true;
-                                    Logger.Log("Startup", "Phase 4.5h OK: Rootcord active");
+                                    Logger.Log("Startup", $"Phase 4.5h OK: Rootcord active (attempt {rcAttempts})");
                                 }
                             }
                             catch (Exception ex)
                             {
-                                Logger.Log("Startup", $"Phase 4.5h LayoutUpdated error: {ex.Message}");
+                                if (rcAttempts == maxRcAttempts)
+                                    Logger.Log("Startup", $"Phase 4.5h: Rootcord gave up after {maxRcAttempts} attempts: {ex.Message}");
                             }
                         });
                     });
@@ -445,20 +450,31 @@ internal class StartupHook
                     {
                         if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                         {
-                            const int pollIntervalMs = 2000;
-                            const int maxWaitMs = 90_000;
-                            int elapsed = 0;
-                            while (elapsed < maxWaitMs && !DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
+                            // Event-driven: wait for DotNetBrowser assembly load
+                            using var dnbSignal = new ManualResetEventSlim(false);
+                            void OnDnbAssemblyLoad(object? s, AssemblyLoadEventArgs a)
                             {
-                                Thread.Sleep(pollIntervalMs);
-                                elapsed += pollIntervalMs;
+                                if ((a.LoadedAssembly.GetName().Name ?? "").StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase))
+                                    dnbSignal.Set();
                             }
-                            if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
+                            AppDomain.CurrentDomain.AssemblyLoad += OnDnbAssemblyLoad;
+                            try
                             {
-                                ev.Set("result", "timeout");
-                                return;
+                                // Double-check after subscribing
+                                if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
+                                {
+                                    if (!dnbSignal.Wait(90_000))
+                                    {
+                                        ev.Set("result", "timeout");
+                                        return;
+                                    }
+                                }
                             }
-                            Thread.Sleep(1000);
+                            finally
+                            {
+                                AppDomain.CurrentDomain.AssemblyLoad -= OnDnbAssemblyLoad;
+                            }
+                            Thread.Sleep(1000); // let remaining DotNetBrowser assemblies load
                         }
 
                         var browserReflection = new DotNetBrowserReflection();
@@ -555,18 +571,35 @@ internal class StartupHook
 
     private static bool WaitForAvaloniaAssemblies(TimeSpan timeout)
     {
-        var deadline = DateTime.UtcNow + timeout;
-        while (DateTime.UtcNow < deadline)
+        // Check if already loaded (profiler injection fires after module loads)
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
+            if ((asm.GetName().Name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+
+        // Event-driven: wait for AssemblyLoad event instead of polling
+        using var signal = new ManualResetEventSlim(false);
+        void OnAssemblyLoad(object? sender, AssemblyLoadEventArgs args)
+        {
+            if ((args.LoadedAssembly.GetName().Name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
+                signal.Set();
+        }
+        AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
+        try
+        {
+            // Double-check after subscribing (race window)
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                var name = asm.GetName().Name ?? "";
-                if (name.Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
+                if ((asm.GetName().Name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
                     return true;
             }
-            Thread.Sleep(250);
+            return signal.Wait(timeout);
         }
-        return false;
+        finally
+        {
+            AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoad;
+        }
     }
 
     private static bool WaitFor(Func<bool> condition, TimeSpan timeout)
@@ -579,7 +612,7 @@ internal class StartupHook
                 if (condition()) return true;
             }
             catch { }
-            Thread.Sleep(50);
+            Thread.Sleep(200);
         }
         return false;
     }
