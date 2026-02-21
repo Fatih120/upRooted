@@ -10,11 +10,18 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 
+- **Wide event structured logging** — New `WideEvent` builder emits structured `[Category|operation] key=value key=value dur_ms=N` log lines following [loggingsucks.com](https://loggingsucks.com) methodology. ~1200 freeform `Logger.Log` calls migrated to ~100 wide events across 11 files. Old format still works (backwards compatible).
+  - Files: `hook/WideEvent.cs` (new), `hook/Logger.cs`
+- **Tail sampling for scan engines** — `TailSampler` aggregates high-frequency scan timer results into 30-second heartbeat summaries. Applied to 4 scan engines (LinkEmbedEngine, MessageLogger, NsfwFilter, ThemeEngine), eliminating thousands of repetitive log lines per session.
+  - File: `hook/TailSampler.cs` (new)
+- **Log Console** — Dev-channel-only "Live Console" button on the About page opens a named pipe server that streams log lines in real time. `Logger.OnLine` callback feeds new lines to the pipe.
+  - File: `hook/LogConsole.cs` (new)
 - **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
 - **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
 
 ### Changed
 
+- **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
 - **Card border thickness** — 1.5px → 1.0px to match Root's native divider lines; color from Root's `Border` resource
 - **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
 - **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color

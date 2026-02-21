@@ -117,6 +117,28 @@ Four optimizations reduce the time between Root launching and Uprooted being act
 
 ---
 
+## Refactored: Wide Event Structured Logging
+
+The entire hook logging system was refactored from freeform string messages to structured wide events, following the [loggingsucks.com](https://loggingsucks.com) methodology. ~1200 individual `Logger.Log` calls across 11 files were consolidated into ~100 wide events, each emitting a single structured line with machine-parseable key=value pairs.
+
+**New log format:**
+```
+[HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N
+```
+
+The old `[HH:mm:ss.fff] [Category] message` format still works -- existing callsites are unaffected and the two formats coexist in the same log file.
+
+**Tail sampling for scan engines.** Four timer-based scan engines (LinkEmbedEngine, MessageLogger, NsfwFilter, ThemeEngine) that previously logged on every 500ms tick now use tail sampling: scan results are buffered and only emitted as a 30-second heartbeat summary. This eliminates thousands of repetitive log lines per session while preserving the information that matters (total scans, hits, errors).
+
+**Log Console (developer only).** A new "Live Console" button on the About page (dev channel only) opens a named pipe server that streams log lines in real time. Connect with any pipe client to watch the log live without tailing the file.
+
+**New files:**
+- `hook/WideEvent.cs` (~150 lines) -- structured event builder with key=value serialization and duration tracking
+- `hook/TailSampler.cs` (~72 lines) -- periodic heartbeat aggregator for high-frequency scan loops
+- `hook/LogConsole.cs` (~200 lines) -- named pipe server for real-time log streaming (dev channel only)
+
+---
+
 ## Developer Tools
 
 **ReconLogger** is a new dev-channel-only diagnostic tool that hooks into Root's settings page interaction events and writes visual tree data to the hook log as `[Recon]` entries. Useful for capturing style properties of sidebar controls during Rootcord and Uprooted UI development. Only initializes when the update channel is `developer`.

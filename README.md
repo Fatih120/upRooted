@@ -119,7 +119,10 @@ uprooted-private/
     BrowserDiscovery.cs       Phase 4.5 diagnostic scanner
     UprootedSettings.cs       INI-based settings (System.Text.Json is broken in profiler context)
     DotNetBrowserReflection.cs  reflection cache for DotNetBrowser types
-    Logger.cs                 thread-safe file logging
+    Logger.cs                 thread-safe file logging with structured wide events
+    WideEvent.cs              structured event builder (key=value serialization, duration tracking)
+    TailSampler.cs            periodic heartbeat aggregator for high-frequency scan loops
+    LogConsole.cs             named pipe server for real-time log streaming (dev only)
 
   src/                      TypeScript browser injection layer
     core/preload.ts           browser entry point, bridge proxy install

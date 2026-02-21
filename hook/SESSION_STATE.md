@@ -47,6 +47,49 @@
 - **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text)
 - **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
 
+## Wide Event Logging (v0.4.3)
+
+### New Files
+
+| File | Lines | Purpose |
+|------|------:|---------|
+| `WideEvent.cs` | ~150 | Structured wide event builder — IDisposable pattern, key=value pairs, automatic `dur_ms` on Dispose |
+| `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks — suppresses repetitive scan output, emits periodic heartbeat |
+| `LogConsole.cs` | ~200 | Dev-only "Live Console" button on About page — spawns PowerShell terminal with named pipe streaming |
+
+### Log Format
+
+**New structured format (wide events):**
+```
+[HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N
+```
+
+**Old format (still works, backwards compatible):**
+```
+[HH:mm:ss.fff] [Category] message
+```
+
+`Logger.cs` grew from 113 to ~170 lines — gained `EmitWideEvent` method and `OnLine` callback for pipe streaming. ~1200 scattered `Logger.Log` calls across 11 files were migrated to ~100 wide events.
+
+### Tail-Sampled Engines
+
+Four high-frequency scan engines use `TailSampler` to suppress repetitive scan tick output while emitting periodic heartbeats:
+
+| Engine | Purpose |
+|--------|---------|
+| `LinkEmbedEngine` | Avalonia-native link embed scanner |
+| `MessageLogger` | Edit/delete detection scanner |
+| `SidebarInjector` | Settings page monitor |
+| `ClearUrlsEngine` | Tracking param stripper |
+
+### LogConsole Architecture
+
+- Dev-only "Live Console" button injected on the About settings page
+- Creates a Windows named pipe server for real-time log streaming
+- `Logger.OnLine` callback writes each log line to the pipe
+- Spawns a PowerShell terminal process that connects to the named pipe and displays output
+- Only available on developer channel builds
+
 ## Critical Finding: Root's Chat is Avalonia-Native
 
 Root v0.9.93's chat UI is rendered **entirely in native Avalonia controls**, NOT in DotNetBrowser.

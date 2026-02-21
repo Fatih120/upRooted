@@ -37,7 +37,7 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ```
 uprooted-private/
-├── hook/                              # C# .NET hook (CLR profiler injection) — 32 .cs files
+├── hook/                              # C# .NET hook (CLR profiler injection) — 35 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (2920 lines)
@@ -69,7 +69,10 @@ uprooted-private/
 │   ├── UprootedPresenceBeacon.cs     # Presence beacon: Uprooted user detection via gRPC metadata
 │   ├── ReconLogger.cs                # Recon logger: visual tree + style property diagnostic dumper
 │   ├── Entry.cs                       # Profiler injection entry point
-│   ├── Logger.cs                      # File-based logging (113 lines)
+│   ├── LogConsole.cs                  # Dev-only live log terminal via named pipe (~200 lines)
+│   ├── Logger.cs                      # File-based logging + wide event emission (~170 lines)
+│   ├── TailSampler.cs                # Tail sampling for high-frequency scan ticks (~72 lines)
+│   ├── WideEvent.cs                  # Structured wide event builder (IDisposable, key=value, dur_ms) (~150 lines)
 │   └── SESSION_STATE.md               # Session state/context handoff
 ├── installer/src-tauri/src/           # Console TUI installer (Rust)
 │   ├── main.rs                        # Console TUI entry point (ratatui)

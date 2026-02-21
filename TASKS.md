@@ -55,9 +55,6 @@ Current focus areas (in order):
 
 ### Organization
 
-- [ ] **Structured logging overhaul** — Implement [loggingsucks.com](https://loggingsucks.com) methodology: replace scattered `Logger.Log("[Category] message")` with wide events (one structured event per operation with high-cardinality fields: phase, feature, duration_ms, outcome, error_type, settings_state). Currently Logger.cs is 113 lines of append-to-file string logging. Target: queryable structured events, tail sampling for high-volume ops.
-  - Files: `hook/Logger.cs`, all `hook/*.cs` callers
-
 - [ ] **Set up Vitest** — Install Vitest, add `test`/`test:watch`/`test:coverage` scripts, co-locate test files as `.test.ts`.
 
 - [ ] **PluginLoader unit tests** — Registration, start/stop lifecycle, patch install, event emission, race conditions.
@@ -168,6 +165,7 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Structured logging overhaul** (2026-02-21) — WideEvent + TailSampler infrastructure, ~1200 Logger.Log calls migrated to ~100 wide events, 4 scan engines tail-sampled, LogConsole dev terminal.
 - [x] **TranslateEngine shipped** (2026-02-21) — DeepL-powered message translation with language picker, API key config, context menu integration.
 - [x] **UprootedPresenceBeacon shipped** (2026-02-21) — Uprooted user detection via gRPC metadata injection.
 - [x] **ReconLogger shipped** (2026-02-21) — Visual tree + style property diagnostic dumper for development.

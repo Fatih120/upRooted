@@ -182,7 +182,10 @@ This section describes the key classes and modules that form the framework's bac
 | `TranslateConfigPopup` | `hook/TranslateConfigPopup.cs` | Translate configuration popup UI — language picker, API key input, test connection button (511 lines). |
 | `UprootedPresenceBeacon` | `hook/UprootedPresenceBeacon.cs` | Presence beacon for Uprooted user detection via gRPC metadata injection (Phase 4.5j, 470 lines). |
 | `ReconLogger` | `hook/ReconLogger.cs` | Visual tree + style property diagnostic dumper for development/debugging (786 lines). |
-| `Logger` | `hook/Logger.cs` | Thread-safe file logging (113 lines). Writes to `uprooted-hook.log` in the profile directory with timestamps and `[Category]` prefixes. Swallows its own exceptions to avoid crashing Root. |
+| `Logger` | `hook/Logger.cs` | Thread-safe buffered file logging (~170 lines). Writes to `uprooted-hook.log` in the profile directory. Supports two formats: classic `[Category] message` and structured wide events `[Category|operation] key=value dur_ms=N`. Buffered I/O (100ms flush timer). `OnLine` callback for live subscribers (used by `LogConsole`). Swallows its own exceptions to avoid crashing Root. |
+| `WideEvent` | `hook/WideEvent.cs` | Structured wide event builder (~150 lines). `IDisposable` — accumulates key-value fields during an operation, emits a single log line on `Dispose()` with automatic `dur_ms`. Supports tail sampling via `TailSampler` for high-frequency operations, parent-child linking, error tracking. |
+| `TailSampler` | `hook/TailSampler.cs` | Tail sampling for high-frequency scan ticks (~72 lines). Controls when sampled `WideEvent`s emit: on error, slow duration, notable work, or periodic heartbeat. |
+| `LogConsole` | `hook/LogConsole.cs` | Dev-only live log terminal (~200 lines). Spawns a system console window connected via named pipe (`\\.\pipe\uprooted-log-console`). Streams live log output with color coding, 200-line backfill on connect. Dev channel only, live toggle. |
 
 ### TypeScript Browser Layer
 
@@ -426,7 +429,7 @@ The TypeScript layer is single-threaded (browser main thread):
 | Concurrent injection guard | `hook/SidebarInjector.cs` | `Interlocked.CompareExchange(ref _injecting, 1, 0)` |
 | Click coordination | `hook/SidebarInjector.cs` | `_ourItemClicked` volatile flag between PointerPressed and ListBox events |
 | Patch cooldown | `hook/HtmlPatchVerifier.cs` | `DateTime` comparison + `Interlocked` guard + debounce timer |
-| Logger thread safety | `hook/Logger.cs` | Append-mode `StreamWriter` with `lock` or `using` per write |
+| Logger thread safety | `hook/Logger.cs` | `lock` around `StringBuilder` buffer, 100ms flush timer, eager flush at 8 KB |
 
 ---
 
@@ -467,6 +470,7 @@ Never throw from injected code. Both layers prioritize Root's stability over err
 | Layer | Primary tool | Location |
 |-------|-------------|----------|
 | C# hook | Log file | `%LOCALAPPDATA%/Root Communications/Root/profile/default/uprooted-hook.log` |
+| C# hook | Named pipe dev console | `\\.\pipe\uprooted-log-console` — `LogConsole.cs` spawns a live terminal window (dev channel only) |
 | TypeScript | Error banner | Red `#uprooted-error` div at page top on fatal errors |
 | TypeScript | Debug overlay | Green `#uprooted-debug` div at page bottom (when `DEBUG = true` in `panel.ts`) |
 | Profiler | Log file | `%LOCALAPPDATA%/Root/uprooted/profiler.log` |
@@ -528,7 +532,8 @@ Examples:
 | Layer | Format | Destination |
 |-------|--------|-------------|
 | TypeScript | `[Uprooted] message` or `[Uprooted:plugin-name] message` | Browser console (DotNetBrowser internal) |
-| C# hook | `[Category] message` with timestamp | `uprooted-hook.log` in profile directory |
+| C# hook (classic) | `[HH:mm:ss.fff] [Category] message` | `uprooted-hook.log` in profile directory |
+| C# hook (wide event) | `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N` | `uprooted-hook.log` in profile directory |
 
 ### Element Identification
 

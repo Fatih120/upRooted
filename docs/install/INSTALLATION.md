@@ -348,31 +348,25 @@ Uprooted writes detailed logs to:
 Open the log file after launching Root. A successful startup looks like this:
 
 ```
-[HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] === Uprooted Hook v0.4.2 Loaded ===
-[HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] Process: C:\Users\...\Root.exe
-[HH:MM:SS.fff] [Startup] PID: 12345
-[HH:MM:SS.fff] [Startup] .NET: 10.0.0
-[HH:MM:SS.fff] [Startup] Phase 0: Verifying HTML patches...
-[HH:MM:SS.fff] [HtmlPatch] Checking 2 HTML file(s) for patches
-[HH:MM:SS.fff] [HtmlPatch] OK: WebRtcBundle/index.html
-[HH:MM:SS.fff] [HtmlPatch] OK: RootApps/.../index.html
-[HH:MM:SS.fff] [Startup] Phase 0 OK: 0 file(s) repaired
-[HH:MM:SS.fff] [Startup] Phase 1: Waiting for Avalonia assemblies...
-[HH:MM:SS.fff] [Startup] Phase 1 OK: Avalonia assemblies loaded
-[HH:MM:SS.fff] [Startup] Phase 2: Waiting for Application.Current...
-[HH:MM:SS.fff] [Startup] Phase 2 OK: Application.Current is set
-[HH:MM:SS.fff] [Startup] Phase 3: Waiting for MainWindow...
-[HH:MM:SS.fff] [Startup] Phase 3 OK: MainWindow = ...
-[HH:MM:SS.fff] [Startup] Phase 3.5: Initializing theme engine
-[HH:MM:SS.fff] [Startup] Phase 4: Starting settings page monitor
-[HH:MM:SS.fff] [Startup] ========================================
-[HH:MM:SS.fff] [Startup] === Uprooted Hook Ready ===
-[HH:MM:SS.fff] [Startup] ========================================
+[14:32:01.123] [Startup|init] version=0.4.2 process=Root.exe pid=12345 dotnet=10.0.0
+[14:32:01.130] [Startup|phase] phase=0 action=verify_html_patches
+[14:32:01.145] [HtmlPatch|check] files=2 ok=2 repaired=0 dur_ms=15
+[14:32:01.146] [Startup|phase] phase=1 action=wait_avalonia
+[14:32:01.850] [Startup|phase] phase=1 status=ok dur_ms=704
+[14:32:01.851] [Startup|phase] phase=2 action=wait_application
+[14:32:02.100] [Startup|phase] phase=2 status=ok dur_ms=249
+[14:32:02.101] [Startup|phase] phase=3 action=wait_mainwindow
+[14:32:02.500] [Startup|phase] phase=3 status=ok dur_ms=399
+[14:32:02.501] [Startup|phase] phase=3.5 action=init_theme_engine
+[14:32:02.650] [Startup|phase] phase=4 action=start_sidebar_monitor
+[14:32:02.651] [Startup|ready] total_ms=1528
 ```
 
-All five phases should complete. If any phase shows "FAILED", see
+Each line uses the format `[HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N`.
+Some older log lines may use the simpler format `[HH:mm:ss.fff] [Category] message` --
+both formats are valid and can appear in the same log file.
+
+All phases should complete. If any phase shows `status=failed`, see
 [Troubleshooting](#troubleshooting).
 
 ### 3. Check TypeScript Features
@@ -688,7 +682,8 @@ The log file is at:
 - **Windows:** `%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-hook.log`
 - **Linux:** `~/.local/share/Root Communications/Root/profile/default/uprooted-hook.log`
 
-The log uses the format `[HH:MM:SS.fff] [Category] Message`. Key categories:
+The log uses structured wide events: `[HH:mm:ss.fff] [Category|operation] key=value ...`.
+Some lines use the simpler legacy format: `[HH:mm:ss.fff] [Category] message`. Key categories:
 
 | Category | What it covers |
 |----------|----------------|
@@ -696,7 +691,14 @@ The log uses the format `[HH:MM:SS.fff] [Category] Message`. Key categories:
 | `HtmlPatch` | HTML file verification, patching, and FileSystemWatcher events |
 | `Injector` | Sidebar injection into the Avalonia settings page |
 | `Entry` | Profiler entry point (ModuleInitializer or constructor) |
+| `Theme` | Theme engine operations (apply, revert, walker) |
+| `LinkEmbed` | Link embed engine (OG fetch, embed injection) |
+| `MsgLogger` | Message logger (edit/delete detection) |
 | `Recon` | Style reconnaissance for matching native Avalonia UI |
+
+High-frequency scan engines (LinkEmbed, MsgLogger, NsfwFilter, Theme walker) use tail
+sampling -- instead of logging every scan tick, they emit a 30-second heartbeat summary
+with totals. Look for lines like `[Category|heartbeat] scans=N hits=N errors=N`.
 
 ---
 

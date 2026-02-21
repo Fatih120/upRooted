@@ -1,6 +1,6 @@
 ﻿# Hook Reference
 
-> **What this is:** Implementation-level reference for all 28 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
+> **What this is:** Implementation-level reference for all 31 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
 > **Read when:** Modifying or extending any C# hook feature; understanding startup sequence detail; debugging hook behavior.
 > **Skip if:** You need the architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md). You need Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md).
 > **Does NOT cover:** Architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection specifics → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | TypeScript layer → [TYPESCRIPT_REFERENCE.md](TYPESCRIPT_REFERENCE.md)
@@ -48,7 +48,7 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 28 source files in the `hook/` directory:
+The hook layer consists of 31 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
@@ -78,7 +78,10 @@ The hook layer consists of 28 source files in the `hook/` directory:
 | `DesktopNotification.cs` | 56 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
 | `AuditLogEngine.cs` | ~674 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
 | `UprootedSettings.cs` | 210 | INI-based settings persistence |
-| `Logger.cs` | 46 | Thread-safe file logging |
+| `Logger.cs` | ~170 | Thread-safe file logging + wide event emission + OnLine callback |
+| `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value fields, dur_ms, parent-child linking, tail sampling) |
+| `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks (error/slow/notable/heartbeat emission rules) |
+| `LogConsole.cs` | ~200 | Dev-only live log terminal via named pipe (`\\.\pipe\uprooted-log-console`), spawns PowerShell/bash console window, backfill + live stream |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
 ---
@@ -2269,41 +2272,131 @@ Plugin.themes=true
 
 ### Logger.cs
 
-**File:** `hook/Logger.cs` (46 lines)
+**File:** `hook/Logger.cs` (~170 lines)
 
-Thread-safe file logger. Writes to `{profileDir}/uprooted-hook.log`.
+Thread-safe file logger with buffered writes. Writes to `{profileDir}/uprooted-hook.log`.
+
+**Two log formats coexist:**
+
+| Format | Method | Example |
+|--------|--------|---------|
+| Classic | `Logger.Log("Category", "message")` | `[12:34:56.789] [Startup] Phase 1 complete` |
+| Wide event | `Logger.EmitWideEvent(...)` (called by `WideEvent.Dispose`) | `[12:34:56.789] [AutoUpdate|check] channel=stable result=up_to_date dur_ms=342` |
 
 ```csharp
 internal static class Logger
 {
     private static readonly string LogPath;
     private static readonly object Lock = new();
+    private static readonly StringBuilder _buffer = new();
 
-    static Logger()
-    {
-        var profileDir = PlatformPaths.GetProfileDir();
-        Directory.CreateDirectory(profileDir);
-        LogPath = Path.Combine(profileDir, "uprooted-hook.log");
-    }
+    /// Optional subscriber for live log lines (used by LogConsole).
+    internal static Action<string>? OnLine;
 
-    internal static void Log(string message)
-    {
-        lock (Lock)
-        {
-            File.AppendAllText(LogPath, $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
-        }
-    }
-
+    internal static void Log(string message) { /* buffers + notifies OnLine */ }
     internal static void Log(string category, string message) => Log($"[{category}] {message}");
+    internal static void EmitWideEvent(string category, string operation,
+        List<KeyValuePair<string, string>> fields, int durationMs) { /* wide event format */ }
+    internal static void Flush() { /* periodic + exit flush */ }
+    internal static void LogException(string category, string context, Exception ex) { /* chain */ }
+    internal static string GetLogPath() => LogPath;
 }
 ```
 
 **Key details:**
 - **Thread safety**: All writes are inside `lock (Lock)`.
-- **Format**: `[HH:mm:ss.fff] [Category] Message`
+- **Buffered I/O**: Log lines accumulate in a `StringBuilder`, flushed every 100ms by a `Timer` or eagerly when the buffer exceeds 8 KB. `AppDomain.ProcessExit` guarantees a final flush.
+- **Classic format**: `[HH:mm:ss.fff] [Category] Message`
+- **Wide event format**: `[HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N`
+- **`OnLine` callback**: Every formatted log line (both classic and wide event) is passed to `OnLine` if set. Used by `LogConsole` for live streaming. Single consumer, not thread-safe for multiple subscribers.
+- **`EmitWideEvent()`**: Called by `WideEvent.Dispose()` to write the structured line. Values containing backslashes or newlines are escaped.
+- **`LogException()`**: Logs an exception with up to 5 levels of inner exception chain plus stack trace.
 - **No rotation**: The log file grows unbounded. Manual deletion is needed.
-- **Fail-silent**: The `try/catch` around `File.AppendAllText` swallows all exceptions
-  to prevent logging failures from crashing the hook.
+- **Fail-silent**: All `catch` blocks swallow exceptions to prevent logging failures from crashing the hook.
+
+### WideEvent.cs
+
+**File:** `hook/WideEvent.cs` (~150 lines)
+
+Structured wide event builder implementing the "one wide event per operation" pattern.
+A `WideEvent` accumulates key-value fields during an operation and emits a single log
+line on `Dispose()` with automatic duration measurement.
+
+```csharp
+// Always-emit usage:
+using var ev = WideEvent.Begin("AutoUpdate", "check");
+ev.Set("channel", settings.Channel);
+ev.Set("result", "up_to_date");
+// auto-emits on Dispose: [12:34:56.789] [AutoUpdate|check] channel=stable result=up_to_date dur_ms=342
+
+// Tail-sampled usage (for high-frequency scan ticks):
+using var ev = WideEvent.BeginSampled("LinkEmbed", "scan_tick", _sampler);
+ev.Set("urls_found", count);
+if (count > 0) ev.MarkNotable();
+// only emits if sampler says so (error/slow/notable/heartbeat)
+```
+
+**Key details:**
+- **`IDisposable`**: Emits the log line in `Dispose()`, so `using var` guarantees emission even on exceptions.
+- **`Begin()` / `BeginSampled()`**: Factory methods. `Begin` always emits; `BeginSampled` defers to a `TailSampler`.
+- **`Set(key, value)`**: Fluent API for string, int, long, bool fields.
+- **`Increment(key)`**: Counter fields (creates at 0 if not present).
+- **`SetError(Exception)` / `SetError(string)`**: Records error and forces emission for sampled events.
+- **`MarkNotable()`**: Forces emission for sampled events (e.g., scan found work to do).
+- **Parent-child linking**: `WideEvent.Begin("Cat", "op", parentEvent)` adds a `parent_op=` field for correlating related operations.
+- **`dur_ms`**: Automatically appended using `Stopwatch.GetElapsedTime()`.
+- **`Id`**: Opaque timestamp-based ID (`HHmmss.fff`) for parent-child linking.
+
+### TailSampler.cs
+
+**File:** `hook/TailSampler.cs` (~72 lines)
+
+Controls when sampled wide events are actually emitted. Designed for high-frequency
+recurring operations (e.g., 200ms scan timer ticks) that produce noise when nothing
+interesting happens.
+
+**Emission rules (OR -- emit if ANY is true):**
+1. The event has an error (`sampled=error`)
+2. Duration exceeds the slow threshold (`sampled=slow:150ms`)
+3. The event was marked notable (`sampled=notable`)
+4. N ticks have elapsed since last emission (`sampled=tick:60+55skip`)
+
+```csharp
+// Create a sampler that emits every 60th tick or when a tick takes >50ms
+private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
+
+// In the scan timer callback:
+using var ev = WideEvent.BeginSampled("LinkEmbed", "scan_tick", _sampler);
+// ... sampler decides whether to emit or suppress
+```
+
+**Key details:**
+- **Thread-safe**: Uses `Interlocked` for tick counting and reset.
+- **`ShouldEmit()`**: Returns a reason string if the event should emit, null to suppress.
+- **Heartbeat**: Even when nothing interesting happens, emits periodically (with suppressed count) so the log confirms the timer is alive.
+
+### LogConsole.cs
+
+**File:** `hook/LogConsole.cs` (~200 lines)
+
+Dev-only live log console. Spawns a system terminal window (PowerShell on Windows,
+gnome-terminal/konsole/xterm on Linux) that streams log output in real time via a
+named pipe (`\\.\pipe\uprooted-log-console` on Windows,
+`/tmp/CoreFxPipe_uprooted-log-console` on Linux).
+
+**Architecture:**
+1. Creates a `NamedPipeServerStream` (one-way, server writes)
+2. Spawns a console process that connects to the pipe as a client
+3. Writes the last 200 lines from the log file as backfill
+4. Subscribes to `Logger.OnLine` for live streaming
+5. Console stays open after Root closes; can be relaunched at any time
+
+**Key details:**
+- **Toggle**: Enable from the "Live Console" button on the About settings page (dev channel only).
+- **Color coding** (Windows PowerShell): Error lines in red, wide events (`|...dur_ms=`) in cyan, startup phases in green, others in gray.
+- **Pipe disconnect**: When the console window is closed, the broken pipe is caught silently and streaming disables automatically.
+- **Backfill**: On connect, the last 200 lines from the current log file are replayed so the console shows recent history.
+- **No Logger dependency loop**: LogConsole subscribes to `Logger.OnLine` but does not call `Logger.Log` for the streamed lines themselves. It only logs its own status messages (enable, connect, errors).
 
 ### PlatformPaths.cs
 
@@ -2398,11 +2491,14 @@ Returns:
 | `DesktopNotification.cs` | `Logger` | OS-level toast notifications |
 | `AuditLogEngine.cs` | `AvaloniaReflection`, `Logger` | Audit log HTTP interception + protobuf decoding |
 | `UprootedSettings.cs` | `PlatformPaths`, `Logger` | INI persistence |
-| `Logger.cs` | `PlatformPaths` | File path for log |
+| `Logger.cs` | `PlatformPaths` | File path for log, buffered writes, OnLine callback |
+| `WideEvent.cs` | `Logger`, `TailSampler` | Emits structured wide event lines via `Logger.EmitWideEvent()` |
+| `TailSampler.cs` | (none) | Pure sampling logic |
+| `LogConsole.cs` | `Logger`, `PlatformPaths` | Subscribes to `Logger.OnLine`, reads log file for backfill |
 | `PlatformPaths.cs` | (none) | Pure path resolution |
 
 ---
 
-**Canonical for:** all 28 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter, RootcordEngine, DesktopNotification, AuditLogEngine
+**Canonical for:** all 31 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter, RootcordEngine, DesktopNotification, AuditLogEngine, WideEvent, TailSampler, LogConsole
 **Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
 *Hook reference for Uprooted v0.4.2. Last updated 2026-02-19.*

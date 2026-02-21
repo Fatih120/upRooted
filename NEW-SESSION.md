@@ -39,7 +39,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 **Always also read** `hook/SESSION_STATE.md` if working on any `hook/` code.
 
-## 4. File Map — Hook Layer (32 .cs files)
+## 4. File Map — Hook Layer (35 .cs files)
 
 | File | Lines | Purpose |
 |------|------:|---------|
@@ -73,7 +73,10 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `TranslateConfigPopup.cs` | 511 | Translate config UI |
 | `UprootedPresenceBeacon.cs` | 470 | Uprooted user detection via gRPC |
 | `ReconLogger.cs` | 786 | Visual tree + style diagnostic dumper |
-| `Logger.cs` | 113 | Thread-safe file logging |
+| `LogConsole.cs` | ~200 | Dev-only live log terminal via named pipe |
+| `Logger.cs` | ~170 | Thread-safe file logging + wide event emission |
+| `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks |
+| `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value, dur_ms) |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
 ## 5. File Map — Other Layers

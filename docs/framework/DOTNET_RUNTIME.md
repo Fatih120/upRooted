@@ -482,9 +482,17 @@ Uprooted produces two log files at different stages:
 | `uprooted-hook.log` | Managed hook (C#) | `%LocalAppData%\Root Communications\Root\profile\default\` |
 
 The native log captures everything before managed code runs (`tools/uprooted_profiler.c`,
-lines 172-186). The managed log (`hook/Logger.cs`, lines 15-25) uses `lock` and
-`File.AppendAllText` for thread-safe append, with a swallowed `catch` to prevent
-logging failures from crashing the hook.
+lines 172-186). The managed log (`hook/Logger.cs`) uses a `lock`-guarded `StringBuilder`
+buffer flushed every 100ms (or eagerly at 8 KB) for thread-safe writes, with swallowed
+`catch` blocks to prevent logging failures from crashing the hook. Logger supports two
+formats: classic `[Category] message` and structured wide events
+`[Category|operation] key=value dur_ms=N` (see `WideEvent.cs`).
+
+**Live log console:** For real-time debugging, `LogConsole.cs` can spawn a terminal
+window connected via named pipe (`\\.\pipe\uprooted-log-console` on Windows,
+`/tmp/CoreFxPipe_uprooted-log-console` on Linux). It subscribes to `Logger.OnLine`,
+backfills the last 200 log lines on connect, then streams live output with color coding.
+Dev channel only, toggled from the settings page.
 
 ### Attaching a Debugger
 

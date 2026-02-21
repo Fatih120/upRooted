@@ -117,7 +117,10 @@ powershell -File scripts/build-installer.ps1
 - All Avalonia type access through `AvaloniaReflection` -- never `typeof()` or `Type.GetType()`
 - `Interlocked.CompareExchange` for one-time initialization guards (never `lock` or `bool` flags)
 - Never throw from injected code -- catch and log
-- Log messages use `[Category]` prefix
+- Prefer structured wide events (`WideEvent.Begin("Category", "operation").Set("key", value).Emit()`) over freeform `Logger.Log("[Category] message")` for new code
+- Wide event log format: `[HH:mm:ss.fff] [Category|operation] key=value key=value dur_ms=N`
+- Legacy `[Category] message` format still works and is acceptable for simple one-off messages
+- For high-frequency scan timers (500ms ticks), use `TailSampler` to aggregate into 30s heartbeats instead of logging every tick
 - Thread-safe file logging to `uprooted-hook.log`
 
 ### Rust (installer)
