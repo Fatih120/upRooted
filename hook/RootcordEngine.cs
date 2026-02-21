@@ -1460,6 +1460,26 @@ internal class RootcordEngine
             var bounds = _r.GetBounds(_channelsWidthPanel);
             if (bounds == null || bounds.Value.W <= 0) return;
             double targetWidth = StripWidth + bounds.Value.W;
+
+            // When a pane is open (PanePlacement=Left → pane sits between strip and channels),
+            // expand the user card to also cover the pane width.
+            if (_rootSplitView != null && _homeViewModel != null)
+            {
+                var paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
+                if (paneOpen is true)
+                {
+                    // Read the pane's actual rendered width from the SplitView template part
+                    try
+                    {
+                        // PaneWidth property on HomeViewModel (default 320)
+                        var paneWidth = _r.GetPropertyValue(_homeViewModel, "PaneWidth");
+                        if (paneWidth is double pw && pw > 0)
+                            targetWidth += pw;
+                    }
+                    catch { }
+                }
+            }
+
             _r.SetWidth(_userBar, targetWidth);
         }
         catch { }
@@ -3986,6 +4006,14 @@ internal class RootcordEngine
     private void RearrangeSignOutButton()
     {
         if (_rootSplitView == null || !IsApplied) return;
+
+        // Only run when the Profile pane is actually open — Friends/DMs/Notifications
+        // panes have deep visual trees (hundreds of items) that cause freezes during DFS walk.
+        if (_homeViewModel != null)
+        {
+            var profileOpen = _r.GetPropertyValue(_homeViewModel, "ProfileOpen");
+            if (profileOpen is not true) return;
+        }
 
         // Walk from SplitView.Pane (the utility pane host), not the entire SplitView.
         // ProfileView is: SplitView.Pane → RootBorder → Border → ContentControl → ProfileView → Grid
