@@ -75,11 +75,15 @@ internal class UprootedSettings
 
     internal static UprootedSettings Load()
     {
-        // Read cached ref into a local to avoid a TOCTOU null-return if another thread
-        // calls InvalidateCache() between the null-check and the return.
-        var cached = _cached;
-        if (cached != null && DateTime.UtcNow - _cachedAt < CacheTtl)
-            return cached;
+        // Lock ensures _cached and _cachedAt are read/written atomically.
+        // Without this, another thread could see a new _cached with a stale _cachedAt,
+        // making the TTL check incorrect.
+        lock (_saveLock)
+        {
+            var cached = _cached;
+            if (cached != null && DateTime.UtcNow - _cachedAt < CacheTtl)
+                return cached;
+        }
 
         var settings = new UprootedSettings();
         var path = GetSettingsPath();
@@ -175,8 +179,11 @@ internal class UprootedSettings
             }
         }
 
-        _cached = settings;
-        _cachedAt = DateTime.UtcNow;
+        lock (_saveLock)
+        {
+            _cached = settings;
+            _cachedAt = DateTime.UtcNow;
+        }
         return settings;
     }
 
@@ -186,7 +193,7 @@ internal class UprootedSettings
     /// </summary>
     internal static void InvalidateCache()
     {
-        _cached = null;
+        lock (_saveLock) { _cached = null; }
     }
 
     internal void Save()
