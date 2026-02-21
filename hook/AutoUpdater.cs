@@ -148,18 +148,19 @@ internal class AutoUpdater
     /// </summary>
     internal void Initialize()
     {
+        using var ev = WideEvent.Begin("AutoUpdate", "init");
         var settings = UprootedSettings.Load();
+        ev.Set("auto_update_enabled", settings.AutoUpdateEnabled);
+        ev.Set("channel", settings.AutoUpdateChannel ?? "stable");
+
         if (settings.AutoUpdateEnabled)
         {
             // Check if enough time has passed since last check
-            if (ShouldCheck(settings))
+            var shouldCheck = ShouldCheck(settings);
+            ev.Set("initial_check", shouldCheck);
+            if (shouldCheck)
             {
-                Logger.Log("AutoUpdate", "Running initial update check...");
                 CheckForUpdate();
-            }
-            else
-            {
-                Logger.Log("AutoUpdate", "Skipping initial check (throttled)");
             }
 
             // Start periodic timer (check every minute)
@@ -176,10 +177,6 @@ internal class AutoUpdater
                     Logger.Log("AutoUpdate", $"Periodic check error: {ex.Message}");
                 }
             }, null, TimeSpan.FromMinutes(CheckIntervalMinutes), TimeSpan.FromMinutes(CheckIntervalMinutes));
-        }
-        else
-        {
-            Logger.Log("AutoUpdate", "Auto-check disabled, skipping periodic timer");
         }
     }
 
@@ -248,6 +245,7 @@ internal class AutoUpdater
     private void RunCheck()
     {
         _lastError = null;
+        using var ev = WideEvent.Begin("AutoUpdate", "check");
 
         try
         {
@@ -256,7 +254,8 @@ internal class AutoUpdater
             var apiUrl = isDev ? DevApiUrl : StableApiUrl;
             var authToken = isDev ? DecryptPat() : null;
 
-            Logger.Log("AutoUpdate", $"Checking for updates (channel: {settings.AutoUpdateChannel})...");
+            ev.Set("channel", settings.AutoUpdateChannel ?? "stable");
+            ev.Set("is_manual", _isManualCheck);
 
             // Update last check timestamp immediately (we attempted a check regardless of outcome)
             settings.LastUpdateCheck = DateTime.UtcNow.ToString("o");
@@ -267,7 +266,7 @@ internal class AutoUpdater
             if (json == null)
             {
                 _lastError = "Could not reach GitHub";
-                Logger.Log("AutoUpdate", "Failed to fetch release info");
+                ev.SetError(_lastError);
                 return;
             }
 
@@ -276,13 +275,13 @@ internal class AutoUpdater
             if (!match.Success)
             {
                 _lastError = "No published release found";
-                Logger.Log("AutoUpdate", "tag_name not found in response (no published release?)");
+                ev.SetError(_lastError);
                 return;
             }
 
             _latestTag = match.Groups[1].Value;
             _latestVersion = _latestTag.TrimStart('v');
-            Logger.Log("AutoUpdate", $"Latest release: {_latestTag} (version: {_latestVersion})");
+            ev.Set("latest_version", _latestVersion);
 
             // For private repos, extract the API asset URL (browser download URLs return 404 with Bearer auth)
             _assetApiUrl = null;
@@ -290,24 +289,19 @@ internal class AutoUpdater
             {
                 var assetMatch = AssetApiUrlRegex.Match(json);
                 if (assetMatch.Success)
-                {
                     _assetApiUrl = assetMatch.Groups[1].Value;
-                    Logger.Log("AutoUpdate", $"Asset API URL: {_assetApiUrl}");
-                }
-                else
-                {
-                    Logger.Log("AutoUpdate", "No asset API URL found in response, will use browser download URL");
-                }
+                ev.Set("has_asset_api_url", assetMatch.Success);
             }
 
             // Compare versions
             var currentVersion = settings.Version;
             var cmp = CompareVersions(_latestVersion, currentVersion);
-            Logger.Log("AutoUpdate", $"Version comparison: latest={_latestVersion} current={currentVersion} result={cmp}");
+            ev.Set("current_version", currentVersion);
+            ev.Set("version_cmp", cmp);
 
             if (cmp > 0)
             {
-                Logger.Log("AutoUpdate", $"Update available: {currentVersion} -> {_latestVersion}");
+                ev.Set("result", "update_available");
 
                 // Save pending version for UI
                 settings = UprootedSettings.Load();
@@ -315,30 +309,31 @@ internal class AutoUpdater
                 settings.Save();
 
                 // Download and apply
-                DownloadAndApply(isDev);
+                DownloadAndApply(isDev, ev);
             }
             else if (cmp == 0 && _isManualCheck)
             {
                 // Same version — on a manual check, still download the package and compare
                 // its SHA-256 against the stored hash. A differing hash means a silent hotfix
                 // was published under the same version tag.
-                Logger.Log("AutoUpdate", $"Same version ({currentVersion}) — checking package hash for silent hotfix...");
-                DownloadAndApply(isDev);
+                ev.Set("result", "same_version_hotfix_check");
+                DownloadAndApply(isDev, ev);
             }
             else
             {
-                Logger.Log("AutoUpdate", "Already up to date");
+                ev.Set("result", "up_to_date");
             }
         }
         catch (Exception ex)
         {
             _lastError = ex.Message;
-            Logger.Log("AutoUpdate", $"Check error: {ex.Message}");
+            ev.SetError(ex);
         }
     }
 
-    private void DownloadAndApply(bool isDev)
+    private void DownloadAndApply(bool isDev, WideEvent parentEv)
     {
+        using var ev = WideEvent.Begin("AutoUpdate", "download", parentEv);
         var uprootedDir = PlatformPaths.GetUprootedDir();
         var stagingDir = Path.Combine(uprootedDir, "update-staging");
 
@@ -346,6 +341,9 @@ internal class AutoUpdater
         // toggles the channel while the check is in progress)
         var downloadBase = isDev ? DevDownloadBase : StableDownloadBase;
         var authToken = isDev ? DecryptPat() : null;
+
+        ev.Set("version", _latestVersion);
+        ev.Set("is_dev", isDev);
 
         try
         {
@@ -360,7 +358,7 @@ internal class AutoUpdater
             var browserUrl = $"{downloadBase}/{_latestTag}/auto-update.uprpkg";
             var pkgUrl = _assetApiUrl ?? browserUrl;
             var useApiDownload = _assetApiUrl != null;
-            Logger.Log("AutoUpdate", $"Downloading {pkgUrl} (auth={authToken != null}, api={useApiDownload})...");
+            ev.Set("use_api_download", useApiDownload);
 
             var pkgBytes = useApiDownload
                 ? HttpGetBytesViaApi(pkgUrl, authToken)
@@ -368,15 +366,15 @@ internal class AutoUpdater
             if (pkgBytes == null || pkgBytes.Length == 0)
             {
                 _lastError = "Download failed (check log for HTTP status)";
-                Logger.Log("AutoUpdate", $"Package download failed: url={pkgUrl}, isDev={isDev}");
+                ev.SetError(_lastError);
                 return;
             }
 
-            Logger.Log("AutoUpdate", $"Package downloaded: {pkgBytes.Length} bytes");
+            ev.Set("pkg_bytes", pkgBytes.Length);
 
             // Compute package SHA-256 for hotfix detection (same-version updates)
             var newHash = ComputeSha256Hex(pkgBytes);
-            Logger.Log("AutoUpdate", $"Package hash: {newHash[..16]}...");
+            ev.Set("pkg_hash", newHash[..16]);
 
             // If the installed version matches the release version, only apply when the
             // hash differs — this lets the "Check for Updates" button catch silent hotfixes
@@ -387,14 +385,13 @@ internal class AutoUpdater
                 var storedHash = UprootedSettings.Load().LastPackageHash;
                 if (!string.IsNullOrEmpty(storedHash) && storedHash == newHash)
                 {
-                    Logger.Log("AutoUpdate", "Package hash matches stored hash — no hotfix available, nothing to apply");
+                    ev.Set("applied", false);
+                    ev.Set("skip_reason", "hash_matches");
                     // No update needed; leave _updateApplied false so UI shows "Up to date"
                     try { Directory.Delete(stagingDir, true); } catch { }
                     return;
                 }
-                Logger.Log("AutoUpdate", string.IsNullOrEmpty(storedHash)
-                    ? "No stored hash — establishing baseline from current package"
-                    : "Package hash differs — applying hotfix (same version, updated package)");
+                ev.Set("hotfix", string.IsNullOrEmpty(storedHash) ? "baseline" : "hash_differs");
             }
 
             // Decrypt and unpack
@@ -402,16 +399,16 @@ internal class AutoUpdater
             if (files == null)
             {
                 // _lastError already set by UnpackPackage
+                ev.SetError(_lastError ?? "unpack_failed");
                 return;
             }
 
-            Logger.Log("AutoUpdate", $"Unpacked {files.Count} files from package");
+            ev.Set("files_unpacked", files.Count);
 
             // Write extracted files to staging
             foreach (var (filename, data) in files)
             {
                 File.WriteAllBytes(Path.Combine(stagingDir, filename), data);
-                Logger.Log("AutoUpdate", $"  {filename}: {data.Length} bytes");
             }
 
             // Verify expected files present
@@ -421,26 +418,24 @@ internal class AutoUpdater
                 if (!File.Exists(path))
                 {
                     _lastError = $"Missing file in package: {filename}";
-                    Logger.Log("AutoUpdate", _lastError);
+                    ev.SetError(_lastError);
                     return;
                 }
                 var info = new FileInfo(path);
                 if (info.Length == 0)
                 {
                     _lastError = $"Empty file in package: {filename}";
-                    Logger.Log("AutoUpdate", _lastError);
+                    ev.SetError(_lastError);
                     return;
                 }
             }
 
             // Copy from staging to uprooted dir (overwrite)
-            Logger.Log("AutoUpdate", "All files verified, applying update...");
             foreach (var filename in UpdateFiles)
             {
                 var src = Path.Combine(stagingDir, filename);
                 var dst = Path.Combine(uprootedDir, filename);
                 CopyFileRobust(src, dst);
-                Logger.Log("AutoUpdate", $"  Applied: {filename}");
             }
 
             // Clean up staging
@@ -455,7 +450,7 @@ internal class AutoUpdater
             settings.Save();
 
             _updateApplied = true;
-            Logger.Log("AutoUpdate", $"Update applied: v{_latestVersion} — restart Root to use new version");
+            ev.Set("applied", true);
 
             // Notify UI for background (non-manual) updates — the user hasn't pressed a button
             // so they may not be looking at the Updates settings page. Show a popup.
@@ -467,7 +462,7 @@ internal class AutoUpdater
         catch (Exception ex)
         {
             _lastError = $"Apply failed: {ex.Message}";
-            Logger.Log("AutoUpdate", $"Download/apply error: {ex.Message}");
+            ev.SetError(ex);
             // Leave staging dir for debugging, don't overwrite production files
         }
     }
@@ -677,6 +672,7 @@ internal class AutoUpdater
         if (s_httpResolved) return;
         s_httpResolved = true;
 
+        using var ev = WideEvent.Begin("AutoUpdate", "http_resolve");
         try
         {
             Type? httpClientType = null;
@@ -689,7 +685,7 @@ internal class AutoUpdater
 
             if (httpClientType == null)
             {
-                Logger.Log("AutoUpdate", "HttpClient type not found");
+                ev.SetError("HttpClient type not found");
                 return;
             }
 
@@ -763,15 +759,15 @@ internal class AutoUpdater
                 Logger.Log("AutoUpdate", $"SendAsync resolve error: {ex.Message}");
             }
 
-            Logger.Log("AutoUpdate", $"HTTP resolved: client={s_httpClient != null}, " +
-                $"GetStringAsync={s_getStringAsync != null}, " +
-                $"GetByteArrayAsync={s_getByteArrayAsync != null}, " +
-                $"GetAsync={s_getAsync != null}, " +
-                $"SendAsync={s_sendAsync != null}");
+            ev.Set("client", s_httpClient != null);
+            ev.Set("get_string_async", s_getStringAsync != null);
+            ev.Set("get_byte_array_async", s_getByteArrayAsync != null);
+            ev.Set("get_async", s_getAsync != null);
+            ev.Set("send_async", s_sendAsync != null);
         }
         catch (Exception ex)
         {
-            Logger.Log("AutoUpdate", $"HTTP resolve error: {ex.Message}");
+            ev.SetError(ex);
         }
     }
 
