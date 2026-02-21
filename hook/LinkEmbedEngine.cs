@@ -31,6 +31,7 @@ internal class LinkEmbedEngine : IDisposable
 
     private Timer? _scanTimer;
     private int _scanning; // Interlocked reentrancy guard
+    private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
 
     // Chat area discovery — no caching, always scan from mainWindow on each tick
     // to handle room navigation instantly
@@ -253,14 +254,15 @@ internal class LinkEmbedEngine : IDisposable
 
     internal void Initialize()
     {
-        Logger.Log("LinkEmbed", "Starting native link embed engine");
+        using var ev = WideEvent.Begin("LinkEmbed", "initialize");
 
         // Pre-warm HttpClient reflection so first fetch doesn't pay resolution cost
         EnsureHttpResolved();
+        ev.Set("http_resolved", s_httpClient != null);
 
         // Start polling timer
         _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
-        Logger.Log("LinkEmbed", $"Scan timer started ({ScanIntervalMs}ms interval)");
+        ev.Set("scan_interval_ms", ScanIntervalMs);
     }
 
     public void Dispose()
@@ -276,12 +278,15 @@ internal class LinkEmbedEngine : IDisposable
     {
         // Reentrancy guard (same pattern as SidebarInjector)
         if (Interlocked.CompareExchange(ref _scanning, 1, 0) != 0) return;
+        var ev = WideEvent.BeginSampled("LinkEmbed", "scan_tick", _sampler);
         try
         {
             // Check settings — stop if plugin disabled
             var settings = UprootedSettings.Load();
             if (settings.Plugins.TryGetValue("link-embeds", out var enabled) && !enabled)
             {
+                ev.Set("skipped", "disabled");
+                ev.Dispose();
                 Interlocked.Exchange(ref _scanning, 0);
                 return;
             }
@@ -290,14 +295,15 @@ internal class LinkEmbedEngine : IDisposable
             {
                 try
                 {
-                    ScanForUrls();
+                    ScanForUrls(ev);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("LinkEmbed", $"Scan error: {ex.Message}");
+                    ev.SetError(ex);
                 }
                 finally
                 {
+                    ev.Dispose();
                     Interlocked.Exchange(ref _scanning, 0);
                 }
             });
@@ -310,7 +316,8 @@ internal class LinkEmbedEngine : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"OnScanTick error: {ex.Message}");
+            ev.SetError(ex);
+            ev.Dispose();
             Interlocked.Exchange(ref _scanning, 0);
         }
     }
@@ -335,7 +342,7 @@ internal class LinkEmbedEngine : IDisposable
         "RootMarkdownTextBlock"
     };
 
-    private void ScanForUrls()
+    private void ScanForUrls(WideEvent ev)
     {
         var container = DiscoverChatArea();
         if (container == null) return;
@@ -387,18 +394,23 @@ internal class LinkEmbedEngine : IDisposable
                 ThreadPool.QueueUserWorkItem(_ => FetchAndInject(url, capturedNode));
             }
         }
+
+        ev.Set("urls_queued", queued);
+        if (queued > 0) ev.MarkNotable();
     }
 
     // ===== Component 3: OG Metadata Fetcher =====
 
     private void FetchAndInject(string url, object textBlock)
     {
+        using var ev = WideEvent.Begin("LinkEmbed", "fetch_and_inject");
+        ev.Set("url", url);
         try
         {
             // Skip domains where Root renders embeds natively (avoids double-embedding)
             if (NativeEmbedDomainRegex.IsMatch(url))
             {
-                if (Verbose) Logger.Log("LinkEmbed", $"Skipping native embed domain: {url}");
+                ev.Set("skipped", "native_embed_domain");
                 return;
             }
 
@@ -411,14 +423,20 @@ internal class LinkEmbedEngine : IDisposable
                 {
                     var host = new Uri(url).Host;
                     data = new EmbedData(url, null, null, host, null, null, null, null);
+                    ev.Set("fallback", "domain_only");
                 }
                 catch { return; }
             }
+
+            ev.Set("title", data.Title);
+            ev.Set("has_image", data.Image != null);
+            ev.Set("has_video", data.VideoId != null);
 
             // Fast path: if we already have cached image bytes (re-injection after
             // VirtualizingStackPanel recycle), build the full card with image in one shot
             if (_imageBytesCache.TryGetValue(url, out var cachedBytes))
             {
+                ev.Set("image_cache_hit", true);
                 InjectEmbedWithCachedImage(textBlock, data, cachedBytes);
                 return;
             }
@@ -432,9 +450,13 @@ internal class LinkEmbedEngine : IDisposable
                 var imageUrl = ResolveImageUrl(data.Image!, url);
                 if (imageUrl != null)
                 {
+                    ev.Set("phase_b", "image");
                     var capturedData = data;
                     ThreadPool.QueueUserWorkItem(_ =>
                     {
+                        using var imgEv = WideEvent.Begin("LinkEmbed", "phase_b_image");
+                        imgEv.Set("url", url);
+                        imgEv.Set("image_url", imageUrl);
                         try
                         {
                             var imgBytes = HttpGetBytes(imageUrl);
@@ -444,7 +466,7 @@ internal class LinkEmbedEngine : IDisposable
                             // Common for Zipline /view/ and /u/ paths that have .png extension but serve viewer pages.
                             if (imgBytes == null && capturedData.Image == capturedData.Url)
                             {
-                                Logger.Log("LinkEmbed", $"Phase B: image fast-path failed for {imageUrl}, trying OG fallback");
+                                imgEv.Set("og_fallback", true);
                                 var ogData = FetchOgMetadata(capturedData.Url);
                                 if (ogData?.Image != null && ogData.Image != capturedData.Url)
                                 {
@@ -453,29 +475,32 @@ internal class LinkEmbedEngine : IDisposable
                                     {
                                         imgBytes = HttpGetBytes(realImageUrl);
                                         if (imgBytes != null)
-                                            Logger.Log("LinkEmbed", $"Phase B: OG fallback found image: {realImageUrl}");
+                                            imgEv.Set("og_fallback_image", realImageUrl);
                                     }
                                 }
                             }
 
                             if (imgBytes == null)
                             {
-                                Logger.Log("LinkEmbed", $"Phase B: image fetch returned null for {imageUrl}");
+                                imgEv.Set("result", "no_bytes");
                                 return;
                             }
                             if (imgBytes.Length > MaxImageBytes || imgBytes.Length < 100)
                             {
-                                Logger.Log("LinkEmbed", $"Image skipped (size={imgBytes.Length}): {imageUrl}");
+                                imgEv.Set("result", "size_rejected");
+                                imgEv.Set("image_size", imgBytes.Length);
                                 return;
                             }
                             // Cache image bytes for future re-injections (evict if full)
                             if (_imageBytesCache.Count >= MaxImageBytesCache) _imageBytesCache.Clear();
                             _imageBytesCache[capturedData.Url] = imgBytes;
                             AddImageToExistingCard(capturedData, imgBytes);
+                            imgEv.Set("result", "injected");
+                            imgEv.Set("image_size", imgBytes.Length);
                         }
                         catch (Exception ex)
                         {
-                            Logger.Log("LinkEmbed", $"Phase B image error for {url}: {ex.Message}");
+                            imgEv.SetError(ex);
                         }
                     });
                 }
@@ -484,9 +509,12 @@ internal class LinkEmbedEngine : IDisposable
             // Phase B for video URLs: extract first-frame thumbnail via DotNetBrowser Chromium
             if (data.VideoId != null && string.IsNullOrEmpty(data.Image))
             {
+                ev.Set("phase_b", "video_thumb");
                 var capturedData = data;
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
+                    using var vidEv = WideEvent.Begin("LinkEmbed", "phase_b_video_thumb");
+                    vidEv.Set("url", url);
                     try
                     {
                         var thumbBytes = ExtractVideoThumbnail(capturedData.Url);
@@ -495,18 +523,24 @@ internal class LinkEmbedEngine : IDisposable
                             if (_imageBytesCache.Count >= MaxImageBytesCache) _imageBytesCache.Clear();
                             _imageBytesCache[capturedData.Url] = thumbBytes;
                             ReplaceVideoPlaceholderWithThumbnail(capturedData, thumbBytes);
+                            vidEv.Set("result", "injected");
+                            vidEv.Set("thumb_size", thumbBytes.Length);
+                        }
+                        else
+                        {
+                            vidEv.Set("result", "no_thumb");
                         }
                     }
                     catch (Exception ex)
                     {
-                        Logger.Log("LinkEmbed", $"Phase B video thumb error for {url}: {ex.Message}");
+                        vidEv.SetError(ex);
                     }
                 });
             }
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"FetchAndInject error for {url}: {ex.Message}");
+            ev.SetError(ex);
         }
     }
 
@@ -554,7 +588,6 @@ internal class LinkEmbedEngine : IDisposable
                 _r.AddChild(grid, card);
                 if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
                 _injectedCards.Add(card);
-                Logger.Log("LinkEmbed", $"Embed re-injected (cached) for: {data.Url}");
             }
             catch (Exception ex)
             {
@@ -621,7 +654,6 @@ internal class LinkEmbedEngine : IDisposable
                             }
 
                             _animatedDisposables[data.Url] = animated.Value.dispose;
-                            Logger.Log("LinkEmbed", $"Animated image added to embed: {data.Url}");
                         }
                     }
                 }
@@ -667,7 +699,6 @@ internal class LinkEmbedEngine : IDisposable
                 if (imageElement != null)
                 {
                     _r.AddChild(content, imageElement);
-                    Logger.Log("LinkEmbed", $"Image added to embed: {data.Url}");
                 }
             }
             catch (Exception ex)
@@ -685,24 +716,25 @@ internal class LinkEmbedEngine : IDisposable
     /// </summary>
     private static byte[]? ExtractVideoThumbnail(string videoUrl)
     {
-        Logger.Log("LinkEmbed", $"Video thumb: starting extraction for {videoUrl}");
+        using var ev = WideEvent.Begin("LinkEmbed", "extract_video_thumb");
+        ev.Set("url", videoUrl);
 
         // Skip known failures
         if (s_videoThumbFailed.ContainsKey(videoUrl))
         {
-            Logger.Log("LinkEmbed", $"Video thumb: skipping known failure {videoUrl}");
+            ev.Set("result", "known_failure");
             return null;
         }
 
         // Wait for DotNetBrowser shared references to become available
         if (!DotNetBrowserReflection.IsReady)
-            Logger.Log("LinkEmbed", $"Video thumb: waiting for DotNetBrowser to become ready...");
+            ev.Set("waiting_for_browser", true);
         var waitStart = Environment.TickCount64;
         while (!DotNetBrowserReflection.IsReady)
         {
             if (Environment.TickCount64 - waitStart > 30_000)
             {
-                Logger.Log("LinkEmbed", "Video thumb: DotNetBrowser not ready after 30s, skipping");
+                ev.Set("result", "browser_timeout");
                 s_videoThumbFailed[videoUrl] = 1;
                 return null;
             }
@@ -714,7 +746,7 @@ internal class LinkEmbedEngine : IDisposable
         var frame = DotNetBrowserReflection.SharedFrame;
         if (instance == null || browser == null || frame == null)
         {
-            Logger.Log("LinkEmbed", "Video thumb: shared references null despite IsReady");
+            ev.SetError("shared references null despite IsReady");
             s_videoThumbFailed[videoUrl] = 1;
             return null;
         }
@@ -722,7 +754,7 @@ internal class LinkEmbedEngine : IDisposable
         // Serialize — document.title is a single global channel
         if (!s_videoThumbSemaphore.Wait(VideoThumbTimeoutMs))
         {
-            Logger.Log("LinkEmbed", $"Video thumb: semaphore timeout for {videoUrl}");
+            ev.Set("result", "semaphore_timeout");
             return null;
         }
 
@@ -764,7 +796,7 @@ internal class LinkEmbedEngine : IDisposable
 
             if (!instance.ExecuteJavaScript(frame, js))
             {
-                Logger.Log("LinkEmbed", $"Video thumb: JS execution failed for {videoUrl}");
+                ev.Set("result", "js_execution_failed");
                 s_videoThumbFailed[videoUrl] = 1;
                 return null;
             }
@@ -779,7 +811,7 @@ internal class LinkEmbedEngine : IDisposable
 
                 if (title == VideoThumbError)
                 {
-                    Logger.Log("LinkEmbed", $"Video thumb: JS reported error for {videoUrl}");
+                    ev.Set("result", "js_error");
                     s_videoThumbFailed[videoUrl] = 1;
                     return null;
                 }
@@ -791,7 +823,7 @@ internal class LinkEmbedEngine : IDisposable
                     var commaIdx = dataUrl.IndexOf(',');
                     if (commaIdx < 0)
                     {
-                        Logger.Log("LinkEmbed", $"Video thumb: malformed data URL for {videoUrl}");
+                        ev.Set("result", "malformed_data_url");
                         s_videoThumbFailed[videoUrl] = 1;
                         return null;
                     }
@@ -799,12 +831,14 @@ internal class LinkEmbedEngine : IDisposable
                     try
                     {
                         var bytes = Convert.FromBase64String(base64);
-                        Logger.Log("LinkEmbed", $"Video thumb: extracted {bytes.Length} bytes for {videoUrl}");
+                        ev.Set("result", "success");
+                        ev.Set("thumb_bytes", bytes.Length);
                         return bytes;
                     }
                     catch (Exception ex)
                     {
-                        Logger.Log("LinkEmbed", $"Video thumb: base64 decode failed for {videoUrl}: {ex.Message}");
+                        ev.SetError(ex);
+                        ev.Set("result", "base64_decode_failed");
                         s_videoThumbFailed[videoUrl] = 1;
                         return null;
                     }
@@ -812,13 +846,14 @@ internal class LinkEmbedEngine : IDisposable
             }
 
             // Timeout
-            Logger.Log("LinkEmbed", $"Video thumb: timeout ({VideoThumbTimeoutMs}ms) for {videoUrl}");
+            ev.Set("result", "poll_timeout");
+            ev.Set("timeout_ms", VideoThumbTimeoutMs);
             s_videoThumbFailed[videoUrl] = 1;
             return null;
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"Video thumb: error for {videoUrl}: {ex.Message}");
+            ev.SetError(ex);
             s_videoThumbFailed[videoUrl] = 1;
             return null;
         }
@@ -895,7 +930,6 @@ internal class LinkEmbedEngine : IDisposable
                 if (imageElement != null)
                 {
                     _r.AddChild(content, imageElement);
-                    Logger.Log("LinkEmbed", $"Video placeholder replaced with thumbnail: {data.Url}");
                 }
             }
             catch (Exception ex)
@@ -971,6 +1005,7 @@ internal class LinkEmbedEngine : IDisposable
         if (s_httpResolved) return;
         s_httpResolved = true;
 
+        using var ev = WideEvent.Begin("LinkEmbed", "http_resolve");
         try
         {
             // Find HttpClient type from loaded assemblies
@@ -984,7 +1019,7 @@ internal class LinkEmbedEngine : IDisposable
 
             if (httpClientType == null)
             {
-                Logger.Log("LinkEmbed", "HttpClient type not found");
+                ev.SetError("HttpClient type not found");
                 return;
             }
 
@@ -1013,7 +1048,7 @@ internal class LinkEmbedEngine : IDisposable
             }
             catch (Exception ex)
             {
-                Logger.Log("LinkEmbed", $"HTTP headers error: {ex.Message}");
+                ev.Set("headers_error", ex.Message);
             }
 
             // Find GetStringAsync(string)
@@ -1076,29 +1111,21 @@ internal class LinkEmbedEngine : IDisposable
             }
             catch (Exception ex)
             {
-                Logger.Log("LinkEmbed", $"SendAsync resolve error: {ex.Message}");
+                ev.Set("send_async_error", ex.Message);
             }
 
-            // Log all available methods for diagnostics
-            var methodNames = httpClientType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .Where(m => m.DeclaringType == httpClientType)
-                .Select(m => $"{m.Name}({m.GetParameters().Length})")
-                .Distinct()
-                .OrderBy(n => n);
-            Logger.Log("LinkEmbed", $"HttpClient available methods: {string.Join(", ", methodNames)}");
-
-            Logger.Log("LinkEmbed", $"HTTP resolved: client={s_httpClient != null}, " +
-                $"GetStringAsync={s_getStringAsync != null}, " +
-                $"GetByteArrayAsync={s_getByteArrayAsync != null}, " +
-                $"GetAsync={s_getAsync != null}, " +
-                $"SendAsync={s_sendAsync != null}, " +
-                $"SendAsyncHR={s_sendAsyncHeadersRead != null}, " +
-                $"HttpRequestMessage={s_httpRequestMessageType != null}, " +
-                $"HttpMethod.Get={s_httpMethodGet != null}");
+            ev.Set("client", s_httpClient != null);
+            ev.Set("GetStringAsync", s_getStringAsync != null);
+            ev.Set("GetByteArrayAsync", s_getByteArrayAsync != null);
+            ev.Set("GetAsync", s_getAsync != null);
+            ev.Set("SendAsync", s_sendAsync != null);
+            ev.Set("SendAsyncHR", s_sendAsyncHeadersRead != null);
+            ev.Set("HttpRequestMessage", s_httpRequestMessageType != null);
+            ev.Set("HttpMethod_Get", s_httpMethodGet != null);
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"HTTP resolve error: {ex.Message}");
+            ev.SetError(ex);
         }
     }
 
@@ -1472,7 +1499,7 @@ internal class LinkEmbedEngine : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.Log("LinkEmbed", $"FetchMetadata error for {url}: {ex.Message}");
+            Logger.Log("LinkEmbed", $"FetchMetadata error [{ex.GetType().Name}] for {url}: {ex.Message}");
             if (_metadataCache.Count >= MaxMetadataCache) _metadataCache.Clear();
             _metadataCache[url] = null;
             return null;
@@ -1499,7 +1526,6 @@ internal class LinkEmbedEngine : IDisposable
             title = "Image";
         }
 
-        Logger.Log("LinkEmbed", $"Image URL fast path: {url}");
         return new EmbedData(url, provider, null, title, null, url, null, null);
     }
 
@@ -1524,7 +1550,6 @@ internal class LinkEmbedEngine : IDisposable
             title = "Video";
         }
 
-        Logger.Log("LinkEmbed", $"Video URL fast path: {url}");
         return new EmbedData(url, provider, null, title, null, null, null, "direct");
     }
 
@@ -1549,8 +1574,6 @@ internal class LinkEmbedEngine : IDisposable
         }
 
         if (oembedEndpoint == null) return null;
-
-        Logger.Log("LinkEmbed", $"oEmbed discovered for {pageUrl}: {oembedEndpoint}");
 
         try
         {
@@ -1631,13 +1654,11 @@ internal class LinkEmbedEngine : IDisposable
             if (description != null && description.Length > 200)
                 description = description[..197] + "...";
 
-            Logger.Log("LinkEmbed", $"oEmbed fetched via {providerName ?? "discovery"} for {pageUrl}: title=\"{title}\", thumbnail={thumbnail != null}");
             return new EmbedData(pageUrl, providerName, author, title, description, thumbnail, null, null);
         }
         catch (Exception ex)
         {
             Logger.Log("LinkEmbed", $"oEmbed discovery fetch error [{ex.GetType().Name}] for {pageUrl}: {ex.Message}");
-            if (Verbose) Logger.Log("LinkEmbed", $"oEmbed stack: {ex.StackTrace}");
             return null;
         }
     }
@@ -1657,7 +1678,6 @@ internal class LinkEmbedEngine : IDisposable
         if (fixerMatch.Success)
         {
             url = fixerMatch.Groups[1].Value + "vxtwitter.com/" + url[(fixerMatch.Length)..];
-            Logger.Log("LinkEmbed", $"Normalized {originalUrl} -> {url}");
         }
 
         // Twitter-related domains (x.com, twitter.com, vxtwitter, fxtwitter, fixupx, etc.)
@@ -1666,7 +1686,6 @@ internal class LinkEmbedEngine : IDisposable
         if (EmbedFixerDomainRegex.IsMatch(url) || TwitterDomainRegex.IsMatch(url))
         {
             botUA = "Mozilla/5.0 (compatible; Discordbot/2.0; +https://discordapp.com)";
-            Logger.Log("LinkEmbed", $"Using bot UA for: {url}");
         }
 
         var (contentType, html) = HttpGetWithContentType(url, botUA);
@@ -1678,15 +1697,9 @@ internal class LinkEmbedEngine : IDisposable
             {
                 var ct = contentType.ToLowerInvariant();
                 if (ct.StartsWith("image/"))
-                {
-                    Logger.Log("LinkEmbed", $"Content-Type image (no-body) for {originalUrl}: {contentType}");
                     return SynthesizeImageEmbed(originalUrl);
-                }
                 if (ct.StartsWith("video/"))
-                {
-                    Logger.Log("LinkEmbed", $"Content-Type video (no-body) for {originalUrl}: {contentType}");
                     return SynthesizeVideoEmbed(originalUrl);
-                }
             }
             return null;
         }
@@ -1702,19 +1715,16 @@ internal class LinkEmbedEngine : IDisposable
             else if (ct.StartsWith("image/"))
             {
                 // Extensionless image URL (e.g. pbs.twimg.com/media/abc) — synthesize image embed
-                Logger.Log("LinkEmbed", $"Content-Type image detected for {originalUrl}: {contentType}");
                 return SynthesizeImageEmbed(originalUrl);
             }
             else if (ct.StartsWith("video/"))
             {
                 // Direct video URL without extension — synthesize video embed
-                Logger.Log("LinkEmbed", $"Content-Type video detected for {originalUrl}: {contentType}");
                 return SynthesizeVideoEmbed(originalUrl);
             }
             else
             {
                 // PDF, binary, JSON, etc. — bail
-                Logger.Log("LinkEmbed", $"Non-HTML Content-Type for {url}: {contentType}, skipping OG parse");
                 return null;
             }
         }
@@ -1780,7 +1790,6 @@ internal class LinkEmbedEngine : IDisposable
         if (description != null && description.Length > 200)
             description = description[..197] + "...";
 
-        Logger.Log("LinkEmbed", $"OG fetched for {originalUrl}: title=\"{title}\"");
         return new EmbedData(originalUrl, siteName, null, title, description, image, themeColor, null);
     }
 
@@ -1825,7 +1834,6 @@ internal class LinkEmbedEngine : IDisposable
                         title = System.Net.WebUtility.HtmlDecode(pageTitleMatch.Groups[1].Value.Trim());
                         if (title.EndsWith(" - YouTube"))
                             title = title[..^10];
-                        Logger.Log("LinkEmbed", $"YouTube title from page scrape: \"{title}\"");
                     }
                 }
             }
@@ -1843,7 +1851,6 @@ internal class LinkEmbedEngine : IDisposable
             title = title[..97] + "...";
 
         var thumbnail = $"https://img.youtube.com/vi/{videoId}/hqdefault.jpg";
-        Logger.Log("LinkEmbed", $"YouTube fetched: id={videoId}, author=\"{author}\", title=\"{title}\"");
         return new EmbedData(url, "YouTube", author, title, null, thumbnail, "#FF0000", videoId);
     }
 
@@ -1877,10 +1884,7 @@ internal class LinkEmbedEngine : IDisposable
         {
             var ct = contentType.ToLowerInvariant();
             if (!ct.Contains("text/html") && !ct.Contains("text/xhtml") && !ct.Contains("application/xhtml"))
-            {
-                Logger.Log("LinkEmbed", $"Reddit: non-HTML Content-Type '{contentType}' for {fetchUrl}");
                 return null;
-            }
         }
 
         // Limit to first 50KB for parsing
@@ -1923,7 +1927,6 @@ internal class LinkEmbedEngine : IDisposable
         if (description != null && description.Length > 200)
             description = description[..197] + "...";
 
-        Logger.Log("LinkEmbed", $"Reddit fetched for {url}: title=\"{title}\", provider={provider}");
         return new EmbedData(url, provider, null, title, description, image, RedditAccentColor, null);
     }
 
@@ -2076,7 +2079,6 @@ internal class LinkEmbedEngine : IDisposable
 
                             // Track dispose action for cleanup
                             _animatedDisposables[data.Url] = animated.Value.dispose;
-                            Logger.Log("LinkEmbed", $"Animated embed created for: {data.Url}");
                         }
                     }
                 }
@@ -2352,11 +2354,7 @@ internal class LinkEmbedEngine : IDisposable
             try
             {
                 var (grid, col, colSpan) = FindInjectionGrid(textControl);
-                if (grid == null)
-                {
-                    Logger.Log("LinkEmbed", $"No injection grid for: {data.Url}");
-                    return;
-                }
+                if (grid == null) return;
 
                 // URL-specific dedup tag
                 var embedTag = "uprooted-link-embed:" + data.Url;
@@ -2388,9 +2386,6 @@ internal class LinkEmbedEngine : IDisposable
                 _r.AddChild(grid, card);
                 if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
                 _injectedCards.Add(card);
-
-                Logger.Log("LinkEmbed", $"Embed injected for: {data.Url} " +
-                    $"into Grid row={newRow} col={col}");
             }
             catch (Exception ex)
             {
@@ -2474,10 +2469,7 @@ internal class LinkEmbedEngine : IDisposable
         }
 
         if (markdownTextBlock == null)
-        {
-            Logger.Log("LinkEmbed", "RootMarkdownTextBlock not found in parent chain");
             return (null, 0, 1);
-        }
 
         // The Grid is the direct parent of RootMarkdownTextBlock
         var grid = _r.GetParent(markdownTextBlock);
@@ -2488,10 +2480,7 @@ internal class LinkEmbedEngine : IDisposable
             if (above != null && _r.IsGrid(above))
                 grid = above;
             else
-            {
-                Logger.Log("LinkEmbed", $"Grid not found above RootMarkdownTextBlock (found {grid?.GetType().Name})");
                 return (null, 0, 1);
-            }
         }
 
         // Get the column the markdown text is in (usually column 1, column 0 is avatar)
