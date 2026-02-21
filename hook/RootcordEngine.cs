@@ -40,6 +40,8 @@ internal class RootcordEngine
     // Original layout state (for revert)
     private double _originalCol0Width;
     private string _originalCol0UnitType = "Pixel";
+    private double _originalCol4Width;
+    private double _originalCol5Width;
     private bool _tabsWasVisible = true;
     private readonly List<(object control, int originalColSpan)> _modifiedColSpans = new();
 
@@ -80,6 +82,7 @@ internal class RootcordEngine
     private object? _communityGrid;
     private List<(object child, int originalCol)>? _originalChildColumns;
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
+    private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -486,6 +489,22 @@ internal class RootcordEngine
         _r.SetColumnDefinitionPixelWidth(colDefs[0], StripWidth);
         Logger.Log(Tag, $"Col0 widened to {StripWidth}px");
 
+        // Zero Col 4 (SystemTray, 200px) and Col 5 (right padding, 16px)
+        // so the SplitView content extends flush to the right window edge
+        if (colDefs.Count >= 5)
+        {
+            var col4Info = _r.GetColumnDefinitionWidth(colDefs[4]);
+            _originalCol4Width = col4Info?.Value ?? 200;
+            _r.SetColumnDefinitionPixelWidth(colDefs[4], 0);
+        }
+        if (colDefs.Count >= 6)
+        {
+            var col5Info = _r.GetColumnDefinitionWidth(colDefs[5]);
+            _originalCol5Width = col5Info?.Value ?? 16;
+            _r.SetColumnDefinitionPixelWidth(colDefs[5], 0);
+        }
+        Logger.Log(Tag, $"Col4/Col5 zeroed for flush-right layout");
+
         // Find all children that start at Col=0 and span multiple columns.
         // These are typically TabsControl (ColSpan=6) and SplitView (ColSpan=6).
         // We need to adjust their ColSpan and Col to skip our strip column,
@@ -518,7 +537,13 @@ internal class RootcordEngine
 
         // Restore original Col 0 width
         _r.SetColumnDefinitionPixelWidth(colDefs[0], _originalCol0Width);
-        Logger.Log(Tag, $"Col0 restored to {_originalCol0Width}px");
+
+        // Restore Col 4 and Col 5
+        if (colDefs.Count >= 5)
+            _r.SetColumnDefinitionPixelWidth(colDefs[4], _originalCol4Width);
+        if (colDefs.Count >= 6)
+            _r.SetColumnDefinitionPixelWidth(colDefs[5], _originalCol5Width);
+        Logger.Log(Tag, $"Col0/4/5 restored to {_originalCol0Width}/{_originalCol4Width}/{_originalCol5Width}px");
 
         // Restore original Col positions
         foreach (var (control, originalSpan) in _modifiedColSpans)
@@ -545,6 +570,50 @@ internal class RootcordEngine
             var leftVal = Enum.Parse(pp.PropertyType, "Left");
             pp.SetValue(_rootSplitView, leftVal);
             Logger.Log(Tag, $"SplitView PanePlacement → Left (was {_originalPanePlacement})");
+
+            // Prevent the Overlay→Inline flash in togglePane():
+            // Root's togglePane() checks CommunityPaneDisplayMode==Overlay and switches to Inline.
+            // By setting CommunityPaneDisplayMode to Inline via PaneDisplayService, that condition
+            // is never true, so the mode switch never fires. The SplitView stays in Overlay mode
+            // (pane floats over content — when closed, content fills full width).
+            try
+            {
+                if (_homeViewModel != null)
+                {
+                    var pds = _r.GetPropertyValue(_homeViewModel, "PaneDisplayService");
+                    if (pds != null)
+                    {
+                        // Set CommunityPaneDisplayMode to Inline so togglePane's condition is false
+                        var setCommunityMethod = pds.GetType().GetMethod("SetCommunityPaneDisplayMode");
+                        if (setCommunityMethod != null)
+                        {
+                            var parms = setCommunityMethod.GetParameters();
+                            if (parms.Length > 0)
+                            {
+                                var inlineEnum = Enum.Parse(parms[0].ParameterType, "Inline");
+                                setCommunityMethod.Invoke(pds, new[] { inlineEnum });
+                                Logger.Log(Tag, "PaneDisplayService.CommunityPaneDisplayMode → Inline (prevents flash)");
+                            }
+                        }
+                        else
+                        {
+                            // Fallback: try setting GlobalPaneDisplayMode
+                            var setGlobalMethod = pds.GetType().GetMethod("SetGlobalPaneDisplayMode");
+                            if (setGlobalMethod != null)
+                            {
+                                var parms = setGlobalMethod.GetParameters();
+                                if (parms.Length > 0)
+                                {
+                                    var inlineEnum = Enum.Parse(parms[0].ParameterType, "Inline");
+                                    setGlobalMethod.Invoke(pds, new[] { inlineEnum });
+                                    Logger.Log(Tag, "PaneDisplayService.GlobalPaneDisplayMode → Inline (fallback)");
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"PaneDisplayService set error: {ex.Message}"); }
 
             // Guard: if Root resets PanePlacement to Right, immediately re-assert Left
             var capturedSplitView = _rootSplitView;
@@ -601,6 +670,9 @@ internal class RootcordEngine
             pp.SetValue(_rootSplitView, val);
             Logger.Log(Tag, $"SplitView PanePlacement restored → {_originalPanePlacement}");
             _originalPanePlacement = null;
+
+            // Note: PaneDisplayService.CommunityPaneDisplayMode was set to Inline during Apply
+            // to prevent toggle flash. Root will reset it naturally on next theme/layout cycle.
         }
         catch (Exception ex) { Logger.Log(Tag, $"RevertUtilityPanePlacement error: {ex.Message}"); }
     }
@@ -811,15 +883,18 @@ internal class RootcordEngine
             }
 
             // Gather layout-area children sorted by column.
-            // Skip GridSplitters (resize handles) and Decorators (overlays/adorner layers).
+            // Separate GridSplitters (resize handles) from content panels.
             var nonSplitters = new List<(object child, int col)>();
+            var gridSplitters = new List<(object child, int col)>();
             foreach (var child in _r.GetVisualChildren(layoutGrid))
             {
                 var typeName = child.GetType().Name;
-                if (typeName.Contains("GridSplitter")) continue;
                 if (typeName == "Decorator" || typeName == "AdornerDecorator") continue;
                 int col = _r.GetGridColumn(child);
-                nonSplitters.Add((child, col));
+                if (typeName.Contains("GridSplitter"))
+                    gridSplitters.Add((child, col));
+                else
+                    nonSplitters.Add((child, col));
             }
             nonSplitters.Sort((a, b) => a.col.CompareTo(b.col));
 
@@ -832,6 +907,7 @@ internal class RootcordEngine
             // Save original state for revert
             _communityGrid = layoutGrid;
             _originalChildColumns = nonSplitters.Select(c => (c.child, c.col)).ToList();
+            _originalSplitterColumns = gridSplitters.Select(s => (s.child, s.col)).ToList();
             _originalColWidths = new List<(int, double, string)>();
             for (int i = 0; i < gridColDefs.Count; i++)
             {
@@ -846,14 +922,39 @@ internal class RootcordEngine
             // Target:   [Channels(col A)] [Chat(col B)]    [Members(col C)]
             var columns = nonSplitters.Select(c => c.col).ToList();
 
+            // Build old→new column mapping for the rotation
             int n = nonSplitters.Count;
+            var colMapping = new Dictionary<int, int>(); // oldCol → newCol
             for (int i = 0; i < n; i++)
             {
-                // Each child gets the column of the PREVIOUS child (wrapping last to first)
-                // Members(0)→col2, Channels(1)→col0, Chat(2)→col1
                 int newCol = columns[(i + n - 1) % n];
+                colMapping[columns[i]] = newCol;
                 _r.SetGridColumn(nonSplitters[i].child, newCol);
             }
+
+            // Rotate GridSplitters using the same column mapping.
+            // A splitter at col X should move to the mapped col for X, or the nearest mapped col.
+            foreach (var (splitter, oldCol) in gridSplitters)
+            {
+                if (colMapping.TryGetValue(oldCol, out int mappedCol))
+                {
+                    _r.SetGridColumn(splitter, mappedCol);
+                }
+                else
+                {
+                    // Splitter is between two panels — find the nearest panel column <= splitterCol
+                    // and apply its mapping offset
+                    int bestOld = -1;
+                    foreach (var oc in columns)
+                        if (oc <= oldCol && oc > bestOld) bestOld = oc;
+                    if (bestOld >= 0 && colMapping.TryGetValue(bestOld, out int panelNew))
+                    {
+                        int offset = oldCol - bestOld;
+                        _r.SetGridColumn(splitter, panelNew + offset);
+                    }
+                }
+            }
+            Logger.Log(Tag, $"SwapCommunityMembers: rotated {gridSplitters.Count} GridSplitters");
 
             // Rotate column definition widths the same way
             var savedWidths = new List<(double value, string unit)>();
@@ -981,6 +1082,13 @@ internal class RootcordEngine
                     _r.SetGridColumn(child, originalCol);
             }
 
+            // Restore GridSplitter column assignments
+            if (_originalSplitterColumns != null)
+            {
+                foreach (var (splitter, originalCol) in _originalSplitterColumns)
+                    _r.SetGridColumn(splitter, originalCol);
+            }
+
             // Restore column definition widths
             var colDefs = _r.GetColumnDefinitions(_communityGrid);
             if (colDefs != null && _originalColWidths != null)
@@ -1002,6 +1110,7 @@ internal class RootcordEngine
         _communityGrid = null;
         _originalChildColumns = null;
         _originalColWidths = null;
+        _originalSplitterColumns = null;
     }
 
     // ===== Flyout placement flip (member profile popups) =====
@@ -1480,6 +1589,19 @@ internal class RootcordEngine
 
         PopulateServerStrip();
 
+        // Delayed refresh: community bitmaps may not be loaded yet on first render.
+        // Re-populate after 2s to pick up async-loaded images.
+        var bitmapRefreshToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        Task.Delay(2000, bitmapRefreshToken).ContinueWith(_ =>
+        {
+            if (bitmapRefreshToken.IsCancellationRequested) return;
+            _r.RunOnUIThread(() =>
+            {
+                try { PopulateServerStrip(); Logger.Log(Tag, "Server strip: delayed bitmap refresh"); }
+                catch { }
+            });
+        }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+
         var scrollViewer = _r.CreateScrollViewer(_serverStrip);
         if (scrollViewer != null)
         {
@@ -1520,8 +1642,8 @@ internal class RootcordEngine
 
     /// <summary>
     /// Build and inject a Discord-style user bar at the bottom-left of the HomeView Grid.
-    /// 240px wide (spans strip col + channel list col), ZIndex=10, fully opaque background.
-    /// 3-column layout: [56px avatar+dot] [*star username/status] [Auto native SystemTray].
+    /// Flush to left/bottom window edges (no floating dock look). Only top-right corner rounded.
+    /// 5-column layout: [Auto avatar] [8px gap] [* username MinWidth=120] [8px gap] [Auto buttons].
     /// </summary>
     private void BuildAndInjectUserBar()
     {
@@ -1535,12 +1657,13 @@ internal class RootcordEngine
             string onlineColor = "#43b581";
             string statusLabel = GetCurrentStatusLabel();
 
-            // Floating card: 240px wide, 12px rounded corners, cardBg background, elevated look
-            _userBar = _r.CreateBorder(_cardBg, 12);
+            // Docked card: flush to bottom-left, only top-right corner rounded (Discord-style)
+            _userBar = _r.CreateBorder(_cardBg, 0);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            _r.SetWidth(_userBar, 240);
-            SetBorderStroke(_userBar, AdjustForHighlight(_cardBg, 22), 1.0);
+            _r.SetCornerRadius(_userBar, 0, 12, 0, 0); // only top-right rounded
+            _r.SetMinWidth(_userBar, 300);
+            _r.SetMaxWidth(_userBar, 400);
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
             _r.SetGridColumn(_userBar, 0);
@@ -1549,34 +1672,41 @@ internal class RootcordEngine
             int rowCount = rowDefs?.Count ?? 4;
             _r.SetGridRowSpan(_userBar, rowCount);
             var allCols = _r.GetColumnDefinitions(_homeViewGrid)?.Count ?? 6;
-            _r.SetGridColumnSpan(_userBar, allCols); // spans full grid so HorizontalAlignment=Left works with auto-width
+            _r.SetGridColumnSpan(_userBar, allCols);
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
-            _r.SetMargin(_userBar, 8, 0, 0, 8); // floating: 8px gap from left and bottom window edges
+            _r.SetMargin(_userBar, 0, 0, 0, 0); // flush to window edges
             _userBar.GetType().GetProperty("ZIndex")?.SetValue(_userBar, 10);
 
-            // 3-column content Grid: [56px avatar] [* text] [Auto tray]
+            // 5-column content Grid: [Auto avatar] [8px] [* username] [8px] [Auto buttons]
             var contentGrid = _r.CreateGrid();
             if (contentGrid == null) return;
-            _r.SetMargin(contentGrid, 10, 6, 6, 6); // inner padding inside the floating card
+            _r.SetMargin(contentGrid, 10, 8, 10, 8); // inner padding
 
-            _r.AddGridColumn(contentGrid, 1.0); // Col 0 → will be set to 56px
-            _r.AddGridColumn(contentGrid, 1.0); // Col 1 → star (fills middle)
-            _r.AddGridColumn(contentGrid, 1.0); // Col 2 → will be set to Auto
+            // Add 5 columns: Auto, 8px, Star, 8px, Auto
+            _r.AddGridColumn(contentGrid, 1.0); // Col 0: Auto (avatar)
+            _r.AddGridColumn(contentGrid, 1.0); // Col 1: 8px gap
+            _r.AddGridColumn(contentGrid, 1.0); // Col 2: Star (username)
+            _r.AddGridColumn(contentGrid, 1.0); // Col 3: 8px gap
+            _r.AddGridColumn(contentGrid, 1.0); // Col 4: Auto (buttons)
 
             var colDefs = _r.GetColumnDefinitions(contentGrid);
-            if (colDefs?.Count >= 1)
-                _r.SetColumnDefinitionPixelWidth(colDefs[0], StripWidth); // 56px
-            if (colDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            if (colDefs != null && colDefs.Count >= 5 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
             {
                 try
                 {
                     var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                    var pixelUnit = Enum.Parse(_r.GridUnitTypeEnum, "Pixel");
                     var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit)!;
-                    var colDef2 = colDefs[2];
-                    colDef2?.GetType().GetProperty("Width")?.SetValue(colDef2, autoLen);
+                    var gap8Len = Activator.CreateInstance(_r.GridLengthType, 8d, pixelUnit)!;
+
+                    colDefs[0]?.GetType().GetProperty("Width")?.SetValue(colDefs[0], autoLen);  // Col 0: Auto
+                    colDefs[1]?.GetType().GetProperty("Width")?.SetValue(colDefs[1], gap8Len);  // Col 1: 8px
+                    // Col 2: Star (default from AddGridColumn) — leave as-is
+                    colDefs[3]?.GetType().GetProperty("Width")?.SetValue(colDefs[3], gap8Len);  // Col 3: 8px
+                    colDefs[4]?.GetType().GetProperty("Width")?.SetValue(colDefs[4], autoLen);  // Col 4: Auto
                 }
-                catch (Exception ex) { Logger.Log(Tag, $"UserBar: Auto col set error: {ex.Message}"); }
+                catch (Exception ex) { Logger.Log(Tag, $"UserBar: column setup error: {ex.Message}"); }
             }
 
             // --- Col 0: Avatar circle + online dot ---
@@ -1628,13 +1758,13 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, avatarGrid);
             }
 
-            // --- Col 1: Username + status label ---
+            // --- Col 2: Username + status label (star column, MinWidth=120) ---
             var textPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
             if (textPanel != null)
             {
-                _r.SetGridColumn(textPanel, 1);
+                _r.SetGridColumn(textPanel, 2);
                 _r.SetVerticalAlignment(textPanel, "Center");
-                _r.SetMargin(textPanel, 8, 0, 4, 0);
+                _r.SetMinWidth(textPanel, 120);
 
                 var nameText = _r.CreateTextBlock(username, 13, _text);
                 if (nameText != null)
@@ -1648,6 +1778,18 @@ internal class RootcordEngine
                             Enum.Parse(nameText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
+
+                    // ToolTip: show full username on hover (in case it's ellipsized)
+                    try
+                    {
+                        EnsureToolTipMethods();
+                        var setTipMethod = _toolTipGetTipMethod?.DeclaringType?.GetMethod("SetTip",
+                            BindingFlags.Public | BindingFlags.Static);
+                        if (setTipMethod != null)
+                            setTipMethod.Invoke(null, new[] { nameText, (object)username });
+                    }
+                    catch { }
+
                     _r.AddChild(textPanel, nameText);
                 }
 
@@ -1668,13 +1810,12 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, textPanel);
             }
 
-            // --- Col 2: 4 action buttons (People / DMs / Notifications / Settings) ---
-            var trayHost = _r.CreateStackPanel(vertical: false, spacing: 0);
+            // --- Col 4: 4 action buttons (People / DMs / Notifications / Settings) ---
+            var trayHost = _r.CreateStackPanel(vertical: false, spacing: 2);
             if (trayHost != null)
             {
-                _r.SetGridColumn(trayHost, 2);
+                _r.SetGridColumn(trayHost, 4);
                 _r.SetVerticalAlignment(trayHost, "Center");
-                _r.SetMargin(trayHost, 0, 0, 4, 0);
 
                 var btnP = BuildActionButton(GlyphFriends,       () => InvokeHomeCommand("FriendsPaneToggleCommand"));
                 var btnD = BuildActionButton(GlyphMessages,      () => InvokeHomeCommand("DirectMessagesPaneToggleCommand"));
@@ -1691,7 +1832,7 @@ internal class RootcordEngine
             _r.SetBorderChild(_userBar, contentGrid);
 
             _r.AddChild(_homeViewGrid, _userBar);
-            Logger.Log(Tag, "User bar injected: 240px floating card, 12px corners, 8px margins, icon-glyph buttons");
+            Logger.Log(Tag, "User bar injected: flush docked card, 5-col layout, MinWidth=300");
         }
         catch (Exception ex)
         {
@@ -2036,6 +2177,7 @@ internal class RootcordEngine
         _r.SetHeight(iconBorder, IconSize);
         _r.SetCursorHand(iconBorder);
         _r.SetClipToBounds(iconBorder, true);
+        _r.SetBorderThickness(iconBorder, 0); // prevent square stroke outline
 
         // Content: community image if available, otherwise initial letter
         if (bitmap != null)
@@ -3038,28 +3180,34 @@ internal class RootcordEngine
                         if (sel != null && !IsDmTab(sel))
                         {
                             SwapCommunityMembersToRight();
-                            // CommunityView may not be in the visual tree yet — retry after 300ms
+                            // CommunityView may not be in the visual tree yet — progressive retry
                             if (_communityGrid == null)
                             {
                                 var capturedSel = sel;
                                 var capturedToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-                                System.Threading.Tasks.Task.Delay(300, capturedToken).ContinueWith(_ =>
+                                int[] delays = { 100, 300, 600, 1000 };
+                                foreach (var delay in delays)
                                 {
-                                    if (capturedToken.IsCancellationRequested) return;
-                                    _r.RunOnUIThread(() =>
+                                    var d = delay;
+                                    System.Threading.Tasks.Task.Delay(d, capturedToken).ContinueWith(_ =>
                                     {
-                                        try
+                                        if (capturedToken.IsCancellationRequested) return;
+                                        _r.RunOnUIThread(() =>
                                         {
-                                            var current = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-                                            if (current == capturedSel && _communityGrid == null)
+                                            try
                                             {
-                                                SwapCommunityMembersToRight();
-                                                Logger.Log(Tag, "Tab switch: delayed swap retry completed");
+                                                var current = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+                                                if (current == capturedSel && _communityGrid == null)
+                                                {
+                                                    SwapCommunityMembersToRight();
+                                                    if (_communityGrid != null)
+                                                        Logger.Log(Tag, $"Tab switch: swap succeeded at {d}ms");
+                                                }
                                             }
-                                        }
-                                        catch { }
-                                    });
-                                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                                            catch { }
+                                        });
+                                    }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                                }
                             }
                         }
                         else

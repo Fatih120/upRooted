@@ -988,6 +988,27 @@ internal class AvaloniaReflection
         return null;
     }
 
+    /// <summary>
+    /// Get a value via the Avalonia property system by static field name, bypassing trimmed CLR getters.
+    /// </summary>
+    public object? GetAvaloniaPropertyByName(object? control, string propertyFieldName)
+    {
+        if (control == null) return null;
+        var field = control.GetType().GetField(propertyFieldName,
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+        return GetAvaloniaProperty(control, field);
+    }
+
+    /// <summary>
+    /// Set a value via the Avalonia property system by static field name, bypassing trimmed CLR setters.
+    /// </summary>
+    public void SetAvaloniaPropertyByName(object control, string propertyFieldName, object value)
+    {
+        var field = control.GetType().GetField(propertyFieldName,
+            BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+        if (field != null) SetAvaloniaProperty(control, field, value);
+    }
+
     public object? CreatePanel()
     {
         if (PanelType == null) return null;
@@ -1047,6 +1068,45 @@ internal class AvaloniaReflection
         // Padding exists on Border (Decorator), TemplatedControl, etc. - search the actual type
         var paddingProp = control.GetType().GetProperty("Padding");
         paddingProp?.SetValue(control, thickness);
+    }
+
+    /// <summary>
+    /// Read the current Margin from a control as a (Left, Top, Right, Bottom) tuple.
+    /// Returns null if the control has no Margin or it cannot be read.
+    /// </summary>
+    public (double Left, double Top, double Right, double Bottom)? GetMargin(object? control)
+    {
+        if (control == null) return null;
+        try
+        {
+            var val = _controlMargin?.GetValue(control);
+            if (val == null) return null;
+            var t = val.GetType();
+            var left = (double)(t.GetProperty("Left")?.GetValue(val) ?? 0.0);
+            var top = (double)(t.GetProperty("Top")?.GetValue(val) ?? 0.0);
+            var right = (double)(t.GetProperty("Right")?.GetValue(val) ?? 0.0);
+            var bottom = (double)(t.GetProperty("Bottom")?.GetValue(val) ?? 0.0);
+            return (left, top, right, bottom);
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Set per-corner CornerRadius on a Border control.
+    /// Avalonia CornerRadius(topLeft, topRight, bottomRight, bottomLeft).
+    /// </summary>
+    public void SetCornerRadius(object? border, double topLeft, double topRight, double bottomRight, double bottomLeft)
+    {
+        if (border == null || CornerRadiusType == null) return;
+        try
+        {
+            var cr = Activator.CreateInstance(CornerRadiusType, topLeft, topRight, bottomRight, bottomLeft);
+            _borderCornerRadius?.SetValue(border, cr);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetCornerRadius error: {ex.Message}");
+        }
     }
 
     public void SetTag(object? control, string tag) => _controlTag?.SetValue(control, tag);
@@ -1838,11 +1898,26 @@ internal class AvaloniaReflection
                 Logger.Log("Reflection", "Clipboard property not found on window");
                 return;
             }
+
+            // Try concrete type first, then search interfaces (handles explicit implementations)
             var setTextAsync = clipboard.GetType().GetMethod("SetTextAsync", new[] { typeof(string) });
+            if (setTextAsync == null)
+            {
+                foreach (var iface in clipboard.GetType().GetInterfaces())
+                {
+                    setTextAsync = iface.GetMethod("SetTextAsync", new[] { typeof(string) });
+                    if (setTextAsync != null) break;
+                }
+            }
+
             if (setTextAsync != null)
             {
                 setTextAsync.Invoke(clipboard, new object[] { text });
-                Logger.Log("Reflection", $"Copied to clipboard: {text}");
+                Logger.Log("Reflection", $"Copied {text.Length} chars to clipboard");
+            }
+            else
+            {
+                Logger.Log("Reflection", $"CopyToClipboard: SetTextAsync not found on {clipboard.GetType().FullName}");
             }
         }
         catch (Exception ex)
@@ -2008,6 +2083,12 @@ internal class AvaloniaReflection
     {
         if (control == null) return;
         control.GetType().GetProperty("Height")?.SetValue(control, height);
+    }
+
+    public void SetMinWidth(object? control, double minWidth)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("MinWidth")?.SetValue(control, minWidth);
     }
 
     public void SetOpacity(object? control, double opacity)
@@ -2461,7 +2542,12 @@ internal class AvaloniaReflection
     public void SetImageSource(object? image, object? bitmap)
     {
         if (image == null || bitmap == null) return;
-        _imageSource?.SetValue(image, bitmap);
+        if (_imageSource == null)
+        {
+            Logger.Log("Reflection", "SetImageSource: _imageSource PropertyInfo is null — Image.Source reflection failed");
+            return;
+        }
+        _imageSource.SetValue(image, bitmap);
     }
 
     // ===== ThemeDictionaries Access (for Theme Engine v2) =====
