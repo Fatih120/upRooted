@@ -20,6 +20,15 @@
 - **Theme-card hover fixes**:
   - Preset card hover borders now luminance-aware (`AdjustForHighlight`) for correct light-mode darkening.
   - Custom theme card hover remains hardcoded island behavior and always lightens.
+- **Native preset card state/preview improvements**:
+  - Native card label now includes Root state context (`Root`, `Dark`, `Light`, `System`).
+  - Native preview adapts to Root requested/effective variant state and no longer reads temporary theme-spoofed variant values while Uprooted themes are active.
+  - Preview contrast tuned for cross-context readability:
+    - Light preview toned down when shown on non-light host themes.
+    - Inner mini-window contrast rebalanced for light-on-dark and dark-on-light host combinations.
+- **Theme variant restore correctness**:
+  - Requested variant (including null/default = System) is now preserved/restored explicitly through apply/revert.
+  - Added requested-variant reflection getter and null-capable requested-variant setter path.
 - **Experimental plugins banner/toggle in Light mode reworked**:
   - Enabled warning state now uses light-amber surface/border/text/icon palette in Light mode.
   - Toggle now reuses shared `BuildToggleSwitch` control to match plugin card toggle formatting and behavior.

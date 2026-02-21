@@ -2859,14 +2859,37 @@ internal class AvaloniaReflection
     }
 
     /// <summary>
+    /// Gets Application.Current.RequestedThemeVariant.
+    /// This preserves "System/Default" intent, unlike ActualThemeVariant which resolves to
+    /// the currently effective light/dark variant.
+    /// </summary>
+    public object? GetRequestedThemeVariant()
+    {
+        var app = GetAppCurrent();
+        if (app == null) return null;
+        try
+        {
+            var prop = app.GetType().GetProperty("RequestedThemeVariant",
+                BindingFlags.Public | BindingFlags.Instance);
+            return prop?.GetValue(app);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"GetRequestedThemeVariant error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
     /// Sets Application.Current.RequestedThemeVariant to switch the active variant.
+    /// Passing null restores the default/system behavior.
     /// The variantKey should be a ThemeVariant object (from GetActiveThemeVariant or
-    /// GetThemeVariantByName). Setting this changes ActualThemeVariant synchronously
-    /// on the UI thread, which triggers ActualThemeVariantChanged.
+    /// GetThemeVariantByName), or null for default. Setting this changes
+    /// ActualThemeVariant synchronously on the UI thread, which triggers
+    /// ActualThemeVariantChanged.
     /// </summary>
     public bool SetRequestedThemeVariant(object? variantKey)
     {
-        if (variantKey == null) return false;
         var app = GetAppCurrent();
         if (app == null) return false;
         try
@@ -2879,7 +2902,7 @@ internal class AvaloniaReflection
                 return false;
             }
             prop.SetValue(app, variantKey);
-            Logger.Log("Reflection", $"Set RequestedThemeVariant -> {variantKey}");
+            Logger.Log("Reflection", $"Set RequestedThemeVariant -> {(variantKey == null ? "<null/default>" : variantKey)}");
             return true;
         }
         catch (Exception ex)

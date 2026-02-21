@@ -32,6 +32,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Theme page behavior polish: added Refresh button, prevented no-op re-toggle on already-active theme cards, and fixed multiple theme-card press/propagation quirks.
   - Preset theme card hover borders are now luminance-aware (darken in light mode / lighten in dark mode); Custom Theme card hover remains hardcoded island behavior and always lightens.
   - Experimental plugins banner/toggle light-mode visuals revised: enabled state uses a light amber surface palette in Light mode; toggle visuals now reuse the shared plugin toggle control for consistent formatting/behavior.
+  - Themes page Native preset now shows Root-state context in label (`Root` / `Dark` / `Light` / `System`) and uses state-aware preview appearance. Native gear hover is now luminance-aware (darkens in Light mode, lightens in Dark mode).
+  - Theme preview contrast tuning refined for cross-context readability (especially Light preview shown in dark/preset host and dark preset previews shown in light host).
   - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
 
 - **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
@@ -66,6 +68,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Custom Theme Ping toggle no longer activates the entire custom card.
   - Theme cards no longer re-trigger when pressing an already active card.
   - About/Plugins/popup button border-hover styling now consistent across previously missed controls.
+  - Root native variant restoration now preserves requested state (including `System/default`) when applying/reverting Uprooted themes, fixing cases where fallback incorrectly stuck to explicit Dark/Light.
   - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
 
 - **Full codebase bug audit** — 15-commit sweep covering thread safety, timer leaks, fire-and-forget task accumulation, error handling gaps, and type correctness:

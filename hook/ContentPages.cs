@@ -2166,9 +2166,60 @@ internal static class ContentPages
                     r.AddChild(presetsInner, presetHeader);
                 }
 
+                var rootVariant = themeEngine?.GetNativeRootVariant() ?? "Dark";
+                var requestedVariant = themeEngine?.GetNativeRootRequestedVariant() ?? rootVariant;
+                var variantName = requestedVariant?.Trim() ?? "Dark";
+                var actualVariantName = rootVariant?.Trim() ?? "Dark";
+                string nativeStateLabel;
+                string nativeBg;
+                string nativeAccent;
+                if (variantName.Equals("System", StringComparison.OrdinalIgnoreCase))
+                {
+                    nativeStateLabel = "System";
+                    if (actualVariantName.Equals("Light", StringComparison.OrdinalIgnoreCase))
+                    {
+                        nativeBg = "#F3F3F3";
+                        nativeAccent = "#2D5BFF";
+                    }
+                    else if (actualVariantName.Equals("PureDark", StringComparison.OrdinalIgnoreCase))
+                    {
+                        nativeBg = "#121212";
+                        nativeAccent = "#3B6AF8";
+                    }
+                    else
+                    {
+                        nativeBg = "#0D1521";
+                        nativeAccent = "#3B6AF8";
+                    }
+                }
+                else if (variantName.Equals("Dark", StringComparison.OrdinalIgnoreCase))
+                {
+                    nativeStateLabel = "Root";
+                    nativeBg = "#0D1521";
+                    nativeAccent = "#3B6AF8";
+                }
+                else if (variantName.Equals("Light", StringComparison.OrdinalIgnoreCase))
+                {
+                    nativeStateLabel = "Light";
+                    nativeBg = "#F3F3F3";
+                    nativeAccent = "#2D5BFF";
+                }
+                else if (variantName.Equals("PureDark", StringComparison.OrdinalIgnoreCase))
+                {
+                    nativeStateLabel = "Dark";
+                    nativeBg = "#121212";
+                    nativeAccent = "#3B6AF8";
+                }
+                else
+                {
+                    nativeStateLabel = "System";
+                    nativeBg = "#121212";
+                    nativeAccent = "#3B6AF8";
+                }
+
                 var allPresets = new[]
                 {
-                    ("Native",  "default-dark", "#0D1521", "#3B6AF8", "Root's app theme"),
+                    ($"Native ({nativeStateLabel})",  "default-dark", nativeBg, nativeAccent, "Root's app theme"),
                     ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
                     ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
                     ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
@@ -2866,7 +2917,7 @@ internal static class ContentPages
                     r.SubscribeEvent(gearBtn, "PointerEntered", () =>
                     {
                         gearHovered = true;
-                        r.SetBackground(gearBtnRef, ColorUtils.Lighten(gearBtnBg, 8));
+                        r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8));
                         // Remove card hover while over gear
                         if (!isActive)
                         {
@@ -2970,11 +3021,32 @@ internal static class ContentPages
     /// </summary>
     private static object? BuildThemePreview(AvaloniaReflection r, string bgColor, string accentColor)
     {
+        var isLightPreview = ColorUtils.Luminance(bgColor) > 0.5;
+        var hostIsLight = ColorUtils.Luminance(CardBg) > 0.5;
+        // Only tone down the Light preview when host UI is not light.
+        var toneDownLightPreview = isLightPreview && !hostIsLight;
+        var darkPreviewOnLightHost = !isLightPreview && hostIsLight;
+        var bodyBg = isLightPreview
+            ? ColorUtils.Darken(bgColor, toneDownLightPreview ? 24 : 9)
+            : ColorUtils.Darken(bgColor, 8);
+        var accentBarColor = isLightPreview
+            ? (toneDownLightPreview ? ColorUtils.Mix(accentColor, bodyBg, 0.36) : accentColor)
+            : ColorUtils.Mix(accentColor, bodyBg, 0.42);
+        var frameStroke = isLightPreview
+            ? (toneDownLightPreview ? "#08FFFFFF" : "#12FFFFFF")
+            : "#1CFFFFFF";
+        var sidebarShade = isLightPreview
+            ? (toneDownLightPreview ? "#3AFFFFFF" : "#55FFFFFF")
+            : (darkPreviewOnLightHost ? "#1EFFFFFF" : "#0AFFFFFF");
+        var contentShade = isLightPreview
+            ? (toneDownLightPreview ? "#28FFFFFF" : "#3AFFFFFF")
+            : (darkPreviewOnLightHost ? "#14FFFFFF" : "#05FFFFFF");
+
         // Outer frame -- tagged to prevent tree walker from recoloring
         var frame = r.CreateBorder("#00000000", 6);
         if (frame == null) return null;
         r.SetTag(frame, "uprooted-no-recolor");
-        SetBorderStroke(r, frame, "#30ffffff", 0.5);
+        SetBorderStroke(r, frame, frameStroke, 0.5);
         r.SetWidth(frame, 100);
         r.SetHeight(frame, 56);
 
@@ -2982,7 +3054,7 @@ internal static class ContentPages
         if (inner == null) return frame;
 
         // Accent bar at top
-        var accentBar = r.CreateBorder(accentColor, 0);
+        var accentBar = r.CreateBorder(accentBarColor, 0);
         if (accentBar != null)
         {
             r.SetHeight(accentBar, 6);
@@ -2996,7 +3068,7 @@ internal static class ContentPages
         }
 
         // Body with bg color
-        var body = r.CreateBorder(bgColor, 0);
+        var body = r.CreateBorder(bodyBg, 0);
         if (body != null)
         {
             r.SetHeight(body, 50);
@@ -3012,7 +3084,7 @@ internal static class ContentPages
             {
                 r.SetMargin(bodyLayout, 4, 4, 4, 4);
 
-                var sidebar = r.CreateBorder("#15ffffff", 2);
+                var sidebar = r.CreateBorder(sidebarShade, 2);
                 if (sidebar != null)
                 {
                     r.SetWidth(sidebar, 22);
@@ -3020,7 +3092,7 @@ internal static class ContentPages
                     r.AddChild(bodyLayout, sidebar);
                 }
 
-                var content = r.CreateBorder("#0Bffffff", 2);
+                var content = r.CreateBorder(contentShade, 2);
                 if (content != null)
                 {
                     r.SetWidth(content, 64);
@@ -4097,8 +4169,11 @@ internal static class ContentPages
         ApplyFont(r, labelText, font);
         r.AddChild(row, labelText);
 
-        var separator = CreateBoundText(r, " \u2022 ", 13, TextDim, "TextTertiary");
+        // Use a smaller centered middle-dot separator; keep it close to label/value color.
+        var separator = CreateBoundText(r, "\u00B7", 11, TextMuted, "TextSecondary");
         ApplyFont(r, separator, font);
+        r.SetVerticalAlignment(separator, "Center");
+        r.SetMargin(separator, 6, 0, 6, 0);
         r.AddChild(row, separator);
 
         var valueText = r.CreateTextBlock(value, 13, valueColor);
