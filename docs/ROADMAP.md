@@ -96,6 +96,13 @@ If `plugin.start()` rejects, the plugin is currently logged as errored but may b
 ### Bridge version detection
 Add negotiation between Uprooted and Root's bridge interface (`__nativeToWebRtc`, `__webRtcToNative`). Detect bridge version at runtime and warn or degrade gracefully if the interface has changed.
 
+### LiquidGlass visual mod plugin (iOS 26-inspired)
+Build a new visual plugin focused on translucent, depth-aware UI treatment inspired by iOS 26's Liquid Glass aesthetic. Initial scope is decorative surfaces (cards/panels/badges) and accent edge effects, with strict perf limits and instant disable fallback.
+- **Technical path validated:** Avalonia custom draw operations + Skia lease pattern are now confirmed from dumps (`DrawingContext.Custom` -> `ImmediateDrawingContext.TryGetFeature` -> `ISkiaSharpApiLeaseFeature.Lease`). See `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
+- **Phase 1:** Prototype one reusable custom draw operation for a sweep-gradient border stroke with position-aware angle and lightweight blur/glow.
+- **Phase 2:** Wrap in a toggleable plugin surface with global enable + intensity presets + fallback to standard Border rendering.
+- **Phase 3:** Expand to selected components (settings cards, popups, badges) after perf and readability validation on Dark/Light/PureDark.
+
 ---
 
 ## Long-term Vision
@@ -309,7 +316,7 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-21 — added Translate + Presence Beacon goals, removed stale NSFW filter issue, updated MessageLogger status*
+*Last updated: 2026-02-21 — added LiquidGlass medium-term plan, added Translate + Presence Beacon goals, removed stale NSFW filter issue, updated MessageLogger status*
 
 ---
 

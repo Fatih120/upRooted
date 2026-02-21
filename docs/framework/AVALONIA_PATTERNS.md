@@ -1045,8 +1045,21 @@ You'll see this in ListBox, ListBoxItem, TransparentButton, RootScrollViewer, Me
 
 The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentColor`, `TextFillColorPrimary`, etc.) which Root's controls do NOT reference. Root's views exclusively bind to Root's own 32 keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via `DynamicResourceExtension`. This is why some controls remain unthemed after theme application and why toggling a switch mid-theme shows the wrong accent color — the style-level brush still comes from the unmodified root 32 keys. The correct fix is to override Root's 32 keys in `Application.Resources.ThemeDictionaries[variant]`. See [Root Control Reference: Theme System Mechanics](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) and [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
 
+### Custom Draw + Skia Lease (Validated)
+
+Latest Avalonia decompilation confirms the full advanced-render path:
+
+1. `DrawingContext.Custom(ICustomDrawOperation)` dispatches custom operations.
+2. `PlatformDrawingContext.Custom(...)` instantiates `ImmediateDrawingContext` and calls `op.Render(immediateCtx)`.
+3. `ImmediateDrawingContext.TryGetFeature(Type)` forwards to backend `IDrawingContextImpl.GetFeature(Type)`.
+4. Skia backend (`DrawingContextImpl`) exposes `ISkiaSharpApiLeaseFeature`; `Lease()` grants guarded `SkCanvas` access.
+
+This validates the implementation path for high-end visual effects (e.g. sweep-gradient border strokes, liquid/glass surfaces) without abandoning Avalonia's render pipeline.
+
+Reference: `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
+
 ---
 
 **Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s*instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
 **Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-\_Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-19.*
+\_Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-21.*
