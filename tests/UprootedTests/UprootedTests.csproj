@@ -19,6 +19,10 @@
     <!-- Existing: ColorUtils for GradientBrush tests -->
     <Compile Include="..\..\hook\ColorUtils.cs" Link="ColorUtils.cs" />
 
+    <!-- Logging infrastructure (required by modules that use WideEvent) -->
+    <Compile Include="..\..\hook\WideEvent.cs" Link="WideEvent.cs" />
+    <Compile Include="..\..\hook\TailSampler.cs" Link="TailSampler.cs" />
+
     <!-- New: pure-logic modules under test -->
     <Compile Include="..\..\hook\UprootedSettings.cs" Link="UprootedSettings.cs" />
     <Compile Include="..\..\hook\MessageStore.cs" Link="MessageStore.cs" />
