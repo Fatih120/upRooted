@@ -1205,6 +1205,36 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
 
+            // Enforce minimum widths so neither the channels panel nor the chat can disappear
+            // when the user drags the GridSplitter to an extreme position.
+            try
+            {
+                for (int pi = 0; pi < n; pi++)
+                {
+                    var panel = nonSplitters[pi].child;
+                    if (pi == maxAssignedIdx)
+                    {
+                        // Members panel (rightmost after rotation) — let it size naturally
+                        continue;
+                    }
+                    int origCol = nonSplitters[pi].col;
+                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                    if (origW.unit == "Star" || origW.unit == "star")
+                    {
+                        // Chat panel — must not collapse below 300px
+                        _r.SetMinWidth(panel, 300);
+                        Logger.Log(Tag, $"SwapCommunityMembers: chat panel MinWidth=300");
+                    }
+                    else
+                    {
+                        // Channels panel — must not collapse below 240px
+                        _r.SetMinWidth(panel, 240);
+                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=240");
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: MinWidth error: {ex.Message}"); }
+
             // Build a custom community header and inject it at the top of the channels column.
             // Also hide the native header in the members column.
             // Deferred 500ms so the ContentControl→MembersView/ChannelsView visual tree is ready.
