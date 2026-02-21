@@ -5,7 +5,7 @@ internal class UprootedSettings
     public bool Enabled { get; set; } = true;
     public string Version { get; set; } = "0.4.2";
     public string ActiveTheme { get; set; } = "default-dark";
-    public Dictionary<string, bool> Plugins { get; set; } = new();
+    public Dictionary<string, bool> Plugins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string CustomCss { get; set; } = "";
     public string CustomAccent { get; set; } = "#3B6AF8";
     public string CustomBackground { get; set; } = "#0D1521";
@@ -56,6 +56,7 @@ internal class UprootedSettings
     private static UprootedSettings? _cached;
     private static DateTime _cachedAt;
     private static readonly TimeSpan CacheTtl = TimeSpan.FromSeconds(10);
+    private static readonly object _saveLock = new();
 
     private static string GetSettingsPath()
     {
@@ -74,9 +75,11 @@ internal class UprootedSettings
 
     internal static UprootedSettings Load()
     {
-        // Return cached instance if still fresh (avoids disk I/O on every 500ms timer tick)
-        if (_cached != null && DateTime.UtcNow - _cachedAt < CacheTtl)
-            return _cached;
+        // Read cached ref into a local to avoid a TOCTOU null-return if another thread
+        // calls InvalidateCache() between the null-check and the return.
+        var cached = _cached;
+        if (cached != null && DateTime.UtcNow - _cachedAt < CacheTtl)
+            return cached;
 
         var settings = new UprootedSettings();
         var path = GetSettingsPath();
@@ -188,54 +191,63 @@ internal class UprootedSettings
 
     internal void Save()
     {
-        try
+        // Serialize concurrent saves; write to a temp file then rename for atomicity
+        // (prevents corruption if the process is killed mid-write).
+        lock (_saveLock)
         {
-            var path = GetSettingsPath();
-            var lines = new List<string>
+            try
             {
-                "ActiveTheme=" + ActiveTheme,
-                "Enabled=" + (Enabled ? "true" : "false"),
-                "Version=" + Version,
-                "CustomCss=" + CustomCss,
-                "CustomAccent=" + CustomAccent,
-                "CustomBackground=" + CustomBackground,
-                "CustomText=" + CustomText,
-                "CustomSvgMode=" + CustomSvgMode,
-                "NsfwFilterEnabled=" + (NsfwFilterEnabled ? "true" : "false"),
-                "NsfwApiKey=" + NsfwApiKey,
-                "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
-                "MessageLogger.LogDeletes=" + (MessageLoggerLogDeletes ? "true" : "false"),
-                "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
-                "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
-                "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
-                "LinkEmbeds.ShowFilenames=" + (LinkEmbedsShowFilenames ? "true" : "false"),
-                "ShowExperimentalPlugins=" + (ShowExperimentalPlugins ? "true" : "false"),
-                "CustomPingColor=" + CustomPingColor,
-                "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
-                "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
-                "AutoUpdate.Channel=" + AutoUpdateChannel,
-                "AutoUpdate.LastCheck=" + LastUpdateCheck,
-                "AutoUpdate.PendingVersion=" + PendingUpdateVersion,
-                "AutoUpdate.LastPackageHash=" + LastPackageHash,
-                "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false"),
-                "Translate.AutoTranslate=" + (TranslateAutoTranslate ? "true" : "false"),
-                "Translate.ShowOriginal="  + (TranslateShowOriginal  ? "true" : "false"),
-                "Translate.FromLang="      + TranslateFromLang,
-                "Translate.ToLang="        + TranslateToLang,
-                "Translate.SendFromLang="  + TranslateSendFromLang,
-                "Translate.SendToLang="    + TranslateSendToLang
-            };
-            foreach (var (name, enabled) in Plugins)
-            {
-                lines.Add($"Plugin.{name}={( enabled ? "true" : "false" )}");
+                var path = GetSettingsPath();
+                var lines = new List<string>
+                {
+                    "ActiveTheme=" + ActiveTheme,
+                    "Enabled=" + (Enabled ? "true" : "false"),
+                    "Version=" + Version,
+                    "CustomCss=" + CustomCss,
+                    "CustomAccent=" + CustomAccent,
+                    "CustomBackground=" + CustomBackground,
+                    "CustomText=" + CustomText,
+                    "CustomSvgMode=" + CustomSvgMode,
+                    "NsfwFilterEnabled=" + (NsfwFilterEnabled ? "true" : "false"),
+                    "NsfwApiKey=" + NsfwApiKey,
+                    "NsfwThreshold=" + NsfwThreshold.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                    "MessageLogger.LogDeletes=" + (MessageLoggerLogDeletes ? "true" : "false"),
+                    "MessageLogger.LogEdits=" + (MessageLoggerLogEdits ? "true" : "false"),
+                    "MessageLogger.IgnoreSelf=" + (MessageLoggerIgnoreSelf ? "true" : "false"),
+                    "MessageLogger.MaxMessages=" + MessageLoggerMaxMessages,
+                    "LinkEmbeds.ShowFilenames=" + (LinkEmbedsShowFilenames ? "true" : "false"),
+                    "ShowExperimentalPlugins=" + (ShowExperimentalPlugins ? "true" : "false"),
+                    "CustomPingColor=" + CustomPingColor,
+                    "AutoUpdate.Enabled=" + (AutoUpdateEnabled ? "true" : "false"),
+                    "AutoUpdate.Notify=" + (AutoUpdateNotify ? "true" : "false"),
+                    "AutoUpdate.Channel=" + AutoUpdateChannel,
+                    "AutoUpdate.LastCheck=" + LastUpdateCheck,
+                    "AutoUpdate.PendingVersion=" + PendingUpdateVersion,
+                    "AutoUpdate.LastPackageHash=" + LastPackageHash,
+                    "Migrated.PluginDefaults=" + (PluginDefaultsMigrated ? "true" : "false"),
+                    "Translate.AutoTranslate=" + (TranslateAutoTranslate ? "true" : "false"),
+                    "Translate.ShowOriginal="  + (TranslateShowOriginal  ? "true" : "false"),
+                    "Translate.FromLang="      + TranslateFromLang,
+                    "Translate.ToLang="        + TranslateToLang,
+                    "Translate.SendFromLang="  + TranslateSendFromLang,
+                    "Translate.SendToLang="    + TranslateSendToLang
+                };
+                foreach (var (name, enabled) in Plugins)
+                    lines.Add($"Plugin.{name}={( enabled ? "true" : "false" )}");
+
+                // Atomic write: write to .tmp then replace, so a crash mid-write
+                // never leaves the settings file partially written.
+                var tmp = path + ".tmp";
+                File.WriteAllText(tmp, string.Join("\n", lines));
+                File.Move(tmp, path, overwrite: true);
+
+                InvalidateCache();
+                Logger.Log("Settings", "Saved settings to " + path + ": ActiveTheme=" + ActiveTheme);
             }
-            File.WriteAllText(path, string.Join("\n", lines));
-            InvalidateCache();
-            Logger.Log("Settings", "Saved settings to " + path + ": ActiveTheme=" + ActiveTheme);
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("Settings", "Failed to save settings: " + ex.Message);
+            catch (Exception ex)
+            {
+                Logger.Log("Settings", "Failed to save settings: " + ex.Message);
+            }
         }
     }
 }
