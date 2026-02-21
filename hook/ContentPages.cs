@@ -305,7 +305,7 @@ internal static class ContentPages
                         r.SetVerticalAlignment(consoleBtn, "Center");
                         r.SetCursorHand(consoleBtn);
                         SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 15), ThickBorder);
-                        r.SubscribeEvent(consoleBtn, "PointerPressed", () => LogConsole.Enable());
+                        r.SubscribeEvent(consoleBtn, "PointerReleased", () => LogConsole.Enable());
                         r.SubscribeEvent(consoleBtn, "PointerEntered", () =>
                             r.SetBackground(consoleBtn, ColorUtils.Lighten(consoleBtnBg, 8)));
                         r.SubscribeEvent(consoleBtn, "PointerExited", () =>
@@ -327,7 +327,7 @@ internal static class ContentPages
                     r.SetCursorHand(logBtn);
                     SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
                     var logPath = Logger.GetLogPath();
-                    r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
+                    r.SubscribeEvent(logBtn, "PointerReleased", () => OpenInExplorer(logPath));
                     r.SubscribeEvent(logBtn, "PointerEntered", () =>
                         r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
                     r.SubscribeEvent(logBtn, "PointerExited", () =>
@@ -537,7 +537,7 @@ internal static class ContentPages
                     var btnTextRef = btnText;
                     var statusValueRef = statusValueText;
                     var lastCheckRef = lastCheckLabel;
-                    r.SubscribeEvent(btn, "PointerPressed", () =>
+                    r.SubscribeEvent(btn, "PointerReleased", () =>
                     {
                         var u = AutoUpdater.Instance;
                         if (u == null) return;
@@ -656,7 +656,7 @@ internal static class ContentPages
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
                         r.SetCursorHand(updateRestartBtn);
-                        r.SubscribeEvent(updateRestartBtn, "PointerPressed", RestartRoot);
+                        r.SubscribeEvent(updateRestartBtn, "PointerReleased", RestartRoot);
                         var urBtnRef = updateRestartBtn;
                         r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
                             r.SetBackground(urBtnRef, ColorUtils.Lighten(AccentGreen, 10)));
@@ -870,7 +870,7 @@ internal static class ContentPages
                         var innerRef = expInner;
                         var labelRef = expLabel;
                         var descRef = expDesc;
-                        r.SubscribeEvent(expPill, "PointerPressed", () =>
+                        r.SubscribeEvent(expPill, "PointerReleased", () =>
                         {
                             showExperimental[0] = !showExperimental[0];
                             var isOn = showExperimental[0];
@@ -966,7 +966,7 @@ internal static class ContentPages
                     r.SetHorizontalAlignment(restartBtn, "Right");
                     r.SetVerticalAlignment(restartBtn, "Center");
                     r.SetCursorHand(restartBtn);
-                    r.SubscribeEvent(restartBtn, "PointerPressed", RestartRoot);
+                    r.SubscribeEvent(restartBtn, "PointerReleased", RestartRoot);
                     r.SubscribeEvent(restartBtn, "PointerEntered", () =>
                         r.SetBackground(restartBtn, ColorUtils.Lighten("#D06818", 10)));
                     r.SubscribeEvent(restartBtn, "PointerExited", () =>
@@ -1087,7 +1087,7 @@ internal static class ContentPages
 
                 var badgeRef = filterBadge;
                 var badgeTextRef = filterBadgeText;
-                r.SubscribeEvent(filterBadge, "PointerPressed", () =>
+                r.SubscribeEvent(filterBadge, "PointerReleased", () =>
                 {
                     filterMode[0] = (filterMode[0] + 1) % 3;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
@@ -1279,7 +1279,7 @@ internal static class ContentPages
                     r.SetMargin(smBtn, 0, 4, 0, 0);
                     r.SetHorizontalAlignment(smBtn, "Center");
                     r.SetCursorHand(smBtn);
-                    r.SubscribeEvent(smBtn, "PointerPressed", () =>
+                    r.SubscribeEvent(smBtn, "PointerReleased", () =>
                     {
                         showAll[0] = !showAll[0];
                         rebuildGrid?.Invoke();
@@ -1394,7 +1394,7 @@ internal static class ContentPages
                         var gearBtnRef = gearBtn;
                         var capturedId = pluginId;
                         var capturedName = displayName;
-                        r.SubscribeEvent(gearBtn, "PointerPressed", () =>
+                        r.SubscribeEvent(gearBtn, "PointerReleased", () =>
                         {
                             ShowPluginSettingsLightbox(r, capturedId, capturedName, settings, font);
                         });
@@ -1429,7 +1429,7 @@ internal static class ContentPages
                         var capturedName = displayName;
                         var capturedDesc = description;
                         var capturedId = pluginId;
-                        r.SubscribeEvent(infoBtn, "PointerPressed", () =>
+                        r.SubscribeEvent(infoBtn, "PointerReleased", () =>
                         {
                             ShowPluginInfoLightbox(r, capturedName, capturedDesc, capturedId, font);
                         });
@@ -1464,7 +1464,7 @@ internal static class ContentPages
                         r.SetBorderChild(openBtn, openLabel);
 
                         var btnRef = openBtn;
-                        r.SubscribeEvent(openBtn, "PointerPressed", () =>
+                        r.SubscribeEvent(openBtn, "PointerReleased", () =>
                         {
                             onNavigate("themes");
                         });
@@ -1621,7 +1621,7 @@ internal static class ContentPages
             r.SetHeight(_infoBackdrop, windowH);
             r.SetCanvasPosition(_infoBackdrop, 0, 0);
             r.SetTag(_infoBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_infoBackdrop, "PointerPressed", () => DismissPluginInfoLightbox(r));
+            r.SubscribeEvent(_infoBackdrop, "PointerReleased", () => DismissPluginInfoLightbox(r));
             r.AddToOverlay(overlay, _infoBackdrop);
         }
 
@@ -1671,7 +1671,7 @@ internal static class ContentPages
                 r.SetBorderChild(closeBtn, closeText);
 
                 var closeBtnRef = closeBtn;
-                r.SubscribeEvent(closeBtn, "PointerPressed", () => DismissPluginInfoLightbox(r));
+                r.SubscribeEvent(closeBtn, "PointerReleased", () => DismissPluginInfoLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
                     r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
@@ -1767,7 +1767,7 @@ internal static class ContentPages
             r.SetHeight(_updateNotifyBackdrop, windowH);
             r.SetCanvasPosition(_updateNotifyBackdrop, 0, 0);
             r.SetTag(_updateNotifyBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_updateNotifyBackdrop, "PointerPressed", () => DismissUpdateNotification(r));
+            r.SubscribeEvent(_updateNotifyBackdrop, "PointerReleased", () => DismissUpdateNotification(r));
             r.AddToOverlay(overlay, _updateNotifyBackdrop);
         }
 
@@ -1842,7 +1842,7 @@ internal static class ContentPages
 
             var okRef = okBtn;
             var dimmedGreen = ColorUtils.Darken(AccentGreen, 15);
-            r.SubscribeEvent(okBtn, "PointerPressed", () => DismissUpdateNotification(r));
+            r.SubscribeEvent(okBtn, "PointerReleased", () => DismissUpdateNotification(r));
             r.SubscribeEvent(okBtn, "PointerEntered", () => r.SetBackground(okRef, dimmedGreen));
             r.SubscribeEvent(okBtn, "PointerExited", () => r.SetBackground(okRef, AccentGreen));
 
@@ -1927,6 +1927,7 @@ internal static class ContentPages
         Action<bool>? onToggled = null, string? offColor = null, string? onColor = null)
     {
         bool state = initialState;
+        bool isHover = false;
 
         var dimColor = offColor ?? AdjustForHighlight(CardBg, 18);
         var pillColor = state ? AccentGreen : dimColor;
@@ -1955,12 +1956,24 @@ internal static class ContentPages
         // Capture the current accent for closures
         var accentColor = onColor ?? AccentGreen;
 
-        // Click handler
         r.SubscribeEvent(pill, "PointerPressed", () =>
         {
+            var basis = state
+                ? (isHover ? ColorUtils.Lighten(accentColor, 10) : accentColor)
+                : (isHover ? ColorUtils.Lighten(dimColor, 8) : dimColor);
+            r.SetRenderScale(pill, 0.985);
+            r.SetBackground(pill, AdjustForHighlight(basis, 10));
+        });
+
+        // Click handler
+        r.SubscribeEvent(pill, "PointerReleased", () =>
+        {
+            r.SetRenderScale(pill, 1.0);
             state = !state;
             // Update visuals
-            r.SetBackground(pill, state ? accentColor : dimColor);
+            var rest = state ? accentColor : dimColor;
+            var hover = state ? ColorUtils.Lighten(accentColor, 10) : ColorUtils.Lighten(dimColor, 8);
+            r.SetBackground(pill, isHover ? hover : rest);
             if (thumb != null)
                 r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
 
@@ -1970,6 +1983,7 @@ internal static class ContentPages
         // Hover effects
         r.SubscribeEvent(pill, "PointerEntered", () =>
         {
+            isHover = true;
             var hoverColor = state
                 ? ColorUtils.Lighten(accentColor, 10)
                 : ColorUtils.Lighten(dimColor, 8);
@@ -1977,6 +1991,8 @@ internal static class ContentPages
         });
         r.SubscribeEvent(pill, "PointerExited", () =>
         {
+            isHover = false;
+            r.SetRenderScale(pill, 1.0);
             r.SetBackground(pill, state ? accentColor : dimColor);
         });
 
@@ -2549,7 +2565,7 @@ internal static class ContentPages
             r.AddChild(row, swatch);
 
             r.SetCursorHand(swatch);
-            r.SubscribeEvent(swatch, "PointerPressed", () =>
+            r.SubscribeEvent(swatch, "PointerReleased", () =>
             {
                 ColorPickerPopup.Show(r, swatch, textBox, onColorChanged);
             });
@@ -2703,7 +2719,7 @@ internal static class ContentPages
                     }
 
                     var gearBtnRef = gearBtn;
-                    r.SubscribeEvent(gearBtn, "PointerPressed", () =>
+                    r.SubscribeEvent(gearBtn, "PointerReleased", () =>
                     {
                         gearClicked = true;
                         onSettings();
@@ -2912,7 +2928,7 @@ internal static class ContentPages
             r.SetHeight(_settingsBackdrop, windowH);
             r.SetCanvasPosition(_settingsBackdrop, 0, 0);
             r.SetTag(_settingsBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_settingsBackdrop, "PointerPressed", () => DismissPluginSettingsLightbox(r));
+            r.SubscribeEvent(_settingsBackdrop, "PointerReleased", () => DismissPluginSettingsLightbox(r));
             r.AddToOverlay(overlay, _settingsBackdrop);
         }
 
@@ -2962,7 +2978,7 @@ internal static class ContentPages
                 r.SetBorderChild(closeBtn, closeText);
 
                 var closeBtnRef = closeBtn;
-                r.SubscribeEvent(closeBtn, "PointerPressed", () => DismissPluginSettingsLightbox(r));
+                r.SubscribeEvent(closeBtn, "PointerReleased", () => DismissPluginSettingsLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
                     r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
@@ -3071,7 +3087,7 @@ internal static class ContentPages
                 var apiTextBoxRef = apiTextBox;
                 var saveBtnRef = saveBtn;
                 var saveBtnTextRef = saveBtnText;
-                r.SubscribeEvent(saveBtn, "PointerPressed", () =>
+                r.SubscribeEvent(saveBtn, "PointerReleased", () =>
                 {
                     var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
 
@@ -3203,7 +3219,7 @@ internal static class ContentPages
             }
 
             var capturedThreshold = threshold;
-            r.SubscribeEvent(optionRow, "PointerPressed", () =>
+            r.SubscribeEvent(optionRow, "PointerReleased", () =>
             {
                 settings.NsfwThreshold = capturedThreshold;
                 try { settings.Save(); }
@@ -3446,6 +3462,7 @@ internal static class ContentPages
 
         // Right side: toggle pill
         bool[] state = { currentValue };
+        bool[] hovered = { false };
         var toggleBg = currentValue ? AccentGreen : AdjustForHighlight(CardBg, 20);
         var pill = r.CreateBorder(toggleBg, 13);
         if (pill != null)
@@ -3469,10 +3486,33 @@ internal static class ContentPages
                 var dotRef = dot;
                 r.SubscribeEvent(pill, "PointerPressed", () =>
                 {
+                    var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
+                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    var basis = hovered[0] ? hover : rest;
+                    r.SetRenderScale(pillRef, 0.985);
+                    r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
+                });
+                r.SubscribeEvent(pill, "PointerReleased", () =>
+                {
+                    r.SetRenderScale(pillRef, 1.0);
                     state[0] = !state[0];
-                    r.SetBackground(pillRef, state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20));
+                    var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
+                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    r.SetBackground(pillRef, hovered[0] ? hover : rest);
                     r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
                     onChanged(state[0]);
+                });
+                r.SubscribeEvent(pill, "PointerEntered", () =>
+                {
+                    hovered[0] = true;
+                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    r.SetBackground(pillRef, hover);
+                });
+                r.SubscribeEvent(pill, "PointerExited", () =>
+                {
+                    hovered[0] = false;
+                    r.SetRenderScale(pillRef, 1.0);
+                    r.SetBackground(pillRef, state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20));
                 });
             }
 
@@ -3540,7 +3580,7 @@ internal static class ContentPages
             var containerRef = container;
             bool promptVisible = false;
 
-            r.SubscribeEvent(badge, "PointerPressed", () =>
+            r.SubscribeEvent(badge, "PointerReleased", () =>
             {
                 var current = UprootedSettings.Load().AutoUpdateChannel;
                 if (current == "developer")
@@ -3711,7 +3751,7 @@ internal static class ContentPages
 
         if (submitBtn != null)
         {
-            r.SubscribeEvent(submitBtn, "PointerPressed", doSubmit);
+            r.SubscribeEvent(submitBtn, "PointerReleased", doSubmit);
             r.SubscribeEvent(submitBtn, "PointerEntered", () =>
                 r.SetBackground(submitBtn, ColorUtils.Lighten(AccentGreen, 10)));
             r.SubscribeEvent(submitBtn, "PointerExited", () =>

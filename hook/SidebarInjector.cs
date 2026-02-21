@@ -888,6 +888,8 @@ internal class SidebarInjector
         _r.SetCursorHand(outerPanel);
         _r.SetHeight(outerPanel, 40); // Match native ListBoxItem height exactly
         _r.SetBackground(outerPanel, "#00000000"); // Transparent BG required for hit-testing (pointer events)
+        object? highlight = null;
+        var hoverBgColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
 
         // Inner panel with vertical spacing matching native ListBoxItem
         var innerPanel = _r.CreatePanel();
@@ -897,7 +899,7 @@ internal class SidebarInjector
 
             // Highlight border (behind content, full width, rounded corners)
             // Matches Root's native ListBoxItem style: thin border matching divider lines
-            var highlight = _r.CreateBorder(cornerRadius: 12);
+            highlight = _r.CreateBorder(cornerRadius: 12);
             if (highlight != null)
             {
                 _r.SetTag(highlight, $"uprooted-highlight-{pageName}");
@@ -949,8 +951,6 @@ internal class SidebarInjector
             // Light = HighlightLight=#0A000000, HighlightNormal=#19000000, HighlightStrong=#30000000
             var restingBorderColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
             var hoverBorderColor = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? "#19ffffff";
-            var hoverBgColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
-
             // Hover events on the outer panel (captures full area)
             _r.SubscribeEvent(outerPanel, "PointerEntered", () =>
             {
@@ -965,6 +965,7 @@ internal class SidebarInjector
 
             _r.SubscribeEvent(outerPanel, "PointerExited", () =>
             {
+                _r.SetRenderScale(outerPanel, 1.0);
                 if (_activePage != pageName && highlight != null)
                 {
                     _r.SetBackground(highlight, (string?)null);
@@ -975,9 +976,20 @@ internal class SidebarInjector
             });
         }
 
-        // Click handler
         _r.SubscribeEvent(outerPanel, "PointerPressed", () =>
         {
+            _r.SetRenderScale(outerPanel, 0.985);
+            if (_activePage != pageName && highlight != null)
+            {
+                var pressBg = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? hoverBgColor;
+                _r.SetBackground(highlight, pressBg);
+            }
+        });
+
+        // Click handler
+        _r.SubscribeEvent(outerPanel, "PointerReleased", () =>
+        {
+            _r.SetRenderScale(outerPanel, 1.0);
             OnNavItemClicked(pageName);
         });
 

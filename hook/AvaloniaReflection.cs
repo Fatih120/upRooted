@@ -1,6 +1,7 @@
 using System.Collections;
 using System.Linq.Expressions;
 using System.Reflection;
+using System.Runtime.CompilerServices;
 
 namespace Uprooted;
 
@@ -48,6 +49,7 @@ internal class AvaloniaReflection
     // Value types
     public Type? SolidColorBrushType { get; private set; }
     public Type? LinearGradientBrushType { get; private set; }
+    public Type? ScaleTransformType { get; private set; }
     public Type? GradientStopType { get; private set; }
     public Type? GradientStopsType { get; private set; }
     public Type? RelativePointType { get; private set; }
@@ -127,6 +129,8 @@ internal class AvaloniaReflection
     private MethodInfo? _translatePoint;           // Visual.TranslatePoint(Point, Visual) extension
     private PropertyInfo? _controlOpacity;
     private PropertyInfo? _controlIsHitTestVisible;
+    private PropertyInfo? _visualRenderTransform;
+    private PropertyInfo? _visualRenderTransformOrigin;
 
     // Image
     private PropertyInfo? _imageSource;    // Image.Source
@@ -145,6 +149,13 @@ internal class AvaloniaReflection
     private bool _loggedBindStrategy;
     private bool _loggedBindStrategyB;
     private readonly Dictionary<string, FieldInfo?> _avaloniaPropertyFieldCache = new();
+    private readonly ConditionalWeakTable<object, PressFeedbackState> _pressFeedbackStates = new();
+    private readonly HashSet<object> _pressFeedbackSubscribed = new(ReferenceEqualityComparer.Instance);
+
+    private sealed class PressFeedbackState
+    {
+        public double BaseOpacity = 1.0;
+    }
 
     public bool IsResolved { get; private set; }
 
@@ -226,6 +237,7 @@ internal class AvaloniaReflection
 
         SolidColorBrushType = Find("Avalonia.Media.SolidColorBrush");
         LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
+        ScaleTransformType = Find("Avalonia.Media.ScaleTransform");
         GradientStopType = Find("Avalonia.Media.GradientStop");
         GradientStopsType = Find("Avalonia.Media.GradientStops");
         RelativePointType = Find("Avalonia.RelativePoint");
@@ -460,6 +472,10 @@ internal class AvaloniaReflection
         _controlOpacity = ControlType?.GetProperty("Opacity", pub)
             ?? VisualType?.GetProperty("Opacity", pub);
         _controlIsHitTestVisible = ControlType?.GetProperty("IsHitTestVisible", pub);
+        _visualRenderTransform = ControlType?.GetProperty("RenderTransform", pub)
+            ?? VisualType?.GetProperty("RenderTransform", pub);
+        _visualRenderTransformOrigin = ControlType?.GetProperty("RenderTransformOrigin", pub)
+            ?? VisualType?.GetProperty("RenderTransformOrigin", pub);
 
         if (_overlayGetOverlayLayer == null) missing.Add("OverlayLayer.GetOverlayLayer");
         if (_canvasSetLeft == null) missing.Add("Canvas.SetLeft");
@@ -1225,8 +1241,53 @@ internal class AvaloniaReflection
             var hand = Enum.Parse(StandardCursorType, "Hand");
             var cursor = Activator.CreateInstance(CursorType, hand);
             _controlCursor?.SetValue(control, cursor);
+            EnsurePressFeedback(control);
         }
         catch { }
+    }
+
+    private void EnsurePressFeedback(object control)
+    {
+        try
+        {
+            if (!_pressFeedbackSubscribed.Add(control)) return;
+        }
+        catch
+        {
+            return;
+        }
+
+        var state = _pressFeedbackStates.GetValue(control, _ => new PressFeedbackState());
+
+        SubscribeEvent(control, "PointerPressed", () =>
+        {
+            state.BaseOpacity = ReadOpacity(control);
+            SetRenderScale(control, 0.975);
+            SetOpacity(control, Math.Clamp(state.BaseOpacity * 0.92, 0.0, 1.0));
+        });
+
+        SubscribeEvent(control, "PointerReleased", () =>
+        {
+            SetRenderScale(control, 1.0);
+            SetOpacity(control, state.BaseOpacity);
+        });
+
+        SubscribeEvent(control, "PointerExited", () =>
+        {
+            SetRenderScale(control, 1.0);
+            SetOpacity(control, state.BaseOpacity);
+        });
+    }
+
+    private double ReadOpacity(object control)
+    {
+        try
+        {
+            var value = _controlOpacity?.GetValue(control);
+            if (value is double d && d > 0) return d;
+        }
+        catch { }
+        return 1.0;
     }
 
     // ===== Text property access =====
@@ -2135,6 +2196,63 @@ internal class AvaloniaReflection
     {
         if (control == null) return;
         _controlOpacity?.SetValue(control, opacity);
+    }
+
+    /// <summary>
+    /// Apply a layout-independent scale transform centered on the control.
+    /// Scale 1.0 resets the transform.
+    /// </summary>
+    public void SetRenderScale(object? control, double scale)
+    {
+        if (control == null || _visualRenderTransform == null || ScaleTransformType == null) return;
+        try
+        {
+            if (Math.Abs(scale - 1.0) < 0.0001)
+            {
+                _visualRenderTransform.SetValue(control, null);
+                return;
+            }
+
+            var transform = Activator.CreateInstance(ScaleTransformType);
+            if (transform == null) return;
+            ScaleTransformType.GetProperty("ScaleX")?.SetValue(transform, scale);
+            ScaleTransformType.GetProperty("ScaleY")?.SetValue(transform, scale);
+            _visualRenderTransform.SetValue(control, transform);
+            SetRenderTransformOriginCenter(control);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetRenderScale error: {ex.Message}");
+        }
+    }
+
+    private void SetRenderTransformOriginCenter(object control)
+    {
+        if (_visualRenderTransformOrigin == null || RelativePointType == null) return;
+        try
+        {
+            object? center = null;
+            var parseMethod = RelativePointType.GetMethod("Parse",
+                BindingFlags.Public | BindingFlags.Static, null, new[] { typeof(string) }, null);
+            if (parseMethod != null)
+                center = parseMethod.Invoke(null, new object[] { "50%,50%" });
+
+            if (center == null)
+            {
+                var relUnitType = RelativeUnitType ?? RelativePointType.GetConstructors()
+                    .SelectMany(c => c.GetParameters())
+                    .FirstOrDefault(p => p.ParameterType.Name == "RelativeUnit")?.ParameterType;
+                if (relUnitType != null)
+                {
+                    var relativeUnit = Enum.Parse(relUnitType, "Relative");
+                    center = Activator.CreateInstance(RelativePointType, 0.5, 0.5, relativeUnit);
+                }
+            }
+
+            if (center != null)
+                _visualRenderTransformOrigin.SetValue(control, center);
+        }
+        catch { }
     }
 
     public void SetIsHitTestVisible(object? control, bool visible)

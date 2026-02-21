@@ -125,7 +125,7 @@ internal static class TranslateConfigPopup
             r.SetHeight(_currentBackdrop, windowH);
             r.SetCanvasPosition(_currentBackdrop, 0, 0);
             r.SetTag(_currentBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_currentBackdrop, "PointerPressed", () => Dismiss(r));
+            r.SubscribeEvent(_currentBackdrop, "PointerReleased", () => Dismiss(r));
             r.AddToOverlay(overlay, _currentBackdrop);
         }
 
@@ -263,7 +263,17 @@ internal static class TranslateConfigPopup
 
             // Capture for dismiss (need AvaloniaReflection in lambda context)
             var capturedR = r;
-            r.SubscribeEvent(closeBtn, "PointerPressed", () => Dismiss(capturedR));
+            r.SubscribeEvent(closeBtn, "PointerPressed", () =>
+            {
+                capturedR.SetRenderScale(closeBtn, 0.985);
+                capturedR.SetBackground(closeBtn, "#20FFFFFF");
+            });
+            r.SubscribeEvent(closeBtn, "PointerReleased", () => Dismiss(capturedR));
+            r.SubscribeEvent(closeBtn, "PointerExited", () =>
+            {
+                capturedR.SetRenderScale(closeBtn, 1.0);
+                capturedR.SetBackground(closeBtn, (string?)null);
+            });
             r.AddChild(row, closeBtn);
         }
 
@@ -452,8 +462,22 @@ internal static class TranslateConfigPopup
             var capturedKnob   = knob;
             var capturedEngine = engine;
             var capturedR      = r;
+            bool[] hovered = { false };
 
             r.SubscribeEvent(pill, "PointerPressed", () =>
+            {
+                var rest = settings.TranslateAutoTranslate ? ContentPages.AccentGreen : "#4A4D55";
+                var hover = settings.TranslateAutoTranslate
+                    ? ColorUtils.Lighten(ContentPages.AccentGreen, 10)
+                    : ColorUtils.Lighten("#4A4D55", 8);
+                var basis = hovered[0] ? hover : rest;
+                capturedR.SetRenderScale(capturedPill, 0.985);
+                capturedR.SetBackground(capturedPill, ColorUtils.Luminance(basis) > 0.5
+                    ? ColorUtils.Darken(basis, 8)
+                    : ColorUtils.Lighten(basis, 8));
+            });
+
+            r.SubscribeEvent(pill, "PointerReleased", () =>
             {
                 try
                 {
@@ -464,7 +488,11 @@ internal static class TranslateConfigPopup
                     // Update pill color and knob position
                     var newBg    = s.TranslateAutoTranslate ? ContentPages.AccentGreen : "#4A4D55";
                     var newKnobX = s.TranslateAutoTranslate ? 22.0 : 2.0;
-                    capturedR.SetBackground(capturedPill, newBg);
+                    capturedR.SetRenderScale(capturedPill, 1.0);
+                    var hoverBg = s.TranslateAutoTranslate
+                        ? ColorUtils.Lighten(ContentPages.AccentGreen, 10)
+                        : ColorUtils.Lighten("#4A4D55", 8);
+                    capturedR.SetBackground(capturedPill, hovered[0] ? hoverBg : newBg);
                     if (capturedKnob != null)
                         capturedR.SetMargin(capturedKnob, newKnobX, 3, 0, 0);
 
@@ -477,6 +505,22 @@ internal static class TranslateConfigPopup
                 {
                     Logger.Log("Translate", $"Toggle click error: {ex.Message}");
                 }
+            });
+
+            r.SubscribeEvent(pill, "PointerEntered", () =>
+            {
+                hovered[0] = true;
+                var on = UprootedSettings.Load().TranslateAutoTranslate;
+                capturedR.SetBackground(capturedPill, on
+                    ? ColorUtils.Lighten(ContentPages.AccentGreen, 10)
+                    : ColorUtils.Lighten("#4A4D55", 8));
+            });
+            r.SubscribeEvent(pill, "PointerExited", () =>
+            {
+                hovered[0] = false;
+                capturedR.SetRenderScale(capturedPill, 1.0);
+                var on = UprootedSettings.Load().TranslateAutoTranslate;
+                capturedR.SetBackground(capturedPill, on ? ContentPages.AccentGreen : "#4A4D55");
             });
 
             r.AddChild(row, pill);
