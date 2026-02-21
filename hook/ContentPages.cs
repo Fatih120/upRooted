@@ -1453,7 +1453,8 @@ internal static class ContentPages
                         if (pluginId == "content-filter")
                         {
                             settings.NsfwFilterEnabled = enabled;
-                            NsfwFilterInstance?.UpdateConfig();
+                            try { NsfwFilterInstance?.UpdateConfig(); }
+                            catch (Exception nex) { Logger.Log("Plugins", $"NsfwFilter.UpdateConfig error: {nex.Message}"); }
                         }
 
                         // Rootcord: apply/revert live without restart
@@ -1684,20 +1685,19 @@ internal static class ContentPages
     /// </summary>
     private static void DismissPluginInfoLightbox(AvaloniaReflection r)
     {
-        if (_infoOverlay == null) return;
-
-        if (_infoBackdrop != null)
-        {
-            r.RemoveFromOverlay(_infoOverlay, _infoBackdrop);
-            _infoBackdrop = null;
-        }
-        if (_infoPanel != null)
-        {
-            r.RemoveFromOverlay(_infoOverlay, _infoPanel);
-            _infoPanel = null;
-        }
-
+        // Capture and null the overlay FIRST so a re-entrant call (rapid double-click)
+        // hits the early return before we try to remove elements that are already gone.
+        var overlay = _infoOverlay;
+        if (overlay == null) return;
         _infoOverlay = null;
+
+        var backdrop = _infoBackdrop;
+        _infoBackdrop = null;
+        var panel = _infoPanel;
+        _infoPanel = null;
+
+        try { if (backdrop != null) r.RemoveFromOverlay(overlay, backdrop); } catch { }
+        try { if (panel != null)    r.RemoveFromOverlay(overlay, panel); }    catch { }
     }
 
     // ===== Background Update Notification =====
@@ -2875,20 +2875,17 @@ internal static class ContentPages
 
     private static void DismissPluginSettingsLightbox(AvaloniaReflection r)
     {
-        if (_settingsOverlay == null) return;
-
-        if (_settingsBackdrop != null)
-        {
-            r.RemoveFromOverlay(_settingsOverlay, _settingsBackdrop);
-            _settingsBackdrop = null;
-        }
-        if (_settingsPanel != null)
-        {
-            r.RemoveFromOverlay(_settingsOverlay, _settingsPanel);
-            _settingsPanel = null;
-        }
-
+        var overlay = _settingsOverlay;
+        if (overlay == null) return;
         _settingsOverlay = null;
+
+        var backdrop = _settingsBackdrop;
+        _settingsBackdrop = null;
+        var panel = _settingsPanel;
+        _settingsPanel = null;
+
+        try { if (backdrop != null) r.RemoveFromOverlay(overlay, backdrop); } catch { }
+        try { if (panel != null)    r.RemoveFromOverlay(overlay, panel); }    catch { }
     }
 
     /// <summary>
@@ -2969,7 +2966,8 @@ internal static class ContentPages
                     settings.NsfwApiKey = key;
                     try { settings.Save(); }
                     catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
-                    NsfwFilterInstance?.UpdateConfig();
+                    try { NsfwFilterInstance?.UpdateConfig(); }
+                    catch (Exception nex) { Logger.Log("ContentFilter", $"NsfwFilter.UpdateConfig error: {nex.Message}"); }
 
                     if (string.IsNullOrEmpty(key))
                     {
@@ -3097,7 +3095,8 @@ internal static class ContentPages
                 settings.NsfwThreshold = capturedThreshold;
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("ContentFilter", $"Save error: {sx.Message}"); }
-                NsfwFilterInstance?.UpdateConfig();
+                try { NsfwFilterInstance?.UpdateConfig(); }
+                catch (Exception nex) { Logger.Log("ContentFilter", $"NsfwFilter.UpdateConfig error: {nex.Message}"); }
                 Logger.Log("ContentFilter", $"Sensitivity set to {capturedThreshold}");
 
                 foreach (var (outer, inner, th) in radioIndicators)
