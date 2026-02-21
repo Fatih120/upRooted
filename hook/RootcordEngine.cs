@@ -85,6 +85,8 @@ internal class RootcordEngine
     private readonly HashSet<int> _flippedFlyoutIds = new();
     private object? _membersLayoutUpdatedHandler;
     private object? _membersPanel; // Members panel reference for LayoutUpdated unsub
+    private long _lastFlyoutFlipTick;  // Debounce: Environment.TickCount64 of last flip
+    private const int FlyoutFlipDebounceMs = 150;
     private object? _overlayMonitorHandler; // Monitors overlay layer for right-side popups
 
     // State
@@ -1052,9 +1054,14 @@ internal class RootcordEngine
                     var capturedPanel = membersPanel;
                     EventHandler handler = (_, _) =>
                     {
+                        // Debounce: skip if less than 150ms since last flip (LayoutUpdated
+                        // fires dozens of times per second during scrolling/animation).
+                        var now = Environment.TickCount64;
+                        if (now - _lastFlyoutFlipTick < FlyoutFlipDebounceMs) return;
+                        _lastFlyoutFlipTick = now;
+
                         try
                         {
-                            // Clear HashSet so controls whose placement was reset by Root get re-flipped
                             _flippedFlyoutIds.Clear();
                             FlipFlyoutsInTree(capturedPanel, "", "");
                         }
