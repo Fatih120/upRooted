@@ -3438,7 +3438,6 @@ internal static class ContentPages
                     var s = UprootedSettings.Load();
                     s.AutoUpdateChannel = "stable";
                     s.Save();
-                    Logger.Disable();
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
@@ -3572,7 +3571,6 @@ internal static class ContentPages
                 var s = UprootedSettings.Load();
                 s.AutoUpdateChannel = "developer";
                 s.Save();
-                Logger.Enable();
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
                 r.SetBackground(badgeRef, "#8B6914");
@@ -3849,25 +3847,41 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Open a file path in the system file explorer, selecting the file.
+    /// Open a file path in the system file explorer, selecting the file if it exists.
+    /// Falls back to opening the parent directory when the file does not exist
+    /// (e.g. stable channel where the log file is deleted).
     /// </summary>
     private static void OpenInExplorer(string path)
     {
         try
         {
+            var dir = Path.GetDirectoryName(path) ?? path;
             if (OperatingSystem.IsWindows())
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                // /select only works when the target file exists; Explorer silently falls
+                // back to the home folder otherwise. Open the directory directly instead.
+                if (File.Exists(path))
                 {
-                    FileName = "explorer.exe",
-                    Arguments = $"/select,\"{path}\"",
-                    UseShellExecute = false
-                });
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"/select,\"{path}\"",
+                        UseShellExecute = false
+                    });
+                }
+                else
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = "explorer.exe",
+                        Arguments = $"\"{dir}\"",
+                        UseShellExecute = false
+                    });
+                }
             }
             else
             {
                 // Linux/macOS: open the containing directory
-                var dir = Path.GetDirectoryName(path) ?? path;
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
                     FileName = dir,

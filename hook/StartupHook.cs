@@ -39,16 +39,6 @@ internal class StartupHook
     {
         try
         {
-            // Gate logging to developer channel only — stable users get no log file.
-            // Must check before the startup banner to avoid creating a log on stable.
-            try
-            {
-                var channelSettings = UprootedSettings.Load();
-                if (!channelSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
-                    Logger.Disable();
-            }
-            catch { /* Settings load failed — keep logging enabled for diagnostics */ }
-
             Logger.Log("Startup", "========================================");
             Logger.Log("Startup", $"=== Uprooted Hook v{CurrentVersion} Loaded ===");
             Logger.Log("Startup", "========================================");
@@ -57,20 +47,24 @@ internal class StartupHook
             Logger.Log("Startup", $".NET: {Environment.Version}");
             Logger.Log("Startup", $"Log file: {Logger.GetLogPath()}");
 
-            // Phase 0: Verify HTML patches (filesystem only -- no Avalonia needed)
-            Logger.Log("Startup", "Phase 0: Verifying HTML patches...");
-            try
+            // Phase 0: Verify HTML patches (filesystem only -- no Avalonia needed).
+            // Runs in background so Phase 1 polling can start immediately.
+            Logger.Log("Startup", "Phase 0: Verifying HTML patches (background)...");
+            ThreadPool.QueueUserWorkItem(_ =>
             {
-                var verifier = new HtmlPatchVerifier();
-                var repaired = verifier.VerifyAndRepair();
-                Logger.Log("Startup", $"Phase 0 OK: {repaired} file(s) repaired");
-                verifier.StartWatching();
-                s_patchVerifier = verifier; // prevent GC
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Startup", $"Phase 0 non-fatal error: {ex.Message}");
-            }
+                try
+                {
+                    var verifier = new HtmlPatchVerifier();
+                    var repaired = verifier.VerifyAndRepair();
+                    Logger.Log("Startup", $"Phase 0 OK: {repaired} file(s) repaired");
+                    verifier.StartWatching();
+                    s_patchVerifier = verifier; // prevent GC
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Startup", $"Phase 0 non-fatal error: {ex.Message}");
+                }
+            });
 
             // Version migration: force-disable unstable plugins on upgrade
             {
@@ -187,17 +181,18 @@ internal class StartupHook
                         themeEngine.SetCustomPingColor(savedSettings.CustomPingColor);
                     }
 
-                    // Ping color diagnostic: dumps visual tree colors 10s after startup
-                    // to identify the exact color used by mention/reply highlight borders.
-                    // Remove after confirming the source hex in Step 2.
-                    var te = themeEngine;
-                    System.Threading.ThreadPool.QueueUserWorkItem(_ => {
-                        Thread.Sleep(10_000);
-                        resolver.RunOnUIThread(() => {
-                            try { te.DumpVisualTreeColors(); }
-                            catch { }
+                    // Ping color diagnostic: dev channel only.
+                    if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var te = themeEngine;
+                        System.Threading.ThreadPool.QueueUserWorkItem(_ => {
+                            Thread.Sleep(10_000);
+                            resolver.RunOnUIThread(() => {
+                                try { te.DumpVisualTreeColors(); }
+                                catch { }
+                            });
                         });
-                    });
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -214,7 +209,8 @@ internal class StartupHook
             Logger.Log("Startup", "=== Uprooted Hook Ready ===");
             Logger.Log("Startup", "========================================");
 
-            // Phase 4.5: Browser discovery (runs after delay to let Root finish loading)
+            // Phase 4.5: Browser discovery (diagnostic scan, dev channel only)
+            if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
             {
                 var discoveryWindow = mainWindow!;
                 var discoveryResolver = resolver;
@@ -242,10 +238,13 @@ internal class StartupHook
                     }
                 });
             }
+            else
+            {
+                Logger.Log("Startup", "Phase 4.5: Browser discovery skipped (stable channel)");
+            }
 
             // Phase 4.5a: ClearURLs (strip tracking params from chat URLs)
-            var clearUrlsSettings = UprootedSettings.Load();
-            var wantClearUrls = clearUrlsSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled;
+            var wantClearUrls = savedSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled;
             if (wantClearUrls)
             {
                 var cuWindow = mainWindow!;
@@ -272,8 +271,7 @@ internal class StartupHook
             }
 
             // Phase 4.5b: Native link embeds (Avalonia-only, no DotNetBrowser)
-            var embedSettings = UprootedSettings.Load();
-            var wantLinkEmbeds = embedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled;
+            var wantLinkEmbeds = savedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled;
 
             if (wantLinkEmbeds)
             {
@@ -302,8 +300,7 @@ internal class StartupHook
             }
 
             // Phase 4.5c: Message Logger (discovery + logging + visual indicators)
-            var msgLogSettings = UprootedSettings.Load();
-            var wantMsgLogger = msgLogSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled;
+            var wantMsgLogger = savedSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled;
 
             if (wantMsgLogger)
             {
@@ -406,8 +403,7 @@ internal class StartupHook
             }
 
             // Phase 4.5f: Silent typing (HttpClient handler injection)
-            var stSettings = UprootedSettings.Load();
-            var wantSilentTyping = stSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled;
+            var wantSilentTyping = savedSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled;
             if (wantSilentTyping)
             {
                 var stWindow = mainWindow!;
@@ -434,12 +430,12 @@ internal class StartupHook
             }
 
             // Phase 4.5g: NSFW content filter (Avalonia-native visual tree scan)
-            var nsfwSettings = UprootedSettings.Load();
-            var wantNsfw = nsfwSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(nsfwSettings.NsfwApiKey);
+            var wantNsfw = savedSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(savedSettings.NsfwApiKey);
             if (wantNsfw)
             {
-                var nsfwWindow   = mainWindow!;
-                var nsfwResolver = resolver;
+                var nsfwWindow    = mainWindow!;
+                var nsfwResolver  = resolver;
+                var nsfwSettings  = savedSettings; // captured for lambda
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try
@@ -463,9 +459,8 @@ internal class StartupHook
             }
 
             // Phase 4.5h: Rootcord (experimental, Discord-style vertical server strip)
-            var rootcordSettings = UprootedSettings.Load();
-            var wantRootcord = rootcordSettings.ShowExperimentalPlugins
-                && rootcordSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
+            var wantRootcord = savedSettings.ShowExperimentalPlugins
+                && savedSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
             {
                 // Always create a dormant/active instance so the toggle can apply at runtime.
                 var rcEngine = new RootcordEngine(resolver, mainWindow!, themeEngine);
@@ -509,8 +504,7 @@ internal class StartupHook
 
             // Phase 4.5i: Recon Logger (dev channel only, dev plugin tier)
             {
-                var reconSettings = UprootedSettings.Load();
-                if (reconSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                 {
                     var reconResolver = resolver;
                     var reconWindow   = mainWindow!;
@@ -521,8 +515,7 @@ internal class StartupHook
                             ReconLogger.Init(reconResolver, reconWindow);
                             Logger.Log("Startup", "Phase 4.5i: ReconLogger initialized");
 
-                            var autoSettings = UprootedSettings.Load();
-                            if (autoSettings.Plugins.TryGetValue("recon-logger", out var rlEnabled) && rlEnabled)
+                            if (savedSettings.Plugins.TryGetValue("recon-logger", out var rlEnabled) && rlEnabled)
                             {
                                 ReconLogger.Enable();
                                 Logger.Log("Startup", "Phase 4.5i: ReconLogger auto-started (plugin enabled)");
@@ -684,7 +677,7 @@ internal class StartupHook
                 if (condition()) return true;
             }
             catch { }
-            Thread.Sleep(500);
+            Thread.Sleep(50);
         }
         return false;
     }

@@ -179,6 +179,7 @@ These cause real bugs -- do not violate:
 - **Never use `EventInfo.AddEventHandler` for RoutedEvents** -- use Expression lambdas
 - **Never use localStorage** -- Root runs Chromium with `--incognito`
 - **`DispatcherPriority` is a struct not enum** in Avalonia 11+
+- **Never gate `Logger` to developer channel only** -- stable users MUST produce logs so we can diagnose their bug reports. `Logger.Disable()` and `Logger.Enable()` do not exist. Do not add them. Do not add `_enabled` flags or channel checks inside `Logger`. This was removed intentionally -- see `hook/Logger.cs` header comment.
 - **When replicating Root UI elements, ALWAYS examine Root's source first** -- Root's .NET assemblies are fully decompilable via ILSpy. Decompiled sources live in `research/ilspy-dumps/`. Don't reinvent controls (scrollbars, themes, etc.) from scratch when Root already has working implementations you can instantiate directly or study for exact behavior. Example: `RootScrollViewer` provides overlay scrollbars natively -- use it instead of hacking stock `ScrollViewer`.
 
 ## Related Repos
