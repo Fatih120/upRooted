@@ -12,7 +12,7 @@ namespace Uprooted;
 /// Root's chat UI is rendered entirely in Avalonia controls — DotNetBrowser's iframe is
 /// permanently at about:blank and never renders chat content.
 /// </summary>
-internal class LinkEmbedEngine
+internal class LinkEmbedEngine : IDisposable
 {
     private const int ScanIntervalMs = 500;
     private const int MaxUrlsPerScan = 20;
@@ -257,6 +257,13 @@ internal class LinkEmbedEngine
         // Start polling timer
         _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
         Logger.Log("LinkEmbed", $"Scan timer started ({ScanIntervalMs}ms interval)");
+    }
+
+    public void Dispose()
+    {
+        var t = _scanTimer;
+        _scanTimer = null;
+        t?.Dispose();
     }
 
     // ===== Timer callback =====
