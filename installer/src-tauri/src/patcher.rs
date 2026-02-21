@@ -38,7 +38,10 @@ pub fn install() -> PatchResult {
         .replace('\\', "/");
 
     let settings = load_settings();
-    let settings_json = serde_json::to_string(&settings).unwrap_or_else(|_| "{}".to_string());
+    // Escape `</` to `<\/` so JSON containing "</script>" can't break out of the script tag
+    let settings_json = serde_json::to_string(&settings)
+        .unwrap_or_else(|_| "{}".to_string())
+        .replace("</", "<\\/");
 
     // On Linux, paths start with `/` so `file://` + `/home/...` = `file:///home/...` (correct).
     // On Windows, paths start with `C:\` so we need `file:///` to get `file:///C:/...`.
@@ -76,9 +79,12 @@ pub fn install() -> PatchResult {
             }
         };
 
-        if is_patched(&content) {
-            continue;
-        }
+        // If already patched, strip old injection so we re-patch with current settings
+        let content = if is_patched(&content) {
+            strip_injection(&content)
+        } else {
+            content
+        };
 
         // Backup original
         let backup_path_str = format!("{}{}", file.to_string_lossy(), BACKUP_SUFFIX);
@@ -178,6 +184,9 @@ pub fn uninstall() -> PatchResult {
 /// Strip injected content between start/end markers, legacy markers, and bare uprooted tags
 /// (from bash installer which historically didn't use markers).
 fn strip_injection(content: &str) -> String {
+    // Detect original line ending style so we don't silently convert CRLF to LF
+    let line_ending = if content.contains("\r\n") { "\r\n" } else { "\n" };
+
     let mut result = Vec::new();
     let mut inside_block = false;
 
@@ -212,7 +221,7 @@ fn strip_injection(content: &str) -> String {
         result.push(line);
     }
 
-    result.join("\n")
+    result.join(line_ending)
 }
 
 pub fn repair() -> PatchResult {
