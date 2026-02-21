@@ -4,6 +4,20 @@
 
 ## Shipped This Cycle
 
+### Post-v0.4.2 (bug audit sweep — 2026-02-21)
+- **15-commit codebase audit** — Thread safety, timer disposal, task leak removal, error handling, type correctness:
+  - `UprootedSettings`: TOCTOU-safe cache, atomic Save() via temp-rename, OrdinalIgnoreCase plugins dict
+  - `MessageStore`: IDisposable + WriteLock covers full I/O; skip bad timestamps instead of fabricating UtcNow
+  - `MessageLogger`, `AuditLogEngine`, `LinkEmbedEngine`: IDisposable added; all dispose their `_scanTimer`
+  - `ClearUrlsEngine`, `SidebarInjector`: redundant `Task.Delay().ContinueWith()` timeout tasks removed
+  - `NsfwFilter`: `_seenImages` capped at 2000 entries to prevent unbounded session-long growth
+  - `RootcordEngine`: `_applyCts` CancellationToken cancels pending `Task.Delay` callbacks on `Revert()`
+  - `Logger`: static constructor now catches bad profile path and falls back to temp dir
+  - `HtmlPatchVerifier`: `_debounceTimer = null` in Dispose()
+  - `StartupHook`: diagnostic exception logged instead of silently swallowed
+  - `plugin.ts` / `pluginLoader.ts`: Patch handlers restricted to synchronous return types (Promise<> broke cancellation)
+  - `ContentPages`: lightbox dismiss methods null ref before remove; NsfwFilterInstance.UpdateConfig() guarded
+
 ### Post-v0.4.2 (custom theme overhaul)
 - **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range, smooth derivation, custom text color input, tag-based visual tree walker, variant switching
 - **Card border fix** — 1.5px → 1.0px, color from Root's `Border` resource (matches native divider lines)
@@ -148,7 +162,22 @@ The Avalonia-native link embed engine is broadly functional:
 
 | File | Changes |
 |------|---------|
-| `hook/ClearUrlsEngine.cs` | New file: strips tracking params from compose editor URLs on Enter key via AvaloniaEdit.TextArea routed event interception |
+| `hook/UprootedSettings.cs` | Thread-safe cache (local copy), atomic Save() via temp-rename, OrdinalIgnoreCase plugins dict |
+| `hook/HtmlPatchVerifier.cs` | `_debounceTimer = null` after Dispose() |
+| `hook/Logger.cs` | Static ctor wrapped in try/catch with Path.GetTempPath() fallback |
+| `hook/StartupHook.cs` | Diagnostic DumpVisualTreeColors exception now logged |
+| `hook/MessageStore.cs` | IDisposable + timer disposal + WriteLock covers full I/O + skip bad timestamps |
+| `hook/MessageLogger.cs` | IDisposable (disposes _scanTimer + _store) |
+| `hook/AuditLogEngine.cs` | IDisposable (disposes _scanTimer) |
+| `hook/LinkEmbedEngine.cs` | IDisposable (disposes _scanTimer) |
+| `hook/ClearUrlsEngine.cs` | Removed redundant Task.Delay().ContinueWith() timeout task |
+| `hook/SidebarInjector.cs` | Removed redundant Task.Delay(3000).ContinueWith() timeout task |
+| `hook/NsfwFilter.cs` | _seenImages size cap at 2000 entries |
+| `hook/RootcordEngine.cs` | _applyCts CancellationToken cancels pending delays on Revert(); covers both SubscribeTabChanges and OpenSettingsDirectly |
+| `hook/ContentPages.cs` | Null-first dismiss pattern on all 3 lightbox types; NsfwFilterInstance.UpdateConfig() guarded with try/catch |
+| `src/types/plugin.ts` | Patch handler return types restricted to synchronous (removed Promise<>) |
+| `src/core/pluginLoader.ts` | EventHandler type restricted to void return |
+| `hook/ClearUrlsEngine.cs` (original) | New file: strips tracking params from compose editor URLs on Enter key via AvaloniaEdit.TextArea routed event interception |
 | `hook/StartupHook.cs` | Added Phase 4.5a: ClearURLs engine registration (14s delay) |
 | `hook/ContentPages.cs` | Added ClearURLs PluginInfo entry (clear-urls, default enabled, TestingStatus=1) |
 | `hook/LinkEmbedEngine.cs` | Chrome-like UA, bot UA for Twitter/X, embed-fixer normalization, oEmbed discovery, Content-Type gate, direct image fast path, twitter:* fallbacks, verbose logging, Reddit embeds (old.reddit.com OG, subreddit label, orange accent), HTTP status/Content-Type validation in HttpGetBytes, OG fallback for image-extension HTML pages, robust OG regex, image border corner fix |

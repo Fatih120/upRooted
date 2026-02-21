@@ -36,6 +36,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Full codebase bug audit** — 15-commit sweep covering thread safety, timer leaks, fire-and-forget task accumulation, error handling gaps, and type correctness:
+  - `UprootedSettings`: thread-safe cache read (local copy prevents TOCTOU null return), atomic `Save()` via temp-rename, `OrdinalIgnoreCase` plugins dict
+  - `MessageStore`: `IDisposable` + timer disposal, `WriteLock` covers full file I/O (prevents Truncate/FlushBuffer interleave), skip records with bad timestamps instead of inventing `UtcNow`
+  - `MessageLogger`, `AuditLogEngine`, `LinkEmbedEngine`: `IDisposable` added; each disposes its `_scanTimer` on shutdown. `MessageLogger` also disposes its owned `MessageStore`.
+  - `ClearUrlsEngine`, `SidebarInjector`: redundant `Task.Delay().ContinueWith()` timeout tasks removed (accumulated thousands of orphaned background tasks per hour; `finally` blocks already reset the guard)
+  - `NsfwFilter`: `_seenImages` dictionary now capped at 2000 entries to prevent unbounded growth during long sessions
+  - `RootcordEngine`: `Task.Delay(300)` in `SubscribeTabChanges` and `Task.Delay(350)` in `OpenSettingsDirectly` now receive a `CancellationToken` cancelled in `Revert()`, preventing stale callbacks from firing after the plugin is disabled
+  - `Logger`: static constructor wrapped in try/catch with `Path.GetTempPath()` fallback — prevents `TypeInitializationException` from crashing the entire hook if the profile directory is unresolvable
+  - `HtmlPatchVerifier`: `_debounceTimer = null` added after disposal in `Dispose()` to prevent use-after-free
+  - `StartupHook`: diagnostic `DumpVisualTreeColors` exception now logged instead of silently swallowed
+  - `plugin.ts` / `pluginLoader.ts`: `Patch` handler signatures restricted to synchronous return types — `Promise<>` return would silently break `before()` cancellation because the bridge proxy cannot await
+  - `ContentPages`: lightbox dismiss methods (`DismissPluginInfoLightbox`, `DismissPluginSettingsLightbox`, `DismissUpdateNotification`) now null the overlay ref before calling `RemoveFromOverlay`, guarding against re-entrant dismiss on rapid double-click; `NsfwFilterInstance.UpdateConfig()` calls wrapped in try/catch with logging
+
 - **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
 - **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
 - **Settings header back arrow** — Structural search finds back button by child order in header Grid (not by bounds or text). Collapse pattern (Opacity/MaxWidth/MaxHeight/Width/Margin all zeroed) avoids fighting Root's `IsVisible` binding on `SelectedMenuItemPageContainer.Navigator.CanGoBack`. Title TextBlock overridden after ListBox deselection. Restores original values (Width=40, Margin=24,0,0,0) when switching back to Root tabs.

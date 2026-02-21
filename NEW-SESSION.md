@@ -48,32 +48,32 @@ Two independent injection layers into one app:
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point, `[ModuleInitializer]` guard |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr, diagnostic logging |
-| `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-g deferred features, version migration, dev-channel log gate) |
-| `HtmlPatchVerifier.cs` | 442 | Phase 0: self-healing HTML patches + FileSystemWatcher |
+| `StartupHook.cs` | 684 | Multi-phase startup orchestrator (Phase 0-5, 4.5a-h deferred features, version migration) |
+| `HtmlPatchVerifier.cs` | 443 | Phase 0: self-healing HTML patches + FileSystemWatcher |
 | `AvaloniaReflection.cs` | ~2383 | Reflection cache for ~80 Avalonia types + ThemeDictionaries access (CRITICAL, largest file) |
 | `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | ~1729 | LayoutUpdated event (50ms throttle) + timer poll, sidebar injection, header management (structural back button search + collapse pattern + title override), selection suppression, click events, theme walk burst triggers, settings reload on nav click |
-| `ContentPages.cs` | ~3602 | Settings page builders (Uprooted, Plugins, Themes); background update notification overlay |
+| `SidebarInjector.cs` | ~1779 | LayoutUpdated event (50ms throttle) + timer poll, sidebar injection, header management (structural back button search + collapse pattern + title override), selection suppression, click events, theme walk burst triggers, settings reload on nav click |
+| `ContentPages.cs` | ~3893 | Settings page builders (Uprooted, Plugins, Themes); background update notification overlay |
 | `ThemeEngine.cs` | ~1280 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color, live-recoloring tag walker, custom text color, light theme variant switching |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay for custom accent/bg |
 | `ColorUtils.cs` | ~414 | HSL/RGB/OKLCH conversion, contrast calculation, gamut mapping |
-| `UprootedSettings.cs` | 210 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection |
+| `UprootedSettings.cs` | 253 | INI-based settings (System.Text.Json workaround) + 10s TTL cache; `LastPackageHash` for hotfix detection; thread-safe cache + atomic Save() |
 | `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `ClearUrlsEngine.cs` | 482 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
-| `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection) |
-| `MessageLogger.cs` | ~2100 | Message logger (WIP): property fix (DeletedAt/EditedAt DateTimeOffset?), author names (SenderMember chain), INPC event-driven detection, self-delete fallback (collection-presence), dedup, 500ms scan; edit detection (dual-strategy EditedAt + grace period); Discord-style deleted/edit indicator rows |
-| `MessageStore.cs` | 232 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only) |
+| `ClearUrlsEngine.cs` | 477 | ClearURLs: strip tracking params from compose editor URLs on send (AvaloniaEdit routed event interception) |
+| `LinkEmbedEngine.cs` | ~2484 | Avalonia-native link embed engine (OG/oEmbed fetch + animated image + video embeds + Reddit + visual tree injection); IDisposable |
+| `MessageLogger.cs` | ~2326 | Message logger (WIP): property fix (DeletedAt/EditedAt DateTimeOffset?), author names (SenderMember chain), INPC event-driven detection, self-delete fallback (collection-presence), dedup, 500ms scan; edit detection (dual-strategy EditedAt + grace period); Discord-style deleted/edit indicator rows; IDisposable |
+| `MessageStore.cs` | 278 | Flat-file persistence for message log (pipe-delimited, URI-encoded, append-only); IDisposable with flush-on-dispose, WriteLock covers full I/O |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder + timer playback (SkiaSharp reflection, persistent canvas compositing) |
 | `AutoUpdater.cs` | 909 | In-process auto-updater (encrypted .uprpkg download, GitHub releases, HTTP via reflection, version compare, hash-based same-version hotfix detection, `BackgroundUpdateApplied` event) |
 | `ProfileBadgeInjector.cs` | 535 | "Uprooted Dev" profile badge injector (event-driven + fallback poll, dev-username gated, tightened IsProfilePopup heuristic) |
 | `SilentTypingEngine.cs` | ~90 | Silent typing: DiagnosticListener-based interception — subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0. Replaces 482-line handler injection. |
-| `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
-| `RootcordEngine.cs` | ~2873 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `NsfwFilter.cs` | 482 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan); _seenImages size-capped at 2000 |
+| `RootcordEngine.cs` | ~3377 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle with CancellationToken for pending delays, tab monitoring, user card popup, community members sidebar swap) |
 | `DesktopNotification.cs` | 56 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
-| `AuditLogEngine.cs` | ~674 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
+| `AuditLogEngine.cs` | ~680 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event; IDisposable |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
-| `Logger.cs` | 92 | Thread-safe file logging, startup separator, dev-channel gate (stable = no log file), runtime Enable/Disable |
+| `Logger.cs` | 76 | Thread-safe file logging, startup separator; always active for all users (never gated by channel) |
 
 ### TypeScript Layer (`src/`)
 
