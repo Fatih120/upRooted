@@ -283,26 +283,59 @@ internal static class ContentPages
             r.SetVerticalAlignment(pageTitle, "Center");
             r.AddChild(pageTitleRow, pageTitle);
 
-            var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
-            ApplyFont(r, logBtnText, font);
-            r.SetHorizontalAlignment(logBtnText, "Center");
-            var logBtnBg = ColorUtils.Lighten(CardBg, 4);
-            var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
-            if (logBtn != null)
+            // Button row: horizontal stack aligned right
+            var btnRow = r.CreateStackPanel(vertical: false, spacing: 8);
+            if (btnRow != null)
             {
-                r.SetPadding(logBtn, 8, 4, 8, 4);
-                r.SetHorizontalAlignment(logBtn, "Right");
-                r.SetVerticalAlignment(logBtn, "Center");
-                r.SetCursorHand(logBtn);
-                SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
-                var logPath = Logger.GetLogPath();
-                r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
-                r.SubscribeEvent(logBtn, "PointerEntered", () =>
-                    r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
-                r.SubscribeEvent(logBtn, "PointerExited", () =>
-                    r.SetBackground(logBtn, logBtnBg));
+                r.SetHorizontalAlignment(btnRow, "Right");
+                r.SetVerticalAlignment(btnRow, "Center");
+
+                // "Live Console" button (dev channel only)
+                var devSettings = UprootedSettings.Load();
+                if (devSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                {
+                    var consoleBtnText = CreateBoundText(r, "Live Console", 11, "#7289DA", "TextSecondary");
+                    ApplyFont(r, consoleBtnText, font);
+                    r.SetHorizontalAlignment(consoleBtnText, "Center");
+                    var consoleBtnBg = ColorUtils.Lighten(CardBg, 4);
+                    var consoleBtn = r.CreateBorder(consoleBtnBg, 6, consoleBtnText);
+                    if (consoleBtn != null)
+                    {
+                        r.SetPadding(consoleBtn, 8, 4, 8, 4);
+                        r.SetVerticalAlignment(consoleBtn, "Center");
+                        r.SetCursorHand(consoleBtn);
+                        SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 15), ThickBorder);
+                        r.SubscribeEvent(consoleBtn, "PointerPressed", () => LogConsole.Enable());
+                        r.SubscribeEvent(consoleBtn, "PointerEntered", () =>
+                            r.SetBackground(consoleBtn, ColorUtils.Lighten(consoleBtnBg, 8)));
+                        r.SubscribeEvent(consoleBtn, "PointerExited", () =>
+                            r.SetBackground(consoleBtn, consoleBtnBg));
+                    }
+                    r.AddChild(btnRow, consoleBtn);
+                }
+
+                // "Open Logs" button
+                var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
+                ApplyFont(r, logBtnText, font);
+                r.SetHorizontalAlignment(logBtnText, "Center");
+                var logBtnBg = ColorUtils.Lighten(CardBg, 4);
+                var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
+                if (logBtn != null)
+                {
+                    r.SetPadding(logBtn, 8, 4, 8, 4);
+                    r.SetVerticalAlignment(logBtn, "Center");
+                    r.SetCursorHand(logBtn);
+                    SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
+                    var logPath = Logger.GetLogPath();
+                    r.SubscribeEvent(logBtn, "PointerPressed", () => OpenInExplorer(logPath));
+                    r.SubscribeEvent(logBtn, "PointerEntered", () =>
+                        r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
+                    r.SubscribeEvent(logBtn, "PointerExited", () =>
+                        r.SetBackground(logBtn, logBtnBg));
+                }
+                r.AddChild(btnRow, logBtn);
             }
-            r.AddChild(pageTitleRow, logBtn);
+            r.AddChild(pageTitleRow, btnRow);
 
             r.AddChild(page, pageTitleRow);
         }
@@ -711,9 +744,6 @@ internal static class ContentPages
                 new() { Id = "recon-logger", DisplayName = "Recon Logger", Version = "0.4.2",
                     Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
-                new() { Id = "log-console", DisplayName = "Log Console", Version = "0.4.3",
-                    Description = "Floating overlay console showing live hook log output in real-time with color-coded lines and auto-scroll.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.4.2",
                     Description = "Translate received and sent messages inline. Planned for a future release.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 5 },
@@ -967,7 +997,7 @@ internal static class ContentPages
                 {
                     foreach (var kv in initialPluginStates)
                     {
-                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate" || kv.Key == "log-console") continue; // live-toggle plugins
+                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
                         bool currentVal = kv.Key == "content-filter"
                             ? settings.NsfwFilterEnabled
                             : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -1493,16 +1523,6 @@ internal static class ContentPages
                             catch (Exception rex) { ev.SetError(rex); }
                         }
 
-                        if (pluginId == "log-console")
-                        {
-                            try
-                            {
-                                if (enabled) LogConsole.Enable();
-                                else         LogConsole.Disable();
-                            }
-                            catch (Exception lcx) { ev.SetError(lcx); }
-                        }
-
                         try { settings.Save(); }
                         catch (Exception sx) { ev.SetError(sx); }
 
@@ -1512,7 +1532,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate" || kv.Key == "log-console") continue; // live-toggle plugins
+                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
