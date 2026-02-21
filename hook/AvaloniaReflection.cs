@@ -1370,6 +1370,13 @@ internal class AvaloniaReflection
         _borderBorderThickness.SetValue(border, thickness);
     }
 
+    public void SetBorderThickness(object? border, double left, double top, double right, double bottom)
+    {
+        if (border == null || _borderBorderThickness == null || ThicknessType == null) return;
+        var thickness = Activator.CreateInstance(ThicknessType, left, top, right, bottom);
+        _borderBorderThickness.SetValue(border, thickness);
+    }
+
     public void SetScrollViewerContent(object? sv, object? content) => _scrollViewerContent?.SetValue(sv, content);
 
     public void SetGridColumn(object? control, int column)

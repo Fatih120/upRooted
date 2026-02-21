@@ -203,13 +203,21 @@ internal class UprootedPresenceBeacon
     {
         try
         {
-            // HomeViewModel must be dispatched on UI thread for safe access
+            // Visual tree walk must run on UI thread. RunOnUIThread is fire-and-forget
+            // (Dispatcher.Post), so we need a ManualResetEventSlim to block until the
+            // UI thread finishes before reading result. Without this, result is always
+            // null because the calling thread races ahead of the dispatch.
             string? result = null;
+            using var done = new ManualResetEventSlim(false);
             _r.RunOnUIThread(() =>
             {
                 try { result = TryGetOwnUuidOnUIThread(); }
                 catch (Exception ex) { Logger.Log(Tag, $"TryGetOwnUuid UI error: {ex.Message}"); }
+                finally { done.Set(); }
             });
+            // 5s safety timeout — prevents deadlock if dispatcher is blocked at startup
+            if (!done.Wait(TimeSpan.FromSeconds(5)))
+                Logger.Log(Tag, "TryGetOwnUuid: UI dispatch timed out");
             return result;
         }
         catch (Exception ex)
@@ -233,7 +241,11 @@ internal class UprootedPresenceBeacon
             }
         }
 
-        if (homeViewModel == null) return null;
+        if (homeViewModel == null)
+        {
+            Logger.Log(Tag, "TryGetOwnUuid: HomeViewModel not found in visual tree");
+            return null;
+        }
 
         // Walk: HomeViewModel → accessor → Session → UserInfoService → SessionUser → Id
         foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
@@ -241,13 +253,29 @@ internal class UprootedPresenceBeacon
             var accessor = _r.GetPropertyValue(homeViewModel, accProp);
             if (accessor == null) continue;
             var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
-            if (session == null) continue;
+            if (session == null)
+            {
+                Logger.Log(Tag, $"TryGetOwnUuid: Session null via {accProp} (not authenticated yet?)");
+                continue;
+            }
             var userInfoService = _r.GetPropertyValue(session, "UserInfoService");
-            if (userInfoService == null) continue;
+            if (userInfoService == null)
+            {
+                Logger.Log(Tag, $"TryGetOwnUuid: UserInfoService null on {session.GetType().Name}");
+                continue;
+            }
             var sessionUser = _r.GetPropertyValue(userInfoService, "SessionUser");
-            if (sessionUser == null) continue;
+            if (sessionUser == null)
+            {
+                Logger.Log(Tag, $"TryGetOwnUuid: SessionUser null on {userInfoService.GetType().Name}");
+                continue;
+            }
             var id = _r.GetPropertyValue(sessionUser, "Id");
-            if (id == null) continue;
+            if (id == null)
+            {
+                Logger.Log(Tag, $"TryGetOwnUuid: Id null on {sessionUser.GetType().Name}");
+                continue;
+            }
             var idStr = id.ToString()?.ToLowerInvariant();
             if (!string.IsNullOrEmpty(idStr)) return idStr;
         }
