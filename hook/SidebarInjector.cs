@@ -1143,19 +1143,6 @@ internal class SidebarInjector
         UpdateNavHighlights();
     }
 
-    private void ClearPanelChildren(object panel)
-    {
-        var children = _r.GetChildren(panel);
-        if (children == null) return;
-
-        // Remove children in reverse to avoid index shifting
-        for (int i = children.Count - 1; i >= 0; i--)
-        {
-            try { children.RemoveAt(i); }
-            catch { }
-        }
-    }
-
     // ===== ScrollViewer wrapping =====
 
     private void WrapInScrollViewer()
@@ -1718,20 +1705,6 @@ internal class SidebarInjector
         {
             var text = FindFirstTextInTree(child);
             if (text != null) return text;
-        }
-        return null;
-    }
-
-    private object? FindSidebarBorder(object navContainer)
-    {
-        var current = _r.GetParent(navContainer);
-        int depth = 0;
-        while (current != null && depth < 5)
-        {
-            if (_r.IsBorder(current))
-                return current;
-            current = _r.GetParent(current);
-            depth++;
         }
         return null;
     }
