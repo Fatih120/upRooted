@@ -84,10 +84,9 @@ internal class RootcordEngine
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
-    // Community header reparenting (moved from members panel to channels panel)
-    private object? _headerSourceGrid;     // MembersView's inner Grid (where header was)
-    private object? _headerTargetPanel;    // Channels panel (where header was moved to)
-    private readonly List<object> _reparentedHeaderControls = new(); // controls moved
+    // Community header hiding (hidden in members panel, not needed on channels side)
+    private object? _headerSourceGrid;     // MembersView's inner Grid (where header rows are hidden)
+    private readonly List<object> _reparentedHeaderControls = new(); // controls hidden via IsVisible=false
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -1317,84 +1316,29 @@ internal class RootcordEngine
             return;
         }
 
-        // Collect children in Rows 0-3 (header area) — skip Row 4 (member list)
+        // Hide header rows (0-3) in the members panel so they don't appear on the right.
+        // We can't reliably RemoveChild from a compiled XAML Grid, but IsVisible=false works.
         _headerSourceGrid = membersInnerGrid;
         _reparentedHeaderControls.Clear();
-        var toMove = new List<object>();
         foreach (var child in _r.GetVisualChildren(membersInnerGrid))
         {
             int row = _r.GetGridRow(child);
             if (row <= 3)
-                toMove.Add(child);
-        }
-        if (toMove.Count == 0)
-        {
-            Logger.Log(Tag, "ReparentHeader: no header controls found in rows 0-3");
-            return;
-        }
-
-        // Create a wrapper StackPanel to hold the header controls at the top of channels
-        var headerWrapper = _r.CreateStackPanel(vertical: true, spacing: 0);
-        if (headerWrapper == null) return;
-        _r.SetTag(headerWrapper, "rootcord-header-wrapper");
-
-        // Capture the DataContext from the MembersView so reparented controls keep their bindings
-        var membersDc = _r.GetDataContext(membersInnerGrid)
-            ?? _r.GetDataContext(membersPanel);
-
-        // Move each header control from members Grid to our wrapper
-        foreach (var ctrl in toMove)
-        {
-            _r.RemoveChild(membersInnerGrid, ctrl);
-            // Preserve DataContext so bindings continue to resolve
-            if (membersDc != null)
-                _r.SetDataContext(ctrl, membersDc);
-            _r.AddChild(headerWrapper, ctrl);
-            _reparentedHeaderControls.Add(ctrl);
-        }
-
-        // Also set DataContext on the wrapper itself
-        if (membersDc != null)
-            _r.SetDataContext(headerWrapper, membersDc);
-
-        // Insert the wrapper at the top of the channels panel
-        // Channels panel is a Border/Panel — we need to wrap its existing content
-        _headerTargetPanel = channelsPanel;
-        var existingContent = _r.GetBorderChild(channelsPanel);
-        if (existingContent != null)
-        {
-            // Channels is a Border: detach its child, wrap in StackPanel with header on top
-            _r.SetBorderChild(channelsPanel, null); // detach from parent first
-
-            var outerStack = _r.CreateStackPanel(vertical: true, spacing: 0);
-            if (outerStack != null)
             {
-                _r.SetTag(outerStack, "rootcord-channel-wrapper");
-                _r.AddChild(outerStack, headerWrapper);
-
-                // Make the original content fill remaining space
-                _r.SetVerticalAlignment(existingContent, "Stretch");
-                _r.AddChild(outerStack, existingContent);
-
-                _r.SetBorderChild(channelsPanel, outerStack);
-            }
-            else
-            {
-                // Fallback: re-attach original content
-                _r.SetBorderChild(channelsPanel, existingContent);
-            }
-        }
-        else
-        {
-            // Try as a Panel with children
-            var children = _r.GetChildren(channelsPanel);
-            if (children != null)
-            {
-                children.Insert(0, headerWrapper);
+                _r.SetIsVisible(child, false);
+                _reparentedHeaderControls.Add(child);
             }
         }
 
-        Logger.Log(Tag, $"ReparentHeader: moved {toMove.Count} header controls to channels panel");
+        // Also collapse the row definitions for rows 0-3 so they don't take up space
+        var memberRowDefs = _r.GetRowDefinitions(membersInnerGrid);
+        if (memberRowDefs != null)
+        {
+            for (int ri = 0; ri <= 3 && ri < memberRowDefs.Count; ri++)
+                _r.SetRowDefinitionPixelHeight(memberRowDefs[ri], 0);
+        }
+
+        Logger.Log(Tag, $"ReparentHeader: hidden {_reparentedHeaderControls.Count} header controls in members panel");
     }
 
     /// <summary>
@@ -1406,45 +1350,40 @@ internal class RootcordEngine
 
         try
         {
-            // Remove the wrapper from channels panel and restore original content
-            if (_headerTargetPanel != null)
+            // Restore visibility of hidden header controls in members panel
+            foreach (var ctrl in _reparentedHeaderControls)
+                _r.SetIsVisible(ctrl, true);
+
+            // Restore row heights for rows 0-3
+            var memberRowDefs = _r.GetRowDefinitions(_headerSourceGrid);
+            if (memberRowDefs != null)
             {
-                var wrapperChild = _r.GetBorderChild(_headerTargetPanel);
-                if (wrapperChild != null)
+                // Row 0 = Auto (header panel), Row 1-2 = 1px dividers, Row 3 = Auto (tabs)
+                for (int ri = 0; ri <= 3 && ri < memberRowDefs.Count; ri++)
                 {
-                    var tag = wrapperChild.GetType().GetProperty("Tag")?.GetValue(wrapperChild) as string;
-                    if (tag == "rootcord-channel-wrapper")
+                    var h = _r.GetRowDefinitionHeight(memberRowDefs[ri]);
+                    // Restore Auto for rows 0 and 3, 1px for divider rows
+                    if (ri == 1 || ri == 2)
+                        _r.SetRowDefinitionPixelHeight(memberRowDefs[ri], 1);
+                    else if (_r.GridUnitTypeEnum != null && _r.GridLengthType != null)
                     {
-                        // Get the original content (second child of the wrapper StackPanel)
-                        var wrapperChildren = _r.GetChildren(wrapperChild);
-                        if (wrapperChildren != null && wrapperChildren.Count >= 2)
+                        try
                         {
-                            var originalContent = wrapperChildren[1];
-                            _r.RemoveChild(wrapperChild, originalContent);
-                            _r.SetBorderChild(_headerTargetPanel, originalContent);
+                            var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                            var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
+                            memberRowDefs[ri]?.GetType().GetProperty("Height")?.SetValue(memberRowDefs[ri], autoLen);
                         }
+                        catch { }
                     }
                 }
             }
 
-            // Move header controls back to the members inner Grid
-            foreach (var ctrl in _reparentedHeaderControls)
-            {
-                // Remove from wherever it is now
-                var parent = _r.GetParent(ctrl);
-                if (parent != null) _r.RemoveChild(parent, ctrl);
-
-                // Add back to source grid
-                _r.AddChild(_headerSourceGrid, ctrl);
-            }
-
-            Logger.Log(Tag, $"RevertCommunityHeader: restored {_reparentedHeaderControls.Count} header controls");
+            Logger.Log(Tag, $"RevertCommunityHeader: restored {_reparentedHeaderControls.Count} header controls visibility");
         }
         catch (Exception ex) { Logger.Log(Tag, $"RevertCommunityHeader error: {ex.Message}"); }
 
         _reparentedHeaderControls.Clear();
         _headerSourceGrid = null;
-        _headerTargetPanel = null;
     }
 
     // ===== Flyout placement flip (member profile popups) =====
