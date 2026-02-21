@@ -18,7 +18,7 @@ namespace Uprooted;
 ///
 /// Edit detection: Content snapshot comparison on each poll tick.
 /// </summary>
-internal class MessageLogger
+internal class MessageLogger : IDisposable
 {
     private const string Tag = "MsgLogger";
     private const int ScanIntervalMs = 500;
@@ -159,6 +159,14 @@ internal class MessageLogger
 
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
         Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms)");
+    }
+
+    public void Dispose()
+    {
+        var t = _scanTimer;
+        _scanTimer = null;
+        t?.Dispose();
+        _store.Dispose();
     }
 
     // ===== Audit Log Integration =====
