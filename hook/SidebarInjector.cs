@@ -74,6 +74,10 @@ internal class SidebarInjector
     private bool _hasAutoNavigated;                        // Only auto-nav to About once per settings open
     private long _selectionSuppressedUntilMs;               // Suppress Root ListBox auto-select until this tick
 
+    // Wide event tail sampler for poll tick (150 ticks × 200ms = 30s heartbeat when fast poll,
+    // or 150 ticks × 1000ms = 150s when slow poll after injection)
+    private readonly TailSampler _sampler = new(heartbeatTicks: 150, slowThresholdMs: 50);
+
     public SidebarInjector(AvaloniaReflection resolver, object mainWindow, ThemeEngine themeEngine)
     {
         _r = resolver;
@@ -172,14 +176,19 @@ internal class SidebarInjector
         {
             _r.RunOnUIThread(() =>
             {
-                try { CheckAndInject(); }
-                catch (Exception ex) { Logger.Log("Injector", $"CheckAndInject error: {ex.Message}"); }
+                using var ev = WideEvent.BeginSampled("Injector", "poll_tick", _sampler);
+                ev.Set("injected", _injected);
+                try { CheckAndInject(ev); }
+                catch (Exception ex)
+                {
+                    ev.SetError(ex);
+                }
                 finally { Interlocked.Exchange(ref _injecting, 0); }
             });
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"OnTimerTick error: {ex.Message}");
+            Logger.Log("Injector", $"OnTimerTick dispatch error: {ex.Message}");
             Interlocked.Exchange(ref _injecting, 0);
         }
     }
@@ -243,7 +252,7 @@ internal class SidebarInjector
         // _injected=true and return harmlessly.
         try
         {
-            CheckAndInject();
+            CheckAndInject(null);
         }
         catch (Exception ex)
         {
@@ -251,10 +260,12 @@ internal class SidebarInjector
         }
     }
 
-    private void CheckAndInject()
+    private void CheckAndInject(WideEvent? ev)
     {
         if (_injected)
         {
+            ev?.Set("phase", "alive_check");
+
             // Poll ListBox selection every tick for responsiveness
             if (_listBox != null)
             {
@@ -271,10 +282,12 @@ internal class SidebarInjector
                             CollapseBackButton();
                             SetHeaderTitle(_activePage);
                         }
+                        ev?.Set("selection", "suppressed");
                     }
                     else
                     {
-                        Logger.Log("Injector", $"ListBox selection changed {_lastListBoxIdx} -> {currentIdx}");
+                        ev?.Set("selection_change", $"{_lastListBoxIdx}->{currentIdx}");
+                        ev?.MarkNotable();
                         _lastListBoxIdx = currentIdx;
                         RemoveContentPage();
                         // New Root tab content loads with default colors — walk burst to recolor
@@ -291,6 +304,7 @@ internal class SidebarInjector
                 {
                     CollapseBackButton();
                     SetHeaderTitle(_activePage);
+                    ev?.Set("back_button", "found_late");
                 }
             }
 
@@ -301,18 +315,26 @@ internal class SidebarInjector
                 ?? _walker.FindFirstTextBlockFast(_window, "App Settings");
             if (appSettings == null)
             {
-                Logger.Log("Injector", "Settings page closed (not found in tree), nulling state");
+                ev?.Set("result", "settings_closed");
+                ev?.MarkNotable();
                 _hasAutoNavigated = false;  // Reset so next settings open auto-navs again
                 NullState();
             }
             return;
         }
 
+        ev?.Set("phase", "detect");
+
         // Not injected -- check if settings page just opened
         var newLayout = _walker.FindSettingsLayout(_window);
-        if (newLayout == null) return;
+        if (newLayout == null)
+        {
+            ev?.Set("result", "no_settings");
+            return;
+        }
 
-        Logger.Log("Injector", "Settings page detected, injecting (direct injection mode)");
+        ev?.Set("result", "settings_detected");
+        ev?.MarkNotable();
 
         InjectIntoSettings(newLayout);
 
@@ -331,13 +353,14 @@ internal class SidebarInjector
 
     private void InjectIntoSettings(SettingsLayout layout)
     {
+        using var ev = WideEvent.Begin("Injector", "inject");
         try
         {
             // Guard: check if we already have injected controls in the tree
             // (protects against re-injection from false detach detection)
             if (_walker.HasTaggedDescendant(layout.NavContainer, InjectedTag))
             {
-                Logger.Log("Injector", "Skipping injection: already-injected controls found in NavContainer");
+                ev.Set("result", "already_injected");
                 // Re-acquire references and mark as injected
                 _navContainer = layout.NavContainer;
                 _listBox = layout.ListBox;
@@ -377,11 +400,11 @@ internal class SidebarInjector
                         Logger.Log("Injector", "Revert button Click -- cleaning up injection BEFORE teardown");
                         CleanupInjection();
                     });
-                    Logger.Log("Injector", $"Revert button Click subscribed: {_revertButton.GetType().Name}");
+                    ev.Set("revert_button", _revertButton.GetType().Name);
                 }
                 else
                 {
-                    Logger.Log("Injector", "Save bar found but Revert button not located (may appear later)");
+                    ev.Set("revert_button", "not_found");
                 }
             }
 
@@ -413,7 +436,7 @@ internal class SidebarInjector
                 _hasAutoNavigated = false;  // Reset so next settings open auto-navs again
                 NullState();
             });
-            Logger.Log("Injector", "DetachedFromVisualTree subscribed on LayoutContainer");
+            ev.Set("detach_subscribed", true);
 
             // Step 1c: Find back button and title TextBlock in header Grid structurally.
             // This works immediately (no bounds needed) even before layout has run.
@@ -480,8 +503,10 @@ internal class SidebarInjector
             // Slow the safety-net poll to 1s — events (SelectionChanged, DetachedFromVisualTree)
             // handle fast transitions; the poll only needs to catch leaked state and run alive checks.
             _timer?.Change(1000, 1000);
-            Logger.Log("Injector", $"Injection complete. {_injectedControls.Count} controls added, " +
-                $"Advanced at index {_advancedIndex}, ListBox idx={_lastListBoxIdx}");
+            ev.Set("controls_added", _injectedControls.Count);
+            ev.Set("advanced_index", _advancedIndex);
+            ev.Set("listbox_idx", _lastListBoxIdx);
+            ev.Set("result", "injected");
 
             // Auto-navigate to Uprooted About page on FIRST settings open only.
             // Skip on re-injection after variant change (user was already on a tab).
@@ -491,6 +516,7 @@ internal class SidebarInjector
             {
                 _hasAutoNavigated = true;
                 _selectionSuppressedUntilMs = Environment.TickCount64 + 500;
+                ev.Set("auto_nav", "uprooted");
                 OnNavItemClicked("uprooted");
             }
 
@@ -500,7 +526,7 @@ internal class SidebarInjector
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"InjectIntoSettings error: {ex}");
+            ev.SetError(ex);
             CleanupInjection();
         }
     }
@@ -508,7 +534,7 @@ internal class SidebarInjector
     private void CleanupInjection()
     {
         if (!_injected) return;
-        Logger.Log("Injector", "CleanupInjection: removing all injected controls");
+        using var ev = WideEvent.Begin("Injector", "cleanup");
 
         try
         {
@@ -548,9 +574,10 @@ internal class SidebarInjector
         }
         catch (Exception ex)
         {
-            Logger.Log("Injector", $"CleanupInjection error: {ex.Message}");
+            ev.SetError(ex);
         }
 
+        ev.Set("result", "cleaned");
         NullState();
     }
 
@@ -1007,13 +1034,18 @@ internal class SidebarInjector
 
     private void OnNavItemClicked(string pageName)
     {
+        using var ev = WideEvent.Begin("Injector", "nav_click");
+        ev.Set("page", pageName);
         try
         {
             // Reload settings so page builds reflect runtime changes (e.g. channel switch)
             _settings = UprootedSettings.Load();
 
-            Logger.Log("Injector", $"Nav item clicked: {pageName}");
-            if (_activePage == pageName) return;
+            if (_activePage == pageName)
+            {
+                ev.Set("result", "already_active");
+                return;
+            }
 
             // Remove current content (without restoring back button -- we'll keep it hidden)
             if (_activeContentPage != null && _contentPanel != null)
@@ -1043,7 +1075,7 @@ internal class SidebarInjector
                 _themeEngine, rebuildCurrentPage, onNavigate: OnNavItemClicked);
             if (page == null)
             {
-                Logger.Log("Injector", $"Failed to build page: {pageName} — page returned null");
+                ev.SetError($"BuildPage returned null for '{pageName}'");
                 return;
             }
 
@@ -1095,10 +1127,8 @@ internal class SidebarInjector
             // if a recent walk happened, causing a 1-frame flash of Root's default colors.
             _themeEngine.WalkVisualTreeNow();
 
-            if (_contentPanel != null)
-                Logger.Log("Injector", $"Content page '{pageName}' displayed in content Panel");
-            else
-                Logger.Log("Injector", $"Content page '{pageName}' built but contentPanel is null (stale state)");
+            ev.Set("result", _contentPanel != null ? "displayed" : "stale_panel");
+            ev.Set("hidden_children", _hiddenContentChildren.Count);
 
             // Schedule delayed save bar search: deselecting Root's ListBox triggers
             // Root's change detection which creates the save bar ASYNCHRONOUSLY.
@@ -1107,7 +1137,7 @@ internal class SidebarInjector
         }
         catch (Exception ex)
         {
-            Logger.LogException("Injector", $"OnNavItemClicked('{pageName}')", ex);
+            ev.SetError(ex);
         }
     }
 
