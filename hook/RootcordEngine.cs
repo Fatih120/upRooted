@@ -1180,7 +1180,13 @@ internal class RootcordEngine
                         }
 
                         if (isChatCol)
+                        {
                             _r.AddGridColumnStar(layoutGrid, 1.0);
+                            // Set MinWidth on the chat column definition so it can't disappear
+                            var chatColDefs = _r.GetColumnDefinitions(layoutGrid);
+                            if (chatColDefs?.Count > ci)
+                                chatColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chatColDefs[ci], 350.0);
+                        }
                         else if (isMembersCol)
                             _r.AddGridColumnAuto(layoutGrid);
                         else
@@ -1194,6 +1200,20 @@ internal class RootcordEngine
                                 _r.AddGridColumnPixel(layoutGrid, origW.width);
                             else
                                 _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
+
+                            // Set Min/MaxWidth on channels column definition to bound the GridSplitter
+                            bool isSplitter = false;
+                            foreach (var (s, sc) in gridSplitters)
+                                if (sc == ci) { isSplitter = true; break; }
+                            if (!isSplitter)
+                            {
+                                var chColDefs = _r.GetColumnDefinitions(layoutGrid);
+                                if (chColDefs?.Count > ci)
+                                {
+                                    chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
+                                    chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
+                                }
+                            }
                         }
                     }
                     Logger.Log(Tag, $"SwapCommunityMembers: rebuilt {originalCount} column definitions");
