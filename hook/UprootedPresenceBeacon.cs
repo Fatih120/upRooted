@@ -31,7 +31,7 @@ internal class UprootedPresenceBeacon
 
     // Keep in sync with StartupHook.CurrentVersion.
     // Can't share the constant — StartupHook is in the global namespace, not Uprooted.
-    private const string Version = "0.4.2";
+    private const string Version = "0.4.3";
 
     // HMAC secret for registration proof: HMAC-SHA256(uuid:dayNumber, SECRET)
     // Server stores this same secret in plaintext (via PRESENCE_HMAC_SECRET env var).
