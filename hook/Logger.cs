@@ -15,9 +15,18 @@ internal static class Logger
 
     static Logger()
     {
-        var profileDir = PlatformPaths.GetProfileDir();
-        Directory.CreateDirectory(profileDir);
-        LogPath = Path.Combine(profileDir, "uprooted-hook.log");
+        try
+        {
+            var profileDir = PlatformPaths.GetProfileDir();
+            Directory.CreateDirectory(profileDir);
+            LogPath = Path.Combine(profileDir, "uprooted-hook.log");
+        }
+        catch
+        {
+            // Fall back to the current working directory so an invalid profile path
+            // doesn't throw TypeInitializationException and crash the entire hook.
+            LogPath = Path.Combine(Path.GetTempPath(), "uprooted-hook.log");
+        }
     }
 
     /// <summary>Returns the full path to the hook log file.</summary>
