@@ -84,6 +84,11 @@ internal class RootcordEngine
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
+    // Community header reparenting (moved from members panel to channels panel)
+    private object? _headerSourceGrid;     // MembersView's inner Grid (where header was)
+    private object? _headerTargetPanel;    // Channels panel (where header was moved to)
+    private readonly List<object> _reparentedHeaderControls = new(); // controls moved
+
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
     private object? _membersLayoutUpdatedHandler;
@@ -1193,6 +1198,12 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
 
+            // Move the community header from the members panel to the channels panel.
+            // Root's MembersView has: Row0=header, Row1-2=dividers, Row3=tabs, Row4=member list.
+            // We want the header + tabs at the top of the channels panel.
+            try { ReparentCommunityHeader(nonSplitters, maxAssignedIdx); }
+            catch (Exception ex) { Logger.Log(Tag, $"ReparentCommunityHeader error: {ex.Message}"); }
+
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
         }
@@ -1207,6 +1218,9 @@ internal class RootcordEngine
     /// </summary>
     private void RevertCommunityMembersSwap()
     {
+        // Revert header reparenting first (before column positions change)
+        RevertCommunityHeaderReparent();
+
         // Revert flyout placements before restoring column positions
         RevertMemberFlyoutPlacements();
 
@@ -1250,6 +1264,176 @@ internal class RootcordEngine
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
+    }
+
+    // ===== Community header reparenting =====
+
+    /// <summary>
+    /// Move the community header (server icon, name, member count, Community/Channel tabs)
+    /// from the members panel (rightmost after rotation) to the channels panel (leftmost).
+    /// Root's MembersView inner Grid has Row 0-3 = header content, Row 4 = member list.
+    /// We extract Row 0-3 children and insert them at the top of the channels panel.
+    /// </summary>
+    private void ReparentCommunityHeader(List<(object child, int col)> nonSplitters, int membersIdx)
+    {
+        if (nonSplitters.Count < 2 || membersIdx < 0) return;
+
+        // Find members panel (rightmost) and channels panel (leftmost non-chat)
+        var membersPanel = nonSplitters[membersIdx].child;
+        object? channelsPanel = null;
+        for (int i = 0; i < nonSplitters.Count; i++)
+        {
+            if (i == membersIdx) continue;
+            int origCol = nonSplitters[i].col;
+            var origW = _originalColWidths?.FirstOrDefault(x => x.colIdx == origCol);
+            if (origW != null && origW.Value.unit != "Star" && origW.Value.unit != "star")
+            {
+                channelsPanel = nonSplitters[i].child;
+                break;
+            }
+        }
+        if (channelsPanel == null)
+        {
+            Logger.Log(Tag, "ReparentHeader: channels panel not found");
+            return;
+        }
+
+        // Walk into the members panel to find its inner Grid (MembersView → Grid with 5 rows)
+        var walker = new VisualTreeWalker(_r);
+        object? membersInnerGrid = null;
+        foreach (var node in walker.DescendantsDepthFirst(membersPanel))
+        {
+            if (!_r.IsGrid(node)) continue;
+            var rowDefs = _r.GetRowDefinitions(node);
+            if (rowDefs != null && rowDefs.Count >= 4)
+            {
+                membersInnerGrid = node;
+                break;
+            }
+        }
+        if (membersInnerGrid == null)
+        {
+            Logger.Log(Tag, "ReparentHeader: MembersView inner Grid not found");
+            return;
+        }
+
+        // Collect children in Rows 0-3 (header area) — skip Row 4 (member list)
+        _headerSourceGrid = membersInnerGrid;
+        _reparentedHeaderControls.Clear();
+        var toMove = new List<object>();
+        foreach (var child in _r.GetVisualChildren(membersInnerGrid))
+        {
+            int row = _r.GetGridRow(child);
+            if (row <= 3)
+                toMove.Add(child);
+        }
+        if (toMove.Count == 0)
+        {
+            Logger.Log(Tag, "ReparentHeader: no header controls found in rows 0-3");
+            return;
+        }
+
+        // Create a wrapper StackPanel to hold the header controls at the top of channels
+        var headerWrapper = _r.CreateStackPanel(vertical: true, spacing: 0);
+        if (headerWrapper == null) return;
+        _r.SetTag(headerWrapper, "rootcord-header-wrapper");
+
+        // Move each header control from members Grid to our wrapper
+        foreach (var ctrl in toMove)
+        {
+            _r.RemoveChild(membersInnerGrid, ctrl);
+            _r.AddChild(headerWrapper, ctrl);
+            _reparentedHeaderControls.Add(ctrl);
+        }
+
+        // Insert the wrapper at the top of the channels panel
+        // Channels panel is a Border/Panel — we need to wrap its existing content
+        _headerTargetPanel = channelsPanel;
+        var existingContent = _r.GetBorderChild(channelsPanel);
+        if (existingContent != null)
+        {
+            // Channels is a Border: detach its child, wrap in StackPanel with header on top
+            _r.SetBorderChild(channelsPanel, null); // detach from parent first
+
+            var outerStack = _r.CreateStackPanel(vertical: true, spacing: 0);
+            if (outerStack != null)
+            {
+                _r.SetTag(outerStack, "rootcord-channel-wrapper");
+                _r.AddChild(outerStack, headerWrapper);
+
+                // Make the original content fill remaining space
+                _r.SetVerticalAlignment(existingContent, "Stretch");
+                _r.AddChild(outerStack, existingContent);
+
+                _r.SetBorderChild(channelsPanel, outerStack);
+            }
+            else
+            {
+                // Fallback: re-attach original content
+                _r.SetBorderChild(channelsPanel, existingContent);
+            }
+        }
+        else
+        {
+            // Try as a Panel with children
+            var children = _r.GetChildren(channelsPanel);
+            if (children != null)
+            {
+                children.Insert(0, headerWrapper);
+            }
+        }
+
+        Logger.Log(Tag, $"ReparentHeader: moved {toMove.Count} header controls to channels panel");
+    }
+
+    /// <summary>
+    /// Revert the community header reparenting — move controls back to the members panel.
+    /// </summary>
+    private void RevertCommunityHeaderReparent()
+    {
+        if (_headerSourceGrid == null || _reparentedHeaderControls.Count == 0) return;
+
+        try
+        {
+            // Remove the wrapper from channels panel and restore original content
+            if (_headerTargetPanel != null)
+            {
+                var wrapperChild = _r.GetBorderChild(_headerTargetPanel);
+                if (wrapperChild != null)
+                {
+                    var tag = wrapperChild.GetType().GetProperty("Tag")?.GetValue(wrapperChild) as string;
+                    if (tag == "rootcord-channel-wrapper")
+                    {
+                        // Get the original content (second child of the wrapper StackPanel)
+                        var wrapperChildren = _r.GetChildren(wrapperChild);
+                        if (wrapperChildren != null && wrapperChildren.Count >= 2)
+                        {
+                            var originalContent = wrapperChildren[1];
+                            _r.RemoveChild(wrapperChild, originalContent);
+                            _r.SetBorderChild(_headerTargetPanel, originalContent);
+                        }
+                    }
+                }
+            }
+
+            // Move header controls back to the members inner Grid
+            foreach (var ctrl in _reparentedHeaderControls)
+            {
+                // Remove from wherever it is now
+                var parent = _r.GetParent(ctrl);
+                if (parent != null) _r.RemoveChild(parent, ctrl);
+
+                // Add back to source grid
+                _r.AddChild(_headerSourceGrid, ctrl);
+            }
+
+            Logger.Log(Tag, $"RevertCommunityHeader: restored {_reparentedHeaderControls.Count} header controls");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RevertCommunityHeader error: {ex.Message}"); }
+
+        _reparentedHeaderControls.Clear();
+        _headerSourceGrid = null;
+        _headerTargetPanel = null;
     }
 
     // ===== Flyout placement flip (member profile popups) =====
@@ -3412,7 +3596,7 @@ internal class RootcordEngine
             // Clear the Bottom alignment and Row assignment
             _r.SetVerticalAlignment(signOutButton, "Top");
             _r.SetGridRow(signOutButton, 0);
-            _r.SetMargin(signOutButton, 0, 0, 0, 12);
+            _r.SetMargin(signOutButton, 0, 12, 0, 0);
 
             // Tag it so we don't re-process
             _r.SetTag(signOutButton, "rootcord-signout-moved");
