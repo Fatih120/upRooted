@@ -56,6 +56,18 @@ internal static class LogConsole
         });
     }
 
+    /// <summary>
+    /// Stop live streaming immediately and detach from Logger.OnLine.
+    /// Safe to call even if the console was never started.
+    /// </summary>
+    internal static void Disable()
+    {
+        _enabled = false;
+        Logger.OnLine = null;
+        CleanupPipe();
+        Logger.Log("LogConsole", "Live streaming disabled");
+    }
+
     private static void StartConsole()
     {
         // Clean up any leftover pipe from a previous session

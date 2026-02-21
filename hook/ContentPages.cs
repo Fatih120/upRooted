@@ -195,7 +195,7 @@ internal static class ContentPages
         {
             page = pageName switch
             {
-                "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine),
+                "uprooted" => BuildUprootedPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged),
                 "plugins" => BuildPluginsPage(r, settings, nativeFontFamily, themeEngine, onNavigate),
                 "themes" => BuildThemesPage(r, settings, nativeFontFamily, themeEngine, onThemeChanged, onNavigate),
                 _ => null
@@ -266,7 +266,8 @@ internal static class ContentPages
         return border;
     }
 
-    private static object? BuildUprootedPage(AvaloniaReflection r, UprootedSettings settings, object? font, ThemeEngine? themeEngine = null)
+    private static object? BuildUprootedPage(AvaloniaReflection r, UprootedSettings settings, object? font,
+        ThemeEngine? themeEngine = null, Action? onRefreshCurrentPage = null)
     {
         ApplyThemedColors(themeEngine);
         ComputeDpiAwareBorders(r);
@@ -469,7 +470,7 @@ internal static class ContentPages
                 });
 
             // Update channel row
-            BuildChannelRow(r, updatesContent, settings, font);
+            BuildChannelRow(r, updatesContent, settings, font, onRefreshCurrentPage);
 
             // Separator line
             var sep = r.CreateBorder(CardBorder, 0);
@@ -744,7 +745,8 @@ internal static class ContentPages
     // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue), 5=Planned(grey)
     // Planned (5) is always sorted last and has no toggle — the plugin does not exist yet.
     private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev", "Planned" };
-    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0", "#7A7A8A" };
+    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#2D4F8C", "#7A7A8A" };
+    private static string DevChannelBlue => TestingColors[4];
 
     // Known plugins metadata
     private static PluginInfo[]? KnownPlugins;
@@ -780,7 +782,7 @@ internal static class ContentPages
                 new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.4.2",
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "recon-logger", DisplayName = "Recon Logger", Version = "0.4.2",
+                new() { Id = "recon-logger", DisplayName = "ReconLogger", Version = "0.4.2",
                     Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.4.2",
@@ -1274,6 +1276,19 @@ internal static class ContentPages
             });
 
             var visible = visibleIndices.ConvertAll(i => cardObjects[i]);
+            int matchedCount = visibleIndices.Count;
+
+            // Total plugins available in the current channel/toggle context
+            // (excludes hidden dev-tier cards on stable and hidden experimental cards).
+            int availableCount = 0;
+            for (int ci = 0; ci < cardObjects.Count; ci++)
+            {
+                if (!showExperimental[0] && cardStatuses[ci] == 0)
+                    continue;
+                if (cardStatuses[ci] == 4 && !settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                availableCount++;
+            }
 
             // Truncate to InitialCardLimit when no search/filter is active and showAll is off
             bool isFiltering = !string.IsNullOrEmpty(searchText[0]) || filterMode[0] != 0;
@@ -1340,9 +1355,10 @@ internal static class ContentPages
             // Update count label
             if (countLabel != null)
             {
-                var text = visible.Count == cardObjects.Count
-                    ? $"{cardObjects.Count} plugins"
-                    : $"{visible.Count} of {cardObjects.Count} plugins";
+                var shownCount = visible.Count;
+                var text = isFiltering
+                    ? $"{matchedCount} out of {availableCount} plugins"
+                    : $"{shownCount} out of {availableCount} plugins";
                 r.TextBlockType?.GetProperty("Text")?.SetValue(countLabel, text);
             }
 
@@ -1567,10 +1583,13 @@ internal static class ContentPages
                         {
                             try
                             {
-                                if (enabled) ReconLogger.Enable();
-                                else         ReconLogger.Disable();
+                                ToggleReconLogger(enabled);
                             }
-                            catch (Exception rex) { ev.SetError(rex); }
+                            catch (Exception rex)
+                            {
+                                ev.SetError(rex);
+                                Logger.LogException("ContentPages", "ReconLogger toggle failed", rex);
+                            }
                         }
 
                         try { settings.Save(); }
@@ -3747,7 +3766,7 @@ internal static class ContentPages
     /// Switching back to "Stable" is immediate (no password needed).
     /// </summary>
     private static void BuildChannelRow(AvaloniaReflection r, object container,
-        UprootedSettings settings, object? font)
+        UprootedSettings settings, object? font, Action? onRefreshCurrentPage = null)
     {
         var row = r.CreatePanel();
         if (row == null) return;
@@ -3776,7 +3795,7 @@ internal static class ContentPages
 
         // Right side: channel badge (clickable)
         var isDev = settings.AutoUpdateChannel == "developer";
-        var badgeColor = isDev ? "#8B6914" : AccentGreen;
+        var badgeColor = isDev ? DevChannelBlue : AccentGreen;
         var badgeLabel = isDev ? "Developer" : "Stable";
 
         var badgeText = r.CreateTextBlock(badgeLabel, 12, "#FFFFFF");
@@ -3808,11 +3827,15 @@ internal static class ContentPages
                     Logger.Log("AutoUpdate", "Switched to Stable channel");
                     var s = UprootedSettings.Load();
                     s.AutoUpdateChannel = "stable";
+                    if (s.Plugins.TryGetValue("recon-logger", out var reconEnabled) && reconEnabled)
+                        s.Plugins["recon-logger"] = false;
                     s.Save();
+                    ApplyChannelRuntimeState(r, s);
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
                     SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                    onRefreshCurrentPage?.Invoke();
                 }
                 else
                 {
@@ -3820,22 +3843,28 @@ internal static class ContentPages
                     if (!promptVisible && badgeTextRef != null)
                     {
                         promptVisible = true;
-                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font, onClose: () => { promptVisible = false; });
+                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font,
+                            onClose: () => { promptVisible = false; },
+                            onChannelChanged: () =>
+                            {
+                                ApplyChannelRuntimeState(r, UprootedSettings.Load());
+                                onRefreshCurrentPage?.Invoke();
+                            });
                     }
                 }
             });
 
-            r.SubscribeEvent(badge, "PointerEntered", () =>
+                r.SubscribeEvent(badge, "PointerEntered", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
-                r.SetBackground(badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 10));
-                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 40), ThickBorder);
+                r.SetBackground(badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 10));
+                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 40), ThickBorder);
             });
             r.SubscribeEvent(badge, "PointerExited", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
-                r.SetBackground(badge, c == "developer" ? "#8B6914" : AccentGreen);
-                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 18), ThickBorder);
+                r.SetBackground(badge, c == "developer" ? DevChannelBlue : AccentGreen);
+                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 18), ThickBorder);
             });
 
             r.AddChild(row, badge);
@@ -3845,11 +3874,47 @@ internal static class ContentPages
     }
 
     /// <summary>
+    /// Apply immediate runtime state changes when update channel flips, without waiting for restart/page navigation.
+    /// </summary>
+    private static void ApplyChannelRuntimeState(AvaloniaReflection r, UprootedSettings settings)
+    {
+        bool isDev = settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase);
+        if (isDev) return;
+
+        try { ToggleReconLogger(false); } catch { }
+        try { LogConsole.Disable(); } catch { }
+        try { ProfileBadgeInjector.ClearDevBadges(r); } catch { }
+    }
+
+    /// <summary>
+    /// Resolve ReconLogger enable/disable at runtime so plugin toggles remain resilient
+    /// across mixed-runtime method shape differences.
+    /// </summary>
+    private static void ToggleReconLogger(bool enabled)
+    {
+        var methodName = enabled ? "Enable" : "Disable";
+        var method = typeof(ReconLogger).GetMethod(methodName,
+            System.Reflection.BindingFlags.Static | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic);
+        if (method == null)
+            throw new MissingMethodException(typeof(ReconLogger).FullName, methodName);
+
+        try
+        {
+            method.Invoke(null, null);
+        }
+        catch (System.Reflection.TargetInvocationException tie) when (tie.InnerException != null)
+        {
+            throw tie.InnerException;
+        }
+    }
+
+    /// <summary>
     /// Show an inline password prompt to switch to Developer channel.
     /// Inserts a row after the channel row with a TextBox + Submit button.
     /// </summary>
     private static void ShowChannelPasswordPrompt(AvaloniaReflection r, object container,
-        object channelRow, object badge, object badgeText, object? font, Action? onClose = null)
+        object channelRow, object badge, object badgeText, object? font,
+        Action? onClose = null, Action? onChannelChanged = null)
     {
         // Create the prompt row
         var promptRow = r.CreateStackPanel(vertical: false, spacing: 8);
@@ -3946,10 +4011,11 @@ internal static class ContentPages
                 s.Save();
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
-                r.SetBackground(badgeRef, "#8B6914");
-                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 18), ThickBorder);
+                r.SetBackground(badgeRef, DevChannelBlue);
+                SetBorderStroke(r, badgeRef, AdjustForHighlight(DevChannelBlue, 18), ThickBorder);
                 r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
                 Logger.Log("AutoUpdate", "Switched to Developer channel");
+                onChannelChanged?.Invoke();
 
                 // Remove the prompt row
                 try

@@ -200,13 +200,13 @@ internal class AutoUpdater
     /// </summary>
     internal (string text, string color) GetStatus()
     {
-        var channelSuffix = IsDevChannel ? " (Dev)" : "";
+        var channelTag = IsDevChannel ? " [Dev]" : "";
 
         if (_checking != 0)
             return ("Checking for updates...", ContentPages.TextMuted);
 
         if (_updateApplied)
-            return ($"Updated to v{_latestVersion}{channelSuffix} \u2014 restart Root to apply", ContentPages.AccentGreen);
+            return ($"Updated to v{_latestVersion}{channelTag} \u2014 restart Root to apply", ContentPages.AccentGreen);
 
         if (_lastError != null)
             return ($"Check failed: {_lastError}", "#E04040");
@@ -216,12 +216,12 @@ internal class AutoUpdater
         {
             var cmp = CompareVersions(_latestVersion, currentVersion);
             if (cmp > 0)
-                return ($"Update available: v{_latestVersion}{channelSuffix}", "#C0A820");
+                return ($"Update available: v{_latestVersion}{channelTag}", "#C0A820");
             if (cmp < 0)
-                return ($"Ahead of latest release (v{currentVersion} > v{_latestVersion}){channelSuffix}", ContentPages.AccentGreen);
+                return ($"Ahead of latest release (v{currentVersion} > v{_latestVersion}){channelTag}", ContentPages.AccentGreen);
         }
 
-        return ($"Up to date (v{currentVersion}){channelSuffix}", ContentPages.AccentGreen);
+        return ($"Up to date (v{currentVersion}){channelTag}", ContentPages.AccentGreen);
     }
 
     internal bool IsChecking => _checking != 0;

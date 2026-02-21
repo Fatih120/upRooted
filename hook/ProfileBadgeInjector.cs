@@ -117,6 +117,51 @@ internal class ProfileBadgeInjector
         _beacon = beacon;
     }
 
+    /// <summary>
+    /// Removes all injected "Uprooted Dev" badges from all top-level windows.
+    /// Used when switching from Developer to Stable channel so the UI updates immediately.
+    /// </summary>
+    internal static void ClearDevBadges(AvaloniaReflection r)
+    {
+        try
+        {
+            int removed = 0;
+            var walker = new VisualTreeWalker(r);
+            foreach (var top in r.GetAllTopLevels())
+                removed += RemoveDevBadgesInSubtree(r, walker, top);
+            if (removed > 0)
+                Logger.Log("ProfileBadge", $"Cleared {removed} dev badge(s) after channel switch");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"ClearDevBadges error: {ex.Message}");
+        }
+    }
+
+    private static int RemoveDevBadgesInSubtree(AvaloniaReflection r, VisualTreeWalker walker, object root)
+    {
+        var toRemove = new List<object>();
+        foreach (var node in walker.DescendantsDepthFirst(root))
+        {
+            if (r.GetTag(node) == BadgeTag)
+                toRemove.Add(node);
+        }
+
+        int removed = 0;
+        foreach (var node in toRemove)
+        {
+            try
+            {
+                var parent = r.GetParent(node);
+                if (parent == null) continue;
+                r.RemoveChild(parent, node);
+                removed++;
+            }
+            catch { }
+        }
+        return removed;
+    }
+
     public void Initialize()
     {
         // Primary: event-driven detection via OverlayLayer children changes
@@ -426,6 +471,8 @@ internal class ProfileBadgeInjector
     /// </summary>
     private void InjectBadgeUnderUsername(object popup)
     {
+        bool isDevChannel = UprootedSettings.Load().AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase);
+
         // Determine which badges are already present
         bool devBadgePresent = false;
         bool alphaBadgePresent = false;
@@ -434,6 +481,13 @@ internal class ProfileBadgeInjector
             var tag = _r.GetTag(node);
             if (tag == BadgeTag) devBadgePresent = true;
             if (tag == AlphaBadgeTag) alphaBadgePresent = true;
+        }
+
+        // Channel switched to stable while popup is open: remove existing dev badge immediately.
+        if (!isDevChannel && devBadgePresent)
+        {
+            RemoveDevBadgesInSubtree(_r, _walker, popup);
+            devBadgePresent = false;
         }
 
         // Get DataContext once — used for both UUID lookup and role check
@@ -503,9 +557,9 @@ internal class ProfileBadgeInjector
         // Dev: same pattern — live role check populates session cache for global badge display.
         bool devByRole = HasRoleId(dc, DeveloperRoleId);
         if (devByRole && userId != null) _confirmedDevIds.Add(userId);
-        bool isDevUser = DeveloperUsernames.Contains(username)
+        bool isDevUser = isDevChannel && (DeveloperUsernames.Contains(username)
                          || (userId != null && (DeveloperUserIds.Contains(userId) || _confirmedDevIds.Contains(userId)))
-                         || devByRole;
+                         || devByRole);
         if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
         // Inject presence icon inline next to username (beacon check — independent of badge logic)
