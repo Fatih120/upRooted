@@ -1821,20 +1821,17 @@ internal static class ContentPages
     /// </summary>
     private static void DismissUpdateNotification(AvaloniaReflection r)
     {
-        if (_updateNotifyOverlay == null) return;
-
-        if (_updateNotifyBackdrop != null)
-        {
-            r.RemoveFromOverlay(_updateNotifyOverlay, _updateNotifyBackdrop);
-            _updateNotifyBackdrop = null;
-        }
-        if (_updateNotifyPanel != null)
-        {
-            r.RemoveFromOverlay(_updateNotifyOverlay, _updateNotifyPanel);
-            _updateNotifyPanel = null;
-        }
-
+        var overlay = _updateNotifyOverlay;
+        if (overlay == null) return;
         _updateNotifyOverlay = null;
+
+        var backdrop = _updateNotifyBackdrop;
+        _updateNotifyBackdrop = null;
+        var panel = _updateNotifyPanel;
+        _updateNotifyPanel = null;
+
+        try { if (backdrop != null) r.RemoveFromOverlay(overlay, backdrop); } catch { }
+        try { if (panel != null)    r.RemoveFromOverlay(overlay, panel); }    catch { }
     }
 
     /// <summary>
