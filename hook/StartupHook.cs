@@ -189,7 +189,7 @@ internal class StartupHook
                             Thread.Sleep(10_000);
                             resolver.RunOnUIThread(() => {
                                 try { te.DumpVisualTreeColors(); }
-                                catch { }
+                                catch (Exception dumpEx) { Logger.Log("Startup", "DumpVisualTreeColors error: " + dumpEx.Message); }
                             });
                         });
                     }
