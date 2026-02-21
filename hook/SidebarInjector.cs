@@ -441,6 +441,9 @@ internal class SidebarInjector
             // Step 3: Build and insert our controls into NavContainer
             BuildAndInsertNavItems(layout);
 
+            // Step 3b: Style Root's native nav items to match our injected nav items
+            StyleNativeNavItems(layout);
+
             // Step 4: Wrap NavContainer in ScrollViewer for sidebar scrolling
             WrapInScrollViewer();
 
@@ -951,6 +954,48 @@ internal class SidebarInjector
         });
 
         return outerPanel;
+    }
+
+    /// <summary>
+    /// Apply a visible resting border to each native Root ListBoxItem so they match
+    /// the rounded-border style of our injected Uprooted nav items.
+    ///
+    /// Root's ListBoxItem template already contains a Border (CornerRadius=12, Height=36)
+    /// for hover/selection highlight — it just has no border stroke at rest.
+    /// We set BorderBrush=HighlightLight and BorderThickness=1 on that border, matching
+    /// exactly what BuildNavItem does for our custom items.
+    /// </summary>
+    private void StyleNativeNavItems(SettingsLayout layout)
+    {
+        if (layout.ListBox == null) return;
+
+        var borderHex = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
+        int styled = 0;
+
+        foreach (var node in _walker.DescendantsDepthFirst(layout.ListBox))
+        {
+            if (node.GetType().Name != "ListBoxItem") continue;
+
+            // Find the rounded highlight Border (CornerRadius=12) inside this ListBoxItem.
+            // Native structure: ListBoxItem → Panel(M=0,2,0,2) → [ContentPresenter..., Border(H=36, CR=12)]
+            // Only the highlight border has CR=12; all layout/container borders have CR=0.
+            foreach (var child in _walker.DescendantsDepthFirst(node))
+            {
+                if (!_r.IsBorder(child)) continue;
+
+                var crObj = child.GetType().GetProperty("CornerRadius")?.GetValue(child);
+                if (crObj == null) continue;
+                var tl = crObj.GetType().GetProperty("TopLeft")?.GetValue(crObj) as double?;
+                if (tl == null || tl < 8.0) continue; // CR=12 → accept ≥8; skip CR=0 layout borders
+
+                _r.SetBorderBrush(child, borderHex);
+                _r.SetBorderThickness(child, 1.0);
+                styled++;
+                break; // one highlight border per ListBoxItem
+            }
+        }
+
+        Logger.Log("Injector", $"Native nav items: {styled} items styled with resting border");
     }
 
     // ===== Content management =====
