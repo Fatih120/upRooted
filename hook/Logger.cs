@@ -17,6 +17,13 @@ internal static class Logger
     private static readonly string LogPath;
     private static readonly object Lock = new();
     private static readonly System.Text.StringBuilder _buffer = new();
+
+    /// <summary>
+    /// Optional subscriber for live log lines (used by LogConsole).
+    /// Called for every logged line including wide events.
+    /// Set to null to unsubscribe. Single consumer — not thread-safe for multiple subscribers.
+    /// </summary>
+    internal static Action<string>? OnLine;
     private static readonly Timer _flushTimer;
 
     static Logger()
@@ -65,11 +72,14 @@ internal static class Logger
     internal static void Log(string message)
     {
         string? eager = null;
+        var formatted = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
+        try { OnLine?.Invoke(formatted); } catch { }
         try
         {
             lock (Lock)
             {
-                _buffer.Append($"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
+                _buffer.Append(formatted);
+                _buffer.Append('\n');
                 // Eager flush when buffer is large so a crash doesn't lose many lines.
                 if (_buffer.Length > 8192)
                 {
@@ -136,6 +146,8 @@ internal static class Logger
 
             sb.Append(" dur_ms=");
             sb.Append(durationMs);
+
+            try { OnLine?.Invoke(sb.ToString()); } catch { }
             sb.Append('\n');
 
             lock (Lock)

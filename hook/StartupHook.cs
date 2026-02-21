@@ -424,6 +424,32 @@ internal class StartupHook
                 });
             pluginsStarted++;
 
+            // Phase 4.5k: Log Console (dev channel only)
+            {
+                if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                {
+                    var lcResolver = resolver;
+                    var lcWindow = mainWindow!;
+                    resolver.RunOnUIThread(() =>
+                    {
+                        using var ev = WideEvent.Begin("Startup", "phase4_5k_log_console");
+                        try
+                        {
+                            LogConsole.Init(lcResolver, lcWindow);
+                            bool autoStart = savedSettings.Plugins.TryGetValue("log-console", out var lcEnabled) && lcEnabled;
+                            if (autoStart) LogConsole.Enable();
+                            ev.Set("auto_start", autoStart);
+                            ev.Set("result", "ok");
+                        }
+                        catch (Exception ex)
+                        {
+                            ev.SetError(ex);
+                            ev.Set("result", "error");
+                        }
+                    });
+                }
+            }
+
             // Phase 5: DotNetBrowser discovery
             {
                 var capturedWindow = mainWindow!;
