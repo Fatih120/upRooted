@@ -2927,6 +2927,12 @@ internal class AvaloniaReflection
         catch { return null; }
     }
 
+    public void SetDataContext(object? control, object? dataContext)
+    {
+        if (control == null) return;
+        control.GetType().GetProperty("DataContext")?.SetValue(control, dataContext);
+    }
+
     /// <summary>
     /// Gets a property value from any object by property name (useful for ViewModel access).
     /// </summary>

@@ -1338,13 +1338,24 @@ internal class RootcordEngine
         if (headerWrapper == null) return;
         _r.SetTag(headerWrapper, "rootcord-header-wrapper");
 
+        // Capture the DataContext from the MembersView so reparented controls keep their bindings
+        var membersDc = _r.GetDataContext(membersInnerGrid)
+            ?? _r.GetDataContext(membersPanel);
+
         // Move each header control from members Grid to our wrapper
         foreach (var ctrl in toMove)
         {
             _r.RemoveChild(membersInnerGrid, ctrl);
+            // Preserve DataContext so bindings continue to resolve
+            if (membersDc != null)
+                _r.SetDataContext(ctrl, membersDc);
             _r.AddChild(headerWrapper, ctrl);
             _reparentedHeaderControls.Add(ctrl);
         }
+
+        // Also set DataContext on the wrapper itself
+        if (membersDc != null)
+            _r.SetDataContext(headerWrapper, membersDc);
 
         // Insert the wrapper at the top of the channels panel
         // Channels panel is a Border/Panel — we need to wrap its existing content
@@ -2654,7 +2665,7 @@ internal class RootcordEngine
             var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
             if (sel == null || !IsDmTab(sel))
                 _r.SetBackground(iconRef, bgHover);
-            ShowIconTooltip(iconRef, "Direct Messages", null);
+            ShowIconTooltip(iconRef, "Explore Servers", null);
         });
         _r.SubscribeEvent(iconBorder, "PointerExited", () =>
         {
@@ -2704,35 +2715,34 @@ internal class RootcordEngine
         if (_homeViewModel == null) return;
         try
         {
-            // Primary: find a DM tab and select it directly.
-            // This triggers SubscribeTabChanges → RevertCommunityMembersSwap() → clean DM view.
+            // Open the server discovery / new tab page (the "+" button in Root's native tab bar).
+            // HomeViewModel.CreateNewTabCommand creates or selects the NewTab page.
+            var cmd = _r.GetPropertyValue(_homeViewModel, "CreateNewTabCommand");
+            if (cmd != null)
+            {
+                InvokeCommand(cmd);
+                Logger.Log(Tag, "Home: opened server discovery (CreateNewTabCommand)");
+                RefreshSelectedHighlight();
+                return;
+            }
+
+            // Fallback: find and select an existing NewTab in the tabs collection
             var tabs = _r.GetPropertyValue(_homeViewModel, "Tabs") as IEnumerable;
             if (tabs != null)
             {
                 foreach (var tab in tabs)
                 {
-                    if (tab != null && IsDmTab(tab))
+                    if (tab != null && tab.GetType().Name.Contains("NewTab"))
                     {
                         _r.SetPropertyValue(_homeViewModel, "SelectedTabViewModel", tab);
-                        Logger.Log(Tag, $"Home: selected DM tab '{GetTabDisplayName(tab)}'");
+                        Logger.Log(Tag, "Home: selected existing NewTab");
                         RefreshSelectedHighlight();
                         return;
                     }
                 }
             }
 
-            // Fallback: toggle DM pane command
-            var cmd = _r.GetPropertyValue(_homeViewModel, "DirectMessagesPaneToggleCommand");
-            if (cmd != null)
-            {
-                InvokeCommand(cmd);
-                Logger.Log(Tag, "Home: opened DM pane (fallback)");
-                RefreshSelectedHighlight();
-            }
-            else
-            {
-                Logger.Log(Tag, "Home: no DM tab or command found");
-            }
+            Logger.Log(Tag, "Home: no CreateNewTabCommand or NewTab found");
         }
         catch (Exception ex)
         {
