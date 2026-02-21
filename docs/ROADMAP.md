@@ -255,7 +255,7 @@ Uprooted injects into a closed-source application that updates independently. Tr
 
 | Uprooted Version | Root Versions Tested | Status | Notes |
 |-------------------|---------------------|--------|-------|
-| 0.4.2 (current) | v0.9.86 - v0.9.92 | Active | Primary development target |
+| 0.4.2 (current) | v0.9.86 - v0.9.93 | Active | Primary development target |
 
 Maintain this matrix as new Root versions are released. When a user reports a bug, the first diagnostic question should be which Root version they are running.
 

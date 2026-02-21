@@ -7,7 +7,7 @@ namespace Uprooted;
 /// Dumps everything we can find about browser engines, chat rendering, and
 /// the visual tree structure to the log. Zero side effects.
 ///
-/// Purpose: Root v0.9.92 removed DotNetBrowser entirely. This discovers what
+/// Purpose: Root v0.9.93 removed DotNetBrowser entirely. This discovers what
 /// (if anything) replaced it, and how chat messages are rendered.
 /// </summary>
 internal class BrowserDiscovery

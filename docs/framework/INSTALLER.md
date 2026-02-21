@@ -261,7 +261,7 @@ Uses 5 strategies in order, returning the first match:
 2. **Glob patterns** -- scans common directories (`~/Applications`, `~/Downloads`,
    `~/.local/bin`, `~/Desktop`, `~`, `/opt`, `/usr/bin`, `/usr/local/bin`) for any
    file matching `root*.appimage` (case-insensitive), catching versioned filenames
-   like `Root-0.9.92.AppImage`
+   like `Root-0.9.93.AppImage`
 3. **`.desktop` file search** -- scans `~/.local/share/applications`,
    `/usr/share/applications`, `/usr/local/share/applications` for desktop entries
    with "Root" in the `Name=` field, extracts the `Exec=` path

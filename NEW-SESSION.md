@@ -22,7 +22,7 @@
 ## 1. Project Identity
 
 **Uprooted** -- client mod framework for Root Communications desktop app (like Vencord for Discord).
-Version: 0.4.2. Target: Root v0.9.92+.
+Version: 0.4.2. Target: Root v0.9.93+.
 This is the **PRIVATE** repo (`The-Uprooted-Project/uprooted-private`). Never leak code to the public repo (`The-Uprooted-Project/uprooted`).
 Contributors: `watchthelight` (owner), `agomusio` (admin).
 
@@ -119,7 +119,7 @@ Two independent injection layers into one app:
 
 **Source:** [`hook/SESSION_STATE.md`](hook/SESSION_STATE.md) (2026-02-18) — *this section is a static snapshot; SESSION_STATE.md is the live source*
 
-**Versions:** 0.4.2 | Target Root 0.9.92
+**Versions:** 0.4.2 | Target Root 0.9.93
 
 **Critical finding (2026-02-17):**
 - **Chat is Avalonia-native** -- 1647+ visual tree nodes, 0 browser controls. DotNetBrowser is auxiliary (WebRTC, OAuth, sub-apps), NOT the chat renderer.

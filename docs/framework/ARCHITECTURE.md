@@ -36,7 +36,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 
 ## 1. Project Overview
 
-**Uprooted** is a client modification framework for [Root Communications](https://rootapp.com) desktop (v0.9.92+), analogous to [Vencord](https://vencord.dev/) for Discord. It provides a plugin and theme system that hooks into Root's desktop app at runtime, allowing users to customize the UI and intercept internal bridge calls without permanently modifying the application binary.
+**Uprooted** is a client modification framework for [Root Communications](https://rootapp.com) desktop (v0.9.93+), analogous to [Vencord](https://vencord.dev/) for Discord. It provides a plugin and theme system that hooks into Root's desktop app at runtime, allowing users to customize the UI and intercept internal bridge calls without permanently modifying the application binary.
 
 ### What it does
 

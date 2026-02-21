@@ -1,12 +1,12 @@
 # ILSpy Dump Index
 
-> **What this is:** Master index for 219 decompiled ILSpy files from Root v0.9.92 — file inventory with analysis status, line counts, and links to curated docs.
+> **What this is:** Master index for 219 decompiled ILSpy files from Root v0.9.93 — file inventory with analysis status, line counts, and links to curated docs.
 > **Read when:** Looking for a specific decompiled source file; checking which files have been analyzed; finding raw ILSpy dumps.
 > **Skip if:** You need the curated findings → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) or [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md).
 > **Does NOT cover:** Curated control reference → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) | Theme key values → [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md)
 
 > Master index for all decompiled files in `research/ilspy-dumps/`.
-> Source: ILSpy decompilation of Root v0.9.92 and its Avalonia dependencies.
+> Source: ILSpy decompilation of Root v0.9.93 and its Avalonia dependencies.
 > Each file preserves original ILSpy comments (assembly version, full namespace path).
 
 **Total:** 273 files, 159,149 lines, 9.7 MB
@@ -21,10 +21,10 @@
 
 | Assembly | Version | Files | Description |
 |----------|---------|-------|-------------|
-| `RootApp.Client.Avalonia` | 0.9.92.0 | 250 | Main UI assembly — views, styles, themes, controls, settings, navigation |
-| `RootApp.Client.Domain` | 0.9.92.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
-| `RootApp.Client.CoreDomain` | 0.9.92.0 | 4 | Core domain (IRootSessionAccessor, RootSessionAccessor, RootSession, RootSessionFactory) |
-| `Root` | 0.9.92.0 | 1 | Root.exe entry point |
+| `RootApp.Client.Avalonia` | 0.9.93.0 | 250 | Main UI assembly — views, styles, themes, controls, settings, navigation |
+| `RootApp.Client.Domain` | 0.9.93.0 | 5 | Domain layer (DataStoreKeys, ILocalDataStore, LocalDataStore, extensions, secure storage) |
+| `RootApp.Client.CoreDomain` | 0.9.93.0 | 4 | Core domain (IRootSessionAccessor, RootSessionAccessor, RootSession, RootSessionFactory) |
+| `Root` | 0.9.93.0 | 1 | Root.exe entry point |
 | `Avalonia.Controls` | 11.3.12.0 | 3 | Framework controls (Application, CheckBox, ToggleSwitch) |
 | `Avalonia.Themes.Simple` | 11.3.12.0 | 1 | SimpleTheme base class |
 | `AvaloniaEdit` | 11.3.0.0 | 3 | Text editor theme resources |
@@ -715,7 +715,7 @@ Classes referenced in the dumps but not present as standalone files. Candidates 
 
 ---
 
-*Last updated: 2026-02-20 — 273 files from Root v0.9.92, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Full inventory: Views (47), ViewModels (52), VM Factories (49), Custom Controls (30), Markdown (18), Settings (6), Data Store (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infrastructure (7), Interfaces (3), Avalonia Framework (4), AvaloniaEdit (3), Resources (2), XAML Infrastructure (9).*
+*Last updated: 2026-02-20 — 273 files from Root v0.9.93, Avalonia 11.3.12, AvaloniaEdit 11.3.0. Full inventory: Views (47), ViewModels (52), VM Factories (49), Custom Controls (30), Markdown (18), Settings (6), Data Store (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infrastructure (7), Interfaces (3), Avalonia Framework (4), AvaloniaEdit (3), Resources (2), XAML Infrastructure (9).*
 
 ---
 

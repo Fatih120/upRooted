@@ -1,6 +1,6 @@
 # Root Control Reference
 
-> **What this is:** Authoritative reference for Root's custom controls, style classes, resource key usage, message view internals, and DataStore keys — all confirmed from ILSpy decompilation of v0.9.92.
+> **What this is:** Authoritative reference for Root's custom controls, style classes, resource key usage, message view internals, and DataStore keys — all confirmed from ILSpy decompilation of v0.9.93.
 > **Read when:** Building any C# feature that touches Root's visual tree; fixing theme bugs; building message plugins; matching Root's UI aesthetic.
 > **Before this:** [ARCHITECTURE.md §Critical Rules](ARCHITECTURE.md#9-critical-rules) — constraints on how to interact with the tree.
 > **After this, for:**
@@ -1460,4 +1460,4 @@ Settings are stored as **integers** (0/1 for booleans). `Theme` is the RootTheme
 **Source dumps:** 56 analyzed files from [ILSPY_DUMP_INDEX.md](../../research/ILSPY_DUMP_INDEX.md) (of 219 total in `research/ilspy-dumps/`)
 **Supersedes (for control detail):** ROOT_INTERNALS.md §3 DotNetBrowser | ROOT_INTERNALS.md §6 Theme System (use ROOT_THEME_SYSTEM_FINDINGS.md for hex values)
 **For implementation patterns:** [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | [HOOK_REFERENCE.md](HOOK_REFERENCE.md)
-*Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.92.0, Avalonia.Controls 11.3.12.0*
+*Last updated: 2026-02-19 — sourced from ILSpy decompilation of RootApp.Client.Avalonia v0.9.93.0, Avalonia.Controls 11.3.12.0*

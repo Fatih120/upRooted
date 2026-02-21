@@ -4,7 +4,7 @@
 > **Read when:** Implementing the resource-first ThemeEngine migration; deriving theme palettes; checking exact color values; understanding how Root switches themes.
 > **Before this:** [ROOT_CONTROL_REFERENCE.md §Theme System Mechanics](../docs/framework/ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — summary of findings and implications.
 > **Implementation guide:** [THEME_ENGINE_DEEP_DIVE.md §Resource-First Migration](../docs/framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan) — how to use these values to fix ThemeEngine.
-> **Source:** ILSpy decompilation of `RootApp.Client.Avalonia v0.9.92.0`
+> **Source:** ILSpy decompilation of `RootApp.Client.Avalonia v0.9.93.0`
 > **Status:** Research complete — all 32 keys decoded, 3 themes compared, App.cs wiring confirmed, all 27 style files analyzed.
 > **Related:** [THEME_ENGINE_DEEP_DIVE](../docs/framework/THEME_ENGINE_DEEP_DIVE.md) | [ROOT_CONTROL_REFERENCE](../docs/framework/ROOT_CONTROL_REFERENCE.md) | [ROOT_INTERNALS](../docs/research/ROOT_INTERNALS.md)
 
@@ -227,7 +227,7 @@ public bool TryGetResource(object key, ThemeVariant? theme, out object? value)
 ## App Startup Chain (from Program.cs)
 
 ```csharp
-// Root, Version=0.9.92.0 — Program.Main
+// Root, Version=0.9.93.0 — Program.Main
 RootLauncher.Run(args,
     host => new AppCompositionRoot(host),  // DI container
     compositionRoot => {

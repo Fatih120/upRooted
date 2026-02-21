@@ -35,7 +35,7 @@
 
 ## Critical Finding: Root's Chat is Avalonia-Native
 
-Root v0.9.92's chat UI is rendered **entirely in native Avalonia controls**, NOT in DotNetBrowser.
+Root v0.9.93's chat UI is rendered **entirely in native Avalonia controls**, NOT in DotNetBrowser.
 Confirmed through extensive investigation on 2026-02-17:
 
 - Avalonia visual tree: 1647+ nodes, **0 browser-like controls**
@@ -88,7 +88,7 @@ Key details:
 
 - DotNetBrowser v3.4.0.6253, DotNetBrowser.Core v3.4.0.6253, DotNetBrowser.Logging v3.4.0.6253
 - DotNetBrowser.AvaloniaUi: **NOT loaded** (Root doesn't ship it)
-- Root v0.9.92.0, RootApp.Client.Avalonia v0.9.92.0
+- Root v0.9.93.0, RootApp.Client.Avalonia v0.9.93.0
 - Avalonia 11.3.12, .NET 10.0.3, Chromium 144.0.0.0
 - Chromium flags: `--incognito`, `--disable-web-security`
 

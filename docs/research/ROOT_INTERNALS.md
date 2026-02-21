@@ -49,7 +49,7 @@ Uprooted is a client modification framework that injects custom UI, plugin infra
 
 ### Scope of This Document
 
-This document covers Root's architecture as observed through reverse engineering of versions 0.9.86 through 0.9.92. Early sections come from static analysis of the binary, source map extraction, runtime observation, and network traffic analysis. Later sections (DotNetBrowser discovery chain, chat-is-Avalonia-native finding) are confirmed by ILSpy decompilation of v0.9.92. Nothing here is based on Root's internal documentation or source code access.
+This document covers Root's architecture as observed through reverse engineering of versions 0.9.86 through 0.9.93. Early sections come from static analysis of the binary, source map extraction, runtime observation, and network traffic analysis. Later sections (DotNetBrowser discovery chain, chat-is-Avalonia-native finding) are confirmed by ILSpy decompilation of v0.9.93. Nothing here is based on Root's internal documentation or source code access.
 
 This is the **native/.NET/system-level view** aimed at Uprooted framework contributors who need to understand the host application deeply. Plugin authors who only need to work within the Chromium context should start with [Root Environment](../plugins/ROOT_ENVIRONMENT.md) instead.
 
@@ -132,7 +132,7 @@ The .NET host creates JavaScript bridge objects that are injected into the Chrom
 
 ### How Root Embeds Chromium
 
-Root accesses DotNetBrowser programmatically through its ViewModel chain, NOT through a `BrowserView` Avalonia control. Root does not ship `DotNetBrowser.AvaloniaUi` (the package that provides `BrowserView`). No browser-like controls exist in the Avalonia visual tree (confirmed: 1647+ nodes scanned, 0 browser controls found). The browser engine is accessed via a multi-step ViewModel chain (confirmed by ILSpy decompilation of v0.9.92):
+Root accesses DotNetBrowser programmatically through its ViewModel chain, NOT through a `BrowserView` Avalonia control. Root does not ship `DotNetBrowser.AvaloniaUi` (the package that provides `BrowserView`). No browser-like controls exist in the Avalonia visual tree (confirmed: 1647+ nodes scanned, 0 browser controls found). The browser engine is accessed via a multi-step ViewModel chain (confirmed by ILSpy decompilation of v0.9.93):
 
 ```
 MainWindow.DataContext (MainViewModel)
@@ -215,7 +215,7 @@ These bridges are the primary mechanism through which the .NET host controls web
 
 ### Critical Finding: Chat is Avalonia-Native
 
-Extensive investigation on 2026-02-17 (Root v0.9.92) revealed that **Root's chat UI is rendered entirely in native Avalonia controls, NOT in DotNetBrowser**. This finding has significant implications for any Uprooted feature that targets chat messages.
+Extensive investigation on 2026-02-17 (Root v0.9.93) revealed that **Root's chat UI is rendered entirely in native Avalonia controls, NOT in DotNetBrowser**. This finding has significant implications for any Uprooted feature that targets chat messages.
 
 **Evidence:**
 
@@ -346,7 +346,7 @@ In addition, each theme dictionary contains ~220 SVG asset path references (them
 
 ### Key Discovery: Full 32-Key Native Color System
 
-> ILSpy decompilation of Root v0.9.92 fully mapped Root's native color system: 32 custom resource keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]`. All Root views bind to these keys via `DynamicResourceExtension`. See [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete catalog with hex values for all three themes, AXAML structure, style stack, and DynamicResource usage analysis.
+> ILSpy decompilation of Root v0.9.93 fully mapped Root's native color system: 32 custom resource keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]`. All Root views bind to these keys via `DynamicResourceExtension`. See [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the complete catalog with hex values for all three themes, AXAML structure, style stack, and DynamicResource usage analysis.
 
 For Root's custom control types and style classes, see [ROOT_CONTROL_REFERENCE.md](../framework/ROOT_CONTROL_REFERENCE.md).
 
