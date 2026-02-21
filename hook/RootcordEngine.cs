@@ -1205,8 +1205,10 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
 
-            // Enforce minimum widths so neither the channels panel nor the chat can disappear
-            // when the user drags the GridSplitter to an extreme position.
+            // Enforce min/max widths so panels can't disappear or overlap.
+            // Channels min must accommodate the user card (strip 56px + channels = card width).
+            // Channels max prevents it from pushing chat off-screen.
+            // Chat min prevents it from collapsing when channels is dragged wide.
             try
             {
                 for (int pi = 0; pi < n; pi++)
@@ -1221,19 +1223,21 @@ internal class RootcordEngine
                     var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
                     if (origW.unit == "Star" || origW.unit == "star")
                     {
-                        // Chat panel — must not collapse below 300px
-                        _r.SetMinWidth(panel, 300);
-                        Logger.Log(Tag, $"SwapCommunityMembers: chat panel MinWidth=300");
+                        // Chat panel — hard floor at 350px so messages are always readable
+                        _r.SetMinWidth(panel, 350);
+                        Logger.Log(Tag, $"SwapCommunityMembers: chat panel MinWidth=350");
                     }
                     else
                     {
-                        // Channels panel — must not collapse below 240px
-                        _r.SetMinWidth(panel, 240);
-                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=240");
+                        // Channels panel — min 270px (user card needs ~326px total, minus 56px strip)
+                        // max 420px so it can't push chat off-screen
+                        _r.SetMinWidth(panel, 270);
+                        _r.SetMaxWidth(panel, 420);
+                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=270 MaxWidth=420");
                     }
                 }
             }
-            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: MinWidth error: {ex.Message}"); }
+            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: width bounds error: {ex.Message}"); }
 
             // Build a custom community header and inject it at the top of the channels column.
             // Also hide the native header in the members column.
@@ -1538,8 +1542,9 @@ internal class RootcordEngine
         var existingChild = _r.GetBorderChild(channelsPanel);
         if (existingChild != null && (_r.GetTag(existingChild) as string) == "rootcord-channel-wrapper") return;
 
-        // Enforce minimum width so the username in the user card is never cut off
-        _r.SetMinWidth(channelsPanel, 240);
+        // Width bounds match SwapCommunityMembersToRight constraints
+        _r.SetMinWidth(channelsPanel, 270);
+        _r.SetMaxWidth(channelsPanel, 420);
 
         // ===== COMMUNITY INFO CARD =====
         var headerBorder = _r.CreateBorder(_cardBg, 12);
