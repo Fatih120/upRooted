@@ -255,20 +255,20 @@ internal class MessageStore : IDisposable
         {
             if (_writeBuffer.Count == 0) return;
 
-            var toWrite = new List<string>(_writeBuffer);
-            _writeBuffer.Clear();
-
             try
             {
                 // Ensure file exists with header
                 if (!File.Exists(_filePath))
                     File.WriteAllText(_filePath, FileHeader + "\n");
 
-                File.AppendAllText(_filePath, string.Join("\n", toWrite) + "\n");
+                File.AppendAllText(_filePath, string.Join("\n", _writeBuffer) + "\n");
+
+                // Only clear after successful write — prevents data loss on I/O error
+                _writeBuffer.Clear();
             }
             catch (Exception ex)
             {
-                Logger.Log(Tag, $"Flush error: {ex.Message}");
+                Logger.Log(Tag, $"Flush error ({_writeBuffer.Count} lines retained): {ex.Message}");
             }
         }
     }

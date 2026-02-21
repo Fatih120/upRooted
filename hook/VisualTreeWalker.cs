@@ -530,12 +530,13 @@ internal class VisualTreeWalker
         return (null, null, false, 0, 0);
     }
 
-    private bool ContainsDescendant(object root, object target)
+    private bool ContainsDescendant(object root, object target, int depth = 0)
     {
         if (root == target) return true;
+        if (depth >= 30) return false;
         foreach (var child in _r.GetVisualChildren(root))
         {
-            if (child == target || ContainsDescendant(child, target))
+            if (child == target || ContainsDescendant(child, target, depth + 1))
                 return true;
         }
         return false;
