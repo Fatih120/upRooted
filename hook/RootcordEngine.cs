@@ -95,6 +95,12 @@ internal class RootcordEngine
     private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
     private object? _channelsWidthPanel;       // Channels panel reference for Bounds reading
     private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
+    private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
+    private object? _userBarStatusText;       // TextBlock showing "Online"/"Away" in user bar
+    private object? _userBarStatusDot;        // Border (circle) showing status color in user bar
+    private object? _sessionUserRef;          // SessionUser object reference for PropertyChanged sub
+    private object? _sessionUserPcHandler;    // PropertyChanged handler on SessionUser
+    private string _lastStatusLabel = "";     // Cached to avoid redundant UI updates
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -1404,6 +1410,7 @@ internal class RootcordEngine
 
         // Unsubscribe any previous handler
         TeardownUserBarWidthTracking();
+        _userBarOverPane = false;
 
         // Find the channels panel (same logic as InjectChannelsHeader)
         object? channelsPanel = null;
@@ -1449,7 +1456,9 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Update user bar width to match StripWidth + channels panel width.
+    /// Update user bar width to match the visible left-side columns.
+    /// When pane is open: snap to StripWidth + paneWidth (channels extend full height).
+    /// When pane is closed: snap to StripWidth + channels panel width (original behavior).
     /// Called on every LayoutUpdated from the community layoutGrid.
     /// </summary>
     private void UpdateUserBarWidth()
@@ -1457,26 +1466,48 @@ internal class RootcordEngine
         if (_userBar == null || _channelsWidthPanel == null) return;
         try
         {
-            var bounds = _r.GetBounds(_channelsWidthPanel);
-            if (bounds == null || bounds.Value.W <= 0) return;
-            double targetWidth = StripWidth + bounds.Value.W;
+            bool paneOpen = false;
+            double paneWidth = 0;
 
-            // When a pane is open (PanePlacement=Left → pane sits between strip and channels),
-            // expand the user card to also cover the pane width.
             if (_rootSplitView != null && _homeViewModel != null)
             {
-                var paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
-                if (paneOpen is true)
+                var paneOpenVal = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
+                if (paneOpenVal is true)
                 {
-                    // Read the pane's actual rendered width from the SplitView template part
+                    paneOpen = true;
                     try
                     {
-                        // PaneWidth property on HomeViewModel (default 320)
-                        var paneWidth = _r.GetPropertyValue(_homeViewModel, "PaneWidth");
-                        if (paneWidth is double pw && pw > 0)
-                            targetWidth += pw;
+                        var pw = _r.GetPropertyValue(_homeViewModel, "PaneWidth");
+                        if (pw is double p && p > 0)
+                            paneWidth = p;
                     }
                     catch { }
+                }
+            }
+
+            double targetWidth;
+            if (paneOpen && paneWidth > 0)
+            {
+                // Pane is open: user bar covers strip + pane only, channels go full height
+                targetWidth = StripWidth + paneWidth;
+
+                if (!_userBarOverPane)
+                {
+                    _userBarOverPane = true;
+                    RemoveChannelListBottomPadding();
+                }
+            }
+            else
+            {
+                // Pane is closed: user bar covers strip + channels (original behavior)
+                var bounds = _r.GetBounds(_channelsWidthPanel);
+                if (bounds == null || bounds.Value.W <= 0) return;
+                targetWidth = StripWidth + bounds.Value.W;
+
+                if (_userBarOverPane)
+                {
+                    _userBarOverPane = false;
+                    AddChannelListBottomPadding();
                 }
             }
 
@@ -1516,6 +1547,34 @@ internal class RootcordEngine
     }
 
     /// <summary>
+    /// Remove bottom margin from the channels panel wrapper content so the channel list
+    /// extends full height (when pane is open and user bar snaps to pane instead).
+    /// </summary>
+    private void RemoveChannelListBottomPadding()
+    {
+        if (_channelsWidthPanel == null) return;
+        try
+        {
+            var child = _r.GetBorderChild(_channelsWidthPanel);
+            if (child == null) return;
+            var tag = _r.GetTag(child) as string;
+            if (tag != "rootcord-channel-wrapper") return;
+
+            foreach (var gridChild in _r.GetVisualChildren(child))
+            {
+                int row = _r.GetGridRow(gridChild);
+                if (row == 1)
+                {
+                    _r.SetMargin(gridChild, 0, 0, 0, 0);
+                    Logger.Log(Tag, "UserBar: removed bottom padding from channels content (pane open)");
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"UserBar: remove bottom padding error: {ex.Message}"); }
+    }
+
+    /// <summary>
     /// Unsubscribe user bar width tracking LayoutUpdated handler.
     /// </summary>
     private void TeardownUserBarWidthTracking()
@@ -1533,6 +1592,7 @@ internal class RootcordEngine
         _userBarLayoutHandler = null;
         _userBarLayoutTarget = null;
         _channelsWidthPanel = null;
+        _userBarOverPane = false;
     }
 
     /// <summary>
@@ -2566,6 +2626,7 @@ internal class RootcordEngine
                     _r.SetHorizontalAlignment(statusDot, "Right");
                     _r.SetVerticalAlignment(statusDot, "Bottom");
                     _r.AddChild(avatarGrid, statusDot);
+                    _userBarStatusDot = statusDot;
                 }
                 // Clicking the avatar opens the profile pane
                 _r.SetCursorHand(avatarGrid);
@@ -2618,6 +2679,8 @@ internal class RootcordEngine
                     }
                     catch { }
                     _r.AddChild(textPanel, statusText);
+                    _userBarStatusText = statusText;
+                    _lastStatusLabel = statusLabel;
                 }
                 // Clicking the text area also opens the profile pane
                 _r.SetCursorHand(textPanel);
@@ -2648,6 +2711,9 @@ internal class RootcordEngine
 
             _r.AddChild(_homeViewGrid, _userBar);
             Logger.Log(Tag, "User bar injected: flush docked card, 5-col layout, MinWidth=300");
+
+            // Subscribe to SessionUser.PropertyChanged for live status updates
+            SubscribeSessionUserStatus();
         }
         catch (Exception ex)
         {
@@ -2672,21 +2738,21 @@ internal class RootcordEngine
             else Logger.Log(Tag, $"InvokeHomeCommand: '{commandName}' not found");
 
             // After opening any pane, schedule Sign Out button rearrangement
-            // (ProfileView may now be in the visual tree)
+            // (ProfileView may now be in the visual tree). Rapid retry for instant feel.
             var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-            Task.Delay(500, token).ContinueWith(_ =>
+            foreach (var delayMs in new[] { 50, 150, 400 })
             {
-                if (token.IsCancellationRequested) return;
-                _r.RunOnUIThread(() =>
+                var captured = delayMs;
+                Task.Delay(captured, token).ContinueWith(_ =>
                 {
-                    try
+                    if (token.IsCancellationRequested) return;
+                    _r.RunOnUIThread(() =>
                     {
-                        Logger.Log(Tag, "RearrangeSignOut: triggered from InvokeHomeCommand");
-                        RearrangeSignOutButton();
-                    }
-                    catch (Exception ex) { Logger.Log(Tag, $"RearrangeSignOut deferred error: {ex.Message}"); }
-                });
-            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                        try { RearrangeSignOutButton(); }
+                        catch { }
+                    });
+                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+            }
         }
         catch (Exception ex) { Logger.Log(Tag, $"InvokeHomeCommand '{commandName}' error: {ex.Message}"); }
     }
@@ -2797,12 +2863,16 @@ internal class RootcordEngine
     /// </summary>
     private void RevertUserBar()
     {
+        UnsubscribeSessionUserStatus();
         if (_userBar != null && _homeViewGrid != null)
         {
             try { _r.RemoveChild(_homeViewGrid, _userBar); } catch { }
             Logger.Log(Tag, "User bar removed");
         }
         _userBar = null;
+        _userBarStatusText = null;
+        _userBarStatusDot = null;
+        _lastStatusLabel = "";
     }
 
     /// <summary>
@@ -3596,6 +3666,84 @@ internal class RootcordEngine
     };
 
     /// <summary>
+    /// Subscribe to SessionUser.PropertyChanged so the user bar status text and dot
+    /// update live when online status changes (e.g., Active → Inactive).
+    /// </summary>
+    private void SubscribeSessionUserStatus()
+    {
+        UnsubscribeSessionUserStatus();
+        if (_homeViewModel == null) return;
+        try
+        {
+            // Walk: HomeViewModel → RootSessionAccessor → Session → UserInfoService → SessionUser
+            foreach (var accProp in new[] { "RootSessionAccessor", "SessionAccessor", "Session" })
+            {
+                var accessor = _r.GetPropertyValue(_homeViewModel, accProp);
+                if (accessor == null) continue;
+                var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
+                if (session == null) continue;
+                var userInfoService = _r.GetPropertyValue(session, "UserInfoService");
+                if (userInfoService == null) continue;
+                var sessionUser = _r.GetPropertyValue(userInfoService, "SessionUser");
+                if (sessionUser == null) continue;
+
+                _sessionUserRef = sessionUser;
+                _sessionUserPcHandler = _r.SubscribePropertyChanged(sessionUser, (propName) =>
+                {
+                    // OnlineStatus, MaxOnlineStatus, DeviceOnlineStatus — any of these means status changed
+                    if (propName.Contains("Online", StringComparison.OrdinalIgnoreCase) ||
+                        propName.Contains("Status", StringComparison.OrdinalIgnoreCase))
+                    {
+                        _r.RunOnUIThread(() => { try { RefreshUserBarStatus(); } catch { } });
+                    }
+                });
+                if (_sessionUserPcHandler != null)
+                    Logger.Log(Tag, "UserBar: subscribed SessionUser.PropertyChanged for live status");
+                // Initial refresh in case status changed between build and subscription
+                RefreshUserBarStatus();
+                return;
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"SubscribeSessionUserStatus error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Unsubscribe from SessionUser.PropertyChanged.
+    /// </summary>
+    private void UnsubscribeSessionUserStatus()
+    {
+        if (_sessionUserRef != null && _sessionUserPcHandler != null)
+            _r.UnsubscribePropertyChanged(_sessionUserRef, _sessionUserPcHandler);
+        _sessionUserRef = null;
+        _sessionUserPcHandler = null;
+    }
+
+    /// <summary>
+    /// Refresh the user bar status text and dot color from the current SessionUser state.
+    /// </summary>
+    private void RefreshUserBarStatus()
+    {
+        if (_userBarStatusText == null && _userBarStatusDot == null) return;
+        try
+        {
+            string label = GetCurrentStatusLabel();
+            if (label == _lastStatusLabel) return; // no change
+            _lastStatusLabel = label;
+
+            string color = GetStatusColor(label);
+
+            if (_userBarStatusText != null)
+                _userBarStatusText.GetType().GetProperty("Text")?.SetValue(_userBarStatusText, label);
+
+            if (_userBarStatusDot != null)
+                _r.SetBackground(_userBarStatusDot, color);
+
+            Logger.Log(Tag, $"UserBar: status refreshed → {label}");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RefreshUserBarStatus error: {ex.Message}"); }
+    }
+
+    /// <summary>
     /// Show an inline status selector replacing the area below the status button.
     /// Each option is a row: colored dot + label, clickable.
     /// </summary>
@@ -4119,24 +4267,25 @@ internal class RootcordEngine
         // Watch for SelectedTabViewModel + PaneOpen changes
         _selectionHandler = _r.SubscribePropertyChanged(_homeViewModel, (propName) =>
         {
-            // When pane opens, rearrange the Sign Out button in the Profile pane
+            // When pane opens, rearrange the Sign Out button in the Profile pane.
+            // Rapid retry: fire at 50ms, 150ms, 400ms so we catch the visual tree ASAP.
             if (propName == "PaneViewModel" || propName == "PaneOpen" || propName == "ProfileOpen")
             {
                 Logger.Log(Tag, $"PropertyChanged: {propName} — scheduling SignOut rearrangement");
                 var paneToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-                Task.Delay(500, paneToken).ContinueWith(_ =>
+                foreach (var delayMs in new[] { 50, 150, 400 })
                 {
-                    if (paneToken.IsCancellationRequested) return;
-                    _r.RunOnUIThread(() =>
+                    var captured = delayMs;
+                    Task.Delay(captured, paneToken).ContinueWith(_ =>
                     {
-                        try
+                        if (paneToken.IsCancellationRequested) return;
+                        _r.RunOnUIThread(() =>
                         {
-                            Logger.Log(Tag, "RearrangeSignOut: executing from PropertyChanged");
-                            RearrangeSignOutButton();
-                        }
-                        catch (Exception ex) { Logger.Log(Tag, $"RearrangeSignOut error: {ex.Message}"); }
-                    });
-                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                            try { RearrangeSignOutButton(); }
+                            catch { }
+                        });
+                    }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                }
             }
 
             if (propName == "SelectedTabViewModel")
