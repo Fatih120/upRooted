@@ -976,6 +976,16 @@ internal class SidebarInjector
         {
             if (node.GetType().Name != "ListBoxItem") continue;
 
+            // Skip section header items ("USER SETTINGS", "APP SETTINGS").
+            // They are ListBoxItems too but contain FontSize=11 TextBlocks; nav items use FontSize=14.
+            bool isNavItem = false;
+            foreach (var tb in _walker.DescendantsDepthFirst(node))
+            {
+                if (!_r.IsTextBlock(tb)) continue;
+                if (_r.GetFontSize(tb) is 14.0) { isNavItem = true; break; }
+            }
+            if (!isNavItem) continue;
+
             // Find the rounded highlight Border (CornerRadius=12) inside this ListBoxItem.
             // Native structure: ListBoxItem → Panel(M=0,2,0,2) → [ContentPresenter..., Border(H=36, CR=12)]
             // Only the highlight border has CR=12; all layout/container borders have CR=0.
