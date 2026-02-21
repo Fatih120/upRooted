@@ -22,8 +22,6 @@ Current focus areas (in order):
 
 ### Bugfixes
 
-- [ ] **Version copy intercept** — The version info copy button only copies Root's version. Need to intercept and overwrite clipboard with all TextBlock lines (Root + Uprooted). Handler is commented out due to Root's async `SetTextAsync` racing with our clipboard write.
-  - Files: `hook/SidebarInjector.cs` (~line 1155)
 
 - [ ] **MessageLogger card positioning** — `FindMessageGridInContainer` returns null. Container structure may have changed; needs investigation.
   - Files: `hook/MessageLogger.cs`
@@ -167,6 +165,7 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Version copy intercept race condition fixed** (2026-02-21) — Root's async `SetTextAsync` no longer races with our clipboard write.
 - [x] **Native theme card settings button** (2026-02-21) — Gear button on "Native" preset card opens Root's native Change Theme page via ViewModel-driven ListBox.SelectedItem binding. SelectRootTab helper for programmatic Root settings navigation.
 - [x] **Structured logging overhaul** (2026-02-21) — WideEvent + TailSampler infrastructure, ~1200 Logger.Log calls migrated to ~100 wide events, 4 scan engines tail-sampled, LogConsole dev terminal.
 - [x] **TranslateEngine shipped** (2026-02-21) — DeepL-powered message translation with language picker, API key config, context menu integration.
