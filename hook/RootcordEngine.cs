@@ -92,6 +92,12 @@ internal class RootcordEngine
     private object? _tabChannelBtn;        // "Channel" tab button
     private object? _headerMembersVm;      // MembersViewModel for ToggleMenuCommand
 
+    // User bar width tracking (matches channels panel width dynamically)
+    private object? _userBarLayoutHandler;     // LayoutUpdated handler on community layoutGrid
+    private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
+    private object? _channelsWidthPanel;       // Channels panel reference for Bounds reading
+    private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
+
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
     private object? _membersLayoutUpdatedHandler;
@@ -1213,7 +1219,11 @@ internal class RootcordEngine
                 if (headerToken.IsCancellationRequested) return;
                 _r.RunOnUIThread(() =>
                 {
-                    try { InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx); }
+                    try
+                    {
+                        InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                        SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                    }
                     catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader error: {ex.Message}"); }
                 });
             }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
@@ -1278,6 +1288,9 @@ internal class RootcordEngine
 
         // Unwrap the injected header from the channels panel (restores original content)
         RemoveInjectedHeader();
+
+        // Unsubscribe user bar width tracking
+        TeardownUserBarWidthTracking();
     }
 
     // ===== Community header injection =====
@@ -1327,6 +1340,129 @@ internal class RootcordEngine
         _tabCommunityBtn = null;
         _tabChannelBtn = null;
         _headerMembersVm = null;
+    }
+
+    /// <summary>
+    /// Subscribe LayoutUpdated on the community layoutGrid to dynamically update
+    /// the user bar width whenever the channels panel is resized via GridSplitter.
+    /// Also adds bottom padding to the channels panel content so the channel list
+    /// doesn't extend behind the user bar.
+    /// </summary>
+    private void SetupUserBarWidthTracking(object layoutGrid, List<(object child, int col)> nonSplitters, int membersIdx)
+    {
+        if (_userBar == null) return;
+
+        // Unsubscribe any previous handler
+        TeardownUserBarWidthTracking();
+
+        // Find the channels panel (same logic as InjectChannelsHeader)
+        object? channelsPanel = null;
+        for (int i = 0; i < nonSplitters.Count; i++)
+        {
+            if (i == membersIdx) continue;
+            int origCol = nonSplitters[i].col;
+            var origW = _originalColWidths?.FirstOrDefault(x => x.colIdx == origCol);
+            if (origW != null && origW.Value.unit != "Star" && origW.Value.unit != "star")
+            {
+                channelsPanel = nonSplitters[i].child;
+                break;
+            }
+        }
+        if (channelsPanel == null) return;
+        _channelsWidthPanel = channelsPanel;
+
+        // Initial width update
+        UpdateUserBarWidth();
+
+        // Add bottom padding to the channels wrapper so content doesn't go behind user bar
+        AddChannelListBottomPadding();
+
+        // Subscribe LayoutUpdated to track width changes from GridSplitter resize
+        try
+        {
+            var eventInfo = layoutGrid.GetType().GetEvent("LayoutUpdated");
+            if (eventInfo != null)
+            {
+                var capturedGrid = layoutGrid;
+                EventHandler handler = (_, _) =>
+                {
+                    try { UpdateUserBarWidth(); }
+                    catch { }
+                };
+                eventInfo.AddEventHandler(layoutGrid, handler);
+                _userBarLayoutHandler = handler;
+                _userBarLayoutTarget = layoutGrid;
+                Logger.Log(Tag, "UserBar: width tracking subscribed on layoutGrid LayoutUpdated");
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"UserBar: width tracking subscription failed: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Update user bar width to match StripWidth + channels panel width.
+    /// Called on every LayoutUpdated from the community layoutGrid.
+    /// </summary>
+    private void UpdateUserBarWidth()
+    {
+        if (_userBar == null || _channelsWidthPanel == null) return;
+        try
+        {
+            var bounds = _r.GetBounds(_channelsWidthPanel);
+            if (bounds == null || bounds.Value.W <= 0) return;
+            double targetWidth = StripWidth + bounds.Value.W;
+            _r.SetWidth(_userBar, targetWidth);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Add bottom margin to the channels panel wrapper content so the channel list
+    /// doesn't extend behind the user bar. Finds the rootcord-channel-wrapper Grid
+    /// and sets Margin on Row 1 (the channel list content).
+    /// </summary>
+    private void AddChannelListBottomPadding()
+    {
+        if (_channelsWidthPanel == null) return;
+        try
+        {
+            var child = _r.GetBorderChild(_channelsWidthPanel);
+            if (child == null) return;
+            var tag = _r.GetTag(child) as string;
+            if (tag != "rootcord-channel-wrapper") return;
+
+            // Find Row 1 child (the original channels content) and add bottom margin
+            foreach (var gridChild in _r.GetVisualChildren(child))
+            {
+                int row = _r.GetGridRow(gridChild);
+                if (row == 1)
+                {
+                    _r.SetMargin(gridChild, 0, 0, 0, UserBarHeight);
+                    Logger.Log(Tag, $"UserBar: added {UserBarHeight}px bottom padding to channels content");
+                    break;
+                }
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"UserBar: bottom padding error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Unsubscribe user bar width tracking LayoutUpdated handler.
+    /// </summary>
+    private void TeardownUserBarWidthTracking()
+    {
+        if (_userBarLayoutHandler != null && _userBarLayoutTarget != null)
+        {
+            try
+            {
+                var eventInfo = _userBarLayoutTarget.GetType().GetEvent("LayoutUpdated");
+                if (eventInfo != null && _userBarLayoutHandler is Delegate del)
+                    eventInfo.RemoveEventHandler(_userBarLayoutTarget, del);
+            }
+            catch { }
+        }
+        _userBarLayoutHandler = null;
+        _userBarLayoutTarget = null;
+        _channelsWidthPanel = null;
     }
 
     /// <summary>
@@ -2306,8 +2442,7 @@ internal class RootcordEngine
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
             _r.SetCornerRadius(_userBar, 0, 12, 0, 0); // only top-right rounded
-            _r.SetMinWidth(_userBar, 300);
-            _r.SetMaxWidth(_userBar, 400);
+            // Width is set dynamically by UpdateUserBarWidth (tracks channels panel bounds)
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
             _r.SetGridColumn(_userBar, 0);
