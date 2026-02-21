@@ -37,32 +37,37 @@ internal class StartupHook
 
     private static void InjectorLoop()
     {
+        // Parent event spans the synchronous startup sequence (Phases 1-4).
+        // Async phases (0, 4.5a-j, 5) emit their own child events from ThreadPool threads.
+        using var startup = WideEvent.Begin("Startup", "init");
+        startup.Set("version", CurrentVersion);
+        startup.Set("pid", Environment.ProcessId);
+        startup.Set("dotnet", Environment.Version.ToString());
+        startup.Set("process", Environment.ProcessPath ?? "unknown");
+        startup.Set("log_file", Logger.GetLogPath());
+
         try
         {
-            Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", $"=== Uprooted Hook v{CurrentVersion} Loaded ===");
-            Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", $"Process: {Environment.ProcessPath}");
-            Logger.Log("Startup", $"PID: {Environment.ProcessId}");
-            Logger.Log("Startup", $".NET: {Environment.Version}");
-            Logger.Log("Startup", $"Log file: {Logger.GetLogPath()}");
-
-            // Phase 0: Verify HTML patches (filesystem only -- no Avalonia needed).
+            // Phase 0: Verify HTML patches (filesystem only — no Avalonia needed).
             // Runs in background so Phase 1 polling can start immediately.
-            Logger.Log("Startup", "Phase 0: Verifying HTML patches (background)...");
+            var parentId = startup.Id;
             ThreadPool.QueueUserWorkItem(_ =>
             {
+                using var ev = WideEvent.Begin("Startup", "phase0");
+                ev.Set("parent_op", parentId);
                 try
                 {
                     var verifier = new HtmlPatchVerifier();
                     var repaired = verifier.VerifyAndRepair();
-                    Logger.Log("Startup", $"Phase 0 OK: {repaired} file(s) repaired");
+                    ev.Set("files_repaired", repaired);
                     verifier.StartWatching();
                     s_patchVerifier = verifier; // prevent GC
+                    ev.Set("result", "ok");
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("Startup", $"Phase 0 non-fatal error: {ex.Message}");
+                    ev.SetError(ex);
+                    ev.Set("result", "error");
                 }
             });
 
@@ -72,31 +77,31 @@ internal class StartupHook
                 var cmp = AutoUpdater.CompareVersions(CurrentVersion, migrationSettings.Version);
                 if (cmp > 0)
                 {
-                    Logger.Log("Startup", $"Version upgrade detected: {migrationSettings.Version} -> {CurrentVersion}");
-                    var oldVersion = migrationSettings.Version;
+                    using var ev = WideEvent.Begin("Startup", "version_migration", startup);
+                    ev.Set("from", migrationSettings.Version);
+                    ev.Set("to", CurrentVersion);
+                    var disabled = new List<string>();
                     foreach (var (version, disableList) in ForceDisableOnUpgrade)
                     {
-                        // Apply entries for versions between old (exclusive) and current (inclusive)
-                        if (AutoUpdater.CompareVersions(version, oldVersion) > 0 &&
+                        if (AutoUpdater.CompareVersions(version, migrationSettings.Version) > 0 &&
                             AutoUpdater.CompareVersions(version, CurrentVersion) <= 0)
                         {
                             foreach (var pluginId in disableList)
                             {
                                 migrationSettings.Plugins[pluginId] = false;
-                                // content-filter uses NsfwFilterEnabled as its canonical toggle
                                 if (pluginId == "content-filter")
                                     migrationSettings.NsfwFilterEnabled = false;
-                                Logger.Log("Startup", $"  Force-disabled plugin '{pluginId}' (v{version} policy)");
+                                disabled.Add(pluginId);
                             }
                         }
                     }
+                    ev.Set("disabled_plugins", string.Join(",", disabled));
                     migrationSettings.Version = CurrentVersion;
                     migrationSettings.Save();
-                    Logger.Log("Startup", "Version migration complete");
+                    ev.Set("result", "ok");
                 }
                 else if (cmp < 0)
                 {
-                    // Downgrade detected — stamp version but don't apply any disable policies
                     Logger.Log("Startup", $"Version downgrade detected: {migrationSettings.Version} -> {CurrentVersion}, updating stamp only");
                     migrationSettings.Version = CurrentVersion;
                     migrationSettings.Save();
@@ -104,81 +109,91 @@ internal class StartupHook
             }
 
             // Phase 1: Wait for Avalonia assemblies to load
-            Logger.Log("Startup", "Phase 1: Waiting for Avalonia assemblies...");
-            if (!WaitForAvaloniaAssemblies(TimeSpan.FromSeconds(30)))
+            int resolvedAssemblies;
+            using (var ev = WideEvent.Begin("Startup", "phase1", startup))
             {
-                Logger.Log("Startup", "Phase 1 FAILED: Avalonia assemblies not found after 30s");
-                return;
+                if (!WaitForAvaloniaAssemblies(TimeSpan.FromSeconds(30)))
+                {
+                    ev.Set("result", "timeout");
+                    startup.Set("result", "phase1_timeout");
+                    return;
+                }
+                resolvedAssemblies = AppDomain.CurrentDomain.GetAssemblies().Length;
+                ev.Set("assemblies", resolvedAssemblies);
+                ev.Set("result", "ok");
             }
-            Logger.Log("Startup", "Phase 1 OK: Avalonia assemblies loaded");
 
             // Resolve all Avalonia types via reflection
             var resolver = new AvaloniaReflection();
             if (!resolver.Resolve())
             {
-                Logger.Log("Startup", "Type resolution failed, aborting");
+                startup.Set("result", "type_resolution_failed");
                 return;
             }
 
             // Phase 2: Wait for Application.Current to be set
-            Logger.Log("Startup", "Phase 2: Waiting for Application.Current...");
-            if (!WaitFor(() => resolver.GetAppCurrent() != null, TimeSpan.FromSeconds(30)))
+            using (var ev = WideEvent.Begin("Startup", "phase2", startup))
             {
-                Logger.Log("Startup", "Phase 2 FAILED: Application.Current not available after 30s");
-                return;
+                if (!WaitFor(() => resolver.GetAppCurrent() != null, TimeSpan.FromSeconds(30)))
+                {
+                    ev.Set("result", "timeout");
+                    startup.Set("result", "phase2_timeout");
+                    return;
+                }
+                ev.Set("result", "ok");
             }
-            Logger.Log("Startup", "Phase 2 OK: Application.Current is set");
 
             // Phase 3: Wait for MainWindow
-            Logger.Log("Startup", "Phase 3: Waiting for MainWindow...");
             object? mainWindow = null;
-            if (!WaitFor(() =>
+            using (var ev = WideEvent.Begin("Startup", "phase3", startup))
             {
-                mainWindow = resolver.GetMainWindow();
-                return mainWindow != null;
-            }, TimeSpan.FromSeconds(60)))
-            {
-                Logger.Log("Startup", "Phase 3 FAILED: MainWindow not available after 60s");
-                return;
+                if (!WaitFor(() =>
+                {
+                    mainWindow = resolver.GetMainWindow();
+                    return mainWindow != null;
+                }, TimeSpan.FromSeconds(60)))
+                {
+                    ev.Set("result", "timeout");
+                    startup.Set("result", "phase3_timeout");
+                    return;
+                }
+                ev.Set("window_type", mainWindow!.GetType().Name);
+                ev.Set("result", "ok");
             }
-            Logger.Log("Startup", $"Phase 3 OK: MainWindow = {mainWindow!.GetType().FullName}");
 
             // Phase 3.5: Initialize theme engine (actual theme apply deferred to UI thread)
-            Logger.Log("Startup", "Phase 3.5: Initializing theme engine");
             var themeEngine = new ThemeEngine(resolver);
             var savedSettings = UprootedSettings.Load();
 
             // Apply saved theme on UI thread (ResourceDictionary requires Dispatcher access)
             resolver.RunOnUIThread(() =>
             {
+                using var ev = WideEvent.Begin("Startup", "phase3_5_theme");
                 try
                 {
                     if (savedSettings.ActiveTheme == "custom")
                     {
-                        Logger.Log("Startup", "Applying saved custom theme: accent=" + savedSettings.CustomAccent + " bg=" + savedSettings.CustomBackground);
                         var textHex = !string.IsNullOrEmpty(savedSettings.CustomText) && ColorUtils.IsValidHex(savedSettings.CustomText)
                             ? savedSettings.CustomText : null;
                         themeEngine.ApplyCustomTheme(savedSettings.CustomAccent, savedSettings.CustomBackground, textHex);
+                        ev.Set("theme", "custom").Set("accent", savedSettings.CustomAccent).Set("bg", savedSettings.CustomBackground);
                     }
                     else if (savedSettings.ActiveTheme != "default-dark")
                     {
-                        Logger.Log("Startup", "Applying saved theme: " + savedSettings.ActiveTheme);
                         themeEngine.ApplyTheme(savedSettings.ActiveTheme);
+                        ev.Set("theme", savedSettings.ActiveTheme);
                     }
                     else
                     {
-                        Logger.Log("Startup", "Using default theme (no override)");
+                        ev.Set("theme", "default-dark");
                     }
 
-                    // Subscribe to variant changes unconditionally — needed for sidebar
-                    // re-injection when Root switches Dark↔Light↔PureDark
                     themeEngine.EnsureVariantChangeSubscribed();
 
-                    // Apply saved custom ping color override (persists across theme switches)
                     if (!string.IsNullOrEmpty(savedSettings.CustomPingColor) && ColorUtils.IsValidHex(savedSettings.CustomPingColor))
                     {
-                        Logger.Log("Startup", "Applying saved custom ping color: " + savedSettings.CustomPingColor);
                         themeEngine.SetCustomPingColor(savedSettings.CustomPingColor);
+                        ev.Set("ping_color", savedSettings.CustomPingColor);
                     }
 
                     // Ping color diagnostic: dev channel only.
@@ -193,21 +208,28 @@ internal class StartupHook
                             });
                         });
                     }
+
+                    ev.Set("result", "ok");
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("Startup", "Theme init error: " + ex.Message);
+                    ev.SetError(ex);
+                    ev.Set("result", "error");
                 }
             });
 
             // Phase 4: Start the settings page monitor
-            Logger.Log("Startup", "Phase 4: Starting settings page monitor");
-            var injector = new SidebarInjector(resolver, mainWindow!, themeEngine);
-            injector.StartMonitoring();
+            using (var ev = WideEvent.Begin("Startup", "phase4", startup))
+            {
+                var injector = new SidebarInjector(resolver, mainWindow!, themeEngine);
+                injector.StartMonitoring();
+                ev.Set("result", "ok");
+            }
 
-            Logger.Log("Startup", "========================================");
-            Logger.Log("Startup", "=== Uprooted Hook Ready ===");
-            Logger.Log("Startup", "========================================");
+            startup.Set("result", "ready");
+            int pluginsStarted = 0;
+
+            // ===== Async plugin phases (fire-and-forget on ThreadPool) =====
 
             // Phase 4.5: Browser discovery (diagnostic scan, dev channel only)
             if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
@@ -218,139 +240,61 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(10_000); // Wait 10s for Root to fully initialize
-                        Logger.Log("Startup", "Phase 4.5: Running browser discovery scan...");
+                        Thread.Sleep(10_000);
                         discoveryResolver.RunOnUIThread(() =>
                         {
-                            try
-                            {
-                                new BrowserDiscovery(discoveryResolver, discoveryWindow).DumpAllFindings();
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Log("Startup", $"Phase 4.5 error (UI): {ex.Message}");
-                            }
+                            try { new BrowserDiscovery(discoveryResolver, discoveryWindow).DumpAllFindings(); }
+                            catch (Exception ex) { Logger.Log("Startup", $"Phase 4.5 error (UI): {ex.Message}"); }
                         });
                     }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5 error: {ex.Message}");
-                    }
+                    catch (Exception ex) { Logger.Log("Startup", $"Phase 4.5 error: {ex.Message}"); }
                 });
             }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5: Browser discovery skipped (stable channel)");
-            }
 
-            // Phase 4.5a: ClearURLs (strip tracking params from chat URLs)
-            var wantClearUrls = savedSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled;
-            if (wantClearUrls)
-            {
-                var cuWindow = mainWindow!;
-                var cuResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
+            // Phase 4.5a: ClearURLs
+            StartPluginPhase("phase4_5a_clearurls", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("clear-urls", out var cuEnabled) && cuEnabled,
+                7_000, (ev, r, w) =>
                 {
-                    try
-                    {
-                        Thread.Sleep(7_000);
-                        Logger.Log("Startup", "Phase 4.5a: Starting ClearURLs engine...");
-                        var engine = new ClearUrlsEngine(cuResolver, cuWindow);
-                        engine.Initialize();
-                        Logger.Log("Startup", "Phase 4.5a OK: ClearURLs active");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5a error: {ex.Message}");
-                    }
+                    var engine = new ClearUrlsEngine(r, w);
+                    engine.Initialize();
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5a: ClearURLs plugin disabled, skipping");
-            }
+            if (savedSettings.Plugins.TryGetValue("clear-urls", out var cuE) && cuE) pluginsStarted++;
 
-            // Phase 4.5b: Native link embeds (Avalonia-only, no DotNetBrowser)
-            var wantLinkEmbeds = savedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled;
-
-            if (wantLinkEmbeds)
-            {
-                var embedWindow = mainWindow!;
-                var embedResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
+            // Phase 4.5b: Native link embeds
+            StartPluginPhase("phase4_5b_link_embeds", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("link-embeds", out var leEnabled) && leEnabled,
+                10_000, (ev, r, w) =>
                 {
-                    try
-                    {
-                        Thread.Sleep(10_000); // Wait for chat to populate
-                        Logger.Log("Startup", "Phase 4.5b: Starting native link embed engine...");
-                        var engine = new LinkEmbedEngine(embedResolver, embedWindow, themeEngine);
-                        LinkEmbedEngine.Instance = engine;
-                        engine.Initialize();
-                        Logger.Log("Startup", "Phase 4.5b OK: Native link embeds active");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5b error: {ex.Message}");
-                    }
+                    var engine = new LinkEmbedEngine(r, w, themeEngine);
+                    LinkEmbedEngine.Instance = engine;
+                    engine.Initialize();
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5b: Link embeds plugin disabled, skipping");
-            }
+            if (savedSettings.Plugins.TryGetValue("link-embeds", out var leE) && leE) pluginsStarted++;
 
-            // Phase 4.5c: Message Logger (discovery + logging + visual indicators)
-            var wantMsgLogger = savedSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled;
-
-            if (wantMsgLogger)
-            {
-                var mlWindow = mainWindow!;
-                var mlResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
+            // Phase 4.5c: Message Logger + Audit Log
+            StartPluginPhase("phase4_5c_msg_logger", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("message-logger", out var mlEnabled) && mlEnabled,
+                15_000, (ev, r, w) =>
                 {
-                    try
-                    {
-                        Thread.Sleep(15_000); // Wait for chat to populate
-                        Logger.Log("Startup", "Phase 4.5c: Starting message logger...");
-                        var logger = new MessageLogger(mlResolver, mlWindow);
-                        logger.Initialize();
-                        Logger.Log("Startup", "Phase 4.5c OK: Message logger active");
-
-                        // Start audit log engine immediately after message logger so it can
-                        // intercept the very first CommunityLogGrpcService/List call.
-                        Logger.Log("Startup", "Phase 4.5c: Starting audit log engine...");
-                        var auditEngine = new AuditLogEngine(mlResolver, mlWindow);
-                        auditEngine.Initialize();
-                        logger.SetAuditLogEngine(auditEngine);
-                        Logger.Log("Startup", "Phase 4.5c OK: Audit log engine active");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5c error: {ex.Message}");
-                    }
+                    var logger = new MessageLogger(r, w);
+                    logger.Initialize();
+                    ev.Set("audit_log", true);
+                    var auditEngine = new AuditLogEngine(r, w);
+                    auditEngine.Initialize();
+                    logger.SetAuditLogEngine(auditEngine);
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5c: Message logger disabled, skipping");
-            }
+            if (savedSettings.Plugins.TryGetValue("message-logger", out var mlE) && mlE) pluginsStarted++;
 
-            // Phase 4.5d: Auto-updater (background update check)
-            // Instance is set immediately so the manual "Check for Updates" button is live
-            // from the moment the settings page opens. The actual check is deferred 5s to
-            // let the app finish initializing before making network requests.
+            // Phase 4.5d: Auto-updater
             var autoUpdater = new AutoUpdater();
             AutoUpdater.Instance = autoUpdater;
 
-            // Subscribe to background update event — shows a popup when the auto-updater
-            // applies an update without the user pressing the button.
             var notifyResolver = resolver;
             AutoUpdater.BackgroundUpdateApplied += (version) =>
             {
                 var s = UprootedSettings.Load();
                 if (!s.AutoUpdateNotify) return;
-
-                Logger.Log("Startup", $"Phase 4.5d: Background update applied (v{version}) — showing notifications");
                 DesktopNotification.Show("Uprooted", $"Updated to v{version} — restart Root to apply");
                 notifyResolver.RunOnUIThread(() =>
                 {
@@ -359,119 +303,62 @@ internal class StartupHook
                 });
             };
 
-            ThreadPool.QueueUserWorkItem(_ =>
-            {
-                try
+            StartPluginPhase("phase4_5d_auto_update", parentId, resolver, mainWindow!,
+                true, 3_000, (ev, r, w) =>
                 {
-                    Thread.Sleep(3_000);
-                    Logger.Log("Startup", "Phase 4.5d: Starting auto-updater...");
                     autoUpdater.Initialize();
-                    Logger.Log("Startup", "Phase 4.5d OK: Auto-updater initialized");
-                }
-                catch (Exception ex)
-                {
-                    Logger.Log("Startup", $"Phase 4.5d error: {ex.Message}");
-                }
-            });
-
-            // Phase 4.5e: Profile badge injector + presence beacon
-            // Beacon registers own UUID with api.uprooted.sh (delayed 10s internally).
-            // Badge injector uses beacon to show green icon on Uprooted users' profiles.
-            {
-                var badgeWindow = mainWindow!;
-                var badgeResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try
-                    {
-                        Thread.Sleep(2_000); // Wait for app to settle
-                        Logger.Log("Startup", "Phase 4.5e: Starting presence beacon + profile badge injector...");
-
-                        var beacon = new UprootedPresenceBeacon(badgeResolver, badgeWindow);
-                        beacon.Initialize(); // Registers in background after 10s
-
-                        var badge = new ProfileBadgeInjector(badgeResolver, badgeWindow, beacon);
-                        badge.Initialize();
-
-                        Logger.Log("Startup", "Phase 4.5e OK: Presence beacon + profile badge injector active");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5e error: {ex.Message}");
-                    }
                 });
-            }
+            pluginsStarted++;
 
-            // Phase 4.5f: Silent typing (HttpClient handler injection)
-            var wantSilentTyping = savedSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled;
-            if (wantSilentTyping)
-            {
-                var stWindow = mainWindow!;
-                var stResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
+            // Phase 4.5e: Presence beacon + profile badge
+            StartPluginPhase("phase4_5e_presence_badge", parentId, resolver, mainWindow!,
+                true, 2_000, (ev, r, w) =>
                 {
-                    try
-                    {
-                        Thread.Sleep(7_000); // Wait for Root's gRPC clients to initialize
-                        Logger.Log("Startup", "Phase 4.5f: Starting silent typing engine...");
-                        var engine = new SilentTypingEngine(stResolver, stWindow);
-                        engine.Initialize();
-                        Logger.Log("Startup", "Phase 4.5f OK: Silent typing engine started");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5f error: {ex.Message}");
-                    }
+                    var beacon = new UprootedPresenceBeacon(r, w);
+                    beacon.Initialize();
+                    var badge = new ProfileBadgeInjector(r, w, beacon);
+                    badge.Initialize();
                 });
-            }
-            else
-            {
-                Logger.Log("Startup", "Phase 4.5f: Silent typing disabled, skipping");
-            }
+            pluginsStarted++;
 
-            // Phase 4.5g: NSFW content filter (Avalonia-native visual tree scan)
+            // Phase 4.5f: Silent typing
+            StartPluginPhase("phase4_5f_silent_typing", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("silent-typing", out var stEnabled) && stEnabled,
+                7_000, (ev, r, w) =>
+                {
+                    var engine = new SilentTypingEngine(r, w);
+                    engine.Initialize();
+                });
+            if (savedSettings.Plugins.TryGetValue("silent-typing", out var stE) && stE) pluginsStarted++;
+
+            // Phase 4.5g: NSFW content filter
             var wantNsfw = savedSettings.NsfwFilterEnabled && !string.IsNullOrEmpty(savedSettings.NsfwApiKey);
             if (wantNsfw)
             {
-                var nsfwWindow    = mainWindow!;
-                var nsfwResolver  = resolver;
-                var nsfwSettings  = savedSettings; // captured for lambda
-                ThreadPool.QueueUserWorkItem(_ =>
-                {
-                    try
+                var nsfwSettings = savedSettings;
+                StartPluginPhase("phase4_5g_nsfw_filter", parentId, resolver, mainWindow!,
+                    true, 15_000, (ev, r, w) =>
                     {
-                        Thread.Sleep(15_000); // Wait for chat to populate
-                        Logger.Log("Startup", "Phase 4.5g: Starting NSFW content filter...");
-                        var filter = new NsfwFilter(nsfwResolver, nsfwSettings, nsfwWindow);
+                        var filter = new NsfwFilter(r, nsfwSettings, w);
                         ContentPages.NsfwFilterInstance = filter;
                         filter.Initialize();
-                        Logger.Log("Startup", "Phase 4.5g OK: NSFW filter active (Avalonia-native)");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5g error: {ex.Message}");
-                    }
-                });
+                    });
+                pluginsStarted++;
             }
             else
             {
                 Logger.Log("Startup", "Phase 4.5g: NSFW filter disabled or no API key, skipping");
             }
 
-            // Phase 4.5h: Rootcord (experimental, Discord-style vertical server strip)
+            // Phase 4.5h: Rootcord
             var wantRootcord = savedSettings.ShowExperimentalPlugins
                 && savedSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
             {
-                // Always create a dormant/active instance so the toggle can apply at runtime.
                 var rcEngine = new RootcordEngine(resolver, mainWindow!, themeEngine);
                 RootcordEngine.Instance = rcEngine;
 
                 if (wantRootcord)
                 {
-                    // Apply via LayoutUpdated — fires on the UI thread after every layout pass.
-                    // This is the same pattern SidebarInjector uses and is far more reliable
-                    // than timed retries: the HomeView is guaranteed to be in the visual tree
-                    // when LayoutUpdated fires, so Apply() will succeed on the first opportunity.
                     bool applied = false;
                     resolver.RunOnUIThread(() =>
                     {
@@ -492,17 +379,16 @@ internal class StartupHook
                                 Logger.Log("Startup", $"Phase 4.5h LayoutUpdated error: {ex.Message}");
                             }
                         });
-                        Logger.Log("Startup", "Phase 4.5h: Rootcord engine listening via LayoutUpdated");
                     });
+                    pluginsStarted++;
                 }
                 else
                 {
                     Logger.Log("Startup", "Phase 4.5h: Rootcord disabled, dormant instance created");
                 }
-
             }
 
-            // Phase 4.5i: Recon Logger (dev channel only, dev plugin tier)
+            // Phase 4.5i: Recon Logger (dev channel only)
             {
                 if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                 {
@@ -510,71 +396,43 @@ internal class StartupHook
                     var reconWindow   = mainWindow!;
                     resolver.RunOnUIThread(() =>
                     {
+                        using var ev = WideEvent.Begin("Startup", "phase4_5i_recon");
                         try
                         {
                             ReconLogger.Init(reconResolver, reconWindow);
-                            Logger.Log("Startup", "Phase 4.5i: ReconLogger initialized");
-
-                            if (savedSettings.Plugins.TryGetValue("recon-logger", out var rlEnabled) && rlEnabled)
-                            {
-                                ReconLogger.Enable();
-                                Logger.Log("Startup", "Phase 4.5i: ReconLogger auto-started (plugin enabled)");
-                            }
-                            else
-                            {
-                                Logger.Log("Startup", "Phase 4.5i: ReconLogger dormant (plugin disabled)");
-                            }
+                            bool autoStart = savedSettings.Plugins.TryGetValue("recon-logger", out var rlEnabled) && rlEnabled;
+                            if (autoStart) ReconLogger.Enable();
+                            ev.Set("auto_start", autoStart);
+                            ev.Set("result", "ok");
                         }
                         catch (Exception ex)
                         {
-                            Logger.Log("Startup", $"Phase 4.5i error: {ex.Message}");
+                            ev.SetError(ex);
+                            ev.Set("result", "error");
                         }
                     });
                 }
-                else
-                {
-                    Logger.Log("Startup", "Phase 4.5i: skipped (not on developer channel)");
-                }
             }
 
-            // Phase 4.5j: Translate engine — always start (engine self-gates on plugin enabled state).
-            // Like Rootcord, the engine is always created so it can be live-toggled without restart.
-            // The 2s discovery timer bails early when the plugin is disabled in settings.
-            {
-                var trWindow   = mainWindow!;
-                var trResolver = resolver;
-                ThreadPool.QueueUserWorkItem(_ =>
+            // Phase 4.5j: Translate engine (always-on, self-gated)
+            StartPluginPhase("phase4_5j_translate", parentId, resolver, mainWindow!,
+                true, 2_000, (ev, r, w) =>
                 {
-                    try
-                    {
-                        Thread.Sleep(2_000);
-                        Logger.Log("Startup", "Phase 4.5j: Starting translate engine (always-on, self-gated)...");
-                        var engine = new TranslateEngine(trResolver, trWindow, themeEngine);
-                        TranslateEngine.Instance = engine;
-                        engine.Initialize();
-                        Logger.Log("Startup", "Phase 4.5j OK: Translate engine initialized (plugin state managed internally)");
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Startup", $"Phase 4.5j error: {ex.Message}");
-                    }
+                    var engine = new TranslateEngine(r, w, themeEngine);
+                    TranslateEngine.Instance = engine;
+                    engine.Initialize();
                 });
-            }
+            pluginsStarted++;
 
-            // Phase 5: DotNetBrowser discovery (needed for video thumbnail extraction in LinkEmbedEngine)
+            // Phase 5: DotNetBrowser discovery
             {
                 var capturedWindow = mainWindow!;
                 var capturedResolver = resolver;
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
+                    using var ev = WideEvent.Begin("Startup", "phase5_dotnetbrowser");
                     try
                     {
-                        Logger.Log("Startup", "Phase 5: Waiting for DotNetBrowser assemblies...");
-
-                        // Poll for DotNetBrowser assemblies.
-                        // Note: event-driven detection via AssemblyLoadEventHandler was removed because
-                        // AppImage/trimmed .NET builds trim System.AssemblyLoadEventHandler, causing a
-                        // TypeLoadException at JIT compilation time (before any try/catch can handle it).
                         if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                         {
                             const int pollIntervalMs = 2000;
@@ -587,29 +445,25 @@ internal class StartupHook
                             }
                             if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                             {
-                                Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies not found after 90s, skipping");
+                                ev.Set("result", "timeout");
                                 return;
                             }
-                            // Brief pause for any companion assemblies to finish loading
                             Thread.Sleep(1000);
                         }
-                        Logger.Log("Startup", "Phase 5: DotNetBrowser assemblies loaded");
 
-                        // Resolve DotNetBrowser types
                         var browserReflection = new DotNetBrowserReflection();
                         if (!browserReflection.Resolve())
                         {
-                            Logger.Log("Startup", "Phase 5: DotNetBrowser type resolution failed, skipping");
+                            ev.Set("result", "resolve_failed");
                             return;
                         }
 
-                        // Discover browser instance — must dispatch to UI thread since
-                        // ViewModel/ApplicationLifetime properties require UI thread access.
-                        // Retry with delays since Root may not have created the IBrowser yet.
                         DotNetBrowserReflection.SharedInstance = browserReflection;
                         object? browser = null;
+                        int attempts = 0;
                         for (int attempt = 1; attempt <= 6; attempt++)
                         {
+                            attempts = attempt;
                             using var found = new ManualResetEventSlim(false);
                             object? result = null;
                             capturedResolver.RunOnUIThread(() =>
@@ -621,34 +475,72 @@ internal class StartupHook
                             found.Wait(15_000);
                             browser = result;
                             if (browser != null) break;
-                            Logger.Log("Startup", $"Phase 5: IBrowser not found (attempt {attempt}/6), retrying in 5s...");
                             Thread.Sleep(5_000);
                         }
 
+                        ev.Set("attempts", attempts);
                         if (browser != null)
                         {
                             DotNetBrowserReflection.SharedBrowser = browser;
                             DotNetBrowserReflection.SharedFrame = browserReflection.GetMainFrame(browser);
                             DotNetBrowserReflection.IsReady = true;
-                            Logger.Log("Startup", "Phase 5: DotNetBrowser shared references ready (browser + frame)");
+                            ev.Set("result", "ok");
                         }
                         else
                         {
-                            Logger.Log("Startup", "Phase 5: IBrowser not found after 6 attempts, video thumbnails unavailable");
+                            ev.Set("result", "browser_not_found");
                         }
-
                     }
                     catch (Exception ex)
                     {
-                        Logger.Log("Startup", $"Phase 5 error: {ex.Message}");
+                        ev.SetError(ex);
+                        ev.Set("result", "error");
                     }
                 });
             }
+
+            startup.Set("plugins_started", pluginsStarted);
         }
         catch (Exception ex)
         {
-            Logger.Log("Startup", $"Fatal error in injector: {ex}");
+            startup.SetError(ex);
+            startup.Set("result", "fatal");
         }
+    }
+
+    /// <summary>
+    /// Helper to start an async plugin phase with consistent wide event structure.
+    /// Fires on ThreadPool with a delay, emits a child wide event.
+    /// </summary>
+    private static void StartPluginPhase(string operation, string parentId,
+        AvaloniaReflection resolver, object mainWindow, bool enabled, int delayMs,
+        Action<WideEvent, AvaloniaReflection, object> initAction)
+    {
+        if (!enabled)
+        {
+            Logger.Log("Startup", $"{operation}: disabled, skipping");
+            return;
+        }
+
+        var capturedResolver = resolver;
+        var capturedWindow = mainWindow;
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            using var ev = WideEvent.Begin("Startup", operation);
+            ev.Set("parent_op", parentId);
+            ev.Set("delay_ms", delayMs);
+            try
+            {
+                Thread.Sleep(delayMs);
+                initAction(ev, capturedResolver, capturedWindow);
+                ev.Set("result", "ok");
+            }
+            catch (Exception ex)
+            {
+                ev.SetError(ex);
+                ev.Set("result", "error");
+            }
+        });
     }
 
     private static bool WaitForAvaloniaAssemblies(TimeSpan timeout)
