@@ -84,9 +84,7 @@ internal class RootcordEngine
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
-    // Community header hiding (hidden in members panel, not needed on channels side)
-    private object? _headerSourceGrid;     // MembersView's inner Grid (where header rows are hidden)
-    private readonly List<object> _reparentedHeaderControls = new(); // controls hidden via IsVisible=false
+    // (header reparenting removed — header stays with its native panel after rotation)
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -1197,12 +1195,6 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
 
-            // Move the community header from the members panel to the channels panel.
-            // Root's MembersView has: Row0=header, Row1-2=dividers, Row3=tabs, Row4=member list.
-            // We want the header + tabs at the top of the channels panel.
-            try { ReparentCommunityHeader(nonSplitters, maxAssignedIdx); }
-            catch (Exception ex) { Logger.Log(Tag, $"ReparentCommunityHeader error: {ex.Message}"); }
-
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
         }
@@ -1217,9 +1209,6 @@ internal class RootcordEngine
     /// </summary>
     private void RevertCommunityMembersSwap()
     {
-        // Revert header reparenting first (before column positions change)
-        RevertCommunityHeaderReparent();
-
         // Revert flyout placements before restoring column positions
         RevertMemberFlyoutPlacements();
 
@@ -1263,127 +1252,6 @@ internal class RootcordEngine
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
-    }
-
-    // ===== Community header reparenting =====
-
-    /// <summary>
-    /// Move the community header (server icon, name, member count, Community/Channel tabs)
-    /// from the members panel (rightmost after rotation) to the channels panel (leftmost).
-    /// Root's MembersView inner Grid has Row 0-3 = header content, Row 4 = member list.
-    /// We extract Row 0-3 children and insert them at the top of the channels panel.
-    /// </summary>
-    private void ReparentCommunityHeader(List<(object child, int col)> nonSplitters, int membersIdx)
-    {
-        if (nonSplitters.Count < 2 || membersIdx < 0) return;
-
-        // Find members panel (rightmost) and channels panel (leftmost non-chat)
-        var membersPanel = nonSplitters[membersIdx].child;
-        object? channelsPanel = null;
-        for (int i = 0; i < nonSplitters.Count; i++)
-        {
-            if (i == membersIdx) continue;
-            int origCol = nonSplitters[i].col;
-            var origW = _originalColWidths?.FirstOrDefault(x => x.colIdx == origCol);
-            if (origW != null && origW.Value.unit != "Star" && origW.Value.unit != "star")
-            {
-                channelsPanel = nonSplitters[i].child;
-                break;
-            }
-        }
-        if (channelsPanel == null)
-        {
-            Logger.Log(Tag, "ReparentHeader: channels panel not found");
-            return;
-        }
-
-        // Walk into the members panel to find its inner Grid (MembersView → Grid with 5 rows)
-        var walker = new VisualTreeWalker(_r);
-        object? membersInnerGrid = null;
-        foreach (var node in walker.DescendantsDepthFirst(membersPanel))
-        {
-            if (!_r.IsGrid(node)) continue;
-            var rowDefs = _r.GetRowDefinitions(node);
-            if (rowDefs != null && rowDefs.Count >= 4)
-            {
-                membersInnerGrid = node;
-                break;
-            }
-        }
-        if (membersInnerGrid == null)
-        {
-            Logger.Log(Tag, "ReparentHeader: MembersView inner Grid not found");
-            return;
-        }
-
-        // Hide header rows (0-3) in the members panel so they don't appear on the right.
-        // We can't reliably RemoveChild from a compiled XAML Grid, but IsVisible=false works.
-        _headerSourceGrid = membersInnerGrid;
-        _reparentedHeaderControls.Clear();
-        foreach (var child in _r.GetVisualChildren(membersInnerGrid))
-        {
-            int row = _r.GetGridRow(child);
-            if (row <= 3)
-            {
-                _r.SetIsVisible(child, false);
-                _reparentedHeaderControls.Add(child);
-            }
-        }
-
-        // Also collapse the row definitions for rows 0-3 so they don't take up space
-        var memberRowDefs = _r.GetRowDefinitions(membersInnerGrid);
-        if (memberRowDefs != null)
-        {
-            for (int ri = 0; ri <= 3 && ri < memberRowDefs.Count; ri++)
-                _r.SetRowDefinitionPixelHeight(memberRowDefs[ri], 0);
-        }
-
-        Logger.Log(Tag, $"ReparentHeader: hidden {_reparentedHeaderControls.Count} header controls in members panel");
-    }
-
-    /// <summary>
-    /// Revert the community header reparenting — move controls back to the members panel.
-    /// </summary>
-    private void RevertCommunityHeaderReparent()
-    {
-        if (_headerSourceGrid == null || _reparentedHeaderControls.Count == 0) return;
-
-        try
-        {
-            // Restore visibility of hidden header controls in members panel
-            foreach (var ctrl in _reparentedHeaderControls)
-                _r.SetIsVisible(ctrl, true);
-
-            // Restore row heights for rows 0-3
-            var memberRowDefs = _r.GetRowDefinitions(_headerSourceGrid);
-            if (memberRowDefs != null)
-            {
-                // Row 0 = Auto (header panel), Row 1-2 = 1px dividers, Row 3 = Auto (tabs)
-                for (int ri = 0; ri <= 3 && ri < memberRowDefs.Count; ri++)
-                {
-                    var h = _r.GetRowDefinitionHeight(memberRowDefs[ri]);
-                    // Restore Auto for rows 0 and 3, 1px for divider rows
-                    if (ri == 1 || ri == 2)
-                        _r.SetRowDefinitionPixelHeight(memberRowDefs[ri], 1);
-                    else if (_r.GridUnitTypeEnum != null && _r.GridLengthType != null)
-                    {
-                        try
-                        {
-                            var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
-                            var autoLen = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
-                            memberRowDefs[ri]?.GetType().GetProperty("Height")?.SetValue(memberRowDefs[ri], autoLen);
-                        }
-                        catch { }
-                    }
-                }
-            }
-
-            Logger.Log(Tag, $"RevertCommunityHeader: restored {_reparentedHeaderControls.Count} header controls visibility");
-        }
-        catch (Exception ex) { Logger.Log(Tag, $"RevertCommunityHeader error: {ex.Message}"); }
-
-        _reparentedHeaderControls.Clear();
-        _headerSourceGrid = null;
     }
 
     // ===== Flyout placement flip (member profile popups) =====
