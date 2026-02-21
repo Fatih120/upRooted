@@ -40,19 +40,28 @@ internal class DotNetBrowserReflection
 
     public bool Resolve()
     {
+        using var ev = WideEvent.Begin("DotNetBrowser", "resolve");
         try
         {
             ResolveTypes();
             ResolveMembers();
 
-            // Partial resolution: we can proceed if we have IBrowser (BrowserView can be found
-            // via visual tree walk, and ExecuteJavaScript can be resolved at runtime from the
-            // concrete frame object type)
             IsResolved = IBrowserType != null && _browserMainFrame != null;
 
-            Logger.Log("DotNetBrowser", $"Resolved: {IsResolved} " +
-                $"(BrowserView={BrowserViewType != null}, IBrowser={IBrowserType != null}, " +
-                $"IFrame={IFrameType != null}, ExecJS={_frameExecuteJavaScript != null})");
+            ev.Set("resolved", IsResolved);
+            ev.Set("browser_view", BrowserViewType != null);
+            ev.Set("ibrowser", IBrowserType != null);
+            ev.Set("iframe", IFrameType != null);
+            ev.Set("exec_js", _frameExecuteJavaScript != null);
+
+            // Collect missing types for structured diagnosis
+            var missing = new List<string>();
+            if (BrowserViewType == null) missing.Add("BrowserView");
+            if (IBrowserType == null) missing.Add("IBrowser");
+            if (IFrameType == null) missing.Add("IFrame");
+            if (_browserMainFrame == null) missing.Add("MainFrame");
+            if (_frameExecuteJavaScript == null) missing.Add("ExecuteJavaScript");
+            if (missing.Count > 0) ev.Set("missing", string.Join(",", missing));
 
             if (!IsResolved)
                 DumpDiagnostics();
@@ -61,7 +70,7 @@ internal class DotNetBrowserReflection
         }
         catch (Exception ex)
         {
-            Logger.Log("DotNetBrowser", $"Resolve failed: {ex}");
+            ev.SetError(ex);
             DumpDiagnostics();
             return false;
         }
@@ -93,7 +102,6 @@ internal class DotNetBrowserReflection
 
         // BrowserView -- the Avalonia control
         BrowserViewType = Find("DotNetBrowser.AvaloniaUi.BrowserView");
-        // Fallback: search by name suffix in DotNetBrowser assemblies
         BrowserViewType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "BrowserView" && !t.IsAbstract && !t.IsInterface);
 
@@ -109,7 +117,6 @@ internal class DotNetBrowserReflection
                         if (type.Name == "BrowserView" && !type.IsAbstract && !type.IsInterface)
                         {
                             BrowserViewType = type;
-                            Logger.Log("DotNetBrowser", $"  BrowserView found in non-DotNetBrowser assembly: {asm.GetName().Name}");
                             break;
                         }
                     }
@@ -129,10 +136,6 @@ internal class DotNetBrowserReflection
         IFrameType ??= Find("DotNetBrowser.Frames.IFrame");
         IFrameType ??= typeMap.Values.FirstOrDefault(t =>
             t.Name == "IFrame" && t.IsInterface);
-
-        Logger.Log("DotNetBrowser", $"  BrowserView: {(BrowserViewType != null ? BrowserViewType.FullName : "MISSING")}");
-        Logger.Log("DotNetBrowser", $"  IBrowser: {(IBrowserType != null ? IBrowserType.FullName : "MISSING")}");
-        Logger.Log("DotNetBrowser", $"  IFrame: {(IFrameType != null ? IFrameType.FullName : "MISSING")}");
     }
 
     private void ResolveMembers()
@@ -148,26 +151,16 @@ internal class DotNetBrowserReflection
         // IBrowser.Title property (used for video thumbnail extraction via document.title)
         _browserTitle = IBrowserType?.GetProperty("Title", pub);
 
-        // Log the MainFrame property return type -- may not be IFrame
+        // MainFrame return type may differ from IFrameType — use it for method search
         if (_browserMainFrame != null)
         {
             var mainFrameReturnType = _browserMainFrame.PropertyType;
-            Logger.Log("DotNetBrowser", $"  IBrowser.MainFrame returns: {mainFrameReturnType.FullName}");
-
-            // If the return type is different from IFrameType, use it for method search
             if (IFrameType == null || (mainFrameReturnType != IFrameType && mainFrameReturnType.IsInterface))
-            {
-                Logger.Log("DotNetBrowser", $"  Using MainFrame return type as frame type: {mainFrameReturnType.FullName}");
                 IFrameType ??= mainFrameReturnType;
-            }
         }
 
         // Search for ExecuteJavaScript across multiple sources
         _frameExecuteJavaScript = FindExecuteJavaScriptMethod(pub);
-
-        Logger.Log("DotNetBrowser", $"  BrowserView.Browser: {(_browserViewBrowser != null ? "OK" : "MISSING")}");
-        Logger.Log("DotNetBrowser", $"  IBrowser.MainFrame: {(_browserMainFrame != null ? "OK" : "MISSING")}");
-        Logger.Log("DotNetBrowser", $"  ExecuteJavaScript: {(_frameExecuteJavaScript != null ? $"OK ({_frameExecuteJavaScript.DeclaringType?.Name}.{_frameExecuteJavaScript.Name})" : "MISSING (will attempt deferred resolution)")}");
     }
 
     private MethodInfo? FindExecuteJavaScriptMethod(BindingFlags pub)

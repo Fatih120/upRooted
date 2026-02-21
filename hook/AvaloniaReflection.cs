@@ -150,25 +150,31 @@ internal class AvaloniaReflection
 
     public bool Resolve()
     {
+        using var ev = WideEvent.Begin("Reflection", "resolve");
         try
         {
-            ResolveTypes();
-            ResolveMembers();
+            var missing = new List<string>();
+            ResolveTypes(ev, missing);
+            ResolveMembers(ev, missing);
             IsResolved = ApplicationType != null && DispatcherType != null && ControlType != null;
-            Logger.Log("Reflection", $"Resolved: {IsResolved} " +
-                $"(App={ApplicationType != null}, Dispatcher={DispatcherType != null}, " +
-                $"Control={ControlType != null}, Panel={PanelType != null}, " +
-                $"TextBlock={TextBlockType != null})");
+            ev.Set("resolved", IsResolved);
+            ev.Set("app", ApplicationType != null);
+            ev.Set("dispatcher", DispatcherType != null);
+            ev.Set("control", ControlType != null);
+            ev.Set("panel", PanelType != null);
+            ev.Set("text_block", TextBlockType != null);
+            if (missing.Count > 0)
+                ev.Set("missing", string.Join(",", missing));
             return IsResolved;
         }
         catch (Exception ex)
         {
-            Logger.Log("Reflection", $"Resolve failed: {ex}");
+            ev.SetError(ex);
             return false;
         }
     }
 
-    private void ResolveTypes()
+    private void ResolveTypes(WideEvent ev, List<string> missing)
     {
         var typeMap = new Dictionary<string, Type>();
 
@@ -188,7 +194,7 @@ internal class AvaloniaReflection
             catch { }
         }
 
-        Logger.Log("Reflection", $"Scanned Avalonia assemblies, found {typeMap.Count} types");
+        ev.Set("types_scanned", typeMap.Count);
 
         Type? Find(string fullName) => typeMap.TryGetValue(fullName, out var t) ? t : null;
 
@@ -271,19 +277,20 @@ internal class AvaloniaReflection
             }
         }
 
-        Logger.Log("Reflection", $"  DesktopLifetime: {(DesktopLifetimeType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  VisualExtensions: {(VisualExtensionsType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  ToggleSwitch: {(ToggleSwitchType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Ellipse: {(EllipseType != null ? EllipseType.FullName : "MISSING")}");
-        Logger.Log("Reflection", $"  Visual: {(VisualType != null ? VisualType.FullName : "MISSING")}");
-        Logger.Log("Reflection", $"  Image: {(ImageType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Bitmap: {(BitmapType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Stretch: {(StretchType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  OverlayLayer: {(OverlayLayerType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Canvas: {(CanvasType != null ? "OK" : "MISSING")}");
+        // Collect missing types for the wide event
+        if (DesktopLifetimeType == null) missing.Add("DesktopLifetime");
+        if (VisualExtensionsType == null) missing.Add("VisualExtensions");
+        if (ToggleSwitchType == null) missing.Add("ToggleSwitch");
+        if (EllipseType == null) missing.Add("Ellipse");
+        if (VisualType == null) missing.Add("Visual");
+        if (ImageType == null) missing.Add("Image");
+        if (BitmapType == null) missing.Add("Bitmap");
+        if (StretchType == null) missing.Add("Stretch");
+        if (OverlayLayerType == null) missing.Add("OverlayLayer");
+        if (CanvasType == null) missing.Add("Canvas");
     }
 
-    private void ResolveMembers()
+    private void ResolveMembers(WideEvent ev, List<string> missing)
     {
         var pub = BindingFlags.Public | BindingFlags.Instance;
         var stat = BindingFlags.Public | BindingFlags.Static;
@@ -326,7 +333,10 @@ internal class AvaloniaReflection
                 return p.Length == 1 && p[0].ParameterType == typeof(Action);
             });
 
-        Logger.Log("Reflection", $"  Dispatcher.Post: {(_dispatcherPost != null ? _dispatcherPost.Name + "(" + _dispatcherPost.GetParameters().Length + ")" : "MISSING")}");
+        if (_dispatcherPost != null)
+            ev.Set("dispatcher_post", _dispatcherPost.Name + "(" + _dispatcherPost.GetParameters().Length + ")");
+        else
+            missing.Add("Dispatcher.Post");
 
         // VisualExtensions.GetVisualChildren(Visual)
         _getVisualChildren = VisualExtensionsType?.GetMethods(stat)
@@ -408,7 +418,7 @@ internal class AvaloniaReflection
         // Last resort: search all Avalonia types for a matching TranslatePoint
         if (_translatePoint == null)
         {
-            Logger.Log("Reflection", "  TranslatePoint: walking all Avalonia types...");
+            ev.Set("translate_point_fallback", true);
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
                 var asmName = asm.GetName().Name ?? "";
@@ -422,17 +432,7 @@ internal class AvaloniaReflection
                             var m = t.GetMethods(stat)
                                 .FirstOrDefault(mi => mi.Name == "TranslatePoint");
                             if (m != null)
-                            {
-                                Logger.Log("Reflection", $"  TranslatePoint found: {t.FullName}.{m.Name}({m.GetParameters().Length} params, static={m.IsStatic})");
                                 _translatePoint = m;
-                            }
-                        }
-                        else
-                        {
-                            var m = t.GetMethods(pub | BindingFlags.DeclaredOnly)
-                                .FirstOrDefault(mi => mi.Name == "TranslatePoint");
-                            if (m != null)
-                                Logger.Log("Reflection", $"  TranslatePoint found: {t.FullName}.{m.Name}({m.GetParameters().Length} params, static={m.IsStatic})");
                         }
                     }
                 }
@@ -448,9 +448,9 @@ internal class AvaloniaReflection
             _resourcesMergedDicts = IResourceDictionaryType.GetProperty("MergedDictionaries", pub);
         // Fallback: try on the concrete Resources object type later at runtime
 
-        Logger.Log("Reflection", $"  ResourceDictionary: {(ResourceDictionaryType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  IResourceDictionary: {(IResourceDictionaryType != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  App.Resources: {(_appResources != null ? "OK" : "MISSING")}");
+        if (ResourceDictionaryType == null) missing.Add("ResourceDictionary");
+        if (IResourceDictionaryType == null) missing.Add("IResourceDictionary");
+        if (_appResources == null) missing.Add("App.Resources");
 
         // Image
         _imageSource = ImageType?.GetProperty("Source", pub);
@@ -461,10 +461,13 @@ internal class AvaloniaReflection
             ?? VisualType?.GetProperty("Opacity", pub);
         _controlIsHitTestVisible = ControlType?.GetProperty("IsHitTestVisible", pub);
 
-        Logger.Log("Reflection", $"  OverlayLayer.GetOverlayLayer: {(_overlayGetOverlayLayer != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Canvas.SetLeft: {(_canvasSetLeft != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  Layoutable.Bounds: {(_layoutableBounds != null ? "OK" : "MISSING")}");
-        Logger.Log("Reflection", $"  TranslatePoint: {(_translatePoint != null ? $"OK ({(_translatePoint.IsStatic ? "static" : "instance")}, {_translatePoint.DeclaringType?.Name}.{_translatePoint.Name}({_translatePoint.GetParameters().Length} params))" : "MISSING")}");
+        if (_overlayGetOverlayLayer == null) missing.Add("OverlayLayer.GetOverlayLayer");
+        if (_canvasSetLeft == null) missing.Add("Canvas.SetLeft");
+        if (_layoutableBounds == null) missing.Add("Layoutable.Bounds");
+        if (_translatePoint != null)
+            ev.Set("translate_point", (_translatePoint.IsStatic ? "static" : "instance") + ":" + _translatePoint.DeclaringType?.Name + "." + _translatePoint.Name + "(" + _translatePoint.GetParameters().Length + ")");
+        else
+            missing.Add("TranslatePoint");
     }
 
     // ===== Core access =====
