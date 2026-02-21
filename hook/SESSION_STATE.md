@@ -1,8 +1,28 @@
-# Uprooted Hook - Session State (2026-02-20)
+# Uprooted Hook - Session State (2026-02-21)
 
 ## Release: v0.4.2
 
 ## Shipped This Cycle
+
+### Post-v0.4.2 (settings UX parity + visual polish — 2026-02-21)
+- **Root-native interaction parity pass completed** across injected settings controls:
+  - Release-activation semantics standardized; drag-off-release no longer toggles.
+  - Centralized press feedback (shrink + press shade) applied broadly with targeted opt-outs to prevent parent-card depression when child controls are clicked.
+- **Themes UX refinements**:
+  - Added Themes page `Refresh` button.
+  - Active theme cards no-op on re-click (no redundant apply/rebuild).
+  - Fixed Native card gear press affecting parent card.
+  - Fixed Custom Theme Ping toggle affecting parent card.
+- **Button visual tuning pass**:
+  - Retuned rest vs hover border emphasis (subtle at rest, strong on hover).
+  - Accent-backed button labels forced white (avoid Light-mode text inversion on accent backgrounds).
+  - Gray/transparent hover-fill tuning separated by button class.
+- **Theme-card hover fixes**:
+  - Preset card hover borders now luminance-aware (`AdjustForHighlight`) for correct light-mode darkening.
+  - Custom theme card hover remains hardcoded island behavior and always lightens.
+- **Experimental plugins banner/toggle in Light mode reworked**:
+  - Enabled warning state now uses light-amber surface/border/text/icon palette in Light mode.
+  - Toggle now reuses shared `BuildToggleSwitch` control to match plugin card toggle formatting and behavior.
 
 ### Post-v0.4.2 (bug audit sweep — 2026-02-21)
 - **15-commit codebase audit** — Thread safety, timer disposal, task leak removal, error handling, type correctness:

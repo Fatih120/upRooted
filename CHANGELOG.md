@@ -24,6 +24,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **Settings interactions and visual feedback aligned with Root native UX** — Incremental UI polish across injected controls:
+  - Release-only activation semantics standardized (`SubscribeClickReleased`) and drag-off-release no longer toggles.
+  - Press feedback (proportional shrink + subtle press shade) now applies consistently to injected controls, with targeted opt-outs for large parent cards where child-button presses should not depress the parent.
+  - Button border emphasis retuned: subtler resting borders and stronger hover borders on action buttons; gray utility buttons tuned separately from transparent text-only controls.
+  - Accent-backed button labels now stay fixed white instead of inheriting Root Light-mode `TextPrimary`.
+  - Theme page behavior polish: added Refresh button, prevented no-op re-toggle on already-active theme cards, and fixed multiple theme-card press/propagation quirks.
+  - Preset theme card hover borders are now luminance-aware (darken in light mode / lighten in dark mode); Custom Theme card hover remains hardcoded island behavior and always lightens.
+  - Experimental plugins banner/toggle light-mode visuals revised: enabled state uses a light amber surface palette in Light mode; toggle visuals now reuse the shared plugin toggle control for consistent formatting/behavior.
+  - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
+
 - **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
 - **Injected control interaction model now matches Root native semantics** — Click-like actions execute on release and are gated by in-bounds press+release (`SubscribeClickReleased`), so press-drag-off-release no longer toggles actions. Applied broadly to settings buttons, toggles, theme cards, nav items, and popup controls.
   - Files: `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
@@ -49,6 +59,14 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Restart button** — Deeper burnt orange (`#D06818`)
 
 ### Fixed
+
+- **Input/activation edge cases across settings UI** — Fixed regressions and interaction quirks discovered during Root-native parity pass:
+  - Pointer press then drag-off then release no longer triggers injected toggles/actions.
+  - Native theme card settings button no longer depresses/toggles the parent card.
+  - Custom Theme Ping toggle no longer activates the entire custom card.
+  - Theme cards no longer re-trigger when pressing an already active card.
+  - About/Plugins/popup button border-hover styling now consistent across previously missed controls.
+  - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
 
 - **Full codebase bug audit** — 15-commit sweep covering thread safety, timer leaks, fire-and-forget task accumulation, error handling gaps, and type correctness:
   - `UprootedSettings`: thread-safe cache read (local copy prevents TOCTOU null return), atomic `Save()` via temp-rename, `OrdinalIgnoreCase` plugins dict

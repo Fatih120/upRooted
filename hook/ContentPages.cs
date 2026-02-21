@@ -636,23 +636,30 @@ internal static class ContentPages
                 var updateBannerOuter = r.CreatePanel();
                 if (updateBannerOuter != null)
                 {
+                    var isLightUi = ColorUtils.Luminance(CardBg) > 0.5;
+                    var warnBg = isLightUi ? "#FFE7CC" : "#2A1D15";
+                    var warnBorder = isLightUi ? "#CC7A1E" : "#D06818";
+                    var warnTitle = isLightUi ? "#5C3512" : "#F0F0F0";
+                    var warnDesc = isLightUi ? "#7A512B" : "#A0A0B0";
+                    var warnIcon = isLightUi ? "#B86412" : "#D06818";
+
                     var restartRow = r.CreateStackPanel(vertical: false, spacing: 10);
                     if (restartRow != null)
                     {
                         r.SetVerticalAlignment(restartRow, "Center");
-                        var restartIcon = r.CreateTextBlock("\u26A0", 20, "#D06818");
+                        var restartIcon = r.CreateTextBlock("\u26A0", 20, warnIcon);
                         ApplyFont(r, restartIcon, font);
                         r.AddChild(restartRow, restartIcon);
 
                         var restartTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                         if (restartTextStack != null)
                         {
-                            var restartTitle = r.CreateTextBlock("Restart Root to install the new version", 13, "#F0F0F0");
+                            var restartTitle = r.CreateTextBlock("Restart Root to install the new version", 13, warnTitle);
                             r.SetFontWeight(restartTitle, "Medium");
                             ApplyFont(r, restartTitle, font);
                             r.AddChild(restartTextStack, restartTitle);
 
-                            var restartDesc = r.CreateTextBlock("The update has been downloaded and will be applied on next launch.", 11, "#A0A0B0");
+                            var restartDesc = r.CreateTextBlock("The update has been downloaded and will be applied on next launch.", 11, warnDesc);
                             ApplyFont(r, restartDesc, font);
                             r.AddChild(restartTextStack, restartDesc);
 
@@ -660,11 +667,11 @@ internal static class ContentPages
                         }
                     }
 
-                    var innerBorder = r.CreateBorder("#2A1D15", 8, restartRow);
+                    var innerBorder = r.CreateBorder(warnBg, 8, restartRow);
                     if (innerBorder != null)
                     {
                         r.SetPadding(innerBorder, 14, 10, 14, 10);
-                        SetBorderStroke(r, innerBorder, "#D06818", 1);
+                        SetBorderStroke(r, innerBorder, warnBorder, 1);
                     }
 
                     // Restart button — accent button format: Bold, border, AdjustForHighlight
@@ -939,23 +946,30 @@ internal static class ContentPages
             var bannerOuter = r.CreatePanel();
             if (bannerOuter != null)
             {
+                var isLightUi = ColorUtils.Luminance(CardBg) > 0.5;
+                var warnBg = isLightUi ? "#FFE7CC" : "#2A1D15";
+                var warnBorder = isLightUi ? "#CC7A1E" : "#D06818";
+                var warnTitle = isLightUi ? "#5C3512" : "#F0F0F0";
+                var warnDesc = isLightUi ? "#7A512B" : "#A0A0B0";
+                var warnIcon = isLightUi ? "#B86412" : "#D06818";
+
                 var bannerContent = r.CreateStackPanel(vertical: false, spacing: 10);
                 if (bannerContent != null)
                 {
                     r.SetVerticalAlignment(bannerContent, "Center");
-                    var icon = r.CreateTextBlock("\u26A0", 20, "#D06818");
+                    var icon = r.CreateTextBlock("\u26A0", 20, warnIcon);
                     ApplyFont(r, icon, font);
                     r.AddChild(bannerContent, icon);
 
                     var bannerTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                     if (bannerTextStack != null)
                     {
-                        var bannerTitle = r.CreateTextBlock("Restart Root to apply plugin changes", 13, "#F0F0F0");
+                        var bannerTitle = r.CreateTextBlock("Restart Root to apply plugin changes", 13, warnTitle);
                         r.SetFontWeight(bannerTitle, "Medium");
                         ApplyFont(r, bannerTitle, font);
                         r.AddChild(bannerTextStack, bannerTitle);
 
-                        var bannerDesc = r.CreateTextBlock("Changed plugins will not take effect until you restart.", 11, "#A0A0B0");
+                        var bannerDesc = r.CreateTextBlock("Changed plugins will not take effect until you restart.", 11, warnDesc);
                         ApplyFont(r, bannerDesc, font);
                         r.AddChild(bannerTextStack, bannerDesc);
 
@@ -990,11 +1004,11 @@ internal static class ContentPages
                     });
                 }
 
-                var innerBorder = r.CreateBorder("#2A1D15", 8, bannerContent);
+                var innerBorder = r.CreateBorder(warnBg, 8, bannerContent);
                 if (innerBorder != null)
                 {
                     r.SetPadding(innerBorder, 14, 10, 14, 10);
-                    SetBorderStroke(r, innerBorder, "#D06818", 1);
+                    SetBorderStroke(r, innerBorder, warnBorder, 1);
                 }
 
                 // Use Panel overlay: banner content stretches, restart button right-aligned
