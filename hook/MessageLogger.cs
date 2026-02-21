@@ -102,6 +102,10 @@ internal class MessageLogger : IDisposable
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
 
+    // Recycling cleanup tracking — tag → (grid21, RowDefinition, ContentPresenter container, DataContextChanged handler)
+    // Allows cleanup of both the card child and the extra RowDefinition when a ContentPresenter is recycled.
+    private readonly Dictionary<string, (object grid, object rowDef, object? container, Delegate? dcHandler)> _injectedRowDefs = new();
+
     // Audit log integration: entries received before the message was cached in the visual tree.
     // Keyed by messageId. Applied the next time the message is added to _messageCache via HandleAdded.
     // All access is on the UI thread (SetAuditLogEngine dispatches OnEntry to UI thread).
@@ -1575,7 +1579,7 @@ internal class MessageLogger : IDisposable
             Logger.Log(Tag, "[DIAG-TREE] === One-time visual tree dump ===");
             Logger.Log(Tag, $"[DIAG-TREE] VSP type: {vsp.GetType().Name}");
             var firstContainer = visibleMessages[0].container;
-            DumpContainerTree(firstContainer, 1, 4);
+            DumpContainerTree(firstContainer, 1, 8);
             Logger.Log(Tag, "[DIAG-TREE] === End tree dump ===");
         }
 
@@ -1623,13 +1627,16 @@ internal class MessageLogger : IDisposable
             if (card == null) { skipped++; continue; }
 
             // Add a new Auto-height row to the Grid and place the card there
-            int newRow = AddAutoRowToGrid(grid);
+            var (newRow, rowDef) = AddAutoRowToGrid(grid);
+            if (newRow < 0) { skipped++; continue; }   // bail — don't add at invalid row 99
+
             _r.SetGridRow(card, newRow);
             _r.SetGridColumn(card, col);
             SetGridColumnSpan(card, 99);
 
             _r.AddChild(grid, card);
             _injectedCards[cardTag] = card;
+            SubscribeContainerDataContextChanged(cardTag, targetContainer, grid, rowDef!);
             injected++;
         }
 
@@ -1643,44 +1650,120 @@ internal class MessageLogger : IDisposable
     }
 
     /// <summary>
-    /// Walk into a message container to find the message layout Grid.
-    /// Follows the same tree path as LinkEmbedEngine: find RootMarkdownTextBlock,
-    /// then its parent Grid is the injection target.
-    /// Returns (grid, column) where column matches the message text position.
+    /// Walk into a message container to find the message content Grid (grid21 in ILSpy terms).
+    /// Tries three strategies in order, logging which succeeded for diagnostics.
+    ///
+    /// Strategy 1 (primary): find RootMarkdownTextBlock → its Grid parent is the target.
+    /// Strategy 2 (fallback): find RootLinkButton (UsernameTextBlock, confirmed in same grid) → its Grid parent.
+    /// Strategy 3 (structural): find MessageBackgroundBorder → walk Panel → grid17 → Col 2 child.
+    ///
+    /// Returns (grid, column=0) on success, (null, 0) on failure.
+    /// Logs encountered type names on miss to aid future diagnosis.
     /// </summary>
     private (object? grid, int column) FindMessageGridInContainer(object container)
     {
+        var seenTypes = new HashSet<string>();
+
+        // Strategy 1: RootMarkdownTextBlock → Grid parent
         foreach (var node in _walker.DescendantsDepthFirst(container))
         {
+            seenTypes.Add(node.GetType().Name);
             if (node.GetType().Name != "RootMarkdownTextBlock") continue;
 
-            int col = _r.GetGridColumn(node);
             var grid = _r.GetParent(node);
             if (grid != null && _r.IsGrid(grid))
-                return (grid, col);
-
-            // One more level up (Grid may be wrapped)
+            {
+                Logger.Log(Tag, "[FMGIC] anchor=markdown");
+                return (grid, 0);
+            }
             if (grid != null)
             {
                 var above = _r.GetParent(grid);
                 if (above != null && _r.IsGrid(above))
-                    return (above, col);
+                {
+                    Logger.Log(Tag, "[FMGIC] anchor=markdown+1");
+                    return (above, 0);
+                }
             }
         }
+
+        // Strategy 2: RootLinkButton (UsernameTextBlock) → Grid parent
+        // UsernameTextBlock is in the same grid (grid21) at Row 0
+        foreach (var node in _walker.DescendantsDepthFirst(container))
+        {
+            if (node.GetType().Name != "RootLinkButton") continue;
+            var grid = _r.GetParent(node);
+            if (grid != null && _r.IsGrid(grid))
+            {
+                Logger.Log(Tag, "[FMGIC] anchor=username");
+                return (grid, 0);
+            }
+        }
+
+        // Strategy 3: MessageBackgroundBorder → Panel.Children[1] (grid17) → Col 2, Row 1 child
+        object? mbBorder = null;
+        foreach (var node in _walker.DescendantsDepthFirst(container))
+        {
+            if (node.GetType().Name != "Border") continue;
+            try
+            {
+                var nameProp = node.GetType().GetProperty("Name",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (nameProp?.GetValue(node) as string == "MessageBackgroundBorder")
+                { mbBorder = node; break; }
+            }
+            catch { }
+        }
+        if (mbBorder != null)
+        {
+            // Border.Child is the Panel
+            var panel = _r.GetBorderChild(mbBorder);
+            if (panel != null)
+            {
+                // Panel.Children[1] is grid17 (index 0 = highlight border, index 1 = grid17)
+                var grid17 = _r.GetChild(panel, 1);
+                if (grid17 != null && _r.IsGrid(grid17))
+                {
+                    // Col 2, Row 1 of grid17 is grid21
+                    int gc = _r.GetChildCount(grid17);
+                    for (int i = 0; i < gc; i++)
+                    {
+                        var candidate = _r.GetChild(grid17, i);
+                        if (candidate == null || !_r.IsGrid(candidate)) continue;
+                        try
+                        {
+                            int col = _r.GetGridColumn(candidate);
+                            int row = _r.GetGridRow(candidate);
+                            if (col == 2 && row == 1)
+                            {
+                                Logger.Log(Tag, "[FMGIC] anchor=structural");
+                                return (candidate, 0);
+                            }
+                        }
+                        catch { }
+                    }
+                }
+            }
+        }
+
+        // All strategies failed — log encountered types for future diagnosis
+        var typeList = string.Join(",", seenTypes.Take(20));
+        Logger.Log(Tag, $"[FMGIC] anchor=none types={typeList}");
         return (null, 0);
     }
 
     /// <summary>
-    /// Add a new Auto-height RowDefinition to a Grid and return its row index.
-    /// Pattern from LinkEmbedEngine.
+    /// Add a new Auto-height RowDefinition to a Grid.
+    /// Returns (rowIndex, rowDefObject) on success, (-1, null) on failure.
+    /// The caller must store rowDefObject for later cleanup via RemoveRowDefinition.
     /// </summary>
-    private int AddAutoRowToGrid(object grid)
+    private (int row, object? rowDef) AddAutoRowToGrid(object grid)
     {
         try
         {
             var rowDefsProp = grid.GetType().GetProperty("RowDefinitions");
             var rowDefs = rowDefsProp?.GetValue(grid);
-            if (rowDefs == null) return 99;
+            if (rowDefs == null) return (-1, null);
 
             int count = 0;
             var countProp = rowDefs.GetType().GetProperty("Count");
@@ -1701,12 +1784,12 @@ internal class MessageLogger : IDisposable
                     var addMethod = rowDefs.GetType().GetMethod("Add");
                     addMethod?.Invoke(rowDefs, new[] { rowDef });
 
-                    return count;
+                    return (count, rowDef);
                 }
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"AddAutoRowToGrid error: {ex.Message}"); }
-        return 99;
+        return (-1, null);
     }
 
     private void SetGridColumnSpan(object control, int span)
@@ -1930,12 +2013,15 @@ internal class MessageLogger : IDisposable
             var card = BuildEditIndicatorCard(cached, editTag);
             if (card == null) continue;
 
-            int newRow = AddAutoRowToGrid(grid);
+            var (newRow, rowDef) = AddAutoRowToGrid(grid);
+            if (newRow < 0) continue;   // bail — don't add at invalid row 99
+
             _r.SetGridRow(card, newRow);
             _r.SetGridColumn(card, col);
             SetGridColumnSpan(card, 99);
             _r.AddChild(grid, card);
             _injectedCards[editTag] = card;
+            SubscribeContainerDataContextChanged(editTag, container, grid, rowDef!);
             editInjected++;
         }
 
@@ -2096,36 +2182,159 @@ internal class MessageLogger : IDisposable
     }
 
     /// <summary>
-    /// Diagnostic: dump the visual tree of a container for debugging grid injection.
+    /// Diagnostic: dump the visual tree of a container using GetVisualChildren so that
+    /// ContentPresenter and TemplatedControl subtrees are traversed correctly.
+    /// Uses the same walker as FindMessageGridInContainer for accurate results.
     /// </summary>
-    private void DumpContainerTree(object node, int depth, int maxDepth)
+    private void DumpContainerTree(object root, int _, int maxDepth)
     {
-        if (depth > maxDepth) return;
-        var indent = new string(' ', depth * 2);
-        var typeName = node.GetType().Name;
-        var childCount = _r.GetChildCount(node);
-        Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} (children={childCount})");
-        for (int i = 0; i < childCount && i < 8; i++)
+        // Use a stack to track (node, depth) so we can honour maxDepth
+        var stack = new Stack<(object node, int depth)>();
+        stack.Push((root, 0));
+        int total = 0;
+        while (stack.Count > 0 && total < 40)
         {
-            var child = _r.GetChild(node, i);
-            if (child != null) DumpContainerTree(child, depth + 1, maxDepth);
+            var (node, depth) = stack.Pop();
+            if (depth > maxDepth) continue;
+            total++;
+            var typeName = node.GetType().Name;
+            var panelChildren = _r.GetChildCount(node);     // Panel.Children count (0 for non-Panels)
+            int gridCol = -1, gridRow = -1;
+            try { gridCol = _r.GetGridColumn(node); } catch { }
+            try { gridRow = _r.GetGridRow(node); } catch { }
+            var indent = new string(' ', depth * 2);
+            Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} panelKids={panelChildren} col={gridCol} row={gridRow}");
+
+            // Push visual children in reverse order so left-to-right pops first
+            var visKids = _r.GetVisualChildren(node).ToList();
+            for (int i = visKids.Count - 1; i >= 0; i--)
+                stack.Push((visKids[i], depth + 1));
         }
+        if (total >= 40)
+            Logger.Log(Tag, "[DIAG-TREE] (truncated at 40 nodes)");
+    }
+
+    /// <summary>
+    /// Subscribe to the ContentPresenter container's DataContextChanged event.
+    /// When Root recycles the container (DataContext changes to a different message),
+    /// we immediately remove the injected card and RowDefinition before they corrupt
+    /// the new message's layout.
+    /// </summary>
+    private void SubscribeContainerDataContextChanged(string cardTag, object container, object grid, object rowDef)
+    {
+        try
+        {
+            var dcEvent = container.GetType().GetEvent("DataContextChanged");
+            if (dcEvent == null)
+            {
+                // No DataContextChanged event — store without cleanup subscription
+                _injectedRowDefs[cardTag] = (grid, rowDef, null, null);
+                return;
+            }
+
+            var handlerType = dcEvent.EventHandlerType!;
+            var invokeMethod = handlerType.GetMethod("Invoke")!;
+            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+
+            var capturedTag = cardTag;
+            var callback = new Action(() =>
+            {
+                try { _r.RunOnUIThread(() => CleanupInjectedRow(capturedTag)); }
+                catch { }
+            });
+
+            // Build (object sender, <EventArgs> e) => callback() delegate matching any event signature
+            var sParam = Expression.Parameter(paramTypes[0], "s");
+            var eParam = paramTypes.Length > 1
+                ? Expression.Parameter(paramTypes[1], "e")
+                : Expression.Parameter(typeof(object), "e");
+            var invokeBody = Expression.Invoke(Expression.Constant(callback));
+            var lambda = paramTypes.Length > 1
+                ? Expression.Lambda(handlerType, invokeBody, sParam, eParam)
+                : Expression.Lambda(handlerType, invokeBody, sParam);
+            var handler = lambda.Compile();
+
+            dcEvent.AddEventHandler(container, handler);
+            _injectedRowDefs[cardTag] = (grid, rowDef, container, handler);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"[recycle-sub] {cardTag}: {ex.Message}");
+            _injectedRowDefs[cardTag] = (grid, rowDef, null, null);
+        }
+    }
+
+    /// <summary>
+    /// Clean up a single injected card entry: remove the card from the grid's Children,
+    /// remove the RowDefinition from the grid's RowDefinitions, and unsubscribe
+    /// the DataContextChanged handler from the container.
+    /// Must be called on the UI thread.
+    /// </summary>
+    private void CleanupInjectedRow(string cardTag)
+    {
+        if (!_injectedRowDefs.TryGetValue(cardTag, out var entry)) return;
+        _injectedRowDefs.Remove(cardTag);
+
+        // Remove injected card from grid.Children
+        if (_injectedCards.TryGetValue(cardTag, out var card))
+        {
+            _r.GetChildren(entry.grid)?.Remove(card);
+            _injectedCards.Remove(cardTag);
+        }
+
+        // Remove injected RowDefinition from grid.RowDefinitions
+        RemoveRowDefinition(entry.grid, entry.rowDef);
+
+        // Unsubscribe DataContextChanged
+        if (entry.dcHandler != null && entry.container != null)
+        {
+            try
+            {
+                entry.container.GetType().GetEvent("DataContextChanged")
+                    ?.RemoveEventHandler(entry.container, entry.dcHandler);
+            }
+            catch { }
+        }
+    }
+
+    /// <summary>
+    /// Remove a RowDefinition object from a Grid's RowDefinitions collection.
+    /// </summary>
+    private static void RemoveRowDefinition(object grid, object rowDef)
+    {
+        try
+        {
+            var rowDefs = grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid);
+            rowDefs?.GetType().GetMethod("Remove")?.Invoke(rowDefs, new[] { rowDef });
+        }
+        catch { }
     }
 
     private void ClearInjectedCards(string reason = "unknown")
     {
-        if (_injectedCards.Count > 0)
-            Logger.Log(Tag, $"Clearing {_injectedCards.Count} cards: {reason}");
-        foreach (var (tag, card) in _injectedCards)
+        int total = _injectedCards.Count;
+        if (total > 0)
+            Logger.Log(Tag, $"Clearing {total} cards: {reason}");
+
+        // Clean up tracked entries: card child + RowDefinition + DataContextChanged handler
+        var tags = _injectedCards.Keys.ToList();  // snapshot — CleanupInjectedRow mutates both dicts
+        foreach (var tag in tags)
+            CleanupInjectedRow(tag);
+
+        // Clean up any RowDef-only entries (should not happen normally, safety net)
+        foreach (var (tag, entry) in _injectedRowDefs)
         {
-            try
+            RemoveRowDefinition(entry.grid, entry.rowDef);
+            if (entry.dcHandler != null && entry.container != null)
             {
-                var parent = _r.GetParent(card);
-                if (parent != null) RemoveChild(parent, card);
+                try { entry.container.GetType().GetEvent("DataContextChanged")
+                          ?.RemoveEventHandler(entry.container, entry.dcHandler); }
+                catch { }
             }
-            catch { }
         }
-        _injectedCards.Clear();
+        _injectedRowDefs.Clear();
+        _injectedCards.Clear();  // safety — should be empty after CleanupInjectedRow calls
+
         UnsubscribeAllPropertyChanged();
         _boolDumpCount = 0; // reset so next epoch gets fresh diagnostic dumps
     }
