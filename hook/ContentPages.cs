@@ -2687,7 +2687,9 @@ internal static class ContentPages
         var card = r.CreateBorder(innerCardBg, 12);
         if (card == null) return null;
         SetBorderStroke(r, card, borderColor, ThickBorder);
-        r.SetCursorHand(card);
+        // Native theme card contains a gear button; disable parent press feedback so
+        // pressing the gear animates only the button (not the whole card).
+        r.SetCursorHand(card, enablePressFeedback: onSettings == null);
 
         // Vertical layout: preview on top, radio + name below
         var outerLayout = r.CreateStackPanel(vertical: true, spacing: 0);
