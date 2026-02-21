@@ -89,6 +89,9 @@ internal class RootcordEngine
 
     // State
     public bool IsApplied { get; private set; }
+    // CancellationTokenSource for fire-and-forget Task.Delay calls started during Apply.
+    // Cancelled in Revert() so pending callbacks don't run after we've cleaned up state.
+    private CancellationTokenSource? _applyCts;
 
     private const string Tag = "Rootcord";
     private const double StripWidth = 56;
@@ -165,6 +168,11 @@ internal class RootcordEngine
         {
             Logger.Log(Tag, "Applying Discord-style layout...");
 
+            // Fresh token for any fire-and-forget delays started during this Apply session
+            _applyCts?.Cancel();
+            _applyCts?.Dispose();
+            _applyCts = new CancellationTokenSource();
+
             // Refresh cached colors from ContentPages statics
             RefreshColors();
 
@@ -225,6 +233,9 @@ internal class RootcordEngine
         try
         {
             Logger.Log(Tag, "Reverting to original layout...");
+
+            // Cancel any pending fire-and-forget delays (e.g. tab-switch retry)
+            _applyCts?.Cancel();
 
             // Dismiss any active tooltip/popup
             DismissIconTooltip();
@@ -3151,8 +3162,10 @@ internal class RootcordEngine
                             if (_communityGrid == null)
                             {
                                 var capturedSel = sel;
-                                System.Threading.Tasks.Task.Delay(300).ContinueWith(_ =>
+                                var capturedToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+                                System.Threading.Tasks.Task.Delay(300, capturedToken).ContinueWith(_ =>
                                 {
+                                    if (capturedToken.IsCancellationRequested) return;
                                     _r.RunOnUIThread(() =>
                                     {
                                         try
@@ -3166,7 +3179,7 @@ internal class RootcordEngine
                                         }
                                         catch { }
                                     });
-                                });
+                                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
                             }
                         }
                         else
