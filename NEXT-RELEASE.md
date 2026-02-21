@@ -2,81 +2,145 @@
 
 > Changes since v0.4.2. This file is replaced each release.
 
-### Added
+---
 
-- **Custom theme overhaul** — Major rework of the custom theme system:
-  - Remove "Apply Custom" button — themes auto-apply on every keystroke via `UpdateCustomThemeLive`
-  - Full OKLCH lightness range (0.05–0.93) — light custom backgrounds now work correctly
-  - Smooth direction-aware color derivation (no binary isDark snapping at 50% threshold)
-  - Custom text color input (empty = auto-derive from background lightness)
-  - `CustomText` and `CustomSvgMode` settings fields persisted in INI
-  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `hook/UprootedSettings.cs`, `hook/StartupHook.cs`
-- **Tag-based visual tree walker** — Controls tagged `dyn-fg:TextPrimary`, `dyn-bg:BackgroundSecondary`, etc. are recolored from the live palette on 100ms walker intervals. Text-only color map handles Root's native untagged controls (Foreground matching only).
-  - File: `hook/ThemeEngine.cs`
-- **DynamicResource binding via reflection** — `BindToDynamicResource(control, property, resourceKey)` attempts Avalonia DynamicResource binding. Silently fails at runtime but harmless; tag-based walker is the real mechanism.
-  - File: `hook/AvaloniaReflection.cs`
-- **Variant switching for custom themes** — Light custom themes trigger `SetRequestedThemeVariant(Light)` for correct SVG resolution. Guard prevents variant change handler from reverting during our switch.
-  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`
-- **ColorPickerPopup.IsOpen** — Static property guards against page rebuilds during color picker drag.
-  - File: `hook/ColorPickerPopup.cs`
+# What's New Since v0.4.2
 
-### Changed
+This is a big one. Since the last release we shipped a new plugin, reworked the entire custom theme system, rebuilt Rootcord's user card, added a presence beacon with community badges, overhauled the settings UI, and made startup meaningfully faster. A lot happened.
 
-- **Card border style** — Border thickness reduced from 1.5px to 1.0px to match Root's native divider lines. Border color now reads from Root's `Border` resource instead of `AdjustForHighlight(CardBg, 15)`.
-  - File: `hook/ContentPages.cs`
-- **Nav item borders** — Sidebar nav items (About/Plugins/Themes) now have visible 1px borders using Root's `HighlightLight`/`HighlightNormal`/`HighlightStrong` resources. Adapts to both light and dark themes.
-  - File: `hook/SidebarInjector.cs`
-- **Custom theme card "no-recolor island"** — Hardcoded colors (`#1A1A2E` bg, `#F0F0F0` text, `#A0A0B0` muted) with `uprooted-no-recolor` tag. Ping color toggle uses hardcoded off-color (`#2A2A44`). Walker skips entire subtree.
-  - File: `hook/ContentPages.cs`
-- **ScrollViewer horizontal scroll disabled** — All content ScrollViewers set `HorizontalScrollBarVisibility = Disabled` so content stretches to fill available width.
-  - File: `hook/AvaloniaReflection.cs`
-- **Plugin filter: dropdown → cycling toggle** — Replaced the 3-option dropdown overlay (Show All/Enabled/Disabled) with a single cycling pill button. Click to cycle through "All Plugins" → "Enabled" → "Disabled". Each state has a distinct color with `AdjustForHighlight` 1.5px border that updates on cycle. Bold text. Fixed `MinWidth` prevents width jitter when cycling.
-  - File: `hook/ContentPages.cs`
-- **Plugin sort order** — Stability tier now takes priority over enabled/disabled state. Stable plugins always list before Beta, regardless of toggle state.
-  - File: `hook/ContentPages.cs`
-- **Themes "Open" button** — Taller (28px) with border stroke and bold text to match toggle switch proportions.
-  - File: `hook/ContentPages.cs`
-- **Overlay scrollbar** — Settings pages use `CreateOverlayScrollViewer` which relocates the vertical ScrollBar into the content Grid column via a deferred LayoutUpdated handler, matching Root's native RootScrollViewer overlay behavior (no content displacement on scroll).
-  - File: `hook/ContentPages.cs`
-- **Filter toggle "Enabled" color** — Hardcoded to `#40A050` (stable green) instead of theme-dependent `AccentGreen` which changed with custom themes.
-  - File: `hook/ContentPages.cs`
-- **Experimental plugins banner: theme-aware toggle** — When disabled, uses theme colors (CardBg, CardBorder, TextWhite, TextMuted); when enabled, switches to hardcoded amber warning colors (`#2A2415` bg, `#E0A030` border). Warning icon (20px) hidden when disabled. Toggle pill uses `AdjustForHighlight(CardBg, 8)` off-color instead of hardcoded `#2A2A44`.
-  - File: `hook/ContentPages.cs`
-- **Restart banners: consistent card format** — Both plugin restart and update restart banners now use title + subtitle layout matching the experimental card height. Distinct burnt orange tint (`#2A1D15` bg, `#D06818` border/icon) differentiates from amber warnings. Update banner text changed from "use" to "install".
-  - File: `hook/ContentPages.cs`
-- **Restart buttons: accent button format** — Bold text, centered, `AdjustForHighlight(color, 30)` 1.5px border. Matches established button standard across all Uprooted tabs.
-  - File: `hook/ContentPages.cs`
-- **Cards-in-a-card layout** — Preset and custom theme sections wrapped in outer container cards (`BackgroundSecondary` bg, `Border` border, corner radius 12). Inner theme cards use 2nd-order styling: slightly lighter bg (`AdjustForHighlight(CardBg, 4.5)`), `CardBorder` rest border, `Lighten(CardBorder, 60)` hover border, 1.5px thickness. Equal-width Grid columns replace fixed-width cards.
-  - File: `hook/ContentPages.cs`
-- **Radio indicators (Root native style)** — Theme card radio selectors use neutral `TextWhite` color only (16×16, 1.0px border, 10×10 inner dot with 1px margin). Never accent-colored, border unaffected by selection state.
-  - File: `hook/ContentPages.cs`
-- **Typography (Root native style)** — Page titles bumped to 20px Bold, section headers to 14px Bold `TextPrimary`. About page renamed to "About Uprooted". Uses `SetFontWeight("Bold")` (string-based) as `SetFontWeightNumeric` silently fails.
-  - File: `hook/ContentPages.cs`
-- **Button borders and text** — Accent buttons (version badge, Check for Updates, Developer/Stable, Go) use `AdjustForHighlight(btnColor, 30)` 1.5px borders with Bold text. Non-accent buttons (Open Logs) use `AdjustForHighlight(bg, 15)`. Developer/Stable border updates dynamically on toggle.
-  - File: `hook/ContentPages.cs`
-- **Restart button color** — Deeper burnt orange (`#D06818`) for better visibility.
-  - File: `hook/ContentPages.cs`
-- **Plugin card vector icons** — Gear and info icons use `Shapes.Path` with `Stretch.Uniform` (Material Design 24x24 SVG paths). Replaced `PathIcon` which didn't scale geometry to fit.
-  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
-- **DPI-aware border thicknesses** — `ComputeDpiAwareBorders` reads `RenderScaling` from MainWindow and computes `ThinBorder` (1 physical pixel) and `ThickBorder` (next pixel boundary above thin). Outer cards use `ThinBorder`, inner cards and buttons use `ThickBorder`. Borders are always visually distinct at any DPI (100%, 125%, 150%, 200%).
-  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
-- **Radio selectors: Grid overlay** — Theme card radio indicators rebuilt as two sibling Borders in a Grid (ring + centered dot) instead of nested Border. Outer bumped to 18x18 so `(18-10)*scale` is always even — perfect centering at 100% and 150%.
-  - File: `hook/ContentPages.cs`
-- **Toggle switch centering** — Thumb 18→16 with margin 3→4, ensuring `(24-16)*scale` is always even for pixel-perfect centering at all common DPI scales.
-  - File: `hook/ContentPages.cs`
-- **Plugin card text** — Plugin names now render Bold via `SetFontWeight("Bold")` (previously `SetFontWeightNumeric(600)` which silently failed). Testing status badges (Alpha/Beta/Stable) also Bold with 1px border (was 0.5px).
-  - File: `hook/ContentPages.cs`
+---
 
-### Fixed
+## New: Translate Plugin
 
-- **Theme revert** — Variant toggle forces DynamicResource re-resolution for Root native controls. `RestoreTaggedControls` walk restores injected elements from Root's live native colors after revert.
-  - File: `hook/ThemeEngine.cs`
-- **Auto-nav on variant change** — Settings page no longer auto-navigates to About tab when Root's theme variant changes. `_hasAutoNavigated` flag ensures auto-nav only fires on first settings open.
-  - File: `hook/SidebarInjector.cs`
+A translate button now appears directly in Root's message compose bar. Click it to pick a target language, and Uprooted rewrites your draft in place before you send. The engine starts 5 seconds after Root launches and self-gates on the plugin toggle, so you can turn it on and off without a restart. It shows up in Plugin Settings under the Experimental tier.
 
-### Known Issues
+---
 
-- **DynamicResource binding via reflection silently fails** — Tag-based walker is the real mechanism for live recoloring
-- **Root "Online" indicator and some sub-tabs don't live-update** with custom text color changes
-- **SVG style UI removed** — Root resolves SVGs at variant-load time, not from ThemeDictionary writes; variant switching handles the common case
-- **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text)
+## New: Presence Beacon and Community Badges
+
+Uprooted now runs a background presence beacon that registers with the Uprooted API 10 seconds after startup. This powers two visible features:
+
+- **Role-based badges on profile popups** - Developers get a Dev badge, alpha testers get an Alpha badge. Dev takes priority if someone holds both roles. Badges are visible to all Uprooted users.
+- **Session role cache** - Roles are fetched once per session and cached, so badge injection is instant the moment any profile popup opens. Detection is event-driven via `OverlayLayer.Children.CollectionChanged`, with a 500ms fallback poll for popups that bypass the overlay system.
+
+---
+
+## Updated: Rootcord
+
+Several significant fixes and improvements to the Discord-style vertical server sidebar plugin since v0.4.2:
+
+**User card rebuilt from scratch.** The old approach tried to reparent Root's native SystemTray border, which was fragile and frequently broke. The new user card is fully custom: the avatar and username area are click targets that open the profile pane, and a 4-button cluster (Friends, Direct Messages, Notifications, Settings) uses native `HomeViewModel` commands directly.
+
+**Crash on server icon click fixed.** `RefreshSelectedHighlight()` was throwing on every server icon click because a `Decorator` appeared in the server strip container where a `Border` was expected. Type guards and per-section try/catch blocks now handle this correctly. The crash is gone.
+
+**Member count tooltips.** Server icon tooltips now show online and total member counts below the server name, using Root's native dot-and-text style from `CommunityTabViewModel`.
+
+**Live toggle.** Rootcord can be enabled and disabled without restarting Root. The engine always initializes a dormant instance at startup so the toggle can apply immediately.
+
+---
+
+## Updated: Custom Theme System
+
+The entire custom theme system was reworked:
+
+**Keystroke apply.** The "Apply Custom" button is gone. Themes now apply live on every keystroke via `UpdateCustomThemeLive`. You see your changes as you type.
+
+**Full lightness range.** The OKLCH lightness clamp now spans 0.05 to 0.93 instead of clamping to dark values. Light custom backgrounds work correctly now.
+
+**Smooth derivation.** The color derivation algorithm no longer snaps to dark or light mode at the 50% threshold. It uses a continuous direction-aware curve that produces natural intermediate tones.
+
+**Custom text color.** A new text color input lets you pin the text color manually. Leave it empty to keep the automatic behavior (derived from background lightness).
+
+**Tag-based visual tree walker.** Injected controls are tagged with `dyn-fg:`, `dyn-bg:`, and `dyn-bb:` attributes. A 100ms interval walker recolors all tagged controls from the live palette. Root's native controls use a separate Foreground-matching pass.
+
+**No-recolor island.** The custom theme card is now immune to the walker. The ping color toggle off-state uses a hardcoded color so the thumb does not blend into the card background.
+
+**Light theme variant switching.** Custom themes with light backgrounds now trigger `SetRequestedThemeVariant(Light)` so SVGs resolve to the correct folder. A guard prevents the variant change handler from reverting the theme during the switch.
+
+---
+
+## Updated: Settings UI Polish
+
+A comprehensive overhaul of the settings pages to match Root's native visual style:
+
+**Cards-in-a-card layout.** Preset and custom theme sections sit inside outer container cards. Inner theme cards use second-order styling: slightly lighter background, thicker borders, and equal-width Grid columns instead of fixed pixel widths.
+
+**DPI-aware borders.** `ThinBorder` (1 physical pixel) and `ThickBorder` (next pixel boundary above thin) are computed from `RenderScaling` at startup. Borders are always visually distinct at 100%, 125%, 150%, and 200% DPI.
+
+**Vector icons.** Plugin card gear and info icons now use `Shapes.Path` with `Stretch.Uniform` and Material Design 24x24 SVG paths. The previous `PathIcon` approach did not scale geometry to fill the container.
+
+**Typography.** Page titles are 20px Bold. Section headers are 14px Bold with `TextPrimary` color. Bold now actually works via `SetFontWeight("Bold")` - the old `SetFontWeightNumeric(600)` path silently failed on Avalonia's trimmed assembly.
+
+**Radio indicators.** Theme card radio selectors are now two sibling Borders in a Grid (18x18 ring + 10x10 centered dot). The math ensures `(18-10) * scale` is always even, giving pixel-perfect centering at both 100% and 150% DPI.
+
+**Toggle switch.** Thumb reduced from 18px to 16px with a 4px margin (was 3px), keeping `(24-16) * scale` even at all common DPI scales.
+
+**Plugin filter.** The 3-option dropdown was replaced by a cycling pill button. Click through: All Plugins, Enabled, Disabled. Each state has a distinct color and a 1.5px border that updates on cycle.
+
+**Plugin sort order.** Stability tier now takes priority over enabled state. Stable plugins always appear before Beta plugins regardless of toggle state.
+
+**Restart banners.** Both the plugin-change and update-applied banners now use a title + subtitle layout with burnt orange tint (`#2A1D15` background, `#D06818` border), distinct from the amber experimental warning color.
+
+**Experimental plugins banner.** When the toggle is off, the banner uses theme colors. When on, it switches to hardcoded amber with a warning icon.
+
+**Nav item borders.** Sidebar nav items now have visible 1px resting borders using Root's `HighlightLight`, `HighlightNormal`, and `HighlightStrong` resources. Adapts to both dark and light theme variants automatically.
+
+---
+
+## Updated: Overlay Scrollbar
+
+Settings pages now use `CreateOverlayScrollViewer`, which relocates the vertical scrollbar into the content Grid column via a deferred `LayoutUpdated` handler. This matches Root's native `RootScrollViewer` overlay behavior exactly, eliminating the content width displacement that a standard `ScrollViewer` caused.
+
+---
+
+## Updated: Settings Detection and Header Fixes
+
+**Instant detection.** The `LayoutUpdated` throttle was lowered from 500ms to 50ms and the reentracy guard was removed from the `LayoutUpdated` path. Settings open detection is now near-instant, including after rapid close and reopen cycles.
+
+**Back arrow.** Now found by child order in the header Grid rather than by bounds or text matching. Hidden using a collapse pattern (Opacity, MaxWidth, MaxHeight, Width, and Margin all zeroed) instead of toggling `IsVisible`, which avoids conflicting with Root's data binding.
+
+**Auto-nav guard.** A `_hasAutoNavigated` flag ensures the settings page only auto-navigates to the About tab once per open, not on every Root theme variant change.
+
+---
+
+## Updated: Startup Performance
+
+Four optimizations reduce the time between Root launching and Uprooted being active:
+
+**Phase 0 runs in parallel.** HTML patch verification fires on a ThreadPool thread immediately. Phase 1 (waiting for Avalonia assemblies) starts without waiting for the filesystem work to finish.
+
+**Faster readiness polling.** The `WaitFor` loop for detecting `Application.Current` and `MainWindow` polls every 50ms instead of 500ms. This removes up to ~900ms of worst-case idle wait across the two phases.
+
+**Diagnostic scans gated to dev channel.** `BrowserDiscovery.DumpAllFindings()` and `DumpVisualTreeColors()` now only run when the update channel is set to `developer`. Both previously ran on the UI thread 10 seconds after every startup for all users.
+
+**Single settings read for plugin phases.** Phases 4.5a through 4.5i each called `UprootedSettings.Load()` individually. They now share the `savedSettings` instance already loaded in Phase 3.5.
+
+---
+
+## Developer Tools
+
+**ReconLogger** is a new dev-channel-only diagnostic tool that hooks into Root's settings page interaction events and writes visual tree data to the hook log as `[Recon]` entries. Useful for capturing style properties of sidebar controls during Rootcord and Uprooted UI development. Only initializes when the update channel is `developer`.
+
+**Planned plugin tier** is a new status level in the plugin system. Plugins in this tier appear in the UI (when the experimental opt-in is active) with a clear label that they are not yet functional. Translate lived here during development before the implementation was ready.
+
+---
+
+## Bug Fixes
+
+- **Theme revert** - Reverting a theme now triggers a variant toggle to force DynamicResource re-resolution on Root's native controls, and `RestoreTaggedControls` restores injected controls from Root's live colors
+- **Named color crash** - `Color.ToString()` returns `"White"` for `#FFFFFFFF` in Avalonia, crashing `ColorUtils.ParseHex()`. Colors are now extracted via the `A`, `R`, `G`, `B` byte properties directly
+- **Online status dots** - `BrandSecondary` is no longer overridden in ThemeDictionaries. Root uses this key for online status dots (green `#A8FF5D`); overriding it caused all online indicators to show the theme accent color
+- **Custom ping color bleed** - `ApplyPingColorOverride()` was overriding `ThemeAccentColor` and `ThemeAccentBrush` globally, causing buttons and active-state UI to take on the ping color. The visual tree walk already handles the correct controls
+- **ResourceDictionary lookups** - `dict["key"]` only checks direct entries, not merged dictionaries. Switched to `Application.TryGetResource` for full resolution chain
+- **Theme preview swatch hover** - Transparent background on the color preview swatch caused a `PointerExited` event when the mouse crossed over it. Fixed with `IsHitTestVisible = false`
+- **Version migration never fired** - `UprootedSettings.Load()` had no `case "Version":` in the INI parser switch, so the Version property always returned its hardcoded default. Upgrade detection never worked. The missing case is now added
+
+---
+
+## Known Issues
+
+- **MessageLogger: card positioning** - `FindMessageGridInContainer` returns null; the container structure may have changed and needs investigation
+- **NSFW filter** - The Avalonia-native visual tree scanner (Phase 4.5g) has not been validated with the Google Vision API in production
+- **SilentTyping** - Both interception layers are deployed but have not been validated with two simultaneous accounts
+- **DynamicResource binding** - `BindToDynamicResource` in AvaloniaReflection does not propagate changes at runtime; the tag-based walker is the real mechanism
+- **Uprooted tab header** - The injected sidebar tab header text does not recolor when a custom theme changes
