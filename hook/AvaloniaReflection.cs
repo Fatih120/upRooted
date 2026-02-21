@@ -79,6 +79,26 @@ internal class AvaloniaReflection
     public Type? DesktopLifetimeType { get; private set; }
     public Type? TopLevelType { get; private set; }
 
+    // Cached assembly list (populated during ResolveTypes, reused by ResolveMembers)
+    private List<System.Reflection.Assembly> _avaloniaAssemblies = new();
+
+    /// <summary>
+    /// Find an Avalonia type by full name across cached assemblies (direct GetType, O(1) per assembly).
+    /// </summary>
+    private Type? FindAvaloniaType(string fullName)
+    {
+        foreach (var asm in _avaloniaAssemblies)
+        {
+            try
+            {
+                var t = asm.GetType(fullName, throwOnError: false);
+                if (t != null) return t;
+            }
+            catch { }
+        }
+        return null;
+    }
+
     // Cached property/method handles
     private PropertyInfo? _appCurrent;
     private PropertyInfo? _appLifetime;
@@ -187,27 +207,36 @@ internal class AvaloniaReflection
 
     private void ResolveTypes(WideEvent ev, List<string> missing)
     {
-        var typeMap = new Dictionary<string, Type>();
-
+        // Direct Assembly.GetType() per type name — avoids enumerating all 2237 types.
+        // Each GetType() is a single internal dictionary lookup inside the assembly.
+        _avaloniaAssemblies.Clear();
+        var avaloniaAssemblies = _avaloniaAssemblies;
         foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
         {
             try
             {
                 var name = asm.GetName().Name ?? "";
-                if (!name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
-
-                foreach (var type in asm.GetTypes())
-                {
-                    var fn = type.FullName;
-                    if (fn != null) typeMap[fn] = type;
-                }
+                if (name.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase))
+                    avaloniaAssemblies.Add(asm);
             }
             catch { }
         }
 
-        ev.Set("types_scanned", typeMap.Count);
+        ev.Set("avalonia_assemblies", avaloniaAssemblies.Count);
 
-        Type? Find(string fullName) => typeMap.TryGetValue(fullName, out var t) ? t : null;
+        Type? Find(string fullName)
+        {
+            foreach (var asm in avaloniaAssemblies)
+            {
+                try
+                {
+                    var t = asm.GetType(fullName, throwOnError: false);
+                    if (t != null) return t;
+                }
+                catch { }
+            }
+            return null;
+        }
 
         ApplicationType = Find("Avalonia.Application");
         DispatcherType = Find("Avalonia.Threading.Dispatcher");
@@ -228,12 +257,6 @@ internal class AvaloniaReflection
         PathIconType = Find("Avalonia.Controls.PathIcon");
         PathShapeType = Find("Avalonia.Controls.Shapes.Path");
         GeometryType = Find("Avalonia.Media.Geometry");
-
-        // Fallback: search by name if namespace differs
-        EllipseType ??= typeMap.Values.FirstOrDefault(t =>
-            t.Name == "Ellipse" && t.Namespace?.StartsWith("Avalonia") == true && !t.IsAbstract);
-        PathShapeType ??= typeMap.Values.FirstOrDefault(t =>
-            t.Name == "Path" && t.Namespace?.Contains("Shapes") == true && !t.IsAbstract);
 
         SolidColorBrushType = Find("Avalonia.Media.SolidColorBrush");
         LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
@@ -276,16 +299,28 @@ internal class AvaloniaReflection
 
         // Resource system
         ResourceDictionaryType = Find("Avalonia.Controls.ResourceDictionary");
-        // IResourceDictionary may be in different namespaces
         IResourceDictionaryType = Find("Avalonia.Controls.IResourceDictionary");
 
-        // IClassicDesktopStyleApplicationLifetime - match by suffix
-        foreach (var kv in typeMap)
+        // IClassicDesktopStyleApplicationLifetime — try known full name first
+        DesktopLifetimeType = Find("Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime");
+        // Fallback: suffix match (only if direct lookup fails)
+        if (DesktopLifetimeType == null)
         {
-            if (kv.Key.EndsWith("IClassicDesktopStyleApplicationLifetime") && kv.Value.IsInterface)
+            foreach (var asm in avaloniaAssemblies)
             {
-                DesktopLifetimeType = kv.Value;
-                break;
+                if (DesktopLifetimeType != null) break;
+                try
+                {
+                    foreach (var t in asm.GetExportedTypes())
+                    {
+                        if (t.IsInterface && (t.FullName?.EndsWith("IClassicDesktopStyleApplicationLifetime") ?? false))
+                        {
+                            DesktopLifetimeType = t;
+                            break;
+                        }
+                    }
+                }
+                catch { }
             }
         }
 
@@ -427,24 +462,45 @@ internal class AvaloniaReflection
         }
         _translatePoint ??= VisualExtensionsType?.GetMethods(stat)
             .FirstOrDefault(m => m.Name == "TranslatePoint" && m.GetParameters().Length == 3);
-        // Last resort: search all Avalonia types for a matching TranslatePoint
+        // Targeted fallback: try known TranslatePoint locations before expensive full scan
+        if (_translatePoint == null)
+        {
+            var extraTypes = new[]
+            {
+                "Avalonia.VisualExtensions",
+                "Avalonia.Controls.VisualExtensions",
+                "Avalonia.VisualTree.VisualExtensions",
+            };
+            foreach (var typeName in extraTypes)
+            {
+                if (_translatePoint != null) break;
+                var t = FindAvaloniaType(typeName);
+                if (t != null)
+                {
+                    _translatePoint = t.GetMethods(stat)
+                        .FirstOrDefault(mi => mi.Name == "TranslatePoint");
+                }
+            }
+        }
+        // Last resort: search all Avalonia static classes (expensive — GetExportedTypes)
         if (_translatePoint == null)
         {
             ev.Set("translate_point_fallback", true);
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            foreach (var asm in _avaloniaAssemblies)
             {
-                var asmName = asm.GetName().Name ?? "";
-                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
                 try
                 {
-                    foreach (var t in asm.GetTypes())
+                    foreach (var t in asm.GetExportedTypes())
                     {
                         if (t.IsAbstract && t.IsSealed) // static class
                         {
                             var m = t.GetMethods(stat)
                                 .FirstOrDefault(mi => mi.Name == "TranslatePoint");
                             if (m != null)
+                            {
                                 _translatePoint = m;
+                                break; // found — stop inner loop
+                            }
                         }
                     }
                 }

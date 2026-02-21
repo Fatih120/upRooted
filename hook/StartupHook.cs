@@ -314,7 +314,7 @@ internal class StartupHook
             };
 
             StartPluginPhase("phase4_5d_auto_update", parentId, resolver, mainWindow!,
-                true, 500, (ev, r, w) =>
+                true, 100, (ev, r, w) =>
                 {
                     autoUpdater.Initialize();
                 });
@@ -322,7 +322,7 @@ internal class StartupHook
 
             // Phase 4.5e: Presence beacon + profile badge (no visual tree dependency)
             StartPluginPhase("phase4_5e_presence_badge", parentId, resolver, mainWindow!,
-                true, 500, (ev, r, w) =>
+                true, 100, (ev, r, w) =>
                 {
                     var beacon = new UprootedPresenceBeacon(r, w);
                     beacon.Initialize();
@@ -431,7 +431,7 @@ internal class StartupHook
 
             // Phase 4.5j: Translate engine (always-on, self-gated, no visual tree dependency)
             StartPluginPhase("phase4_5j_translate", parentId, resolver, mainWindow!,
-                true, 500, (ev, r, w) =>
+                true, 100, (ev, r, w) =>
                 {
                     var engine = new TranslateEngine(r, w, themeEngine);
                     TranslateEngine.Instance = engine;
@@ -474,7 +474,7 @@ internal class StartupHook
                             {
                                 AppDomain.CurrentDomain.AssemblyLoad -= OnDnbAssemblyLoad;
                             }
-                            Thread.Sleep(1000); // let remaining DotNetBrowser assemblies load
+                            Thread.Sleep(200); // brief settle for remaining DotNetBrowser assemblies
                         }
 
                         var browserReflection = new DotNetBrowserReflection();
