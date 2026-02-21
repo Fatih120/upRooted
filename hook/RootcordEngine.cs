@@ -216,8 +216,22 @@ internal class RootcordEngine
             // Step 6b: Flip SplitView pane to open on the left (utility pane between strip + channel list)
             ApplyUtilityPanePlacement();
 
-            // Step 7: Subscribe to tab changes + intercept Profile pane reopens
+            // Step 7: Subscribe to tab changes + pane open monitoring
             SubscribeTabChanges();
+
+            // Step 7b: Periodic check for Profile pane Sign Out button rearrangement.
+            // We can't reliably hook into pane open events (RoutedEvent, not CLR event),
+            // so we poll every 2s when the pane is open.
+            var signOutToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+            _ = Task.Run(async () =>
+            {
+                while (!signOutToken.IsCancellationRequested)
+                {
+                    await Task.Delay(2000, signOutToken);
+                    if (signOutToken.IsCancellationRequested) break;
+                    _r.RunOnUIThread(() => { try { RearrangeSignOutButton(); } catch { } });
+                }
+            }, signOutToken);
 
             // Step 8: Swap community members sidebar to right (Discord-style)
             SwapCommunityMembersToRight();
@@ -918,10 +932,7 @@ internal class RootcordEngine
                     ? (i, w.Value.Value, w.Value.UnitType)
                     : (i, 0, "Auto"));
             }
-            // Diagnostic: log ALL column definitions so we can see the exact widths
             Logger.Log(Tag, $"SwapCommunityMembers: {gridColDefs.Count} colDefs, {nonSplitters.Count} panels, {gridSplitters.Count} splitters");
-            foreach (var (colIdx, width, unit) in _originalColWidths)
-                Logger.Log(Tag, $"  ColDef[{colIdx}] = {width} {unit}");
 
             // Rotate: move members sidebar (col 0) to rightmost, shift others left.
             // Original: [Members(col A)] [Channels(col B)] [Chat(col C)]
@@ -1032,12 +1043,7 @@ internal class RootcordEngine
             var names = string.Join("  ", nonSplitters.Select((c, idx) =>
                 $"{c.child.GetType().Name}@{c.col}→{columns[(idx + n - 1) % n]}"));
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {nonSplitters.Count} children: {names}");
-            // Diagnostic: log post-rotation column widths
-            for (int i = 0; i < gridColDefs.Count; i++)
-            {
-                var w = _r.GetColumnDefinitionWidth(gridColDefs[i]);
-                Logger.Log(Tag, $"  AFTER ColDef[{i}] = {w?.Value ?? 0} {w?.UnitType ?? "?"}");
-            }
+            // (column rebuild below will replace these definitions)
 
             // Deep-clear right-side margins/paddings from SplitView down to the members column host
             // Level 1+2: SplitView immediate visual children (content template wrapper + their children)
@@ -1186,45 +1192,6 @@ internal class RootcordEngine
                 layoutGrid.GetType().GetMethod("InvalidateArrange")?.Invoke(layoutGrid, null);
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
-
-            // Diagnostic: deferred bounds check to see actual rendered sizes
-            var diagToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-            var diagGrid = layoutGrid;
-            var diagSplitView = _rootSplitView;
-            Task.Delay(500, diagToken).ContinueWith(_ =>
-            {
-                if (diagToken.IsCancellationRequested) return;
-                _r.RunOnUIThread(() =>
-                {
-                    try
-                    {
-                        var gridBounds = _r.GetBounds(diagGrid);
-                        var svBounds = diagSplitView != null ? _r.GetBounds(diagSplitView) : null;
-                        var diagColDefs = _r.GetColumnDefinitions(diagGrid);
-                        string colInfo = "";
-                        if (diagColDefs != null)
-                        {
-                            for (int ci = 0; ci < diagColDefs.Count; ci++)
-                            {
-                                var cw = _r.GetColumnDefinitionWidth(diagColDefs[ci]);
-                                var actualW = diagColDefs[ci]?.GetType().GetProperty("ActualWidth")?.GetValue(diagColDefs[ci]);
-                                colInfo += $" [{ci}]={cw?.Value}{cw?.UnitType}(actual={actualW})";
-                            }
-                        }
-                        Logger.Log(Tag, $"SwapCommunityMembers BOUNDS: grid={gridBounds?.W:F0}x{gridBounds?.H:F0} sv={svBounds?.W:F0}x{svBounds?.H:F0} cols:{colInfo}");
-                        foreach (var child in _r.GetVisualChildren(diagGrid))
-                        {
-                            var cb = _r.GetBounds(child);
-                            int col = _r.GetGridColumn(child);
-                            var widthProp = child.GetType().GetProperty("Width")?.GetValue(child);
-                            var maxWProp = child.GetType().GetProperty("MaxWidth")?.GetValue(child);
-                            var hAlign = child.GetType().GetProperty("HorizontalAlignment")?.GetValue(child);
-                            Logger.Log(Tag, $"  child[col{col}] {child.GetType().Name} bounds={cb?.X:F0},{cb?.Y:F0} {cb?.W:F0}x{cb?.H:F0} Width={widthProp} MaxWidth={maxWProp} HAlign={hAlign}");
-                        }
-                    }
-                    catch { }
-                });
-            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
 
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
@@ -1622,14 +1589,7 @@ internal class RootcordEngine
         {
             var unit = Enum.Parse(_r.GridUnitTypeEnum, unitType);
             var gridLength = Activator.CreateInstance(_r.GridLengthType, value, unit);
-            var widthProp = colDef.GetType().GetProperty("Width");
-            widthProp?.SetValue(colDef, gridLength);
-
-            // Verify the set took effect
-            var readBack = widthProp?.GetValue(colDef);
-            var rbStr = readBack?.ToString() ?? "null";
-            if (!rbStr.Contains(unitType, StringComparison.OrdinalIgnoreCase))
-                Logger.Log(Tag, $"SetColumnDefinitionWidth: SET FAILED — wrote {value} {unitType}, readback={rbStr}");
+            colDef.GetType().GetProperty("Width")?.SetValue(colDef, gridLength);
         }
         catch (Exception ex)
         {
@@ -2028,8 +1988,29 @@ internal class RootcordEngine
         try
         {
             var cmd = _r.GetPropertyValue(_homeViewModel, commandName);
-            if (cmd != null) InvokeCommand(cmd);
+            if (cmd != null)
+            {
+                InvokeCommand(cmd);
+                Logger.Log(Tag, $"InvokeHomeCommand: '{commandName}' executed");
+            }
             else Logger.Log(Tag, $"InvokeHomeCommand: '{commandName}' not found");
+
+            // After opening any pane, schedule Sign Out button rearrangement
+            // (ProfileView may now be in the visual tree)
+            var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+            Task.Delay(500, token).ContinueWith(_ =>
+            {
+                if (token.IsCancellationRequested) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try
+                    {
+                        Logger.Log(Tag, "RearrangeSignOut: triggered from InvokeHomeCommand");
+                        RearrangeSignOutButton();
+                    }
+                    catch (Exception ex) { Logger.Log(Tag, $"RearrangeSignOut deferred error: {ex.Message}"); }
+                });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
         }
         catch (Exception ex) { Logger.Log(Tag, $"InvokeHomeCommand '{commandName}' error: {ex.Message}"); }
     }
@@ -3337,15 +3318,142 @@ internal class RootcordEngine
         }
     }
 
+    // ===== Profile pane rearrangement =====
+
+    /// <summary>
+    /// Move the Sign Out button from Row 1 (bottom of the Profile pane Grid) to Row 0
+    /// (inside the StackPanel, after the Support button). This makes it visible without
+    /// scrolling to the bottom of a tall pane.
+    /// Root's ProfileView layout: Grid(Row0=StackPanel[avatar,name,status,divider,Settings,Support,Update], Row1=SignOut@Bottom).
+    /// </summary>
+    private void RearrangeSignOutButton()
+    {
+        if (_rootSplitView == null || !IsApplied) return;
+
+        // Walk from SplitView.Pane (the utility pane host), not the entire SplitView.
+        // ProfileView is: SplitView.Pane → RootBorder → Border → ContentControl → ProfileView → Grid
+        // Try multiple ways to get the pane content host
+        var paneHost = _r.GetPropertyValue(_rootSplitView, "Pane")
+            ?? _r.GetPropertyValue(_rootSplitView, "PaneContent");
+        if (paneHost == null)
+        {
+            // Fallback: walk the SplitView's visual tree looking for the pane template part
+            foreach (var child in _r.GetVisualChildren(_rootSplitView))
+            {
+                foreach (var gc in _r.GetVisualChildren(child))
+                {
+                    var name = gc.GetType().GetProperty("Name")?.GetValue(gc) as string;
+                    if (name == "PART_PaneRoot" || name == "PaneRoot")
+                    {
+                        paneHost = gc;
+                        break;
+                    }
+                }
+                if (paneHost != null) break;
+                // If no named part, look for a Panel/Border in the first visual child
+                // that contains a ContentControl
+                var tn = child.GetType().Name;
+                if (tn.Contains("Panel") || tn.Contains("Grid"))
+                {
+                    paneHost = child;
+                    break;
+                }
+            }
+        }
+        if (paneHost == null) return; // Pane not in visual tree (not open)
+
+        var walker = new VisualTreeWalker(_r);
+        int gridCount = 0;
+        foreach (var node in walker.DescendantsDepthFirst(paneHost))
+        {
+            if (!_r.IsGrid(node)) continue;
+            var rowDefs = _r.GetRowDefinitions(node);
+            if (rowDefs == null) continue;
+            gridCount++;
+            if (rowDefs.Count != 2) continue;
+            // This is a candidate ProfileView Grid
+
+            // Look at visual children (not just Panel.Children) since the Grid
+            // may have its children as visual children
+            object? signOutButton = null;
+            object? stackPanel = null;
+
+            foreach (var child in _r.GetVisualChildren(node))
+            {
+                if (child == null) continue;
+                int row = _r.GetGridRow(child);
+                var typeName = child.GetType().Name;
+
+                if (row == 1 && typeName.Contains("Button"))
+                {
+                    // Row 1 Button = Sign Out button (only button in Row 1 of ProfileView)
+                    signOutButton = child;
+                    Logger.Log(Tag, $"RearrangeSignOut: found Row 1 Button: {typeName}");
+                }
+                else if (row == 0 && (typeName.Contains("StackPanel") || typeName.Contains("Panel")))
+                {
+                    stackPanel = child;
+                }
+            }
+
+            if (signOutButton == null || stackPanel == null)
+            {
+                if (signOutButton != null) Logger.Log(Tag, "RearrangeSignOut: no StackPanel found in row 0");
+                continue;
+            }
+
+            // Already tagged = already moved
+            var tag = signOutButton.GetType().GetProperty("Tag")?.GetValue(signOutButton) as string;
+            if (tag == "rootcord-signout-moved") continue;
+
+            // Remove from Grid Row 1
+            _r.RemoveChild(node, signOutButton);
+
+            // Clear the Bottom alignment and Row assignment
+            _r.SetVerticalAlignment(signOutButton, "Top");
+            _r.SetGridRow(signOutButton, 0);
+            _r.SetMargin(signOutButton, 0, 0, 0, 12);
+
+            // Tag it so we don't re-process
+            _r.SetTag(signOutButton, "rootcord-signout-moved");
+
+            // Add to StackPanel after the last existing child
+            _r.AddChild(stackPanel, signOutButton);
+
+            Logger.Log(Tag, "RearrangeSignOutButton: moved Sign Out under Support button");
+            return;
+        }
+    }
+
     // ===== Tab monitoring =====
 
     private void SubscribeTabChanges()
     {
         if (_homeViewModel == null) return;
 
-        // Watch for SelectedTabViewModel changes
+        // Watch for SelectedTabViewModel + PaneOpen changes
         _selectionHandler = _r.SubscribePropertyChanged(_homeViewModel, (propName) =>
         {
+            // When pane opens, rearrange the Sign Out button in the Profile pane
+            if (propName == "PaneViewModel" || propName == "PaneOpen" || propName == "ProfileOpen")
+            {
+                Logger.Log(Tag, $"PropertyChanged: {propName} — scheduling SignOut rearrangement");
+                var paneToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+                Task.Delay(500, paneToken).ContinueWith(_ =>
+                {
+                    if (paneToken.IsCancellationRequested) return;
+                    _r.RunOnUIThread(() =>
+                    {
+                        try
+                        {
+                            Logger.Log(Tag, "RearrangeSignOut: executing from PropertyChanged");
+                            RearrangeSignOutButton();
+                        }
+                        catch (Exception ex) { Logger.Log(Tag, $"RearrangeSignOut error: {ex.Message}"); }
+                    });
+                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+            }
+
             if (propName == "SelectedTabViewModel")
             {
                 _r.RunOnUIThread(() =>
