@@ -22,18 +22,21 @@ Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds nati
 6. **Phase 4** — Start `SidebarInjector` 200ms timer-based settings page monitor.
 7. **Phase 5** — Background thread: DotNetBrowser discovery + JS injection (NsfwFilter, LinkEmbeds).
 
-**Key files:**
-- `StartupHook.cs` — Entry point, orchestrates the multi-phase sequence
-- `AvaloniaReflection.cs` — 2029-line reflection cache for ~80 Avalonia types (most critical file)
-- `SidebarInjector.cs` — 1090-line timer-based UI injection state machine
-- `ContentPages.cs` — 2270-line native Avalonia page builders
-- `ThemeEngine.cs` — 2218-line native theme application via resource dictionaries
-- `DotNetBrowserReflection.cs` — 1914-line reflection cache for DotNetBrowser types, IBrowser discovery
-- `VisualTreeWalker.cs` — 554-line structural discovery (fragile, text-anchor based)
-- `HtmlPatchVerifier.cs` — Phase 0 self-healing patches
-- `BrowserDiscovery.cs` — Phase 4.5 diagnostic scanner
-- `LinkEmbedEngine.cs` — Avalonia-native link embed engine (Phase 4.5b, YouTube working, generic sites need fixes)
-- `NsfwFilter.cs` — Content filter JS injection (needs Avalonia-native redesign)
+**Key files (32 .cs files total):**
+- `StartupHook.cs` (684) — Entry point, orchestrates the multi-phase sequence
+- `AvaloniaReflection.cs` (2920) — Reflection cache for ~80 Avalonia types (most critical file)
+- `SidebarInjector.cs` (1779) — LayoutUpdated + timer-based UI injection state machine
+- `ContentPages.cs` (3893) — Native Avalonia page builders
+- `ThemeEngine.cs` (2035) — Resource-first theme engine v2, OKLCH palette
+- `DotNetBrowserReflection.cs` (1933) — Reflection cache for DotNetBrowser types, IBrowser discovery
+- `VisualTreeWalker.cs` (572) — Structural discovery (fragile, text-anchor based)
+- `HtmlPatchVerifier.cs` (443) — Phase 0 self-healing patches
+- `LinkEmbedEngine.cs` (2490) — Avalonia-native link embed engine (broadly functional)
+- `NsfwFilter.cs` (482) — Avalonia-native NSFW filter (visual tree scan + blur/reveal)
+- `TranslateEngine.cs` (1145) — DeepL-powered message translation
+- `UprootedPresenceBeacon.cs` (470) — Uprooted user detection via gRPC
+- `ReconLogger.cs` (786) — Visual tree + style diagnostic dumper
+- `RootcordEngine.cs` (3377) — Discord-style vertical sidebar (experimental)
 
 ### Layer 2: TypeScript Browser Injection (`src/`)
 
@@ -55,7 +58,10 @@ Injects into Root's embedded Chromium via HTML `<script>` tags. Provides the plu
 
 ## Critical Rules
 
-Before modifying any code, consult `references/critical-rules.md` for the full list of patterns that cause real bugs. The most important:
+Full critical rules with code examples: [`docs/framework/ARCHITECTURE.md` § 9 Critical Rules](docs/framework/ARCHITECTURE.md#9-critical-rules).
+Compact list: [`CLAUDE.md` § Critical Rules](CLAUDE.md#critical-rules).
+
+The most important:
 
 1. **Never use `Type.GetType()` for Avalonia types** — use `AvaloniaReflection`
 2. **Never modify `ContentControl.Content` directly** — causes UI freeze
@@ -126,6 +132,6 @@ cd installer/src-tauri && cargo build --release
 ### Reference Files
 
 For detailed patterns and rules, consult:
-- **`references/critical-rules.md`** — Complete list of forbidden patterns with explanations and correct alternatives
 - **`references/csharp-patterns.md`** — C# hook coding patterns with code examples
 - **`references/typescript-patterns.md`** — TypeScript injection patterns with code examples
+- **`docs/framework/ARCHITECTURE.md` § 9** — Full critical rules with code examples (canonical source)

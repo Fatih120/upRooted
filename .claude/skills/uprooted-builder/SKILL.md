@@ -53,18 +53,13 @@ Build new components for the Uprooted framework. This skill provides templates, 
 
 ## Build & Test
 
+See [`CLAUDE.md` § Build](CLAUDE.md#build) for build commands.
+
 ```bash
-# TypeScript layer
-pnpm build                           # esbuild IIFE bundle -> dist/
-
-# C# hook
-dotnet build hook/ -c Release        # -> hook/bin/Release/net10.0/UprootedHook.dll
-
-# Console TUI installer
-cd installer/src-tauri && cargo build --release
-
-# Run C# tests
-dotnet test tests/UprootedTests/
+# Quick reference:
+dotnet build hook/ -c Release        # C# hook
+pnpm build                           # TypeScript bundle
+dotnet test tests/UprootedTests/     # C# tests
 ```
 
 ## Quick Checklist
