@@ -16,6 +16,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/TailSampler.cs` (new)
 - **Log Console** — Dev-channel-only "Live Console" button on the About page opens a named pipe server that streams log lines in real time. `Logger.OnLine` callback feeds new lines to the pipe.
   - File: `hook/LogConsole.cs` (new)
+- **Native theme settings button** — Gear button on the "Native" preset card opens Root's native Change Theme page. Uses ViewModel-driven `ListBox.SelectedItem` binding for proper navigation. New `SelectRootTab()` helper enables programmatic Root settings tab navigation by `MenuTitle` match.
 - **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
 - **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
 

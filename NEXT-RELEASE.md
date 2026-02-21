@@ -83,6 +83,8 @@ A comprehensive overhaul of the settings pages to match Root's native visual sty
 
 **Experimental plugins banner.** When the toggle is off, the banner uses theme colors. When on, it switches to hardcoded amber with a warning icon.
 
+**Native theme settings button.** The "Default" preset theme card is now labeled "Native" and has a gear button in the bottom-right corner. Clicking it navigates directly to Root's native Change Theme settings page. Navigation uses the proper ViewModel-driven binding chain (`ListBox.SelectedItem` → `SelectedMenuItemPageContainerProperty` → `SelectMenuItem()`).
+
 **Nav item borders.** Sidebar nav items now have visible 1px resting borders using Root's `HighlightLight`, `HighlightNormal`, and `HighlightStrong` resources. Adapts to both dark and light theme variants automatically.
 
 ---
