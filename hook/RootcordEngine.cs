@@ -2222,55 +2222,57 @@ internal class RootcordEngine
     }
 
     /// <summary>
-    /// Open Root's settings directly: opens the profile pane then programmatically clicks the
-    /// "Settings" button within it, replicating the native user-bar → Settings flow.
+    /// Open Root's settings page directly WITHOUT opening the profile pane.
+    /// ProfileViewModel.ShowProfileSettingsCommand sends PushViewModelToStackMessage,
+    /// which triggers the Navigator to open the settings overlay independently.
+    /// HomeViewModel always holds a private _profileViewModel field (not lazy),
+    /// so we can access it via reflection without touching the pane state.
     /// </summary>
     private void OpenSettingsDirectly()
     {
-        // Open the profile pane first
-        InvokeHomeCommand("ProfilePaneToggleCommand");
-
-        // After the pane has had time to open, find and invoke the Settings button inside it
-        var openSettingsToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-        Task.Delay(350, openSettingsToken).ContinueWith(_ => _r.RunOnUIThread(() =>
+        if (_homeViewModel == null) return;
+        try
         {
+            // Access ProfileViewModel from HomeViewModel's private backing field.
+            // From ILSpy: private readonly ProfileViewModel _profileViewModel;
+            object? profileVm = null;
             try
             {
-                if (_rootSplitView == null || openSettingsToken.IsCancellationRequested) return;
-                var walker = new VisualTreeWalker(_r);
-                foreach (var node in walker.DescendantsDepthFirst(_rootSplitView))
-                {
-                    // Read text content from common properties
-                    string? text = null;
-                    foreach (var prop in new[] { "Text", "Content", "Header" })
-                    {
-                        try { text = _r.GetPropertyValue(node, prop) as string; } catch { }
-                        if (!string.IsNullOrEmpty(text)) break;
-                    }
-                    if (!string.Equals(text?.Trim(), "Settings", StringComparison.OrdinalIgnoreCase))
-                        continue;
-
-                    // Found a node labelled "Settings" — try to invoke its Command
-                    var cmd = _r.GetPropertyValue(node, "Command");
-                    if (cmd == null)
-                    {
-                        // Button's command may live on its DataContext
-                        var dc = _r.GetPropertyValue(node, "DataContext");
-                        if (dc != null)
-                            cmd = _r.GetPropertyValue(dc, "Command") ?? _r.GetPropertyValue(dc, "OpenCommand");
-                    }
-                    if (cmd != null)
-                    {
-                        InvokeCommand(cmd);
-                        Logger.Log(Tag, $"OpenSettingsDirectly: invoked via {node.GetType().Name}.Command");
-                        return;
-                    }
-                    Logger.Log(Tag, $"OpenSettingsDirectly: found '{node.GetType().Name}' text=Settings but no command");
-                }
-                Logger.Log(Tag, "OpenSettingsDirectly: Settings button not found in pane visual tree");
+                var f = _homeViewModel.GetType()
+                    .GetField("_profileViewModel", BindingFlags.NonPublic | BindingFlags.Instance);
+                profileVm = f?.GetValue(_homeViewModel);
             }
-            catch (Exception ex) { Logger.Log(Tag, $"OpenSettingsDirectly error: {ex.Message}"); }
-        }), System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+            catch { }
+
+            // Fallback: if the profile pane happens to be open, PaneViewModel == ProfileViewModel
+            if (profileVm == null)
+                profileVm = _r.GetPropertyValue(_homeViewModel, "PaneViewModel");
+
+            if (profileVm != null)
+            {
+                // ShowProfileSettingsCommand sends PushViewModelToStackMessage → Navigator opens settings overlay
+                var cmd = _r.GetPropertyValue(profileVm, "ShowProfileSettingsCommand");
+                if (cmd != null)
+                {
+                    // Close the profile pane if it was open — settings is a separate full-screen overlay
+                    _r.SetPropertyValue(_homeViewModel, "PaneOpen", false);
+                    _r.SetPropertyValue(_homeViewModel, "ProfileOpen", false);
+                    InvokeCommand(cmd);
+                    Logger.Log(Tag, "OpenSettingsDirectly: invoked ShowProfileSettingsCommand on ProfileViewModel");
+                    return;
+                }
+                Logger.Log(Tag, $"OpenSettingsDirectly: ShowProfileSettingsCommand not found on {profileVm.GetType().Name}");
+            }
+            else
+            {
+                Logger.Log(Tag, "OpenSettingsDirectly: _profileViewModel field not found on HomeViewModel");
+            }
+
+            // Final fallback — open profile pane so the user can click Settings manually
+            Logger.Log(Tag, "OpenSettingsDirectly: fallback — opening profile pane");
+            InvokeHomeCommand("ProfilePaneToggleCommand");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"OpenSettingsDirectly error: {ex.Message}"); }
     }
 
     /// <summary>

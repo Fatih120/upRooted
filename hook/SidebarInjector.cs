@@ -66,6 +66,9 @@ internal class SidebarInjector
     // Version box injection (grey box at bottom of sidebar)
     private object? _versionTextBlock;                   // "Uprooted 0.4.2" TextBlock in version box
     private object? _versionContainer;                   // StackPanel containing version texts
+    private object? _versionButton;                      // Button wrapping version box (Command cleared for intercept)
+    private object? _versionButtonOriginalCommand;       // Saved Command for restore on cleanup
+    private Delegate? _versionClickHandler;              // Our Click handler delegate
 
     // Thread safety
     private int _injecting;
@@ -609,6 +612,9 @@ internal class SidebarInjector
         _hiddenContentChildren.Clear();
         _versionTextBlock = null;
         _versionContainer = null;
+        _versionButton = null;
+        _versionButtonOriginalCommand = null;
+        _versionClickHandler = null;
         _lastListBoxIdx = -1;
         _injected = false;
         _lastLayoutCheckMs = 0;                            // Allow instant LayoutUpdated detection on next settings open
@@ -1313,42 +1319,43 @@ internal class SidebarInjector
             _versionContainer = versionStackPanel;
 
             // Intercept version copy button to include Uprooted version in clipboard.
-            // Root's handler calls SetTextAsync (async) so we delay briefly to overwrite after it completes.
+            // Root's CopySystemInfoCommand races with our clipboard write.
+            // Fix: ClearValue the Command so Root never fires, then handle copy ourselves directly.
             var versionButton = FindAncestorOfType(versionStackPanel, "Button");
             if (versionButton != null)
             {
+                // Save original Command value, then clear it via Avalonia property system
+                // (CLR setter is trimmed in Root's single-file binary)
+                _versionButtonOriginalCommand = _r.GetAvaloniaPropertyByName(versionButton, "CommandProperty");
+                _r.ClearValue(versionButton, "CommandProperty");
+
+                _versionButton = versionButton;
                 var container = versionStackPanel;
-                _r.SubscribeEvent(versionButton, "Click", () =>
+                _versionClickHandler = _r.SubscribeEvent(versionButton, "Click", () =>
                 {
-                    Task.Delay(150).ContinueWith(_ =>
+                    try
                     {
-                        _r.RunOnUIThread(() =>
+                        var lines = new System.Collections.Generic.List<string>();
+                        foreach (var child in _r.GetVisualChildren(container))
                         {
-                            try
-                            {
-                                var lines = new System.Collections.Generic.List<string>();
-                                foreach (var child in _r.GetVisualChildren(container))
-                                {
-                                    if (!_r.IsTextBlock(child)) continue;
-                                    var txt = _r.GetText(child);
-                                    if (!string.IsNullOrWhiteSpace(txt))
-                                        lines.Add(txt);
-                                }
-                                if (lines.Count > 0)
-                                {
-                                    var combined = string.Join("\n", lines);
-                                    _r.CopyToClipboard(_window, combined);
-                                    Logger.Log("Injector", $"Version copy: overwrote clipboard with {lines.Count} lines");
-                                }
-                            }
-                            catch (Exception ex)
-                            {
-                                Logger.Log("Injector", $"Version copy error: {ex.Message}");
-                            }
-                        });
-                    });
+                            if (!_r.IsTextBlock(child)) continue;
+                            var txt = _r.GetText(child);
+                            if (!string.IsNullOrWhiteSpace(txt))
+                                lines.Add(txt);
+                        }
+                        if (lines.Count > 0)
+                        {
+                            var combined = string.Join("\n", lines);
+                            _r.CopyToClipboard(_window, combined);
+                            Logger.Log("Injector", $"Version copy: copied {lines.Count} lines to clipboard");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Injector", $"Version copy error: {ex.Message}");
+                    }
                 });
-                Logger.Log("Injector", "Version copy: subscribed to Button.Click");
+                Logger.Log("Injector", "Version copy: intercepted Button.Command, subscribed Click");
             }
 
             Logger.Log("Injector", $"Version box: injected 'Uprooted {_settings.Version}' into version info");
@@ -1361,6 +1368,23 @@ internal class SidebarInjector
 
     private void RemoveVersionText()
     {
+        // Restore Root's original Command on the version button
+        if (_versionButton != null)
+        {
+            if (_versionClickHandler != null)
+            {
+                _r.UnsubscribeEvent(_versionButton, "Click", _versionClickHandler);
+                _versionClickHandler = null;
+            }
+            if (_versionButtonOriginalCommand != null)
+            {
+                try { _r.SetAvaloniaPropertyByName(_versionButton, "CommandProperty", _versionButtonOriginalCommand); }
+                catch { }
+            }
+        }
+        _versionButton = null;
+        _versionButtonOriginalCommand = null;
+
         if (_versionTextBlock != null && _versionContainer != null)
         {
             try { _r.RemoveChild(_versionContainer, _versionTextBlock); }
