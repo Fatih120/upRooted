@@ -299,19 +299,25 @@ internal static class ContentPages
                     var consoleBtnText = CreateBoundText(r, "Live Console", 11, "#7289DA", "TextSecondary");
                     ApplyFont(r, consoleBtnText, font);
                     r.SetHorizontalAlignment(consoleBtnText, "Center");
-                    var consoleBtnBg = ColorUtils.Lighten(CardBg, 4);
+                    var consoleBtnBg = AdjustForHighlight(CardBg, 2);
                     var consoleBtn = r.CreateBorder(consoleBtnBg, 6, consoleBtnText);
                     if (consoleBtn != null)
                     {
                         r.SetPadding(consoleBtn, 8, 4, 8, 4);
                         r.SetVerticalAlignment(consoleBtn, "Center");
                         r.SetCursorHand(consoleBtn);
-                        SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 15), ThickBorder);
+                        SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 4), ThickBorder);
                         r.SubscribeClickReleased(consoleBtn, () => LogConsole.Enable());
                         r.SubscribeEvent(consoleBtn, "PointerEntered", () =>
-                            r.SetBackground(consoleBtn, ColorUtils.Lighten(consoleBtnBg, 8)));
+                        {
+                            r.SetBackground(consoleBtn, AdjustForHighlight(consoleBtnBg, 5));
+                            SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 36), ThickBorder);
+                        });
                         r.SubscribeEvent(consoleBtn, "PointerExited", () =>
-                            r.SetBackground(consoleBtn, consoleBtnBg));
+                        {
+                            r.SetBackground(consoleBtn, consoleBtnBg);
+                            SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 4), ThickBorder);
+                        });
                     }
                     r.AddChild(btnRow, consoleBtn);
                 }
@@ -320,20 +326,26 @@ internal static class ContentPages
                 var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
                 ApplyFont(r, logBtnText, font);
                 r.SetHorizontalAlignment(logBtnText, "Center");
-                var logBtnBg = ColorUtils.Lighten(CardBg, 4);
+                var logBtnBg = AdjustForHighlight(CardBg, 2);
                 var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
                 if (logBtn != null)
                 {
                     r.SetPadding(logBtn, 8, 4, 8, 4);
                     r.SetVerticalAlignment(logBtn, "Center");
                     r.SetCursorHand(logBtn);
-                    SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
+                    SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 4), ThickBorder);
                     var logPath = Logger.GetLogPath();
                     r.SubscribeClickReleased(logBtn, () => OpenInExplorer(logPath));
                     r.SubscribeEvent(logBtn, "PointerEntered", () =>
-                        r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
+                    {
+                        r.SetBackground(logBtn, AdjustForHighlight(logBtnBg, 5));
+                        SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 36), ThickBorder);
+                    });
                     r.SubscribeEvent(logBtn, "PointerExited", () =>
-                        r.SetBackground(logBtn, logBtnBg));
+                    {
+                        r.SetBackground(logBtn, logBtnBg);
+                        SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 4), ThickBorder);
+                    });
                 }
                 r.AddChild(btnRow, logBtn);
             }
@@ -356,7 +368,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(title, "Center");
             r.AddChild(titleRow, title);
 
-            var versionText = CreateBoundText(r, $"v{settings.Version}", 13, TextWhite, "TextPrimary");
+            var versionText = r.CreateTextBlock($"v{settings.Version}", 13, "#FFFFFF");
             r.SetFontWeight(versionText, "SemiBold");
             ApplyFont(r, versionText, font);
             r.SetHorizontalAlignment(versionText, "Center");
@@ -365,7 +377,7 @@ internal static class ContentPages
             r.BindToDynamicResource(versionBadge, "Background", "BrandPrimary");
             r.SetPadding(versionBadge, 8, 1, 8, 1);
             r.SetVerticalAlignment(versionBadge, "Center");
-            SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 30), ThickBorder);
+            SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 18), ThickBorder);
             r.AddChild(titleRow, versionBadge);
             r.AddChild(cardContent, titleRow);
 
@@ -518,7 +530,7 @@ internal static class ContentPages
             var wasUpdated = updater?.UpdateApplied ?? false;
 
             var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
-            var btnText = CreateBoundText(r, btnLabel, 13, TextWhite, "TextPrimary");
+            var btnText = r.CreateTextBlock(btnLabel, 13, "#FFFFFF");
             r.SetFontWeight(btnText, "Bold");
             ApplyFont(r, btnText, font);
             r.SetHorizontalAlignment(btnText, "Center");
@@ -531,7 +543,7 @@ internal static class ContentPages
                 r.SetMargin(btn, 0, 14, 0, 0);
                 r.SetHorizontalAlignment(btn, "Left");
                 r.SetCursorHand(btn);
-                SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 30), ThickBorder);
+                SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 18), ThickBorder);
 
                 if (!isChecking && !wasUpdated)
                 {
@@ -554,7 +566,7 @@ internal static class ContentPages
                         if (u.IsChecking) return;
 
                         r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Checking...");
-                        r.SetBackground(btnRef, ColorUtils.Lighten(btnColor, 10));
+                        r.SetBackground(btnRef, AdjustForHighlight(btnColor, 10));
 
                         ThreadPool.QueueUserWorkItem(_ =>
                         {
@@ -598,9 +610,21 @@ internal static class ContentPages
                     });
 
                     r.SubscribeEvent(btn, "PointerEntered", () =>
-                        r.SetBackground(btn, ColorUtils.Lighten(btnColor, 10)));
+                    {
+                        var c = AutoUpdater.Instance?.UpdateApplied == true ? AccentGreen
+                            : AutoUpdater.Instance?.HasUpdate == true ? "#C0A820"
+                            : AccentGreen;
+                        r.SetBackground(btn, AdjustForHighlight(c, 10));
+                        SetBorderStroke(r, btn, AdjustForHighlight(c, 40), ThickBorder);
+                    });
                     r.SubscribeEvent(btn, "PointerExited", () =>
-                        r.SetBackground(btn, btnColor));
+                    {
+                        var c = AutoUpdater.Instance?.UpdateApplied == true ? AccentGreen
+                            : AutoUpdater.Instance?.HasUpdate == true ? "#C0A820"
+                            : AccentGreen;
+                        r.SetBackground(btn, c);
+                        SetBorderStroke(r, btn, AdjustForHighlight(c, 18), ThickBorder);
+                    });
                 }
 
                 r.AddChild(updatesContent, btn);
@@ -653,7 +677,7 @@ internal static class ContentPages
                     if (updateRestartBtn != null)
                     {
                         r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
-                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 30), ThickBorder);
+                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
                         r.SetHorizontalAlignment(updateRestartBtn, "Right");
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
@@ -661,9 +685,15 @@ internal static class ContentPages
                         r.SubscribeClickReleased(updateRestartBtn, RestartRoot);
                         var urBtnRef = updateRestartBtn;
                         r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
-                            r.SetBackground(urBtnRef, ColorUtils.Lighten(AccentGreen, 10)));
+                        {
+                            r.SetBackground(urBtnRef, AdjustForHighlight(AccentGreen, 10));
+                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(AccentGreen, 40), ThickBorder);
+                        });
                         r.SubscribeEvent(updateRestartBtn, "PointerExited", () =>
-                            r.SetBackground(urBtnRef, AccentGreen));
+                        {
+                            r.SetBackground(urBtnRef, AccentGreen);
+                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                        });
                     }
 
                     if (innerBorder != null) r.AddChild(updateBannerOuter, innerBorder);
@@ -799,12 +829,19 @@ internal static class ContentPages
 
         // "Show experimental plugins" toggle banner
         // When OFF: theme colors (normal card), no warning icon
-        // When ON: hardcoded warning colors (#2A2415 bg, #E0A030 border), warning icon visible
+        // When ON: warning palette (dark-mode amber surface, light-mode light-amber surface), warning icon visible
         bool[] showExperimental = { settings.ShowExperimentalPlugins };
         {
             var expOuter = r.CreatePanel();
             if (expOuter != null)
             {
+                var isLightUi = ColorUtils.Luminance(CardBg) > 0.5;
+                var warnBgOn = isLightUi ? "#FFF2CC" : "#2A2415";
+                var warnBorderOn = isLightUi ? "#D9A12D" : "#E0A030";
+                var warnLabelOn = isLightUi ? "#5A450F" : "#F0F0F0";
+                var warnDescOn = isLightUi ? "#7A6130" : "#A0A0B0";
+                var warnIconOn = isLightUi ? "#B8860B" : "#E0A030";
+
                 object? expIcon = null;
                 object? expLabel = null;
                 object? expDesc = null;
@@ -813,7 +850,7 @@ internal static class ContentPages
                 if (expContent != null)
                 {
                     r.SetVerticalAlignment(expContent, "Center");
-                    expIcon = r.CreateTextBlock("\u26A0", 20, "#E0A030");
+                    expIcon = r.CreateTextBlock("\u26A0", 20, warnIconOn);
                     ApplyFont(r, expIcon, font);
                     r.SetIsVisible(expIcon, showExperimental[0]);
                     r.AddChild(expContent, expIcon);
@@ -821,13 +858,13 @@ internal static class ContentPages
                     var expTextStack = r.CreateStackPanel(vertical: true, spacing: 1);
                     if (expTextStack != null)
                     {
-                        var initLabelColor = showExperimental[0] ? "#F0F0F0" : TextWhite;
+                        var initLabelColor = showExperimental[0] ? warnLabelOn : TextWhite;
                         expLabel = r.CreateTextBlock("Show experimental plugins", 13, initLabelColor);
                         r.SetFontWeight(expLabel, "Medium");
                         ApplyFont(r, expLabel, font);
                         r.AddChild(expTextStack, expLabel);
 
-                        var initDescColor = showExperimental[0] ? "#A0A0B0" : TextMuted;
+                        var initDescColor = showExperimental[0] ? warnDescOn : TextMuted;
                         expDesc = r.CreateTextBlock("These plugins are untested and may cause unexpected behavior or crashes.", 11, initDescColor);
                         ApplyFont(r, expDesc, font);
                         r.AddChild(expTextStack, expDesc);
@@ -836,8 +873,8 @@ internal static class ContentPages
                     }
                 }
 
-                var initBannerBg = showExperimental[0] ? "#2A2415" : CardBg;
-                var initBannerBorder = showExperimental[0] ? "#E0A030" : CardBorder;
+                var initBannerBg = showExperimental[0] ? warnBgOn : CardBg;
+                var initBannerBorder = showExperimental[0] ? warnBorderOn : CardBorder;
                 var expInner = r.CreateBorder(initBannerBg, 8, expContent);
                 if (expInner != null)
                 {
@@ -845,62 +882,34 @@ internal static class ContentPages
                     SetBorderStroke(r, expInner, initBannerBorder, 1);
                 }
 
-                // Toggle pill (right-aligned)
-                var expToggleBg = showExperimental[0] ? AccentGreen : AdjustForHighlight(CardBg, 8);
-                var expPill = r.CreateBorder(expToggleBg, 13);
+                // Toggle pill (right-aligned) — reuse shared toggle builder so it matches plugin cards
+                var expPill = BuildToggleSwitch(r, showExperimental[0], font, isOn =>
+                {
+                    showExperimental[0] = isOn;
+
+                    // Warning icon visibility
+                    r.SetIsVisible(expIcon, isOn);
+
+                    // Banner bg + border: warning colors when on, theme colors when off
+                    if (expInner != null)
+                    {
+                        r.SetBackground(expInner, isOn ? warnBgOn : CardBg);
+                        r.SetBorderBrush(expInner, isOn ? warnBorderOn : CardBorder);
+                    }
+
+                    // Text colors: hardcoded when on, theme when off
+                    if (expLabel != null) r.SetForeground(expLabel, isOn ? warnLabelOn : TextWhite);
+                    if (expDesc != null) r.SetForeground(expDesc, isOn ? warnDescOn : TextMuted);
+
+                    settings.ShowExperimentalPlugins = isOn;
+                    settings.Save();
+                    rebuildGrid?.Invoke();
+                }, offColor: AdjustForHighlight(CardBg, isLightUi ? 14 : 8));
                 if (expPill != null)
                 {
-                    r.SetWidth(expPill, 44);
-                    r.SetHeight(expPill, 24);
                     r.SetHorizontalAlignment(expPill, "Right");
                     r.SetVerticalAlignment(expPill, "Center");
                     r.SetMargin(expPill, 0, 0, 14, 0);
-                    r.SetCursorHand(expPill);
-
-                    var expDot = r.CreateBorder("#FFFFFF", 8);
-                    if (expDot != null)
-                    {
-                        r.SetWidth(expDot, 18);
-                        r.SetHeight(expDot, 18);
-                        r.SetHorizontalAlignment(expDot, showExperimental[0] ? "Right" : "Left");
-                        r.SetMargin(expDot, 3, 3, 3, 3);
-                        r.SetBorderChild(expPill, expDot);
-
-                        var pillRef = expPill;
-                        var dotRef = expDot;
-                        var iconRef = expIcon;
-                        var innerRef = expInner;
-                        var labelRef = expLabel;
-                        var descRef = expDesc;
-                        r.SubscribeClickReleased(expPill, () =>
-                        {
-                            showExperimental[0] = !showExperimental[0];
-                            var isOn = showExperimental[0];
-
-                            // Toggle pill color + dot position
-                            r.SetBackground(pillRef, isOn ? AccentGreen : AdjustForHighlight(CardBg, 8));
-                            r.SetHorizontalAlignment(dotRef, isOn ? "Right" : "Left");
-
-                            // Warning icon visibility
-                            r.SetIsVisible(iconRef, isOn);
-
-                            // Banner bg + border: warning colors when on, theme colors when off
-                            if (innerRef != null)
-                            {
-                                r.SetBackground(innerRef, isOn ? "#2A2415" : CardBg);
-                                r.SetBorderBrush(innerRef, isOn ? "#E0A030" : CardBorder);
-                            }
-
-                            // Text colors: hardcoded when on, theme when off
-                            if (labelRef != null) r.SetForeground(labelRef, isOn ? "#F0F0F0" : TextWhite);
-                            if (descRef != null) r.SetForeground(descRef, isOn ? "#A0A0B0" : TextMuted);
-
-                            settings.ShowExperimentalPlugins = isOn;
-                            settings.Save();
-                            rebuildGrid?.Invoke();
-                        });
-                    }
-
                 }
 
                 if (expInner != null) r.AddChild(expOuter, expInner);
@@ -964,15 +973,21 @@ internal static class ContentPages
                 if (restartBtn != null)
                 {
                     r.SetPadding(restartBtn, 12, 5, 12, 5);
-                    SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 30), ThickBorder);
+                    SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 18), ThickBorder);
                     r.SetHorizontalAlignment(restartBtn, "Right");
                     r.SetVerticalAlignment(restartBtn, "Center");
                     r.SetCursorHand(restartBtn);
                     r.SubscribeClickReleased(restartBtn, RestartRoot);
                     r.SubscribeEvent(restartBtn, "PointerEntered", () =>
-                        r.SetBackground(restartBtn, ColorUtils.Lighten("#D06818", 10)));
+                    {
+                        r.SetBackground(restartBtn, AdjustForHighlight("#D06818", 10));
+                        SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 40), ThickBorder);
+                    });
                     r.SubscribeEvent(restartBtn, "PointerExited", () =>
-                        r.SetBackground(restartBtn, "#D06818"));
+                    {
+                        r.SetBackground(restartBtn, "#D06818");
+                        SetBorderStroke(r, restartBtn, AdjustForHighlight("#D06818", 18), ThickBorder);
+                    });
                 }
 
                 var innerBorder = r.CreateBorder("#2A1D15", 8, bannerContent);
@@ -1067,7 +1082,7 @@ internal static class ContentPages
 
             // Filter toggle: single cycling pill (All Plugins → Enabled → Disabled)
             var filterLabels = new[] { "All Plugins", "Enabled", "Disabled" };
-            var filterColors = new[] { "#404050", "#40A050", "#E04040" };
+            var filterColors = new[] { "#363644", "#368A46", "#C83838" };
             var filterBadgeText = r.CreateTextBlock(filterLabels[filterMode[0]], 13, "#FFFFFF");
             r.SetFontWeight(filterBadgeText, "Bold");
             ApplyFont(r, filterBadgeText, font);
@@ -1077,6 +1092,9 @@ internal static class ContentPages
             var filterBadge = r.CreateBorder(filterColors[filterMode[0]], 8, filterBadgeText);
             if (filterBadge != null)
             {
+                int BorderRestBoost(int mode) => mode == 0 ? 14 : 20;
+                int BorderHoverBoost(int mode) => mode == 0 ? 38 : 42;
+
                 r.SetPadding(filterBadge, 12, 0, 12, 0);
                 r.SetHeight(filterBadge, 36);
                 // Fixed MinWidth prevents width jitter when cycling labels
@@ -1084,7 +1102,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(filterBadge, "Right");
                 r.SetVerticalAlignment(filterBadge, "Center");
                 r.SetCursorHand(filterBadge);
-                SetBorderStroke(r, filterBadge, AdjustForHighlight(filterColors[filterMode[0]], 30), ThickBorder);
+                SetBorderStroke(r, filterBadge, AdjustForHighlight(filterColors[filterMode[0]], BorderRestBoost(filterMode[0])), ThickBorder);
                 r.SetTag(filterBadge, "uprooted-no-recolor");
 
                 var badgeRef = filterBadge;
@@ -1094,13 +1112,23 @@ internal static class ContentPages
                     filterMode[0] = (filterMode[0] + 1) % 3;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
                     r.SetBackground(badgeRef, filterColors[filterMode[0]]);
-                    SetBorderStroke(r, badgeRef, AdjustForHighlight(filterColors[filterMode[0]], 30), ThickBorder);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(filterColors[filterMode[0]], BorderRestBoost(filterMode[0])), ThickBorder);
                     rebuildGrid?.Invoke();
                 });
                 r.SubscribeEvent(filterBadge, "PointerEntered", () =>
-                    r.SetBackground(badgeRef, ColorUtils.Lighten(filterColors[filterMode[0]], 10)));
+                {
+                    var mode = filterMode[0];
+                    var c = filterColors[filterMode[0]];
+                    r.SetBackground(badgeRef, AdjustForHighlight(c, 10));
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(c, BorderHoverBoost(mode)), ThickBorder);
+                });
                 r.SubscribeEvent(filterBadge, "PointerExited", () =>
-                    r.SetBackground(badgeRef, filterColors[filterMode[0]]));
+                {
+                    var mode = filterMode[0];
+                    var c = filterColors[filterMode[0]];
+                    r.SetBackground(badgeRef, c);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(c, BorderRestBoost(mode)), ThickBorder);
+                });
 
                 r.AddChild(searchFilterRow, filterBadge);
             }
@@ -1287,7 +1315,7 @@ internal static class ContentPages
                         rebuildGrid?.Invoke();
                     });
                     r.SubscribeEvent(smBtn, "PointerEntered", () =>
-                        r.SetBackground(smBtn, ColorUtils.Lighten(CardBg, 8)));
+                        r.SetBackground(smBtn, AdjustForHighlight(CardBg, 8)));
                     r.SubscribeEvent(smBtn, "PointerExited", () =>
                         r.SetBackground(smBtn, "transparent"));
                     r.AddChild(cardContainer, smBtn);
@@ -1401,7 +1429,7 @@ internal static class ContentPages
                             ShowPluginSettingsLightbox(r, capturedId, capturedName, settings, font);
                         });
                         r.SubscribeEvent(gearBtn, "PointerEntered", () =>
-                            r.SetBackground(gearBtnRef, ColorUtils.Lighten(gearBtnBg, 8)));
+                            r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8)));
                         r.SubscribeEvent(gearBtn, "PointerExited", () =>
                             r.SetBackground(gearBtnRef, gearBtnBg));
 
@@ -1436,7 +1464,7 @@ internal static class ContentPages
                             ShowPluginInfoLightbox(r, capturedName, capturedDesc, capturedId, font);
                         });
                         r.SubscribeEvent(infoBtn, "PointerEntered", () =>
-                            r.SetBackground(infoBtnRef, ColorUtils.Lighten(infoBtnBg, 8)));
+                            r.SetBackground(infoBtnRef, AdjustForHighlight(infoBtnBg, 8)));
                         r.SubscribeEvent(infoBtn, "PointerExited", () =>
                             r.SetBackground(infoBtnRef, infoBtnBg));
 
@@ -1456,7 +1484,7 @@ internal static class ContentPages
                         r.SetWidth(openBtn, 44);
                         r.SetHeight(openBtn, 28);
                         r.SetVerticalAlignment(openBtn, "Center");
-                        SetBorderStroke(r, openBtn, AdjustForHighlight(openBtnBg, 30), ThickBorder);
+                        SetBorderStroke(r, openBtn, AdjustForHighlight(openBtnBg, 10), ThickBorder);
 
                         var openLabel = CreateBoundText(r, "Open", 11, TextWhite, "TextPrimary");
                         r.SetFontWeight(openLabel, "Bold");
@@ -1471,9 +1499,15 @@ internal static class ContentPages
                             onNavigate("themes");
                         });
                         r.SubscribeEvent(openBtn, "PointerEntered", () =>
-                            r.SetBackground(btnRef, ColorUtils.Lighten(openBtnBg, 8)));
+                        {
+                            r.SetBackground(btnRef, AdjustForHighlight(openBtnBg, 5));
+                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 40), ThickBorder);
+                        });
                         r.SubscribeEvent(openBtn, "PointerExited", () =>
-                            r.SetBackground(btnRef, openBtnBg));
+                        {
+                            r.SetBackground(btnRef, openBtnBg);
+                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 10), ThickBorder);
+                        });
 
                         r.AddChild(rightIcons, openBtn);
                     }
@@ -1675,7 +1709,7 @@ internal static class ContentPages
                 var closeBtnRef = closeBtn;
                 r.SubscribeClickReleased(closeBtn, () => DismissPluginInfoLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
-                    r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
+                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
                     r.SetBackground(closeBtnRef, closeBtnBg));
 
@@ -1961,8 +1995,8 @@ internal static class ContentPages
         r.SubscribeEvent(pill, "PointerPressed", () =>
         {
             var basis = state
-                ? (isHover ? ColorUtils.Lighten(accentColor, 10) : accentColor)
-                : (isHover ? ColorUtils.Lighten(dimColor, 8) : dimColor);
+                ? (isHover ? AdjustForHighlight(accentColor, 10) : accentColor)
+                : (isHover ? AdjustForHighlight(dimColor, 8) : dimColor);
             r.SetRenderScale(pill, 0.985);
             r.SetBackground(pill, AdjustForHighlight(basis, 10));
         });
@@ -1974,7 +2008,7 @@ internal static class ContentPages
             state = !state;
             // Update visuals
             var rest = state ? accentColor : dimColor;
-            var hover = state ? ColorUtils.Lighten(accentColor, 10) : ColorUtils.Lighten(dimColor, 8);
+            var hover = state ? AdjustForHighlight(accentColor, 10) : AdjustForHighlight(dimColor, 8);
             r.SetBackground(pill, isHover ? hover : rest);
             if (thumb != null)
                 r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
@@ -1987,8 +2021,8 @@ internal static class ContentPages
         {
             isHover = true;
             var hoverColor = state
-                ? ColorUtils.Lighten(accentColor, 10)
-                : ColorUtils.Lighten(dimColor, 8);
+                ? AdjustForHighlight(accentColor, 10)
+                : AdjustForHighlight(dimColor, 8);
             r.SetBackground(pill, hoverColor);
         });
         r.SubscribeEvent(pill, "PointerExited", () =>
@@ -2023,7 +2057,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(pageTitle, "Center");
             r.AddChild(titleRow, pageTitle);
 
-            var refreshBg = AdjustForHighlight(CardBg, 4);
+                var refreshBg = AdjustForHighlight(CardBg, 2);
             var refreshBtn = r.CreateBorder(refreshBg, 8);
             if (refreshBtn != null)
             {
@@ -2037,7 +2071,7 @@ internal static class ContentPages
                 r.SetHorizontalAlignment(refreshBtn, "Right");
                 r.SetVerticalAlignment(refreshBtn, "Center");
                 r.SetCursorHand(refreshBtn);
-                SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 15), ThickBorder);
+                SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 4), ThickBorder);
 
                 r.SubscribeClickReleased(refreshBtn, () =>
                 {
@@ -2080,9 +2114,15 @@ internal static class ContentPages
                     }
                 });
                 r.SubscribeEvent(refreshBtn, "PointerEntered", () =>
-                    r.SetBackground(refreshBtn, ColorUtils.Lighten(refreshBg, 8)));
+                {
+                    r.SetBackground(refreshBtn, AdjustForHighlight(refreshBg, 5));
+                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 36), ThickBorder);
+                });
                 r.SubscribeEvent(refreshBtn, "PointerExited", () =>
-                    r.SetBackground(refreshBtn, refreshBg));
+                {
+                    r.SetBackground(refreshBtn, refreshBg);
+                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 4), ThickBorder);
+                });
 
                 r.AddChild(titleRow, refreshBtn);
             }
@@ -2531,15 +2571,16 @@ internal static class ContentPages
 
         r.SetBorderChild(card, outerContent);
 
-        // Hover effect — island colors (not themed), radio border stays constant
+        // Hover effect — island colors (not themed), always lightens (even in Light mode)
+        var islandHover = ColorUtils.Lighten(islandBorder, 60);
         var dotRef = radioDot;
         r.SubscribeEvent(card, "PointerEntered", () =>
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, "#555577", ThickBorder);
+                SetBorderStroke(r, card, islandHover, ThickBorder);
                 if (dotRef != null)
-                    r.SetBackground(dotRef, "#555577");
+                    r.SetBackground(dotRef, islandHover);
             }
         });
         r.SubscribeEvent(card, "PointerExited", () =>
@@ -2769,7 +2810,7 @@ internal static class ContentPages
 
         // Hover colors (shared between card hover and gear hover suppression)
         var restBorder = CardBorder;
-        var hoverBorder = ColorUtils.Lighten(CardBorder, 60);
+        var hoverBorder = AdjustForHighlight(CardBorder, 60);
         var dotHoverColor = AdjustForHighlight(CardBg, 55);
         var dotRef = radioDot;
 
@@ -3065,7 +3106,7 @@ internal static class ContentPages
                 var closeBtnRef = closeBtn;
                 r.SubscribeClickReleased(closeBtn, () => DismissPluginSettingsLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
-                    r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
+                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
                     r.SetBackground(closeBtnRef, closeBtnBg));
 
@@ -3163,7 +3204,8 @@ internal static class ContentPages
                 r.SetTag(saveBtn, "dyn-bg:BrandPrimary");
                 r.BindToDynamicResource(saveBtn, "Background", "BrandPrimary");
                 r.SetCursorHand(saveBtn);
-                var saveBtnText = CreateBoundText(r, "Save API Key", LightboxScale.Button, TextWhite, "TextPrimary");
+                SetBorderStroke(r, saveBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, "#FFFFFF");
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -3225,9 +3267,15 @@ internal static class ContentPages
 
                 var btnAccent = AccentGreen;
                 r.SubscribeEvent(saveBtn, "PointerEntered", () =>
-                    r.SetBackground(saveBtn, ColorUtils.Lighten(btnAccent, 15)));
+                {
+                    r.SetBackground(saveBtn, AdjustForHighlight(btnAccent, 12));
+                    SetBorderStroke(r, saveBtn, AdjustForHighlight(btnAccent, 40), ThickBorder);
+                });
                 r.SubscribeEvent(saveBtn, "PointerExited", () =>
-                    r.SetBackground(saveBtn, btnAccent));
+                {
+                    r.SetBackground(saveBtn, btnAccent);
+                    SetBorderStroke(r, saveBtn, AdjustForHighlight(btnAccent, 18), ThickBorder);
+                });
 
                 r.AddChild(saveBtnRow, saveBtn);
             }
@@ -3572,7 +3620,7 @@ internal static class ContentPages
                 r.SubscribeEvent(pill, "PointerPressed", () =>
                 {
                     var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
-                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
                     var basis = hovered[0] ? hover : rest;
                     r.SetRenderScale(pillRef, 0.985);
                     r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
@@ -3582,7 +3630,7 @@ internal static class ContentPages
                     r.SetRenderScale(pillRef, 1.0);
                     state[0] = !state[0];
                     var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
-                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
                     r.SetBackground(pillRef, hovered[0] ? hover : rest);
                     r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
                     onChanged(state[0]);
@@ -3590,7 +3638,7 @@ internal static class ContentPages
                 r.SubscribeEvent(pill, "PointerEntered", () =>
                 {
                     hovered[0] = true;
-                    var hover = state[0] ? ColorUtils.Lighten(AccentGreen, 10) : ColorUtils.Lighten(AdjustForHighlight(CardBg, 20), 8);
+                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
                     r.SetBackground(pillRef, hover);
                 });
                 r.SubscribeEvent(pill, "PointerExited", () =>
@@ -3658,7 +3706,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
             r.SetTag(badge, "uprooted-no-recolor");
-            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 30), ThickBorder);
+            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 18), ThickBorder);
 
             var badgeRef = badge;
             var badgeTextRef = badgeText;
@@ -3678,7 +3726,7 @@ internal static class ContentPages
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
                     r.SetBackground(badgeRef, AccentGreen);
-                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 30), ThickBorder);
+                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
                 }
                 else
                 {
@@ -3694,12 +3742,14 @@ internal static class ContentPages
             r.SubscribeEvent(badge, "PointerEntered", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
-                r.SetBackground(badge, ColorUtils.Lighten(c == "developer" ? "#8B6914" : AccentGreen, 10));
+                r.SetBackground(badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 10));
+                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 40), ThickBorder);
             });
             r.SubscribeEvent(badge, "PointerExited", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
                 r.SetBackground(badge, c == "developer" ? "#8B6914" : AccentGreen);
+                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? "#8B6914" : AccentGreen, 18), ThickBorder);
             });
 
             r.AddChild(row, badge);
@@ -3739,7 +3789,7 @@ internal static class ContentPages
         r.AddChild(promptRow, passBox);
 
         // Submit button
-        var submitText = CreateBoundText(r, "Go", 13, TextWhite, "TextPrimary");
+        var submitText = r.CreateTextBlock("Go", 13, "#FFFFFF");
         r.SetFontWeight(submitText, "Bold");
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");
@@ -3753,7 +3803,7 @@ internal static class ContentPages
             r.SetPadding(submitBtn, 12, 5, 12, 5);
             r.SetVerticalAlignment(submitBtn, "Center");
             r.SetCursorHand(submitBtn);
-            SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 30), ThickBorder);
+            SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
             r.AddChild(promptRow, submitBtn);
         }
 
@@ -3811,7 +3861,7 @@ internal static class ContentPages
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
                 r.SetBackground(badgeRef, "#8B6914");
-                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 30), ThickBorder);
+                SetBorderStroke(r, badgeRef, AdjustForHighlight("#8B6914", 18), ThickBorder);
                 r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
                 Logger.Log("AutoUpdate", "Switched to Developer channel");
 
@@ -3838,9 +3888,15 @@ internal static class ContentPages
         {
             r.SubscribeClickReleased(submitBtn, doSubmit);
             r.SubscribeEvent(submitBtn, "PointerEntered", () =>
-                r.SetBackground(submitBtn, ColorUtils.Lighten(AccentGreen, 10)));
+            {
+                r.SetBackground(submitBtn, AdjustForHighlight(AccentGreen, 10));
+                SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 40), ThickBorder);
+            });
             r.SubscribeEvent(submitBtn, "PointerExited", () =>
-                r.SetBackground(submitBtn, AccentGreen));
+            {
+                r.SetBackground(submitBtn, AccentGreen);
+                SetBorderStroke(r, submitBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+            });
         }
     }
 
