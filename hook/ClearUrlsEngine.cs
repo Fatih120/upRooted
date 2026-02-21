@@ -39,6 +39,7 @@ internal class ClearUrlsEngine
 
     private Timer? _scanTimer;
     private int _scanning; // Interlocked reentrancy guard
+    private readonly TailSampler _sampler = new(heartbeatTicks: 15, slowThresholdMs: 50);
 
     // Track hooked editors by identity hash to avoid double-hooking
     private readonly HashSet<int> _hookedEditors = new();
@@ -100,16 +101,16 @@ internal class ClearUrlsEngine
 
     internal void Initialize()
     {
-        Logger.Log("ClearUrls", "Starting ClearURLs engine (KeyDown intercept on AvaloniaEdit.TextEditor)");
-
+        using var ev = WideEvent.Begin("ClearUrls", "init");
         if (!ResolveTypes())
         {
-            Logger.Log("ClearUrls", "Failed to resolve required types — engine disabled");
+            ev.Set("result", "resolve_failed");
             return;
         }
-
+        ev.Set("text_area", _textAreaType != null);
+        ev.Set("add_handler", _addHandlerMethod != null);
         _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
-        Logger.Log("ClearUrls", $"Discovery timer started ({ScanIntervalMs}ms interval)");
+        ev.Set("result", "ok");
     }
 
     /// <summary>
@@ -198,7 +199,6 @@ internal class ClearUrlsEngine
                 Logger.Log("ClearUrls", "No matching AddHandler found, will fall back to CLR event");
             }
 
-            Logger.Log("ClearUrls", $"Resolved OK: TextArea={_textAreaType != null}, AddHandler={_addHandlerMethod != null}");
             _typesValid = true;
             return true;
         }
@@ -212,11 +212,14 @@ internal class ClearUrlsEngine
     private void OnScanTick(object? state)
     {
         if (Interlocked.CompareExchange(ref _scanning, 1, 0) != 0) return;
+        var ev = WideEvent.BeginSampled("ClearUrls", "scan_tick", _sampler);
         try
         {
             var settings = UprootedSettings.Load();
             if (settings.Plugins.TryGetValue("clear-urls", out var enabled) && !enabled)
             {
+                ev.Set("result", "disabled");
+                ev.Dispose();
                 Interlocked.Exchange(ref _scanning, 0);
                 return;
             }
@@ -225,21 +228,27 @@ internal class ClearUrlsEngine
             {
                 try
                 {
+                    var before = _hookedEditors.Count;
                     DiscoverAndHook();
+                    var newHooks = _hookedEditors.Count - before;
+                    if (newHooks > 0) { ev.Set("new_hooks", newHooks); ev.MarkNotable(); }
+                    ev.Set("hooked", _hookedEditors.Count);
                 }
                 catch (Exception ex)
                 {
-                    Logger.Log("ClearUrls", $"Discovery error: {ex.Message}");
+                    ev.SetError(ex);
                 }
                 finally
                 {
+                    ev.Dispose();
                     Interlocked.Exchange(ref _scanning, 0);
                 }
             });
         }
         catch (Exception ex)
         {
-            Logger.Log("ClearUrls", $"OnScanTick error: {ex.Message}");
+            ev.SetError(ex);
+            ev.Dispose();
             Interlocked.Exchange(ref _scanning, 0);
         }
     }
