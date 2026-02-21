@@ -41,6 +41,9 @@ internal class ThemeEngine
     // GetProperty("Foreground") for them on every subsequent node (reflection is slow).
     private readonly HashSet<Type> _noForegroundTypes = new();
 
+    // Cached MethodInfo for Application.TryGetResource(object, ThemeVariant?, out object?)
+    private System.Reflection.MethodInfo? _tryGetResourceMethod;
+
     // Single-shot walk timer
     private System.Threading.Timer? _walkTimer;
 
@@ -92,6 +95,26 @@ internal class ThemeEngine
     }
 
     /// <summary>
+    /// Resolve and cache Application.TryGetResource(object, ThemeVariant?, out object?).
+    /// Avoids scanning all methods on every call during live preview.
+    /// </summary>
+    private System.Reflection.MethodInfo? ResolveTryGetResource(object app)
+    {
+        if (_tryGetResourceMethod != null) return _tryGetResourceMethod;
+        foreach (var m in app.GetType().GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
+        {
+            if (m.Name != "TryGetResource") continue;
+            var ps = m.GetParameters();
+            if (ps.Length == 3 && ps[2].IsOut)
+            {
+                _tryGetResourceMethod = m;
+                return m;
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
     /// Set a callback that fires when Root's theme variant changes (Dark/Light/PureDark).
     /// SidebarInjector uses this to re-inject with fresh colors.
     /// </summary>
@@ -126,19 +149,7 @@ internal class ThemeEngine
 
             var variantKey = _r.GetActiveThemeVariant();
 
-            // Find Application.TryGetResource(object, ThemeVariant?, out object?)
-            System.Reflection.MethodInfo? tryGet = null;
-            foreach (var m in app.GetType().GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-            {
-                if (m.Name != "TryGetResource") continue;
-                var ps = m.GetParameters();
-                if (ps.Length == 3 && ps[2].IsOut)
-                {
-                    tryGet = m;
-                    break;
-                }
-            }
-
+            var tryGet = ResolveTryGetResource(app);
             if (tryGet == null)
             {
                 Logger.Log("Theme", "ReadLiveRootColors: TryGetResource not found on Application");
@@ -209,13 +220,7 @@ internal class ThemeEngine
             if (app == null) return null;
             var variantKey = _r.GetActiveThemeVariant();
 
-            System.Reflection.MethodInfo? tryGet = null;
-            foreach (var m in app.GetType().GetMethods(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance))
-            {
-                if (m.Name != "TryGetResource") continue;
-                var ps = m.GetParameters();
-                if (ps.Length == 3 && ps[2].IsOut) { tryGet = m; break; }
-            }
+            var tryGet = ResolveTryGetResource(app);
             if (tryGet == null) return null;
 
             var args = new object?[] { key, variantKey, null };
