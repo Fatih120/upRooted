@@ -8,13 +8,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Uprooted** is a client mod framework for Root Communications desktop app (like Vencord for Discord). Dual-layer injection: C# .NET hook into Root.exe (Avalonia) + TypeScript injection into embedded Chromium.
 
-For comprehensive documentation, start with [docs/INDEX.md](docs/INDEX.md).
+For comprehensive documentation, see [docs/INDEX.md](docs/INDEX.md) for navigation or [docs/framework/ARCHITECTURE.md](docs/framework/ARCHITECTURE.md) for architecture reference.
 
-Read `docs/INDEX.md` for navigation, `docs/framework/ARCHITECTURE.md` for architecture reference.
-
-### First Thing Every Session: Run `/hi`
-
-**At the start of every new session, run the `/hi` command.** It reads `NEW-SESSION.md`, `docs/INDEX.md`, and `.claude/COMMAND_INDEX.md` to orient you in the codebase -- architecture, critical rules, file map, current state, and available dev tools. Do this before any other work.
+**First thing every session:** Run `/hi`. It loads project context and waits for your instructions.
 
 ## Collaboration
 
@@ -41,14 +37,14 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ```
 uprooted-private/
-├── hook/                              # C# .NET hook (CLR profiler injection)
+├── hook/                              # C# .NET hook (CLR profiler injection) — 32 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
-│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types
+│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (2920 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
-│   ├── ContentPages.cs                # Settings page builders
-│   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview, custom ping color override)
-│   ├── ColorUtils.cs                  # HSL/HSV/RGB color conversion
+│   ├── ContentPages.cs                # Settings page builders (3893 lines)
+│   ├── ThemeEngine.cs                 # Native Avalonia theme engine (resource dict injection, live preview, custom ping color)
+│   ├── ColorUtils.cs                  # HSL/HSV/RGB/OKLCH color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
 │   ├── VisualTreeWalker.cs            # Visual tree DFS traversal
 │   ├── NativeEntry.cs                 # Native method proxies
@@ -57,19 +53,23 @@ uprooted-private/
 │   ├── DotNetBrowserReflection.cs     # Reflection cache for DotNetBrowser types, IBrowser discovery
 │   ├── BrowserDiscovery.cs            # Phase 4.5 diagnostic scanner
 │   ├── ClearUrlsEngine.cs             # ClearURLs: strip tracking params from compose editor URLs on send
-│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed fetch + animated images + video embeds + visual tree injection)
+│   ├── LinkEmbedEngine.cs             # Avalonia-native link embed engine (OG/oEmbed + animated images + video embeds)
 │   ├── AnimatedImage.cs              # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection)
 │   ├── MessageLogger.cs              # Message logger: edit/delete detection, visual indicators, collection subscription
 │   ├── MessageStore.cs               # Flat-file persistence for message log (pipe-delimited, append-only)
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
-│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (dev channel only)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1130 lines)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)
+│   ├── TranslateEngine.cs            # Translate plugin: DeepL-powered message translation (1145 lines)
+│   ├── TranslateConfigPopup.cs       # Translate config popup UI (language picker, API key)
+│   ├── UprootedPresenceBeacon.cs     # Presence beacon: Uprooted user detection via gRPC metadata
+│   ├── ReconLogger.cs                # Recon logger: visual tree + style property diagnostic dumper
 │   ├── Entry.cs                       # Profiler injection entry point
-│   ├── Logger.cs                      # File-based logging
+│   ├── Logger.cs                      # File-based logging (113 lines)
 │   └── SESSION_STATE.md               # Session state/context handoff
 ├── installer/src-tauri/src/           # Console TUI installer (Rust)
 │   ├── main.rs                        # Console TUI entry point (ratatui)
@@ -136,28 +136,6 @@ uprooted-private/
 ├── CLAUDE.md                          # AI contributor guide (this file)
 └── README.md                          # Repository landing page
 ```
-
-## Research and Planning
-
-- **Research directory**: `research/` contains 100+ files from reverse engineering Root -- see [docs/research/RESEARCH_INDEX.md](docs/research/RESEARCH_INDEX.md) for a navigable inventory
-- **Planning analysis**: `.planning/codebase/` has 7 automated analysis files -- see [docs/dev/PLANNING_REFERENCE.md](docs/dev/PLANNING_REFERENCE.md) for structured summaries
-- **Security findings**: 105 security findings from penetration testing -- see [docs/research/SECURITY_RESEARCH.md](docs/research/SECURITY_RESEARCH.md)
-
-## Extended Documentation
-
-Beyond the core docs listed above, the project includes deep-dive references:
-
-| Document | Purpose |
-|----------|---------|
-| [Theme Engine Deep Dive](docs/framework/THEME_ENGINE_DEEP_DIVE.md) | Full ThemeEngine algorithm documentation |
-| [Avalonia Patterns](docs/framework/AVALONIA_PATTERNS.md) | Avalonia concepts via reflection |
-| [.NET Runtime](docs/framework/DOTNET_RUNTIME.md) | CLR profiler, IL injection, assembly scanning |
-| [Root Internals](docs/research/ROOT_INTERNALS.md) | Root's native architecture |
-| [gRPC Protocol](docs/research/GRPC_PROTOCOL.md) | Complete gRPC-web protocol reference |
-| [Contributing Technical](docs/dev/CONTRIBUTING_TECHNICAL.md) | Dev environment, debugging, failure modes |
-| [Advanced Plugin Dev](docs/plugins/ADVANCED_DEVELOPMENT.md) | Deep plugin development patterns |
-
-See [docs/INDEX.md](docs/INDEX.md) for the complete documentation map with reading paths.
 
 ## Build
 
