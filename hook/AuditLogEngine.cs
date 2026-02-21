@@ -18,7 +18,7 @@ namespace Uprooted;
 ///
 /// Phase 3: MessageLogger subscribes to OnEntry and calls ProcessAuditEntry.
 /// </summary>
-internal class AuditLogEngine
+internal class AuditLogEngine : IDisposable
 {
     private const string Tag = "AuditLog";
     private const int ScanIntervalMs = 30_000;
@@ -79,6 +79,13 @@ internal class AuditLogEngine
         }
         Logger.Log(Tag, "Starting audit log engine (HttpClient interception for CommunityLogGrpcService/List)");
         _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
+    }
+
+    public void Dispose()
+    {
+        var t = _scanTimer;
+        _scanTimer = null;
+        t?.Dispose();
     }
 
     // ===== Timer =====
