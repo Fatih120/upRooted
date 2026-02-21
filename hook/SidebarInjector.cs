@@ -177,11 +177,6 @@ internal class SidebarInjector
                 catch (Exception ex) { Logger.Log("Injector", $"CheckAndInject error: {ex.Message}"); }
                 finally { Interlocked.Exchange(ref _injecting, 0); }
             });
-
-            Task.Delay(3000).ContinueWith(_ =>
-            {
-                Interlocked.CompareExchange(ref _injecting, 0, 1);
-            });
         }
         catch (Exception ex)
         {
@@ -305,8 +300,8 @@ internal class SidebarInjector
             _aliveCheckCounter++;
             if (_aliveCheckCounter % 5 == 0)
             {
-                var appSettings = _walker.FindFirstTextBlock(_window, "APP SETTINGS")
-                    ?? _walker.FindFirstTextBlock(_window, "App Settings");
+                var appSettings = _walker.FindFirstTextBlockFast(_window, "APP SETTINGS")
+                    ?? _walker.FindFirstTextBlockFast(_window, "App Settings");
                 if (appSettings == null)
                 {
                     Logger.Log("Injector", "Settings page closed (not found in tree), nulling state");
