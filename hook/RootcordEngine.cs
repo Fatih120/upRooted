@@ -1002,22 +1002,6 @@ internal class RootcordEngine
                 }
             }
 
-            // Clamp channel list column width: if it's a large Pixel value from a previous
-            // session's resize, cap it at 240px (Discord-like default). This prevents the
-            // channel list from consuming too much space on init.
-            for (int i = 0; i < n; i++)
-            {
-                if (i == maxAssignedIdx) continue; // skip members (rightmost)
-                int assignedCol = _r.GetGridColumn(nonSplitters[i].child);
-                if (assignedCol >= gridColDefs.Count) continue;
-                var w = _r.GetColumnDefinitionWidth(gridColDefs[assignedCol]);
-                if (w != null && w.Value.UnitType == "Pixel" && w.Value.Value > 240)
-                {
-                    SetColumnDefinitionWidth(gridColDefs[assignedCol], 240, "Pixel");
-                    Logger.Log(Tag, $"SwapCommunityMembers: clamped ColDef[{assignedCol}] from {w.Value.Value}px to 240px");
-                }
-            }
-
             // Safety: ensure at least one Star column exists for chat to fill space
             bool hasStar = false;
             for (int i = 0; i < gridColDefs.Count; i++)
@@ -1183,32 +1167,18 @@ internal class RootcordEngine
                             _r.AddGridColumnAuto(layoutGrid);
                         else
                         {
-                            // Channels or splitter column — use original width
+                            // Channels or splitter column — use original Pixel width.
+                            // The channels panel was at a Pixel column in Root's native
+                            // layout (resizable via GridSplitter). Keep it Pixel so the
+                            // splitter continues to work. Use 300px default if Auto/tiny.
                             var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
-                            if (origW.unit == "Pixel" && origW.width > 240)
-                                _r.AddGridColumnPixel(layoutGrid, 240); // clamp channels
-                            else if (origW.unit == "Auto" || origW.width == 0)
-                                _r.AddGridColumnAuto(layoutGrid);
-                            else if (origW.unit == "Pixel")
-                                _r.AddGridColumnPixel(layoutGrid, origW.width > 0 ? origW.width : 1);
+                            if (origW.unit == "Pixel" && origW.width > 10)
+                                _r.AddGridColumnPixel(layoutGrid, origW.width);
                             else
-                                _r.AddGridColumnPixel(layoutGrid, 1); // fallback
+                                _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
                         }
                     }
                     Logger.Log(Tag, $"SwapCommunityMembers: rebuilt {originalCount} column definitions");
-
-                    // Clamp channels panel MaxWidth to 240px (Discord-like default)
-                    for (int i = 0; i < n; i++)
-                    {
-                        if (i == maxAssignedIdx) continue; // skip members
-                        int origCol = nonSplitters[i].col;
-                        var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
-                        if (origW.unit != "Star" && origW.unit != "star")
-                        {
-                            _r.SetMaxWidth(nonSplitters[i].child, 240);
-                            Logger.Log(Tag, $"SwapCommunityMembers: clamped {nonSplitters[i].child.GetType().Name} MaxWidth to 240px");
-                        }
-                    }
                 }
 
                 // Invalidate to trigger fresh layout
