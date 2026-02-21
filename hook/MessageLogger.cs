@@ -36,7 +36,7 @@ internal class MessageLogger : IDisposable
 
     private Timer? _scanTimer;
     private int _scanning;
-    private int _heartbeatCounter;
+    private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
 
     // Discovery results
     private object? _chatItemsControl;
@@ -130,16 +130,16 @@ internal class MessageLogger : IDisposable
 
     internal void Initialize()
     {
-        Logger.Log(Tag, "Starting message logger");
+        using var ev = WideEvent.Begin(Tag, "initialize");
 
         _store.LoadAll(_messageCache);
-        Logger.Log(Tag, $"Loaded {_messageCache.Count} cached messages from store");
+        ev.Set("cached_loaded", _messageCache.Count);
 
         var settings = UprootedSettings.Load();
         if (_messageCache.Count > settings.MessageLoggerMaxMessages)
         {
             _store.Truncate(settings.MessageLoggerMaxMessages);
-            Logger.Log(Tag, $"Truncated store to {settings.MessageLoggerMaxMessages}");
+            ev.Set("truncated_to", settings.MessageLoggerMaxMessages);
         }
 
         _r.RunOnUIThread(() =>
@@ -158,7 +158,7 @@ internal class MessageLogger : IDisposable
         });
 
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
-        Logger.Log(Tag, $"Scan timer started ({ScanIntervalMs}ms)");
+        ev.Set("scan_interval_ms", ScanIntervalMs);
     }
 
     public void Dispose()
@@ -183,7 +183,7 @@ internal class MessageLogger : IDisposable
             try { ProcessAuditEntry(entry); }
             catch (Exception ex) { Logger.Log(Tag, $"ProcessAuditEntry: {ex.Message}"); }
         };
-        Logger.Log(Tag, "AuditLogEngine wired — audit entries will supplement visual-tree detection");
+        Logger.Log(Tag, "AuditLogEngine wired");
     }
 
     /// <summary>
@@ -199,9 +199,13 @@ internal class MessageLogger : IDisposable
     {
         if (entry.ActionType == AuditLogEngine.ActionMessageDelete)
         {
-            Logger.Log(Tag, $"[audit] DELETE: msg={entry.MessageId} actor={entry.ActorId} ch={entry.ChannelId}");
-
             if (string.IsNullOrEmpty(entry.MessageId)) return;
+
+            using var ev = WideEvent.Begin(Tag, "audit_delete");
+            ev.Set("msg_id", entry.MessageId);
+            ev.Set("actor_id", entry.ActorId);
+            ev.Set("actor_name", entry.ActorName);
+            ev.Set("channel", entry.ChannelId);
 
             if (_messageCache.TryGetValue(entry.MessageId, out var cached))
             {
@@ -214,14 +218,18 @@ internal class MessageLogger : IDisposable
                     cached.DeletedByName = entry.ActorName;
                     _store.RecordDeletion(cached.MessageId, cached.ChannelId,
                         cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
-                    Logger.Log(Tag, $"[audit] Marked deleted: {entry.MessageId} by @{entry.ActorName}");
+                    ev.Set("result", "marked_deleted");
                 }
                 else if (string.IsNullOrEmpty(cached.DeletedBy) && !string.IsNullOrEmpty(entry.ActorId))
                 {
                     // Already marked deleted (from visual tree), but now we have actor info
                     cached.DeletedBy = entry.ActorId;
                     cached.DeletedByName = entry.ActorName;
-                    Logger.Log(Tag, $"[audit] Actor info added to existing deletion: {entry.MessageId} by @{entry.ActorName}");
+                    ev.Set("result", "actor_added");
+                }
+                else
+                {
+                    ev.Set("result", "already_deleted");
                 }
 
                 // If a card is already injected for this message, remove it so the next
@@ -234,7 +242,7 @@ internal class MessageLogger : IDisposable
                         var parent = _r.GetParent(existingCard);
                         if (parent != null) RemoveChild(parent, existingCard);
                         _injectedCards.Remove(cardTag);
-                        Logger.Log(Tag, $"[audit] Removed stale card for re-injection with actor name: {entry.MessageId}");
+                        ev.Set("card_refreshed", true);
                     }
                 }
             }
@@ -242,7 +250,7 @@ internal class MessageLogger : IDisposable
             {
                 // Message not cached yet — store for application when it's next seen in Add event
                 _pendingAuditDeletes[entry.MessageId] = entry;
-                Logger.Log(Tag, $"[audit] Pending delete queued: {entry.MessageId} (not in cache yet)");
+                ev.Set("result", "pending_queued");
             }
         }
         else if (entry.ActionType == AuditLogEngine.ActionMessageEdit)
@@ -269,32 +277,36 @@ internal class MessageLogger : IDisposable
 
             _r.RunOnUIThread(() =>
             {
+                using var ev = WideEvent.BeginSampled(Tag, "scan_tick", _sampler);
                 try
                 {
-                    _heartbeatCounter++;
-                    if (_heartbeatCounter % 60 == 0) // every ~30s at 500ms interval
+                    int srcCount = 0;
+                    try
                     {
-                        int srcCount = 0;
-                        try
-                        {
-                            if (_currentItemsSource != null)
-                                srcCount = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
-                        }
-                        catch { }
-                        Logger.Log(Tag, $"[heartbeat] subscribed={_subscribed} resolved={_propertiesResolved} srcItems={srcCount} snapshots={_contentSnapshot.Count} cache={_messageCache.Count}");
+                        if (_currentItemsSource != null)
+                            srcCount = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
                     }
+                    catch { }
+                    ev.Set("subscribed", _subscribed);
+                    ev.Set("resolved", _propertiesResolved);
+                    ev.Set("src_items", srcCount);
+                    ev.Set("snapshots", _contentSnapshot.Count);
+                    ev.Set("cache", _messageCache.Count);
 
                     EnsureCollectionSubscription();
                     if (_propertiesResolved)
                     {
-                        FlushPendingRemoves(settings);
+                        FlushPendingRemoves(settings, ev);
                         // Edit detection is event-driven (HandleReplaced), not poll-based.
                         // PollEdits is kept for reference but not called.
-                        InjectDeletedMessageCards(settings);
-                        InjectEditIndicators(settings);
+                        InjectDeletedMessageCards(settings, ev);
+                        InjectEditIndicators(settings, ev);
                     }
                 }
-                catch (Exception ex) { Logger.Log(Tag, $"Scan error: {ex.Message}"); }
+                catch (Exception ex)
+                {
+                    ev.SetError(ex);
+                }
                 finally { Interlocked.Exchange(ref _scanning, 0); }
             });
 
@@ -312,7 +324,7 @@ internal class MessageLogger : IDisposable
 
     private void RunDiscoveryScan()
     {
-        Logger.Log(Tag, "=== Phase 1: Discovery ===");
+        using var ev = WideEvent.Begin(Tag, "discovery_scan");
 
         var settingsText = _walker.FindFirstTextBlock(_mainWindow, "APP SETTINGS");
         object? settingsSubtree = null;
@@ -354,7 +366,9 @@ internal class MessageLogger : IDisposable
         }
 
         ReadCurrentChannelId();
-        Logger.Log(Tag, $"Discovery: resolved={_propertiesResolved}, control={_chatItemsControl != null}, ch={_currentChannelId}");
+        ev.Set("resolved", _propertiesResolved);
+        ev.Set("has_control", _chatItemsControl != null);
+        ev.Set("channel", _currentChannelId);
     }
 
     private void InspectItemsControl(object ic)
@@ -396,7 +410,7 @@ internal class MessageLogger : IDisposable
                 catch { }
             }
 
-            Logger.Log(Tag, $"Chat collection: {typeName}, {count} items");
+            Logger.Log(Tag, $"Chat collection found: {typeName}, {count} items");
             _chatItemsControl = ic;
             _currentItemsSource = source;
         }
@@ -655,7 +669,7 @@ internal class MessageLogger : IDisposable
 
     private void TryRediscoverChat()
     {
-        Logger.Log(Tag, "[rediscover] Scanning for chat control...");
+        using var ev = WideEvent.Begin(Tag, "rediscover");
         object? bestControl = null;
         object? bestSource = null;
         int bestCount = 0;
@@ -715,7 +729,8 @@ internal class MessageLogger : IDisposable
 
         if (bestControl != null && bestSource != null)
         {
-            Logger.Log(Tag, $"[rediscover] Found: {bestControl.GetType().Name} with {bestCount} items");
+            ev.Set("found", bestControl.GetType().Name);
+            ev.Set("items", bestCount);
             _chatItemsControl = bestControl;
             _deletionEpoch++;
             _currentItemsSource = bestSource;
@@ -728,7 +743,7 @@ internal class MessageLogger : IDisposable
         }
         else
         {
-            Logger.Log(Tag, "[rediscover] No chat control found");
+            ev.Set("found", "none");
         }
     }
 
@@ -762,7 +777,7 @@ internal class MessageLogger : IDisposable
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"Subscribe error: {ex.Message}");
+            Logger.Log(Tag, $"Subscribe error: {ex.Message}");  // rare error — keep as diagnostic
             _subscribed = false;
         }
     }
@@ -853,17 +868,19 @@ internal class MessageLogger : IDisposable
     /// </summary>
     private void OnDeletedAtChanged(string msgId, object sender)
     {
-        Logger.Log(Tag, $"[INPC] DeletedAt changed: {msgId}");
         _r.RunOnUIThread(() =>
         {
             try
             {
                 if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
                 {
+                    using var ev = WideEvent.Begin(Tag, "msg_deleted");
                     cached.IsDeleted = true;
                     cached.DeletedAt = DateTime.UtcNow;
                     _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
-                    Logger.Log(Tag, $"[INPC] MSG DEL (instant): {msgId} ({Truncate(cached.Content, 80)})");
+                    ev.Set("msg_id", msgId);
+                    ev.Set("content", Truncate(cached.Content, 80));
+                    ev.Set("source", "inpc");
 
                     var settings = UprootedSettings.Load();
                     InjectDeletedMessageCards(settings);
@@ -878,7 +895,6 @@ internal class MessageLogger : IDisposable
     /// </summary>
     private void OnEditedAtChanged(string msgId, object sender)
     {
-        Logger.Log(Tag, $"[INPC] EditedAt changed: {msgId}");
         _r.RunOnUIThread(() =>
         {
             try
@@ -905,11 +921,15 @@ internal class MessageLogger : IDisposable
                         !string.IsNullOrEmpty(currentContent) &&
                         prevContent != currentContent)
                     {
+                        using var ev = WideEvent.Begin(Tag, "msg_edited");
                         cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prevContent });
                         cached.Content = currentContent;
                         _contentSnapshot[msgId] = currentContent;
                         _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, prevContent);
-                        Logger.Log(Tag, $"[INPC] MSG EDIT (instant): {msgId}: \"{Truncate(prevContent, 40)}\" -> \"{Truncate(currentContent, 40)}\"");
+                        ev.Set("msg_id", msgId);
+                        ev.Set("old", Truncate(prevContent, 40));
+                        ev.Set("new", Truncate(currentContent, 40));
+                        ev.Set("source", "inpc");
 
                         var settings = UprootedSettings.Load();
                         InjectEditIndicators(settings);
@@ -935,7 +955,7 @@ internal class MessageLogger : IDisposable
             catch { }
         }
         if (_propertyChangedSubs.Count > 0)
-            Logger.Log(Tag, $"[INPC] Unsubscribed {_propertyChangedSubs.Count} PropertyChanged handlers");
+            Logger.Log(Tag, $"Unsubscribed {_propertyChangedSubs.Count} INPC handlers");
         _propertyChangedSubs.Clear();
     }
 
@@ -944,6 +964,7 @@ internal class MessageLogger : IDisposable
         if (!_propertiesResolved) return;
         _orderedIds.Clear();
         _orderedIdIndex.Clear();
+        using var ev = WideEvent.Begin(Tag, "snapshot");
         try
         {
             int snapshotCount = 0;
@@ -964,9 +985,9 @@ internal class MessageLogger : IDisposable
                 }
                 snapshotCount++;
             }
-            Logger.Log(Tag, $"Snapshot: {snapshotCount} messages cached");
+            ev.Set("messages", snapshotCount);
         }
-        catch (Exception ex) { Logger.Log(Tag, $"Snapshot error: {ex.Message}"); }
+        catch (Exception ex) { ev.SetError(ex); }
     }
 
     // ===== CollectionChanged =====
@@ -1124,13 +1145,17 @@ internal class MessageLogger : IDisposable
 
             if (!confirmedByEditedAt && !confirmedByGracePeriod) continue;
 
-            var method = confirmedByEditedAt ? "EditedAt" : "grace-period";
-            Logger.Log(Tag, $"[edit-detect] {msgId} (via {method}): \"{Truncate(oldContent, 40)}\" -> \"{Truncate(newContent, 40)}\"");
             if (_messageCache.TryGetValue(msgId, out var cached))
             {
+                using var ev = WideEvent.Begin(Tag, "msg_edited");
                 cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
                 cached.Content = newContent;
                 _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, oldContent);
+                ev.Set("msg_id", msgId);
+                ev.Set("method", confirmedByEditedAt ? "EditedAt" : "grace-period");
+                ev.Set("old", Truncate(oldContent, 40));
+                ev.Set("new", Truncate(newContent, 40));
+                ev.Set("source", "replace_event");
             }
         }
     }
@@ -1375,7 +1400,7 @@ internal class MessageLogger : IDisposable
     /// Actual deletion detection is handled by async pollers (StartDeletionPoller).
     /// This just manages housekeeping and the bulk safety net.
     /// </summary>
-    private void FlushPendingRemoves(UprootedSettings settings)
+    private void FlushPendingRemoves(UprootedSettings settings, WideEvent? scanEv = null)
     {
         if (_pendingRemoves.Count == 0)
         {
@@ -1394,13 +1419,17 @@ internal class MessageLogger : IDisposable
         }
         catch { }
 
-        Logger.Log(Tag, $"[flush] removes={count} adds={_addsSinceFlush} collectionSize={collectionSize}");
+        scanEv?.Set("flush_removes", count);
+        scanEv?.Set("flush_adds", _addsSinceFlush);
+        scanEv?.Set("flush_collection_size", collectionSize);
 
         // Bulk safety net: 10+ removes is a channel switch
         if (count >= 10)
         {
             _deletionEpoch++;
-            Logger.Log(Tag, $"Bulk removes ({count}) — channel switch, discarding (epoch={_deletionEpoch})");
+            scanEv?.Set("bulk_channel_switch", true);
+            scanEv?.Set("epoch", _deletionEpoch);
+            scanEv?.MarkNotable();
             _pendingRemoves.Clear();
             _contentSnapshot.Clear();
             _addedViaEvent.Clear();
@@ -1426,16 +1455,19 @@ internal class MessageLogger : IDisposable
     /// </summary>
     private void MarkAsDeleted(BufferedRemove removed)
     {
-        Logger.Log(Tag, $"[DIAG-FLUSH] About to mark MSG DEL: {removed.MessageId}, cache has={_messageCache.ContainsKey(removed.MessageId)}, IsDeleted already={(_messageCache.TryGetValue(removed.MessageId, out var peekCached) ? peekCached.IsDeleted.ToString() : "N/A")}");
         if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
         {
+            using var ev = WideEvent.Begin(Tag, "msg_deleted");
             cached.IsDeleted = true;
             cached.DeletedAt = DateTime.UtcNow;
             _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
-            Logger.Log(Tag, $"MSG DEL: {removed.MessageId} ({Truncate(cached.Content, 80)})");
+            ev.Set("msg_id", removed.MessageId);
+            ev.Set("content", Truncate(cached.Content, 80));
+            ev.Set("source", "poll");
         }
         else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
         {
+            using var ev = WideEvent.Begin(Tag, "msg_deleted");
             var newCached = new CachedMessage
             {
                 MessageId = removed.MessageId,
@@ -1451,7 +1483,9 @@ internal class MessageLogger : IDisposable
             _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
                 newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
             _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
-            Logger.Log(Tag, $"MSG DEL (uncached): {removed.MessageId} ({Truncate(removed.Content, 80)})");
+            ev.Set("msg_id", removed.MessageId);
+            ev.Set("content", Truncate(removed.Content, 80));
+            ev.Set("source", "poll_uncached");
         }
     }
 
@@ -1503,34 +1537,27 @@ internal class MessageLogger : IDisposable
     /// When the VSP recycles a message container (scroll), the card is lost. The next
     /// scan tick detects the missing tag and re-injects.
     /// </summary>
-    private void InjectDeletedMessageCards(UprootedSettings settings)
+    private void InjectDeletedMessageCards(UprootedSettings settings, WideEvent? scanEv = null)
     {
         if (!settings.MessageLoggerLogDeletes || _chatItemsControl == null) return;
 
-        Logger.Log(Tag, "[DIAG-INJ] === InjectDeletedMessageCards start ===");
-
         object? vsp = FindMessagePanel();
-        Logger.Log(Tag, $"[DIAG-INJ] FindMessagePanel: {(vsp != null ? "found" : "null")}, type={vsp?.GetType().Name ?? "N/A"}");
         if (vsp == null) return;
 
         // Build list of visible messages with their containers (VSP realized items), in VSP order
         var visibleMessages = new List<(string msgId, object container)>();
         int childCount = _r.GetChildCount(vsp);
-        Logger.Log(Tag, $"[DIAG-INJ] VSP childCount={childCount}");
         for (int i = 0; i < childCount; i++)
         {
             var child = _r.GetChild(vsp, i);
             if (child == null) continue;
             var dc = ReadDC(child);
             var msgId = dc != null ? ReadMessageId(dc) : null;
-            if (i < 5 || (i == childCount - 1)) // Log first 5 + last for brevity
-                Logger.Log(Tag, $"[DIAG-INJ]   child[{i}]: type={child.GetType().Name}, DC={dc?.GetType().Name ?? "null"}, msgId={msgId ?? "null"}");
             if (dc == null || msgId == null) continue;
             if (!_messageCache.ContainsKey(msgId)) continue;
             visibleMessages.Add((msgId, child));
         }
 
-        Logger.Log(Tag, $"[DIAG-INJ] visibleMessages: {visibleMessages.Count} found");
         if (visibleMessages.Count == 0) return;
 
         // Count deleted messages for this channel
@@ -1540,7 +1567,6 @@ internal class MessageLogger : IDisposable
             if (c.IsDeleted) totalDeleted++;
             if (c.IsDeleted && c.ChannelId == _currentChannelId) deletedInChannel++;
         }
-        Logger.Log(Tag, $"[DIAG-INJ] deletedInChannel: {deletedInChannel} (of {totalDeleted} total)");
 
         // One-time tree dump (1E): on first call with both deleted + visible messages
         if (!_firstTreeDumpDone && deletedInChannel > 0 && visibleMessages.Count > 0)
@@ -1562,46 +1588,26 @@ internal class MessageLogger : IDisposable
             if (cached.DeletedAt == null) continue;
             if ((DateTime.UtcNow - cached.DeletedAt.Value).TotalHours > 24) continue;
 
-            Logger.Log(Tag, $"[DIAG-INJ]   trying: {cached.MessageId} ts={cached.Timestamp:HH:mm:ss}");
-
             var cardTag = $"uprooted-del:{cached.MessageId}";
 
             // Find the best visible message to attach to: the visible message with the largest
             // insertion-order index that still precedes the deleted message in collection order.
             // This is more reliable than timestamp comparison (timestamps may not resolve correctly).
             object? targetContainer = null;
-            string? targetMsgId = null;
             int deletedOrder = _orderedIdIndex.TryGetValue(cached.MessageId, out var doi) ? doi : int.MaxValue;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
                 if (_orderedIdIndex.TryGetValue(visibleMessages[i].msgId, out var vIdx) && vIdx <= deletedOrder)
-                { targetContainer = visibleMessages[i].container; targetMsgId = visibleMessages[i].msgId; break; }
+                { targetContainer = visibleMessages[i].container; break; }
             }
             // Fallback: attach to the first visible message (deleted msg older than all visible)
             if (targetContainer == null)
-            {
                 targetContainer = visibleMessages[0].container;
-                targetMsgId = visibleMessages[0].msgId;
-            }
-            Logger.Log(Tag, $"[DIAG-INJ]     targetContainer: {(targetContainer != null ? "found" : "null")}, targetMsgId={targetMsgId ?? "null"}");
             if (targetContainer == null) { skipped++; continue; }
 
             // Find the message layout Grid inside the container
             var (grid, col) = FindMessageGridInContainer(targetContainer);
-            Logger.Log(Tag, $"[DIAG-INJ]     FindMessageGridInContainer: grid={grid != null}, col={col}");
-            if (grid == null)
-            {
-                // Dump first 10 descendants for debugging
-                var descTypes = new List<string>();
-                foreach (var desc in _walker.DescendantsDepthFirst(targetContainer))
-                {
-                    descTypes.Add(desc.GetType().Name);
-                    if (descTypes.Count >= 10) break;
-                }
-                Logger.Log(Tag, $"[DIAG-INJ]     (grid null) DFS descendants: {string.Join(", ", descTypes)}");
-                skipped++;
-                continue;
-            }
+            if (grid == null) { skipped++; continue; }
 
             // Dedup: check if card already exists in this Grid (tag-based)
             bool exists = false;
@@ -1611,29 +1617,29 @@ internal class MessageLogger : IDisposable
                 foreach (var c in gridChildren)
                     if (c != null && _r.GetTag(c) == cardTag) { exists = true; break; }
             }
-            Logger.Log(Tag, $"[DIAG-INJ]     dedup check: exists={exists}");
             if (exists) { skipped++; continue; }
 
             var card = BuildDeletedMessageCard(cached, cardTag);
-            Logger.Log(Tag, $"[DIAG-INJ]     BuildDeletedMessageCard: {(card != null ? "success" : "null")}");
             if (card == null) { skipped++; continue; }
 
             // Add a new Auto-height row to the Grid and place the card there
             int newRow = AddAutoRowToGrid(grid);
-            Logger.Log(Tag, $"[DIAG-INJ]     AddAutoRowToGrid: row={newRow}");
             _r.SetGridRow(card, newRow);
             _r.SetGridColumn(card, col);
             SetGridColumnSpan(card, 99);
 
             _r.AddChild(grid, card);
             _injectedCards[cardTag] = card;
-            int gridChildCount = 0;
-            try { gridChildCount = _r.GetChildCount(grid); } catch { }
-            Logger.Log(Tag, $"[DIAG-INJ]     AddChild result: card added, Grid now has {gridChildCount} children");
             injected++;
         }
 
-        Logger.Log(Tag, $"[DIAG-INJ] === InjectDeletedMessageCards done: {injected} injected, {skipped} skipped ===");
+        if (injected > 0 || skipped > 0)
+        {
+            scanEv?.Set("del_injected", injected);
+            scanEv?.Set("del_skipped", skipped);
+            scanEv?.Set("del_in_channel", deletedInChannel);
+            if (injected > 0) scanEv?.MarkNotable();
+        }
     }
 
     /// <summary>
@@ -1881,7 +1887,7 @@ internal class MessageLogger : IDisposable
     /// inline card into the message's layout Grid (below the message text) showing the
     /// previous content and an "(edited)" label. Mirrors InjectDeletedMessageCards().
     /// </summary>
-    private void InjectEditIndicators(UprootedSettings settings)
+    private void InjectEditIndicators(UprootedSettings settings, WideEvent? scanEv = null)
     {
         if (!settings.MessageLoggerLogEdits || _chatItemsControl == null) return;
 
@@ -1900,6 +1906,7 @@ internal class MessageLogger : IDisposable
             if (msgId != null) visible[msgId] = child;
         }
 
+        int editInjected = 0;
         foreach (var cached in _messageCache.Values)
         {
             if (cached.Edits.Count == 0 || cached.IsDeleted) continue;
@@ -1929,7 +1936,13 @@ internal class MessageLogger : IDisposable
             SetGridColumnSpan(card, 99);
             _r.AddChild(grid, card);
             _injectedCards[editTag] = card;
-            Logger.Log(Tag, $"[EDIT] Injected indicator for {cached.MessageId} ({cached.Edits.Count} edits)");
+            editInjected++;
+        }
+
+        if (editInjected > 0)
+        {
+            scanEv?.Set("edit_injected", editInjected);
+            scanEv?.MarkNotable();
         }
     }
 
@@ -2101,7 +2114,8 @@ internal class MessageLogger : IDisposable
 
     private void ClearInjectedCards(string reason = "unknown")
     {
-        Logger.Log(Tag, $"[DIAG] ClearInjectedCards: {reason}, clearing {_injectedCards.Count} cards");
+        if (_injectedCards.Count > 0)
+            Logger.Log(Tag, $"Clearing {_injectedCards.Count} cards: {reason}");
         foreach (var (tag, card) in _injectedCards)
         {
             try
