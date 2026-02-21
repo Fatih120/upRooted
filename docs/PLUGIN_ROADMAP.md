@@ -35,6 +35,15 @@ The `LinkEmbedEngine` (`hook/LinkEmbedEngine.cs`) is the proven pattern for C# n
 
 New C# chat plugins should follow this pattern.
 
+### Custom draw + Skia lease path (validated)
+
+Recent Avalonia decompilation confirms the full custom draw pipeline needed for advanced visual plugins:
+- `DrawingContext.Custom(ICustomDrawOperation)` exists and invokes `ICustomDrawOperation.Render(ImmediateDrawingContext)`.
+- `ImmediateDrawingContext.TryGetFeature(Type)` forwards to backend `IDrawingContextImpl.GetFeature(Type)`.
+- Skia backend exposes `ISkiaSharpApiLeaseFeature`, which provides `Lease()` for `SkCanvas` access.
+
+Reference report: `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
+
 ---
 
 ## Shipped Plugins
@@ -201,14 +210,15 @@ A utility that can distinguish genuine content changes (message added, message d
 
 Space for additional plugin concepts as they emerge. When adding a new idea, include at minimum: the inspiration source, which layer it needs (C# hook vs. TypeScript browser), and a rough complexity estimate.
 
+- **LiquidGlass visual mod** — Inspired by iOS 26's Liquid Glass look. Implement a C# hook visual plugin using `ICustomDrawOperation` + Skia lease to render position-aware sweep-gradient border strokes, translucent panels, and subtle glow/accent edges. Roll out in phases: (1) one reusable custom border op, (2) settings toggle + intensity presets + hard fallback path, (3) targeted adoption on settings cards/popups after perf/readability validation across Dark/Light/PureDark. Complexity: **high** — requires careful control-level integration and strict draw-cost budgeting.
 - **Code block overhaul** — Inspired by Vencord's BetterCodeblocks / MonacoEditor plugin and Discord's custom CSS approach to restyling code blocks. Root renders chat natively in Avalonia, so code blocks are Avalonia `TextBlock` or `Border` controls rather than HTML `<pre>` elements. Implementation would use the `LinkEmbedEngine` visual tree scanning pattern to locate code block controls and replace or augment them with syntax highlighting (e.g. via a bundled highlighting library or a simple regex tokenizer), a copy button, language label, and improved styling. Complexity: **medium-high** — requires identifying Root's exact code block control structure via visual tree dump, then building a reflection-based replacement. C# hook layer.
 
 ---
 
-*Last updated: 2026-02-20 — added code block overhaul to Future Plugin Ideas*
+*Last updated: 2026-02-21 — added LiquidGlass visual mod plan and custom draw/Skia lease architecture note*
 
 ---
 
 **Canonical for:** plugin roadmap, planned plugin features, API evolution, ecosystem goals
 **Not canonical for:** main roadmap → [ROADMAP.md](ROADMAP.md) | active tasks → [TASKS.md](../TASKS.md) | current plugin API → [API_REFERENCE.md](plugins/API_REFERENCE.md)
-*Plugin roadmap. Last updated 2026-02-19.*
+*Plugin roadmap. Last updated 2026-02-21.*

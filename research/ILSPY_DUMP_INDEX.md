@@ -9,6 +9,7 @@
 > Source: ILSpy/ilspycmd decompilation of Root v0.9.93 and all embedded assemblies.
 > Original 273 files: each preserves ILSpy assembly/namespace comment headers.
 > New files (2026-02-21, added via ilspycmd project mode): standard C# output, no ILSpy header.
+> Custom draw extraction update (2026-02-21): temporary aggregate dumps for `Avalonia.Media`, `Avalonia.Platform`, `Avalonia.Visuals.Platform`, `Avalonia.VisualTree`, `AvaloniaSkia`, `AvaloniaRendering`, `Avalonia.Rendering.SceneGraph`, and `SkiaSharp` were used to validate `ICustomDrawOperation` + `ISkiaSharpApiLease` rendering flow, then pruned after split/analysis to reduce bloat. Retained key artifacts include `ICustomDrawOperation.cs`, `DrawingContextImpl.cs`, `ISkiaSharpApiLease*.cs`, and `SKShader.cs`. See `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
 
 **Total:** ~1,395 files across 16 assemblies
 
@@ -757,10 +758,10 @@ Classes still referenced but not present as standalone files:
 
 ---
 
-*Last updated: 2026-02-21 — ~1,395 files from Root v0.9.93 (all embedded assemblies extracted via ilspycmd -d from 577 MB single-file bundle). Original 273 files: Views (47), ViewModels (52), VM Factories (49), Controls (30), Markdown (18), Settings (6), Data (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infra (7), Interfaces (3), Avalonia (4), AvaloniaEdit (3), Resources (2), XAML (9). Added 2026-02-21: ~240 new Avalonia classes (channels, browser, bridges, WebRTC, login, message views, overlay) + ~950 files from 7 new assemblies (RootApp.Core, RootApp.WebApi.Shared.Entities, RootApp.WebApi.Shared, RootApp.Utility, RootApp.AppHub.Client, RootApp.WebApi.Client.Shared, RootApp.Client.Domain.Windows).*
+*Last updated: 2026-02-21 — ~1,395 files from Root v0.9.93 (all embedded assemblies extracted via ilspycmd -d from 577 MB single-file bundle). Original 273 files: Views (47), ViewModels (52), VM Factories (49), Controls (30), Markdown (18), Settings (6), Data (5), Session (5), VM Infrastructure (5), Themes (7), Styles (27), App Infra (7), Interfaces (3), Avalonia (4), AvaloniaEdit (3), Resources (2), XAML (9). Added 2026-02-21: ~240 new Avalonia classes (channels, browser, bridges, WebRTC, login, message views, overlay) + ~950 files from 7 new assemblies (RootApp.Core, RootApp.WebApi.Shared.Entities, RootApp.WebApi.Shared, RootApp.Utility, RootApp.AppHub.Client, RootApp.WebApi.Client.Shared, RootApp.Client.Domain.Windows) + full custom-draw/Skia pipeline extraction.*
 
 ---
 
 **Canonical for:** ILSpy dump file inventory (273 files, 159K lines), analysis status tracking, source assembly mapping
 **Not canonical for:** curated control reference → [ROOT_CONTROL_REFERENCE.md](docs/framework/ROOT_CONTROL_REFERENCE.md) | theme key values → [ROOT_THEME_SYSTEM_FINDINGS.md](ROOT_THEME_SYSTEM_FINDINGS.md)
-*ILSpy dump index. Last updated 2026-02-20.*
+*ILSpy dump index. Last updated 2026-02-21.*
