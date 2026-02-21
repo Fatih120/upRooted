@@ -64,6 +64,7 @@ internal static class ContentPages
 
     private static readonly FontScale PageScale = new(15, 14, 13, 12, 13);
     private static readonly FontScale LightboxScale = new(24, 20, 20, 17, 18);
+    private const double FirstCardTopMargin = 20;
 
     /// <summary>
     /// Update statics for live preview during color picker drag.
@@ -359,7 +360,7 @@ internal static class ContentPages
         var identityCard = CreateCard(r);
         if (identityCard != null)
         {
-            r.SetMargin(identityCard, 0, 20, 0, 0);
+            r.SetMargin(identityCard, 0, FirstCardTopMargin, 0, 0);
             var cardContent = r.CreateStackPanel(vertical: true, spacing: 0);
             r.SetMargin(cardContent, 24, 24, 24, 24);
 
@@ -745,8 +746,9 @@ internal static class ContentPages
     // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue), 5=Planned(grey)
     // Planned (5) is always sorted last and has no toggle — the plugin does not exist yet.
     private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev", "Planned" };
-    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#2D4F8C", "#7A7A8A" };
+    private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0", "#7A7A8A" };
     private static string DevChannelBlue => TestingColors[4];
+    private const string DevChannelBlack = "#0A0E14";
 
     // Known plugins metadata
     private static PluginInfo[]? KnownPlugins;
@@ -827,11 +829,22 @@ internal static class ContentPages
         r.SetMargin(page, 24, 24, 24, 0);
         r.SetTag(page, "uprooted-content");
 
-        // Page title
-        var pageTitle = CreateBoundText(r, "Plugin Settings", 20, TextWhite, "TextPrimary");
-        r.SetFontWeight(pageTitle, "Bold");
-        ApplyFont(r, pageTitle, font);
-        r.AddChild(page, pageTitle);
+        // Page title row (keep top alignment consistent with About/Themes pages)
+        var pageTitleRow = r.CreatePanel();
+        if (pageTitleRow != null)
+        {
+            // About/Themes rows include right-side controls, which increases row height.
+            // Keep Plugins title row at a matching minimum height for consistent title positioning.
+            pageTitleRow.GetType().GetProperty("MinHeight")?.SetValue(pageTitleRow, 28.0);
+
+            var pageTitle = CreateBoundText(r, "Plugin Settings", 20, TextWhite, "TextPrimary");
+            r.SetFontWeight(pageTitle, "Bold");
+            ApplyFont(r, pageTitle, font);
+            r.SetHorizontalAlignment(pageTitle, "Left");
+            r.SetVerticalAlignment(pageTitle, "Center");
+            r.AddChild(pageTitleRow, pageTitle);
+            r.AddChild(page, pageTitleRow);
+        }
 
         // Declare rebuildGrid early so the experimental banner toggle can reference it
         Action? rebuildGrid = null;
@@ -883,7 +896,7 @@ internal static class ContentPages
                 }
 
                 var initBannerBg = showExperimental[0] ? warnBgOn : CardBg;
-                var initBannerBorder = showExperimental[0] ? warnBorderOn : CardBorder;
+                var initBannerBorder = showExperimental[0] ? warnBorderOn : GetCardOutlineColor();
                 var expInner = r.CreateBorder(initBannerBg, 8, expContent);
                 if (expInner != null)
                 {
@@ -903,7 +916,7 @@ internal static class ContentPages
                     if (expInner != null)
                     {
                         r.SetBackground(expInner, isOn ? warnBgOn : CardBg);
-                        r.SetBorderBrush(expInner, isOn ? warnBorderOn : CardBorder);
+                        r.SetBorderBrush(expInner, isOn ? warnBorderOn : GetCardOutlineColor());
                     }
 
                     // Text colors: hardcoded when on, theme when off
@@ -923,7 +936,7 @@ internal static class ContentPages
 
                 if (expInner != null) r.AddChild(expOuter, expInner);
                 if (expPill != null) r.AddChild(expOuter, expPill);
-                r.SetMargin(expOuter, 0, 12, 0, 0);
+                r.SetMargin(expOuter, 0, FirstCardTopMargin, 0, 0);
                 r.AddChild(page, expOuter);
             }
         }
@@ -2168,9 +2181,9 @@ internal static class ContentPages
         var presetsContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (presetsContainer != null)
         {
-            SetBorderStroke(r, presetsContainer, CardBorder, ThinBorder);
+            SetBorderStroke(r, presetsContainer, GetCardOutlineColor(), ThinBorder);
             r.SetTag(presetsContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
-            r.SetMargin(presetsContainer, 0, 20, 0, 0);
+            r.SetMargin(presetsContainer, 0, FirstCardTopMargin, 0, 0);
 
             var presetsInner = r.CreateStackPanel(vertical: true, spacing: 0);
             if (presetsInner != null)
@@ -2282,7 +2295,7 @@ internal static class ContentPages
         var customContainer = CreateBoundBorder(r, CardBg, 12, "BackgroundSecondary");
         if (customContainer != null)
         {
-            SetBorderStroke(r, customContainer, CardBorder, ThinBorder);
+            SetBorderStroke(r, customContainer, GetCardOutlineColor(), ThinBorder);
             r.SetTag(customContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
             r.SetMargin(customContainer, 0, 16, 0, 0);
 
@@ -3795,10 +3808,10 @@ internal static class ContentPages
 
         // Right side: channel badge (clickable)
         var isDev = settings.AutoUpdateChannel == "developer";
-        var badgeColor = isDev ? DevChannelBlue : AccentGreen;
+        var badgeColor = isDev ? DevChannelBlack : AccentGreen;
         var badgeLabel = isDev ? "Developer" : "Stable";
-
-        var badgeText = r.CreateTextBlock(badgeLabel, 12, "#FFFFFF");
+        var badgeTextColor = isDev ? DevChannelBlue : "#FFFFFF";
+        var badgeText = r.CreateTextBlock(badgeLabel, 12, badgeTextColor);
         r.SetFontWeight(badgeText, "Bold");
         ApplyFont(r, badgeText, font);
         r.SetHorizontalAlignment(badgeText, "Center");
@@ -3811,7 +3824,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
             r.SetTag(badge, "uprooted-no-recolor");
-            SetBorderStroke(r, badge, AdjustForHighlight(badgeColor, 18), ThickBorder);
+            SetBorderStroke(r, badge, isDev ? DevChannelBlue : AdjustForHighlight(badgeColor, 18), ThickBorder);
 
             var badgeRef = badge;
             var badgeTextRef = badgeText;
@@ -3833,6 +3846,7 @@ internal static class ContentPages
                     ApplyChannelRuntimeState(r, s);
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
+                    r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeTextRef, r.CreateBrush("#FFFFFF"));
                     r.SetBackground(badgeRef, AccentGreen);
                     SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
                     onRefreshCurrentPage?.Invoke();
@@ -3854,17 +3868,33 @@ internal static class ContentPages
                 }
             });
 
-                r.SubscribeEvent(badge, "PointerEntered", () =>
+            r.SubscribeEvent(badge, "PointerEntered", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
-                r.SetBackground(badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 10));
-                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 40), ThickBorder);
+                if (c == "developer")
+                {
+                    r.SetBackground(badge, AdjustForHighlight(DevChannelBlack, 8));
+                    SetBorderStroke(r, badge, AdjustForHighlight(DevChannelBlue, 24), ThickBorder);
+                }
+                else
+                {
+                    r.SetBackground(badge, AdjustForHighlight(AccentGreen, 10));
+                    SetBorderStroke(r, badge, AdjustForHighlight(AccentGreen, 40), ThickBorder);
+                }
             });
             r.SubscribeEvent(badge, "PointerExited", () =>
             {
                 var c = UprootedSettings.Load().AutoUpdateChannel;
-                r.SetBackground(badge, c == "developer" ? DevChannelBlue : AccentGreen);
-                SetBorderStroke(r, badge, AdjustForHighlight(c == "developer" ? DevChannelBlue : AccentGreen, 18), ThickBorder);
+                if (c == "developer")
+                {
+                    r.SetBackground(badge, DevChannelBlack);
+                    SetBorderStroke(r, badge, DevChannelBlue, ThickBorder);
+                }
+                else
+                {
+                    r.SetBackground(badge, AccentGreen);
+                    SetBorderStroke(r, badge, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                }
             });
 
             r.AddChild(row, badge);
@@ -4011,8 +4041,9 @@ internal static class ContentPages
                 s.Save();
 
                 r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Developer");
-                r.SetBackground(badgeRef, DevChannelBlue);
-                SetBorderStroke(r, badgeRef, AdjustForHighlight(DevChannelBlue, 18), ThickBorder);
+                r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeTextRef, r.CreateBrush(DevChannelBlue));
+                r.SetBackground(badgeRef, DevChannelBlack);
+                SetBorderStroke(r, badgeRef, DevChannelBlue, ThickBorder);
                 r.TextBlockType?.GetProperty("Text")?.SetValue(resultTextRef, "");
                 Logger.Log("AutoUpdate", "Switched to Developer channel");
                 onChannelChanged?.Invoke();
@@ -4110,22 +4141,23 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// DPI-aware border thicknesses — computed from RenderScaling so that thin and thick
-    /// borders always round to distinct physical pixel counts at any display scale.
-    /// Thin stays at 1.0 DIPs (standard). Thick is bumped to the next physical pixel
-    /// boundary above thin, guaranteeing visible distinction.
+    /// DPI-aware border thicknesses expressed in DIPs but targeting fixed physical pixels.
+    /// On high-DPI displays, 1 DIP can rasterize to 2+ physical pixels, so we scale down
+    /// the DIP values by RenderScaling to keep visual stroke widths stable:
+    /// - ThinBorder: 1 physical px
+    /// - ThickBorder: 2 physical px
     /// </summary>
     private static double ThinBorder = 1.0;   // outer container cards
-    private static double ThickBorder = 1.5;   // inner selectable cards, buttons
+    private static double ThickBorder = 2.0;   // inner selectable cards, buttons
 
     private static void ComputeDpiAwareBorders(AvaloniaReflection r)
     {
         var scale = r.GetRenderScaling();
-        ThinBorder = 1.0; // standard — DPI scaling handles physical size
-        // Find the physical pixel count thin rounds to, then target one pixel above
-        var thinPhysical = Math.Ceiling(1.0 * scale);
-        ThickBorder = (thinPhysical + 1) / scale;
-        Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} ({thinPhysical}px), ThickBorder={ThickBorder:F3} ({thinPhysical + 1}px)");
+        if (scale <= 0) scale = 1.0;
+
+        ThinBorder = 1.0 / scale;
+        ThickBorder = 2.0 / scale;
+        Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} (1px), ThickBorder={ThickBorder:F3} (2px)");
     }
 
     /// <summary>
@@ -4212,12 +4244,22 @@ internal static class ContentPages
         if (card == null) return null;
 
         // Visible resting border — uses Root's Border resource for divider-matching color
-        SetBorderStroke(r, card, CardBorder, ThinBorder);
+        SetBorderStroke(r, card, GetCardOutlineColor(), ThinBorder);
 
         // Combine bg + border tags for live walker recoloring
         r.SetTag(card, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
 
         return card;
+    }
+
+    /// <summary>
+    /// Injected card outlines render slightly brighter than native Root settings cards.
+    /// Nudge border tone down to match stock lightness.
+    /// </summary>
+    private static string GetCardOutlineColor()
+    {
+        try { return ColorUtils.Darken(CardBorder, 8); }
+        catch { return CardBorder; }
     }
 
     /// <summary>

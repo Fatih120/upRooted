@@ -24,6 +24,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **Developer channel UI refresh** — Dev channel visuals are now unified around the Dev blue token and include a higher-contrast channel badge style (dark fill + blue outline/text). Update status suffix now uses ` [Dev]` formatting (for example: `Up to date (v0.4.2) [Dev]`) instead of `(Dev)`.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **Plugin count semantics** — Plugin count now reports against plugins available in the current context (channel + experimental visibility) and always uses `X out of Y plugins` formatting.
+  - File: `hook/ContentPages.cs`
+- **Settings page visual consistency pass** — Normalized header/first-card spacing across About/Plugin Settings/Theme Settings and aligned card outlines closer to Root-native lightness.
+  - File: `hook/ContentPages.cs`
 - **Settings interactions and visual feedback aligned with Root native UX** — Incremental UI polish across injected controls:
   - Release-only activation semantics standardized (`SubscribeClickReleased`) and drag-off-release no longer toggles.
   - Press feedback (proportional shrink + subtle press shade) now applies consistently to injected controls, with targeted opt-outs for large parent cards where child-button presses should not depress the parent.
@@ -62,6 +68,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Dev mode teardown latency on channel switch** — Switching from Developer to Stable now immediately disables/refreshes dev-only runtime behavior (ReconLogger, Live Console, dev badge indicators, and related UI state) without requiring tab navigation or restart.
+  - Files: `hook/ContentPages.cs`, `hook/LogConsole.cs`, `hook/ProfileBadgeInjector.cs`
+- **High-DPI border inflation on some laptops** — Border scaling now targets fixed physical pixel widths (thin=1px, thick=2px) to prevent 1px/2px styles rendering as 2px/3px at higher display scale factors.
+  - File: `hook/ContentPages.cs`
+- **Recon Logger naming consistency** — Plugin display name standardized to `ReconLogger`.
+  - File: `hook/ContentPages.cs`
 - **Input/activation edge cases across settings UI** — Fixed regressions and interaction quirks discovered during Root-native parity pass:
   - Pointer press then drag-off then release no longer triggers injected toggles/actions.
   - Native theme card settings button no longer depresses/toggles the parent card.
