@@ -102,7 +102,7 @@ internal class AuditLogEngine : IDisposable
             {
                 try { ScanViewModelChain(); }
                 catch (Exception ex) { Logger.Log(Tag, $"ViewModel scan error: {ex.Message}"); }
-                finally { done.Set(); }
+                finally { try { done.Set(); } catch { } } // Guard: done may be disposed if 10s wait timed out
             });
             done.Wait(10_000);
 
