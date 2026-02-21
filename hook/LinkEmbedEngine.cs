@@ -1136,10 +1136,9 @@ internal class LinkEmbedEngine : IDisposable
         EnsureHttpResolved();
         if (s_httpClient == null) return null;
 
+        object? response = null;
         try
         {
-            object? response = null;
-
             // Use SendAsync as primary path — always survives trimming
             if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
@@ -1227,7 +1226,7 @@ internal class LinkEmbedEngine : IDisposable
             if (stream == null) return null;
 
             using var ms = new System.IO.MemoryStream();
-            stream.CopyTo(ms);
+            using (stream) { stream.CopyTo(ms); }
             return ms.ToArray();
         }
         catch (Exception ex)
@@ -1239,6 +1238,10 @@ internal class LinkEmbedEngine : IDisposable
                 inner = ae.InnerException;
             Logger.Log("LinkEmbed", $"HTTP GET bytes error for {url}: {inner.Message}");
             return null;
+        }
+        finally
+        {
+            (response as IDisposable)?.Dispose();
         }
     }
 
@@ -1254,10 +1257,9 @@ internal class LinkEmbedEngine : IDisposable
         EnsureHttpResolved();
         if (s_httpClient == null) return (null, null);
 
+        object? response = null;
         try
         {
-            object? response = null;
-
             if ((s_sendAsync != null || s_sendAsyncHeadersRead != null) && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[1] creating request for {url}");
@@ -1398,6 +1400,10 @@ internal class LinkEmbedEngine : IDisposable
                 inner = ae.InnerException;
             Logger.Log("LinkEmbed", $"HGWCT outer error [{inner.GetType().Name}]: {inner.Message}");
             return (null, null);
+        }
+        finally
+        {
+            (response as IDisposable)?.Dispose();
         }
     }
 
