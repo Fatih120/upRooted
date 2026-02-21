@@ -36,6 +36,7 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Plugin Examples            | [`docs/plugins/EXAMPLES.md`](plugins/EXAMPLES.md)                                       | Annotated example plugins covering common patterns                                                                           | Plugin authors                         |
 | Theme Engine Deep Dive     | [`docs/framework/THEME_ENGINE_DEEP_DIVE.md`](framework/THEME_ENGINE_DEEP_DIVE.md)       | ThemeEngine algorithm deep dive (live preview, color audit, revert)                                                          | Framework contributors                 |
 | Avalonia Patterns          | [`docs/framework/AVALONIA_PATTERNS.md`](framework/AVALONIA_PATTERNS.md)                 | Avalonia UI concepts through Uprooted's reflection-only lens                                                                 | Framework contributors                 |
+| LiquidGlass Draw Skeleton  | [`docs/framework/LIQUID_GLASS_CUSTOM_DRAW_SKELETON.md`](framework/LIQUID_GLASS_CUSTOM_DRAW_SKELETON.md) | Typed Avalonia 11 + Skia custom draw skeleton for LiquidGlass border stroke (`DrawingContext.Custom` + `ICustomDrawOperation`) | Framework contributors                 |
 | Root Control Reference     | [`docs/framework/ROOT_CONTROL_REFERENCE.md`](framework/ROOT_CONTROL_REFERENCE.md)       | Root's custom controls, style classes, message view structure, theme mechanics, DataStore keys — from ILSpy decompilation    | Framework contributors                 |
 | .NET Runtime               | [`docs/framework/DOTNET_RUNTIME.md`](framework/DOTNET_RUNTIME.md)                       | CLR profiler, IL injection, assembly scanning, startup hooks                                                                 | Framework contributors                 |
 | Root Internals             | [`docs/research/ROOT_INTERNALS.md`](research/ROOT_INTERNALS.md)                         | Root's native architecture from reverse engineering                                                                          | Framework contributors                 |
@@ -136,4 +137,3 @@ For setting up a development environment.
 2. [Build Guide](install/BUILD.md) -- build pipeline for all layers
 3. [Contributing](../CONTRIBUTING.md) -- branch rules and PR process
 4. [Planning Reference](dev/PLANNING_REFERENCE.md) -- technical debt and known issues
-
