@@ -253,7 +253,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(14_000);
+                        Thread.Sleep(7_000);
                         Logger.Log("Startup", "Phase 4.5a: Starting ClearURLs engine...");
                         var engine = new ClearUrlsEngine(cuResolver, cuWindow);
                         engine.Initialize();
@@ -281,7 +281,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(15_000); // Wait 15s for chat to populate
+                        Thread.Sleep(10_000); // Wait for chat to populate
                         Logger.Log("Startup", "Phase 4.5b: Starting native link embed engine...");
                         var engine = new LinkEmbedEngine(embedResolver, embedWindow, themeEngine);
                         LinkEmbedEngine.Instance = engine;
@@ -310,7 +310,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(20_000); // Wait 20s for chat to populate
+                        Thread.Sleep(15_000); // Wait for chat to populate
                         Logger.Log("Startup", "Phase 4.5c: Starting message logger...");
                         var logger = new MessageLogger(mlResolver, mlWindow);
                         logger.Initialize();
@@ -363,7 +363,7 @@ internal class StartupHook
             {
                 try
                 {
-                    Thread.Sleep(5_000);
+                    Thread.Sleep(3_000);
                     Logger.Log("Startup", "Phase 4.5d: Starting auto-updater...");
                     autoUpdater.Initialize();
                     Logger.Log("Startup", "Phase 4.5d OK: Auto-updater initialized");
@@ -384,7 +384,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(5_000); // Wait 5s for app to settle
+                        Thread.Sleep(2_000); // Wait for app to settle
                         Logger.Log("Startup", "Phase 4.5e: Starting presence beacon + profile badge injector...");
 
                         var beacon = new UprootedPresenceBeacon(badgeResolver, badgeWindow);
@@ -412,7 +412,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(12_000); // Wait for Root's gRPC clients to initialize
+                        Thread.Sleep(7_000); // Wait for Root's gRPC clients to initialize
                         Logger.Log("Startup", "Phase 4.5f: Starting silent typing engine...");
                         var engine = new SilentTypingEngine(stResolver, stWindow);
                         engine.Initialize();
@@ -440,7 +440,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(20_000); // Wait for chat to populate
+                        Thread.Sleep(15_000); // Wait for chat to populate
                         Logger.Log("Startup", "Phase 4.5g: Starting NSFW content filter...");
                         var filter = new NsfwFilter(nsfwResolver, nsfwSettings, nsfwWindow);
                         ContentPages.NsfwFilterInstance = filter;
@@ -547,7 +547,7 @@ internal class StartupHook
                 {
                     try
                     {
-                        Thread.Sleep(5_000);
+                        Thread.Sleep(2_000);
                         Logger.Log("Startup", "Phase 4.5j: Starting translate engine (always-on, self-gated)...");
                         var engine = new TranslateEngine(trResolver, trWindow, themeEngine);
                         TranslateEngine.Instance = engine;
