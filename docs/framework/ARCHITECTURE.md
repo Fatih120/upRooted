@@ -30,7 +30,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 9. [Critical Rules](#9-critical-rules)
 10. [Known Limitations](#10-known-limitations)
 11. [Security Considerations](#11-security-considerations)
-12. [AI Contributor Guide](#12-ai-contributor-guide)
+12. [AI Contributor Guide](#12-ai-contributor-guide) *(→ CLAUDE.md)*
 
 ---
 
@@ -143,166 +143,8 @@ The two layers are entirely independent at runtime. The C# hook operates within 
 
 ## 3. Repository Structure
 
-```
-uprooted-private/
-|-- .github/                          # GitHub Actions workflows and issue templates
-|-- .planning/                        # GSD codebase analysis documents (generated)
-|   `-- codebase/                     # ARCHITECTURE.md, CONCERNS.md, CONVENTIONS.md, STRUCTURE.md
-|-- docs/                             # Developer and user documentation
-|   |-- ARCHITECTURE.md               # This file -- authoritative architecture reference
-|   |-- HOW_IT_WORKS.md               # Narrative walkthrough (reverse engineering to injected UI)
-|   |-- ROADMAP.md                    # Known issues and planned features
-|   |-- INDEX.md                      # Documentation navigation hub
-|   `-- plugins/                      # Plugin development documentation
-|       |-- API_REFERENCE.md          # Plugin API surface
-|       |-- BRIDGE_REFERENCE.md       # Root bridge IPC reference
-|       |-- EXAMPLES.md              # Annotated example plugins
-|       |-- GETTING_STARTED.md        # Plugin quickstart guide
-|       `-- ROOT_ENVIRONMENT.md       # Root app internals (DOM, CSS vars, Chromium)
-|-- hook/                             # C# .NET hook (CLR profiler injection layer)
-|   |-- Entry.cs                 (33) # Profiler injection entry. ModuleInitializer + constructor.
-|   |-- NativeEntry.cs           (66) # Alternative entry via hostfxr. Diagnostic-heavy.
-|   |-- StartupHook.cs         (~577) # Multi-phase startup orchestrator, version migration, deferred features (Phase 4.5a-h).
-|   |-- HtmlPatchVerifier.cs   (429)  # Phase 0: self-healing HTML patches + FileSystemWatcher.
-|   |-- AvaloniaReflection.cs (~2383) # Reflection cache for Avalonia types, props, methods.
-|   |-- VisualTreeWalker.cs    (554)  # Visual tree traversal for settings layout discovery.
-|   |-- SidebarInjector.cs    (~1729) # LayoutUpdated + timer-based sidebar monitor, injection, click events.
-|   |-- ContentPages.cs     (~3400)  # Settings page builders (Uprooted, Plugins, Themes).
-|   |-- ThemeEngine.cs       (~1280)  # ThemeEngine v2: resource-first ThemeDictionaries overrides + OKLCH palette + custom ping color.
-|   |-- ColorPickerPopup.cs    (533)  # HSL color picker popup for custom theme colors.
-|   |-- ColorUtils.cs          (262)  # Color parsing, HSL conversion, contrast calculation.
-|   |-- UprootedSettings.cs   (~170)  # INI-based settings (System.Text.Json workaround).
-|   |-- PlatformPaths.cs        (29)  # Cross-platform path resolution (Windows + Linux).
-|   |-- DotNetBrowserReflection.cs (1914) # Reflection cache for DotNetBrowser types, IBrowser discovery.
-|   |-- BrowserDiscovery.cs    (496)  # Phase 4.5 diagnostic scanner (visual tree + assembly dump).
-|   |-- LinkEmbedEngine.cs    (~2409) # Avalonia-native link embed engine (OG/oEmbed/video + visual tree injection).
-|   |-- AnimatedImage.cs       (795)  # Animated GIF/WebP decoder + timer playback (SkiaSharp reflection).
-|   |-- MessageLogger.cs     (~2100) # Message logger (WIP): INPC-driven edit/delete detection, dedup, persistence, visual indicators.
-|   |-- MessageStore.cs        (232)  # Flat-file message log persistence (pipe-delimited, append-only).
-|   |-- NsfwFilter.cs          (473)  # Avalonia-native NSFW content filter (visual tree scan + blur/reveal overlay), pending production validation.
-|   |-- SilentTypingEngine.cs   (~90) # DiagnosticListener-based SetTypingIndicator interception (redirect to localhost:0).
-|   |-- RootcordEngine.cs    (~2873) # Experimental Discord-style vertical server sidebar replacement.
-|   |-- Logger.cs               (46)  # Thread-safe file logging to uprooted-hook.log.
-|   |-- UprootedHook.csproj          # .NET 10.0 project file, nullable enabled.
-|   `-- SESSION_STATE.md              # Session state handoff between dev sessions.
-|-- src/                              # TypeScript source (browser injection layer)
-|   |-- core/                         # Runtime core
-|   |   |-- preload.ts                # Entry point injected into Chromium context.
-|   |   |-- pluginLoader.ts           # Plugin lifecycle manager and event router.
-|   |   |-- patcher.ts                # HTML file injection (script/CSS tag insertion).
-|   |   `-- settings.ts               # File-based settings persistence (CLI/Node.js).
-|   |-- api/                          # Public plugin API
-|   |   |-- index.ts                  # Barrel export: bridge, css, dom, native.
-|   |   |-- bridge.ts                 # ES6 Proxy wrappers for Root's bridge globals.
-|   |   |-- css.ts                    # Inject/remove <style> elements by ID.
-|   |   |-- dom.ts                    # DOM utilities: waitForElement, observe, nextFrame.
-|   |   `-- native.ts                 # CSS variable get/set, native bridge logging.
-|   |-- plugins/                      # Built-in plugins
-|   |   |-- sentry-blocker/           # Privacy: blocks Sentry telemetry (fetch/XHR/sendBeacon).
-|   |   |   `-- index.ts
-|   |   |-- themes/                   # CSS variable theme engine.
-|   |   |   |-- index.ts              # Plugin definition + color math.
-|   |   |   |-- themes.json           # Theme definitions (variable overrides).
-|   |   |   `-- forest-green.css      # Theme CSS, loaded at build time.
-|   |   `-- settings-panel/           # Settings UI injected into Root's web sidebar.
-|   |       |-- index.ts              # Plugin entry, lifecycle hooks.
-|   |       |-- panel.ts              # DOM injection and MutationObserver.
-|   |       |-- panel.css             # Styles for settings panel.
-|   |       `-- components.ts         # UI component builders.
-|   `-- types/                        # TypeScript type definitions
-|       |-- bridge.ts                 # INativeToWebRtc (42 methods), IWebRtcToNative (29 methods).
-|       |-- plugin.ts                 # UprootedPlugin, Patch, SettingField interfaces.
-|       |-- settings.ts               # UprootedSettings, PluginSettings, DEFAULT_SETTINGS.
-|       `-- root.ts                   # Window augmentation, branded GUID types.
-|-- installer/                        # Console TUI installer (Rust)
-|   `-- src-tauri/                    # Rust source
-|       |-- src/                      # Rust source files
-|       |   |-- main.rs              # Console TUI entry point (ratatui)
-|       |   |-- cli.rs              # Plain ANSI output mode (--plain, --diagnose)
-|       |   |-- detection.rs        # Root installation detection
-|       |   |-- patcher.rs          # HTML patch install/uninstall/repair
-|       |   |-- hook.rs             # File deployment + env var management
-|       |   |-- settings.rs        # JSON settings management
-|       |   `-- embedded.rs        # Embedded resource management
-|       `-- artifacts/              # Staging directory for build artifacts
-|-- scripts/                          # Build and utility scripts
-|   |-- build.ts                      # esbuild bundler: src/ -> dist/ (IIFE + CSS).
-|   |-- build-installer.ps1           # Full installer build pipeline (5 steps).
-|   |-- install.ts                    # CLI: calls patcher.install().
-|   |-- uninstall.ts                  # CLI: calls patcher.uninstall().
-|   |-- install-hook.ps1              # PowerShell hook installation helper.
-|   |-- uninstall-hook.ps1            # PowerShell hook uninstallation helper.
-|   |-- patch_binary.py               # Binary patching utility (StartupHooks enable).
-|   |-- verify-install.ps1            # Post-install verification.
-|   |-- diagnose.ps1                  # Diagnostic information collector.
-|   |-- analyze-log.py                # Hook log analyzer.
-|   |-- poll-log.ps1                  # Log file poller.
-|   |-- watch-log.ps1                 # Log file watcher.
-|   `-- test_sandbox.wsb              # Windows Sandbox test configuration.
-|-- tools/                            # Binary tools and build utilities
-|   |-- uprooted_profiler.c           # CLR profiler source (ICorProfilerCallback, IL injection).
-|   |-- uprooted_profiler.dll         # Compiled CLR profiler (Windows x64).
-|   |-- uprooted_profiler_linux.c     # CLR profiler source (Linux variant).
-|   |-- chromium_wrapper.cs           # Chromium wrapper utility.
-|   |-- chromium_wrapper.exe          # Compiled Chromium wrapper.
-|   `-- (other build scripts, DLLs, and diagnostic tools)
-|-- tests/                            # C# unit tests (170 tests passing as of 2026-02-20)
-|   `-- UprootedTests/
-|       |-- ColorUtilsTests.cs        # ColorUtils test coverage.
-|       |-- GradientBrushTests.cs     # Gradient brush test coverage.
-|       |-- ClearUrlsEngineTests.cs   # Compose URL sanitizer coverage.
-|       |-- UprootedSettingsTests.cs  # INI settings/cache coverage.
-|       |-- MessageStoreTests.cs      # Flat-file message persistence coverage.
-|       `-- UprootedTests.csproj      # Test project file.
-|-- hook-test/                        # .NET hook integration test harness
-|-- site/                             # Marketing website (Astro)
-|   |-- src/
-|   |   |-- layouts/                  # Page layouts.
-|   |   `-- pages/                    # Page content (index.astro).
-|   `-- package.json
-|-- legacy/                           # Superseded Python binary patchers (archived)
-|-- research/                         # Reverse engineering notes and analysis
-|-- packaging/                        # Packaging and distribution scripts
-|-- screenshots/                      # Application screenshots
-|-- dist/                             # Prebuilt TypeScript bundle
-|   |-- uprooted-preload.js           # IIFE bundle injected via <script> tag.
-|   |-- uprooted-preload.js.map       # Source map.
-|   `-- uprooted.css                  # Combined CSS from all plugins.
-|-- package.json                      # pnpm workspace root (v0.4.2).
-|-- pnpm-workspace.yaml               # Monorepo: root, site/ (installer is standalone Rust).
-|-- tsconfig.json                     # ES2022, strict, @uprooted/* path alias.
-|-- tsconfig.build.json               # Build-specific TypeScript config.
-|-- Install-Uprooted.ps1             # PowerShell one-click installer (Profiler + StartupHooks).
-|-- Uninstall-Uprooted.ps1           # PowerShell uninstaller.
-|-- install-uprooted-linux.sh         # Bash installer for Linux.
-|-- uninstall-uprooted-linux.sh       # Bash uninstaller for Linux.
-|-- uprooted.sln                      # Visual Studio solution (hook + tests).
-|-- CLAUDE.md                         # AI contributor guidance.
-|-- CONTRIBUTING.md                   # Contribution guidelines.
-|-- README.md                         # Repository landing page.
-`-- LICENSE                           # Custom license.
-```
-
-### Monorepo workspaces
-
-This is a pnpm workspace with two packages:
-
-| Package | Path | Description |
-|---------|------|-------------|
-| Root | `./` | TypeScript source, build scripts, C# hook, shared config |
-| Site | `./site/` | Astro marketing site (uprooted.sh) |
-
-The installer (`./installer/src-tauri/`) is a standalone Rust console TUI and is not part of the pnpm workspace.
-
-### Build output
-
-| Artifact | Source | Command |
-|----------|--------|---------|
-| `dist/uprooted-preload.js` | `src/` | `pnpm build` |
-| `dist/uprooted.css` | `src/plugins/**/*.css` | `pnpm build` |
-| `hook/bin/Release/net10.0/UprootedHook.dll` | `hook/` | `dotnet build hook/ -c Release` |
-| `tools/uprooted_profiler.dll` | `tools/uprooted_profiler.c` | `cl.exe` via VS Build Tools |
-| `uprooted.exe` / `uprooted` | All of the above | `cargo build --release` in `installer/src-tauri/` |
+> Full file tree with descriptions: [`CLAUDE.md` § Repository Structure](../../CLAUDE.md#repository-structure).
+> Build commands: [`CLAUDE.md` § Build](../../CLAUDE.md#build).
 
 ---
 
@@ -317,7 +159,7 @@ This section describes the key classes and modules that form the framework's bac
 | `Entry` | `hook/Entry.cs` | Profiler injection entry point. `[ModuleInitializer]` and constructor both guarded by `Interlocked.CompareExchange` for one-time initialization. Calls `StartupHook.Initialize()`. |
 | `StartupHook` | `hook/StartupHook.cs` | Initialization orchestrator. Process name guard, background thread, multi-phase startup (Phase 0-5). Coordinates Avalonia injection and DotNetBrowser feature loading. |
 | `HtmlPatchVerifier` | `hook/HtmlPatchVerifier.cs` | Self-healing HTML patches. Runs at Phase 0 (no Avalonia needed). Verifies injection markers exist in profile HTML files. Sets up `FileSystemWatcher` to re-patch when Root auto-updates overwrite files. |
-| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (2030 lines). |
+| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (2920 lines). |
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
 | `SidebarInjector` | `hook/SidebarInjector.cs` | Settings page monitor. 200ms timer polls the visual tree, detects settings page open/close, injects the UPROOTED sidebar section, manages content page overlays, handles click events and cleanup. |
 | `ContentPages` | `hook/ContentPages.cs` | Page builders for the Uprooted, Plugins, and Themes settings pages. Creates native Avalonia controls via reflection, matching Root's exact card styling (background, corner radius, border, padding, typography). |
@@ -334,9 +176,13 @@ This section describes the key classes and modules that form the framework's bac
 | `MessageStore` | `hook/MessageStore.cs` | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits. |
 | `AutoUpdater` | `hook/AutoUpdater.cs` | In-process auto-updater with two channels. **Stable** checks `The-Uprooted-Project/uprooted` (public) via `/releases/latest`. **Developer** checks `The-Uprooted-Project/uprooted-private` (private) via `/releases?per_page=1` (includes pre-releases) with XOR-encrypted PAT for auth. Downloads encrypted `.uprpkg` package, decrypts (multi-layer XOR: 64-byte master key + 32-byte nonce + position-dependent derivation), unpacks 6 files to staging, verifies, overwrites in-place. Hash-based same-version hotfix detection on manual checks. HTTP via reflection (trimming-safe). See [Hook Reference § AutoUpdater](HOOK_REFERENCE.md#autoupdater-update-channels-and-package-system). |
 | `ClearUrlsEngine` | `hook/ClearUrlsEngine.cs` | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor on send. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
-| `ProfileBadgeInjector` | `hook/ProfileBadgeInjector.cs` | Injects "Uprooted Dev" badge into profile popups when update channel is Developer. 500ms timer polls TopLevel windows for popup controls. |
+| `ProfileBadgeInjector` | `hook/ProfileBadgeInjector.cs` | Injects "Uprooted Dev" badge into profile popups when update channel is Developer. Event-driven OverlayLayer detection + 500ms fallback poll (1130 lines). |
 | `NsfwFilter` | `hook/NsfwFilter.cs` | Avalonia-native NSFW content filter. 500ms scan timer DFS-walks visual tree for `Image` controls, classifies via Vision API with `SemaphoreSlim(3)` concurrency cap, hides NSFW images with overlay (click-to-reveal). Phase 4.5g, no DotNetBrowser dependency. |
-| `Logger` | `hook/Logger.cs` | Thread-safe file logging. Writes to `uprooted-hook.log` in the profile directory with timestamps and `[Category]` prefixes. Swallows its own exceptions to avoid crashing Root. |
+| `TranslateEngine` | `hook/TranslateEngine.cs` | DeepL-powered message translation (Phase 4.5i). Scans visual tree for CTextBlock nodes, adds translate context menu items, fetches translations via DeepL API (1145 lines). |
+| `TranslateConfigPopup` | `hook/TranslateConfigPopup.cs` | Translate configuration popup UI — language picker, API key input, test connection button (511 lines). |
+| `UprootedPresenceBeacon` | `hook/UprootedPresenceBeacon.cs` | Presence beacon for Uprooted user detection via gRPC metadata injection (Phase 4.5j, 470 lines). |
+| `ReconLogger` | `hook/ReconLogger.cs` | Visual tree + style property diagnostic dumper for development/debugging (786 lines). |
+| `Logger` | `hook/Logger.cs` | Thread-safe file logging (113 lines). Writes to `uprooted-hook.log` in the profile directory with timestamps and `[Category]` prefixes. Swallows its own exceptions to avoid crashing Root. |
 
 ### TypeScript Browser Layer
 
@@ -490,6 +336,30 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 - **Thread:** Background (deferred startup delay), work dispatched to UI as needed
 - **Mechanism:** DFS visual tree scan for `Image` controls, classify with Vision API (bounded concurrency), blur with click-to-reveal overlay.
 - **Status:** Avalonia-native redesign is deployed; production validation is still pending.
+
+### Phase 4.5h: Rootcord Engine
+
+**Purpose:** Start the Discord-style vertical server sidebar replacement (experimental).
+
+- **File:** `hook/RootcordEngine.cs`
+- **Thread:** Background (8s delay, dormant if disabled in settings)
+- **Status:** Experimental. Deployed with crash guards, awaiting validation.
+
+### Phase 4.5i: Translate Engine
+
+**Purpose:** Start the DeepL-powered message translation engine.
+
+- **File:** `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
+- **Thread:** Background (deferred startup), UI dispatch for context menu injection
+- **Status:** Deployed, awaiting validation.
+
+### Phase 4.5j: Presence Beacon
+
+**Purpose:** Start Uprooted user detection via gRPC metadata.
+
+- **File:** `hook/UprootedPresenceBeacon.cs`
+- **Thread:** Background
+- **Status:** Deployed, awaiting validation.
 
 ### Phase 5: DotNetBrowser Feature Loading
 
@@ -711,6 +581,8 @@ Root's settings page uses exact styling values. The C# `ContentPages` class repl
 
 ## 9. Critical Rules
 
+> **Compact list:** [`CLAUDE.md` § Critical Rules](../../CLAUDE.md#critical-rules). Full explanations with code examples below.
+
 These rules reflect hard-won lessons from real bugs. Violating them causes crashes, freezes, or silent failures.
 
 ### C# Hook Rules
@@ -824,88 +696,10 @@ The patcher uses comment markers (`<!-- uprooted:start -->` / `<!-- uprooted:end
 
 ## 12. AI Contributor Guide
 
-Guidance for AI-assisted development sessions working on the Uprooted codebase. See also the project-level [CLAUDE.md](../../CLAUDE.md) for repository-specific rules.
-
-### What to Read First
-
-When onboarding to this codebase, read these files in order:
-
-1. **This document** (`docs/framework/ARCHITECTURE.md`) -- System overview, layer boundaries, critical rules.
-2. **`hook/StartupHook.cs`** -- Understand the C# entry point and initialization flow.
-3. **`src/core/preload.ts`** -- Understand the TypeScript entry point and plugin bootstrap.
-4. **`src/types/plugin.ts`** -- Understand the plugin contract.
-5. **`src/api/bridge.ts`** -- Understand the bridge proxy mechanism.
-6. **`hook/SidebarInjector.cs`** -- Understand native UI injection and the timer-based monitor.
-7. **`hook/AvaloniaReflection.cs`** (first 100 lines) -- Understand the reflection constraint and type cache approach.
-
-### How to Identify Which Layer a Change Belongs To
-
-| If the change involves... | It belongs in... |
-|--------------------------|------------------|
-| Avalonia controls, visual tree, native UI | `hook/` (C# .NET hook) |
-| Theme resource dictionaries, color overrides | `hook/ThemeEngine.cs` |
-| DOM manipulation, CSS variables, browser UI | `src/` (TypeScript layer) |
-| Bridge method interception | `src/api/bridge.ts` + plugin patches |
-| HTML file injection | `src/core/patcher.ts` or `hook/HtmlPatchVerifier.cs` |
-| Installation, deployment, env vars | `installer/`, `scripts/`, or `*.ps1`/`*.sh` |
-| Plugin development | `src/plugins/{name}/` |
-
-### Common Pitfalls
-
-1. **Confusing the two settings systems.** The C# hook uses `uprooted-settings.ini` (INI format, key=value). The TypeScript layer uses `uprooted-settings.json` (JSON, inlined into HTML). They are separate files with separate schemas.
-
-2. **Assuming TypeScript changes affect native UI.** The TypeScript layer runs in Chromium. The C# hook runs in .NET. They do not communicate at runtime. Changing `src/plugins/settings-panel/` does not affect the native Avalonia sidebar.
-
-3. **Forgetting to dispatch to the UI thread.** Any C# code that creates or modifies Avalonia controls must run on the UI thread via `resolver.RunOnUIThread()`. Forgetting this causes cross-thread access exceptions or silent failures.
-
-4. **Using `Type.GetType()` for Avalonia types.** This is the most common mistake. It fails silently in Root's single-file context. Always use `AvaloniaReflection`.
-
-5. **Modifying `ContentControl.Content` directly.** This freezes the UI. Use the Grid overlay pattern.
-
-6. **Not handling null from reflection calls.** Every `AvaloniaReflection` method can return null. Types may not exist in a future Avalonia version.
-
-7. **Cross-contaminating repos.** The public repo (`The-Uprooted-Project/uprooted`) and private repo (`The-Uprooted-Project/uprooted-private`) are strictly separate. Never copy code, commits, or references between them.
-
-### When to Follow Existing Patterns
-
-**Always follow existing patterns when:**
-- Adding a new settings page -> copy the pattern in `hook/ContentPages.cs`
-- Adding a new plugin -> copy the structure in `src/plugins/themes/`
-- Adding a new API function -> add to appropriate file in `src/api/`
-- Adding new Avalonia control creation -> add to `hook/AvaloniaReflection.cs`
-- Adding a new sidebar item -> extend the list in `hook/SidebarInjector.cs`
-
-**Consider a new pattern only when:**
-- The existing approach has a demonstrated failure mode
-- The change enables a fundamentally new capability
-- Multiple contributors have independently hit the same limitation
-
-### How to Verify Changes
-
-| Layer | Build | Verify |
-|-------|-------|--------|
-| TypeScript | `pnpm build` | No build errors, single IIFE bundle in `dist/` |
-| C# hook | `dotnet build hook/ -c Release` | No build errors, DLL in `hook/bin/Release/net10.0/` |
-| Integration | `Install-Uprooted.ps1` + launch Root | UPROOTED section in sidebar, pages render, no errors in `uprooted-hook.log` |
-| Tests | `dotnet test tests/` | All tests pass |
-
-### Things That Will Break on Root Updates
-
-These are the fragile integration points that must be checked when Root releases a new version:
-
-- Root renames "APP SETTINGS" text -> sidebar injection fails
-- Root changes settings page Grid layout -> content overlay mispositioned
-- Root renames CSS variables (`--rootsdk-*`) -> themes have no effect
-- Root moves to AOT compilation -> profiler IL injection fails
-- Root moves HTML files to a different path -> patching cannot find targets
-- Root adds integrity checks to HTML files -> patching triggers verification failure
-- Root switches from DotNetBrowser -> TypeScript layer incompatible
-- Root renames bridge globals (`__nativeToWebRtc`, `__webRtcToNative`) -> proxy fails
-- Root uses `Object.freeze()` on bridge objects -> proxy cannot wrap them
-- Root upgrades Avalonia major version -> reflection type/property names may change
+> Full AI contributor guidance: [`CLAUDE.md`](../../CLAUDE.md). Common pitfalls and layer identification: [`CLAUDE.md` § Critical Rules](../../CLAUDE.md#critical-rules).
 
 ---
 
-**Canonical for:** system design, layer boundaries, 12 critical rules, threading model, error handling patterns, startup phase overview, known limitations, security considerations, AI contributor guide
-**Not canonical for:** per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | native profiler → [CLR_PROFILER.md](CLR_PROFILER.md)
-*Architecture reference for Uprooted v0.4.2. Last updated 2026-02-20.*
+**Canonical for:** system design, layer boundaries, critical rules (full with code), threading model, error handling patterns, startup phase overview, known limitations, security considerations
+**Not canonical for:** per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | native profiler → [CLR_PROFILER.md](CLR_PROFILER.md) | repository structure → [CLAUDE.md](../../CLAUDE.md)
+*Architecture reference for Uprooted v0.4.2. Last updated 2026-02-21.*

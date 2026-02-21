@@ -2,6 +2,8 @@
 
 Navigation hub for all Uprooted documentation. Use this page to find the right document for your goal.
 
+> **AI contributors:** Use [`NEW-SESSION.md`](../NEW-SESSION.md) § Task Dispatch Table instead of this file for task-specific doc routing.
+
 > **Related docs:** [Architecture](framework/ARCHITECTURE.md) | [How It Works](HOW_IT_WORKS.md) | [Contributing](../CONTRIBUTING.md)
 
 ---
@@ -58,49 +60,6 @@ Navigation hub for all Uprooted documentation. Use this page to find the right d
 | Message Logger             | [`docs/plugins/builtin/message-logger.md`](plugins/builtin/message-logger.md)           | Logs deleted messages with red visual indicators (C# hook; deletion working, edit detection WIP)                             | Everyone                               |
 | Archives                   | [`docs/archives/`](archives/)                                                           | Miscellaneous notes, one-off fixes, and historical context                                                                   | Contributors                           |
 | AI Session Onboarding      | [`NEW-SESSION.md`](../NEW-SESSION.md)                                                   | Context-efficient AI agent onboarding reference card                                                                         | AI contributors                        |
-
----
-
-## AI Workflow Paths
-
-Ordered read sequences for common contributor tasks. Read only what you need — don't read everything.
-
-### Fix theme inconsistency bugs (controls wrong color, toggle not updating on state change)
-1. [ROOT_CONTROL_REFERENCE §Theme System](framework/ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — why current ThemeEngine fails (targets wrong keys)
-2. [THEME_ENGINE_DEEP_DIVE §Resource-First Migration](framework/THEME_ENGINE_DEEP_DIVE.md#resource-first-migration-plan) — the correct fix + 32-key derivation table
-3. [ROOT_THEME_SYSTEM_FINDINGS](../research/ROOT_THEME_SYSTEM_FINDINGS.md) — all 32 exact hex values across 3 themes
-
-### Build a C# hook feature (Avalonia, visual tree injection)
-1. **Check `research/ilspy-dumps/` first** — Root's .NET assemblies are fully decompilable. Always examine Root's source before reimplementing UI elements. Root controls (`RootScrollViewer`, `RootBorder`, etc.) can be instantiated directly at runtime — their styles and templates are already loaded.
-2. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — patterns for the specific feature area
-3. [AVALONIA_PATTERNS](framework/AVALONIA_PATTERNS.md) — reflection pitfalls, Root custom control types
-3. [ROOT_CONTROL_REFERENCE](framework/ROOT_CONTROL_REFERENCE.md) — ILSpy-confirmed type names, style classes, settings page pattern
-
-### Build a TypeScript plugin (browser-side, DotNetBrowser Chromium)
-1. [TYPESCRIPT_REFERENCE](framework/TYPESCRIPT_REFERENCE.md) — layer architecture and constraints
-2. [API_REFERENCE](plugins/API_REFERENCE.md) — plugin lifecycle and full API surface
-3. [BRIDGE_REFERENCE](plugins/BRIDGE_REFERENCE.md) — IPC intercept patterns
-
-### Work on message features (Logger, embeds, NoReplyPing, Translate)
-1. [ROOT_CONTROL_REFERENCE §Message View](framework/ROOT_CONTROL_REFERENCE.md#message-view-internals) — named controls, `updateBackgroundColor()`, injection points
-2. [ROOT_CONTROL_REFERENCE §Mention System](framework/ROOT_CONTROL_REFERENCE.md#mention-and-markdown-system) — `CSpan`, mention keys, style selectors
-3. [HOOK_REFERENCE](framework/HOOK_REFERENCE.md) — LinkEmbedEngine / MessageLogger implementation details
-
-### Understand Root's internals from scratch
-1. [HOW_IT_WORKS](HOW_IT_WORKS.md) — narrative from RE to running mod
-2. [ROOT_INTERNALS](research/ROOT_INTERNALS.md) — process architecture, DotNetBrowser, authentication
-3. [ROOT_CONTROL_REFERENCE](framework/ROOT_CONTROL_REFERENCE.md) — ILSpy-confirmed control types (supersedes ROOT_INTERNALS for controls)
-4. [ROOT_THEME_SYSTEM_FINDINGS](../research/ROOT_THEME_SYSTEM_FINDINGS.md) — color system (supersedes ROOT_INTERNALS §6)
-
-### Debug CLR profiler / startup failures / IL injection
-1. [CLR_PROFILER](framework/CLR_PROFILER.md) — profiler internals, GUID, env vars, IL injection
-2. [DOTNET_RUNTIME](framework/DOTNET_RUNTIME.md) — trimming gotchas, assembly scanning, AppDomain
-3. [HOOK_REFERENCE §Startup Sequence](framework/HOOK_REFERENCE.md#startup-sequence) — Phase 0–5 timing and guards
-
-### gRPC protocol / SilentTyping / network interception
-1. [GRPC_PROTOCOL](research/GRPC_PROTOCOL.md) — service catalog, message format, 27 services
-2. [ROOT_INTERNALS §gRPC](research/ROOT_INTERNALS.md#9-grpc-backend) — how Root uses gRPC
-3. [HOOK_REFERENCE §ClearUrlsEngine](framework/HOOK_REFERENCE.md#clearurlsengine-compose-input-interception) — AvaloniaEdit intercept pattern (related technique)
 
 ---
 
@@ -178,84 +137,3 @@ For setting up a development environment.
 3. [Contributing](../CONTRIBUTING.md) -- branch rules and PR process
 4. [Planning Reference](dev/PLANNING_REFERENCE.md) -- technical debt and known issues
 
----
-
-## Quick-Reference Topic Finder
-
-| Topic                         | Document                                                                | Section                     |
-| ----------------------------- | ----------------------------------------------------------------------- | --------------------------- |
-| Critical rules                | [Architecture](framework/ARCHITECTURE.md)                               | Critical Rules              |
-| AddHandler routing strategies | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)                     | Pitfalls                    |
-| Auto-update (.uprpkg)         | [Build Guide](install/BUILD.md)                                         | Auto-Update Package         |
-| Auto-updater                  | [Hook Reference](framework/HOOK_REFERENCE.md)                           | AutoUpdater deep dive       |
-| Auto-update channels          | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Update Channels             |
-| Avalonia patterns             | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)                     | --                          |
-| AvaloniaEdit (compose input)  | [Avalonia Patterns](framework/AVALONIA_PATTERNS.md)                     | Third-Party Controls        |
-| Avalonia reflection           | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Avalonia reflection cache   |
-| Avalonia visual tree          | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Visual tree traversal       |
-| Branch rules                  | [Contributing](../CONTRIBUTING.md)                                      | Branch Rules                |
-| Bridge API (IPC)              | [Bridge Reference](plugins/BRIDGE_REFERENCE.md)                         | --                          |
-| Bridge proxies                | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)               | Bridge proxy system         |
-| Build pipeline                | [Build Guide](install/BUILD.md)                                         | --                          |
-| Chromium context              | [Root Environment](plugins/ROOT_ENVIRONMENT.md)                         | Chromium context            |
-| ClearURLs                     | [Hook Reference](framework/HOOK_REFERENCE.md)                           | ClearUrlsEngine             |
-| Compose input interception    | [Hook Reference](framework/HOOK_REFERENCE.md)                           | ClearUrlsEngine             |
-| CLR profiler attach           | [CLR Profiler](framework/CLR_PROFILER.md)                               | Attach flow                 |
-| CLR profiler concepts         | [.NET Runtime](framework/DOTNET_RUNTIME.md)                             | CLR Profiler API            |
-| Color utilities               | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)               | Color utilities             |
-| Content pages                 | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Content pages               |
-| CSS variables                 | [Root Environment](plugins/ROOT_ENVIRONMENT.md)                         | CSS variables               |
-| Custom themes                 | [Theme Engine Deep Dive](framework/THEME_ENGINE_DEEP_DIVE.md)           | Custom theme generation     |
-| Debugging the hook            | [Contributing Technical](dev/CONTRIBUTING_TECHNICAL.md)                 | Debugging the C# Hook       |
-| Dev environment setup         | [Contributing Technical](dev/CONTRIBUTING_TECHNICAL.md)                 | Development Environment     |
-| .NET runtime                  | [.NET Runtime](framework/DOTNET_RUNTIME.md)                             | --                          |
-| DOM structure                 | [Root Environment](plugins/ROOT_ENVIRONMENT.md)                         | DOM structure               |
-| Environment variables         | [CLR Profiler](framework/CLR_PROFILER.md)                               | Environment variables       |
-| File deployment               | [Installer Reference](framework/INSTALLER.md)                           | File deployment             |
-| gRPC library                  | [gRPC Library Reference](research/GRPC_LIB_REFERENCE.md)                | --                          |
-| gRPC protocol                 | [gRPC Protocol](research/GRPC_PROTOCOL.md)                              | --                          |
-| HTML patching                 | [Hook Reference](framework/HOOK_REFERENCE.md)                           | HTML patch verification     |
-| IL injection                  | [CLR Profiler](framework/CLR_PROFILER.md)                               | IL injection                |
-| Install / uninstall           | [Installation Guide](install/INSTALLATION.md)                           | --                          |
-| Installer detection           | [Installer Reference](framework/INSTALLER.md)                           | Root detection              |
-| Lifecycle hooks               | [Plugin API Reference](plugins/API_REFERENCE.md)                        | Lifecycle hooks             |
-| Linux installer               | [Installation Guide](install/INSTALLATION.md)                           | Linux                       |
-| Live theme preview            | [Theme Engine Deep Dive](framework/THEME_ENGINE_DEEP_DIVE.md)           | Live Preview System         |
-| Logging                       | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Logging                     |
-| Platform paths                | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Platform paths              |
-| Planned plugins               | [Plugin Roadmap](PLUGIN_ROADMAP.md)                                     | --                          |
-| Plugin advanced patterns      | [Advanced Plugin Dev](plugins/ADVANCED_DEVELOPMENT.md)                  | --                          |
-| Plugin contribution workflow  | [Plugin Contribution Guide](plugins/CONTRIBUTING_PLUGINS.md)            | --                          |
-| Plugin examples               | [Plugin Examples](plugins/EXAMPLES.md)                                  | --                          |
-| Plugin settings               | [Plugin API Reference](plugins/API_REFERENCE.md)                        | Settings                    |
-| Plugin storage                | [Plugin API Reference](plugins/API_REFERENCE.md)                        | Storage                     |
-| ILSpy decompiled files        | [ILSpy Dump Index](../research/ILSPY_DUMP_INDEX.md)                    | --                          |
-| Research files                | [Research Index](research/RESEARCH_INDEX.md)                            | --                          |
-| Reverse engineering           | [Reverse Engineering](research/REVERSE_ENGINEERING.md)                  | --                          |
-| Root architecture             | [Root Internals](research/ROOT_INTERNALS.md)                            | --                          |
-| Root custom controls          | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Custom Controls             |
-| Root style classes            | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Style Class System          |
-| Root message view             | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Message View Internals      |
-| Root mention system           | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Mention and Markdown System |
-| Root settings page pattern    | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Settings Page Pattern       |
-| Ping color / mention highlight| [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | Ping Color                  |
-| Root DataStore keys           | [Root Control Reference](framework/ROOT_CONTROL_REFERENCE.md)           | DataStore Keys              |
-| Root detection                | [Installer Reference](framework/INSTALLER.md)                           | Root detection              |
-| Security findings             | [Security Research](research/SECURITY_RESEARCH.md)                      | --                          |
-| Sidebar injection             | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Sidebar injection           |
-| Startup phases                | [Hook Reference](framework/HOOK_REFERENCE.md)                           | Startup phases              |
-| Silent Typing                 | [Hook Reference](framework/HOOK_REFERENCE.md)                           | SilentTypingEngine          |
-| Technical debt                | [Planning Reference](dev/PLANNING_REFERENCE.md)                         | Concerns and Technical Debt |
-| Test infrastructure           | [Testing Guide](dev/TESTING.md)                                         | --                          |
-| Token format / auth           | [Root Internals](research/ROOT_INTERNALS.md)                            | Authentication and Tokens   |
-| Sentry blocker                | [Sentry Blocker](plugins/builtin/sentry-blocker.md)                     | --                          |
-| Theme engine (browser)        | [Themes](plugins/builtin/themes.md)                                     | --                          |
-| Theme engine                  | [TypeScript Reference](framework/TYPESCRIPT_REFERENCE.md)               | Theme engine                |
-| Root theme resource keys      | [Root Theme System Findings](../research/ROOT_THEME_SYSTEM_FINDINGS.md) | --                          |
-| Theme system (Root)           | [Root Environment](plugins/ROOT_ENVIRONMENT.md)                         | Theme system                |
-| Link embeds                   | [Link Embeds](plugins/builtin/link-embeds.md)                           | --                          |
-| Message logger                | [Message Logger](plugins/builtin/message-logger.md)                     | --                          |
-| Message send interception     | [Hook Reference](framework/HOOK_REFERENCE.md)                           | ClearUrlsEngine             |
-| Mitigation countermeasures    | [Mitigation Countermeasures](research/MITIGATION_COUNTERMEASURES.md)     | --                          |
-| Settings panel (browser)      | [Settings Panel](plugins/builtin/settings-panel.md)                     | --                          |
-| Built-in plugins              | [Built-in Plugins Index](plugins/builtin/INDEX.md)                      | --                          |
