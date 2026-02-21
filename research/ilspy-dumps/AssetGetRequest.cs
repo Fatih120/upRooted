@@ -1,0 +1,154 @@
+using System;
+using System.CodeDom.Compiler;
+using Google.Protobuf;
+using Google.Protobuf.Collections;
+using Google.Protobuf.Reflection;
+
+namespace RootApp.WebApi.Shared.Grpc.Requests;
+
+public sealed class AssetGetRequest : IMessage<AssetGetRequest>, IMessage, IEquatable<AssetGetRequest>, IDeepCloneable<AssetGetRequest>, IBufferMessage
+{
+	private static readonly MessageParser<AssetGetRequest> _parser = new MessageParser<AssetGetRequest>(() => new AssetGetRequest());
+
+	private UnknownFieldSet _unknownFields;
+
+	private static readonly FieldCodec<string> _repeated_uris_codec = FieldCodec.ForString(10u);
+
+	private readonly RepeatedField<string> uris_ = new RepeatedField<string>();
+
+	[GeneratedCode("protoc", null)]
+	public static MessageParser<AssetGetRequest> Parser => _parser;
+
+	[GeneratedCode("protoc", null)]
+	public static MessageDescriptor Descriptor => AssetReflection.Descriptor.MessageTypes[0];
+
+	[GeneratedCode("protoc", null)]
+	MessageDescriptor IMessage.Descriptor => Descriptor;
+
+	[GeneratedCode("protoc", null)]
+	public RepeatedField<string> Uris => uris_;
+
+	[GeneratedCode("protoc", null)]
+	public AssetGetRequest()
+	{
+	}
+
+	[GeneratedCode("protoc", null)]
+	public AssetGetRequest(AssetGetRequest other)
+		: this()
+	{
+		uris_ = other.uris_.Clone();
+		_unknownFields = UnknownFieldSet.Clone(other._unknownFields);
+	}
+
+	[GeneratedCode("protoc", null)]
+	public AssetGetRequest Clone()
+	{
+		return new AssetGetRequest(this);
+	}
+
+	[GeneratedCode("protoc", null)]
+	public override bool Equals(object other)
+	{
+		return Equals(other as AssetGetRequest);
+	}
+
+	[GeneratedCode("protoc", null)]
+	public bool Equals(AssetGetRequest other)
+	{
+		if (other == null)
+		{
+			return false;
+		}
+		if (other == this)
+		{
+			return true;
+		}
+		if (!uris_.Equals(other.uris_))
+		{
+			return false;
+		}
+		return object.Equals(_unknownFields, other._unknownFields);
+	}
+
+	[GeneratedCode("protoc", null)]
+	public override int GetHashCode()
+	{
+		int num = 1;
+		num ^= uris_.GetHashCode();
+		if (_unknownFields != null)
+		{
+			num ^= _unknownFields.GetHashCode();
+		}
+		return num;
+	}
+
+	[GeneratedCode("protoc", null)]
+	public override string ToString()
+	{
+		return JsonFormatter.ToDiagnosticString(this);
+	}
+
+	[GeneratedCode("protoc", null)]
+	public void WriteTo(CodedOutputStream output)
+	{
+		output.WriteRawMessage(this);
+	}
+
+	[GeneratedCode("protoc", null)]
+	void IBufferMessage.InternalWriteTo(ref WriteContext P_0)
+	{
+		uris_.WriteTo(ref P_0, _repeated_uris_codec);
+		if (_unknownFields != null)
+		{
+			_unknownFields.WriteTo(ref P_0);
+		}
+	}
+
+	[GeneratedCode("protoc", null)]
+	public int CalculateSize()
+	{
+		int num = 0;
+		num += uris_.CalculateSize(_repeated_uris_codec);
+		if (_unknownFields != null)
+		{
+			num += _unknownFields.CalculateSize();
+		}
+		return num;
+	}
+
+	[GeneratedCode("protoc", null)]
+	public void MergeFrom(AssetGetRequest other)
+	{
+		if (other != null)
+		{
+			uris_.Add(other.uris_);
+			_unknownFields = UnknownFieldSet.MergeFrom(_unknownFields, other._unknownFields);
+		}
+	}
+
+	[GeneratedCode("protoc", null)]
+	public void MergeFrom(CodedInputStream input)
+	{
+		input.ReadRawMessage(this);
+	}
+
+	[GeneratedCode("protoc", null)]
+	void IBufferMessage.InternalMergeFrom(ref ParseContext P_0)
+	{
+		uint num;
+		while ((num = P_0.ReadTag()) != 0 && (num & 7) != 4)
+		{
+			uint num2 = num;
+			uint num3 = num2;
+			if (num3 != 10)
+			{
+				_unknownFields = UnknownFieldSet.MergeFieldFrom(_unknownFields, ref P_0);
+			}
+			else
+			{
+				uris_.AddEntriesFrom(ref P_0, _repeated_uris_codec);
+			}
+		}
+	}
+}

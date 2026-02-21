@@ -145,8 +145,10 @@ Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The r
 
 ### Decompile new classes (not yet in ilspy-dumps/)
 
-- [ ] **Decompile channel list / DM list views** — Low priority until channel-related plugins planned.
-- [ ] **Decompile navigation service** — How Root switches between pages. Would enable programmatic navigation.
+- [x] **Decompile channel list / DM list views** (2026-02-21) — ChannelsView, ChannelView, ChannelGroupView + VMs, TextChannelContentView, VoiceChannelContentView, DirectMessageContentView all added.
+- [x] **Decompile BrowserService + browser system** (2026-02-21) — Full RootApp.Browser.* namespace: BrowserService, BrowserPool, DeviceBrowser, RootAppBrowser, WebRtcBrowser, all bridges (AppToNative, NativeToWebRtc, WebRtcToNative, Turnstile).
+- [x] **Decompile all embedded assemblies** (2026-02-21) — RootApp.Core (UUID/asset types), RootApp.WebApi.Shared.Entities (~700 DTOs), RootApp.WebApi.Shared (gRPC services), RootApp.Utility, RootApp.AppHub.Client, RootApp.WebApi.Client.Shared, RootApp.Client.Domain.Windows.
+- [ ] **Decompile community settings sub-views** — Roles management, apps/bots configuration. Referenced in ViewFactory but not yet extracted.
 
 ---
 
