@@ -113,6 +113,7 @@ internal class HtmlPatchVerifier : IDisposable
     public void Dispose()
     {
         _debounceTimer?.Dispose();
+        _debounceTimer = null;
         _pollTimer?.Dispose();
         _pollTimer = null;
         foreach (var w in _watchers)
