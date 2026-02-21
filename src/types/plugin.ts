@@ -8,12 +8,15 @@ export interface Patch {
   bridge: "nativeToWebRtc" | "webRtcToNative";
   /** Method name on the bridge to intercept */
   method: string;
-  /** Called before the original method. Return false to cancel the call. */
-  before?(args: unknown[]): boolean | void | Promise<boolean | void>;
-  /** Called after the original method with its return value. */
-  after?(result: unknown, args: unknown[]): void | Promise<void>;
-  /** Replace the original method entirely. */
-  replace?(...args: unknown[]): unknown | Promise<unknown>;
+  /** Called before the original method. Return false to cancel the call.
+   *  Must be synchronous — the bridge proxy cannot await async handlers. */
+  before?(args: unknown[]): boolean | void;
+  /** Called after the original method with its return value.
+   *  Must be synchronous — the bridge proxy cannot await async handlers. */
+  after?(result: unknown, args: unknown[]): void;
+  /** Replace the original method entirely.
+   *  Must be synchronous — the bridge proxy cannot await async handlers. */
+  replace?(...args: unknown[]): unknown;
 }
 
 export interface SettingsDefinition {

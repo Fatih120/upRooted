@@ -15,7 +15,7 @@ export interface BridgeEvent {
   returnValue?: unknown;
 }
 
-type EventHandler = (event: BridgeEvent) => void | Promise<void>;
+type EventHandler = (event: BridgeEvent) => void;
 
 export class PluginLoader {
   private plugins = new Map<string, UprootedPlugin>();
