@@ -1717,11 +1717,12 @@ internal class RootcordEngine
         InvokeHomeCommand("ProfilePaneToggleCommand");
 
         // After the pane has had time to open, find and invoke the Settings button inside it
-        Task.Delay(350).ContinueWith(_ => _r.RunOnUIThread(() =>
+        var openSettingsToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        Task.Delay(350, openSettingsToken).ContinueWith(_ => _r.RunOnUIThread(() =>
         {
             try
             {
-                if (_rootSplitView == null) return;
+                if (_rootSplitView == null || openSettingsToken.IsCancellationRequested) return;
                 var walker = new VisualTreeWalker(_r);
                 foreach (var node in walker.DescendantsDepthFirst(_rootSplitView))
                 {
@@ -1755,7 +1756,7 @@ internal class RootcordEngine
                 Logger.Log(Tag, "OpenSettingsDirectly: Settings button not found in pane visual tree");
             }
             catch (Exception ex) { Logger.Log(Tag, $"OpenSettingsDirectly error: {ex.Message}"); }
-        }));
+        }), System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
     }
 
     /// <summary>
