@@ -1233,7 +1233,7 @@ internal class AvaloniaReflection
         catch { }
     }
 
-    public void SetCursorHand(object? control)
+    public void SetCursorHand(object? control, bool enablePressFeedback = true)
     {
         if (control == null || CursorType == null || StandardCursorType == null) return;
         try
@@ -1241,7 +1241,8 @@ internal class AvaloniaReflection
             var hand = Enum.Parse(StandardCursorType, "Hand");
             var cursor = Activator.CreateInstance(CursorType, hand);
             _controlCursor?.SetValue(control, cursor);
-            EnsurePressFeedback(control);
+            if (enablePressFeedback)
+                EnsurePressFeedback(control);
         }
         catch { }
     }
@@ -1553,6 +1554,27 @@ internal class AvaloniaReflection
             Logger.Log("Reflection", $"SubscribeEvent({eventName}) failed: {ex.Message}");
             return null;
         }
+    }
+
+    /// <summary>
+    /// Subscribe click-like behavior: callback fires only when press starts on control
+    /// and release ends on control (native button semantics).
+    /// </summary>
+    public void SubscribeClickReleased(object control, Action callback)
+    {
+        bool armed = false;
+        SubscribePointerEvent(control, "PointerPressed", (x, y) =>
+        {
+            armed = IsPointInside(control, x, y);
+        });
+        SubscribePointerEvent(control, "PointerReleased", (x, y) =>
+        {
+            var shouldFire = armed && IsPointInside(control, x, y);
+            armed = false;
+            if (shouldFire)
+                callback();
+        });
+        SubscribeEvent(control, "PointerCaptureLost", () => armed = false);
     }
 
     /// <summary>
@@ -2632,6 +2654,29 @@ internal class AvaloniaReflection
         catch (Exception ex)
         {
             Logger.Log("Reflection", $"SubscribePointerEvent({eventName}) failed: {ex.Message}");
+        }
+    }
+
+    private bool IsPointInside(object control, double x, double y)
+    {
+        try
+        {
+            var bounds = GetBounds(control);
+            var w = bounds?.W ?? 0;
+            var h = bounds?.H ?? 0;
+            if (w <= 0 || h <= 0)
+            {
+                var aw = control.GetType().GetProperty("ActualWidth")?.GetValue(control);
+                var ah = control.GetType().GetProperty("ActualHeight")?.GetValue(control);
+                if (aw is double da && da > 0) w = da;
+                if (ah is double db && db > 0) h = db;
+            }
+            if (w <= 0 || h <= 0) return true; // avoid false negatives if size unavailable
+            return x >= 0 && y >= 0 && x <= w && y <= h;
+        }
+        catch
+        {
+            return true;
         }
     }
 
