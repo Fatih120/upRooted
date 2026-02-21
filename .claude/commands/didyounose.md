@@ -1,5 +1,5 @@
 ---
-name: super-hi
+name: didyounose
 description: Deep-load session context — NEW-SESSION.md + TASKS.md + SESSION_STATE.md + selected ILSpy dumps based on task. Designed for 1M-token context models. Asks what to load before reading.
 allowed-tools:
   - Read
