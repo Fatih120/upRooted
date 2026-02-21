@@ -1,34 +1,62 @@
 # Tasks
 
 > Active task board for Uprooted contributors. Pick up items, mark them done, add new ones.
-> For strategic direction and long-term goals, see [docs/ROADMAP.md](docs/ROADMAP.md).
-> For planned plugins and implementation strategies, see [docs/PLUGIN_ROADMAP.md](docs/PLUGIN_ROADMAP.md).
+> For strategic direction: [docs/ROADMAP.md](docs/ROADMAP.md). For plugin plans: [docs/PLUGIN_ROADMAP.md](docs/PLUGIN_ROADMAP.md).
 
 ---
 
-## Up Next
+## Priority Focus
 
-Short-term tasks ready to be picked up. Roughly priority-ordered.
+Current focus areas (in order):
+1. **Bugfixes** — broken functionality, crashes, regressions
+2. **Visual consistency** — theme/UI mismatches, flash, stale colors
+3. **Performance** — startup time, memory, CPU
+4. **Anti-mitigation hardening** — survive Root updates, structural fallbacks
+5. **Organization** — structured logging, testing, linting
+6. **Hardening Alpha/Beta plugins** — production-ready validation
+7. **Experimental plugins** — lowest priority, validation only
 
-- [ ] **MessageLogger: real-world validation (v2)** — Major reliability overhaul deployed: property fix (DeletedAt/EditedAt DateTimeOffset?), author names (SenderMember chain), INPC event-driven detection, self-delete fallback (collection-presence check after 3s timeout), dedup. Validate: (1) delete own message — confirm self-delete fallback catches it; (2) have another user delete a message — confirm DeletedAt INPC event fires; (3) edit a message after 5s — confirm amber edit card appears with correct author name; (4) check card positioning (FindMessageGridInContainer was returning null — may need container structure investigation).
+---
+
+## Ready to Build
+
+### Bugfixes
+
+- [ ] **Version copy intercept** — The version info copy button only copies Root's version. Need to intercept and overwrite clipboard with all TextBlock lines (Root + Uprooted). Handler is commented out due to Root's async `SetTextAsync` racing with our clipboard write.
+  - Files: `hook/SidebarInjector.cs` (~line 1155)
+
+- [ ] **MessageLogger card positioning** — `FindMessageGridInContainer` returns null. Container structure may have changed; needs investigation.
   - Files: `hook/MessageLogger.cs`
 
-- [ ] **SilentTyping: verify with second account** — C# engine now successfully blocks SetTypingIndicator (confirmed in log). Need second-account test: type in one session, confirm the other sees no typing indicator.
-  - Files: `hook/SilentTypingEngine.cs`
+- [ ] **ProfileBadgeInjector false-positive refinement** — `IsProfilePopup` heuristic may match non-profile popups. Needs tree dump log analysis.
+  - Files: `hook/ProfileBadgeInjector.cs`
 
-- [ ] **NsfwFilter: validate Avalonia-native redesign** — Phase 4.5g deployed. Verify images are being classified and blurred. Check hook log for scan timer entries and Vision API calls. Confirm overlay + click-to-reveal works.
-  - Files: `hook/NsfwFilter.cs`
+### Visual Consistency
 
-- [ ] **Rootcord: validate tab-switch highlight fix** — `RefreshSelectedHighlight()` throws "Object type Avalonia.Controls.Decorator does not match target type Avalonia.Controls.Grid" on every server icon click. Defensive IsBorder guards + try/catches added (2026-02-20). Enable Rootcord → click server icons → check hook log for `RefreshHL: strip[N] child[1] is Decorator` (guard firing) or errors. Goal: confirm no crash and correct highlight behavior.
-  - Files: `hook/RootcordEngine.cs`
+- [ ] **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text).
+  - Files: `hook/SidebarInjector.cs`
 
-- [ ] **Rootcord: validate user card + 4-button cluster** — Rebuilt (2026-02-20): profile intercept removed, avatar+textPanel→ProfilePane click, 4-button P/D/N/⚙. Enable Rootcord, verify: (1) clicking avatar/text opens profile pane on left; (2) P/D/N each opens correct pane on left; (3) ⚙ opens settings/profile pane on left; (4) no layout regression.
-  - Files: `hook/RootcordEngine.cs`
-
-- [ ] **Theme Engine v2: validate in production** — ThemeEngine v2 (resource-first, OKLCH) rewrite is deployed but not yet tested in production. Verify: (1) all 3 presets (crimson, cosmic-smoothie, loki) display correctly; (2) custom theme live preview is smooth; (3) theme revert restores all defaults; (4) variant switching (Dark/PureDark/Light) preserves overrides; (5) ping color overrides SelfMention keys correctly.
+- [ ] **Root "Online" indicator doesn't live-update** with custom text color changes.
   - Files: `hook/ThemeEngine.cs`
 
-## Testing
+- [ ] **Settings detection flash after long idle** — After 5+ minutes without touching settings, the first open shows a brief flash of Root's User Profile tab before auto-navigating to About. Likely cause: LayoutUpdated stops firing when no layout changes occur during idle.
+  - Files: `hook/SidebarInjector.cs`
+
+### Anti-Mitigation Hardening
+
+- [ ] **Structural fallback for settings page detection** — Remove "APP SETTINGS" text dependency.
+  - Files: `hook/VisualTreeWalker.cs`, `hook/SidebarInjector.cs`
+
+- [ ] **Avalonia version detection + graceful degradation**
+  - Files: `hook/AvaloniaReflection.cs`
+
+- [ ] **Bridge version negotiation** (`__nativeToWebRtc` / `__webRtcToNative`)
+  - Files: `src/api/bridge.ts`
+
+### Organization
+
+- [ ] **Structured logging overhaul** — Implement [loggingsucks.com](https://loggingsucks.com) methodology: replace scattered `Logger.Log("[Category] message")` with wide events (one structured event per operation with high-cardinality fields: phase, feature, duration_ms, outcome, error_type, settings_state). Currently Logger.cs is 113 lines of append-to-file string logging. Target: queryable structured events, tail sampling for high-volume ops.
+  - Files: `hook/Logger.cs`, all `hook/*.cs` callers
 
 - [ ] **Set up Vitest** — Install Vitest, add `test`/`test:watch`/`test:coverage` scripts, co-locate test files as `.test.ts`.
 
@@ -38,6 +66,40 @@ Short-term tasks ready to be picked up. Roughly priority-ordered.
 - [ ] **Settings unit tests** — JSON parsing, merge with defaults, deep merge, corrupted file recovery.
   - Files: `src/core/settings.ts`
 
+- [ ] **ESLint/Biome + Prettier** for TypeScript layer
+
+### Alpha/Beta Plugin Hardening
+
+- [ ] **Theme Engine v2 production validation** — ThemeEngine v2 (resource-first, OKLCH) deployed but not tested in production. Verify: all 3 presets, custom theme live preview, theme revert, variant switching, ping color overrides.
+  - Files: `hook/ThemeEngine.cs`
+
+- [ ] **ClearURLs edge case testing** — Validate with unusual URL patterns, international domains, edge cases in compose editor.
+  - Files: `hook/ClearUrlsEngine.cs`
+
+- [ ] **SilentTyping second-account verification** — C# engine confirmed blocking SetTypingIndicator in log. Need second-account test to verify typing indicator actually suppressed.
+  - Files: `hook/SilentTypingEngine.cs`
+
+### Experimental (lowest priority)
+
+- [ ] **Rootcord: validate tab-switch highlight fix** — `RefreshSelectedHighlight()` IsBorder guards added. Enable Rootcord → click server icons → check hook log.
+  - Files: `hook/RootcordEngine.cs`
+
+- [ ] **Rootcord: validate user card + 4-button cluster** — Profile intercept removed, avatar/text→ProfilePane, P/D/N/⚙ buttons.
+  - Files: `hook/RootcordEngine.cs`
+
+- [ ] **MessageLogger: real-world validation** — Major reliability overhaul deployed: property fix, author names, INPC detection, self-delete fallback. Validate delete/edit detection, card positioning, edit indicators.
+  - Files: `hook/MessageLogger.cs`
+
+- [ ] **NsfwFilter production validation** — Phase 4.5g Avalonia-native redesign deployed. Verify image classification, blur, overlay + click-to-reveal.
+  - Files: `hook/NsfwFilter.cs`
+
+- [ ] **Translate plugin validation** — DeepL-powered translation deployed. Verify language detection, translation quality, config popup.
+  - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
+
+- [ ] **Presence Beacon validation** — Uprooted user detection via gRPC metadata deployed. Verify detection, badge display.
+  - Files: `hook/UprootedPresenceBeacon.cs`
+
+---
 
 ## ILSpy Research
 
@@ -68,64 +130,61 @@ Tasks from [`research/ILSPY_DUMP_INDEX.md`](research/ILSPY_DUMP_INDEX.md). The r
 - [ ] **Analyze RootSvgImage.cs** (144 lines) — SVG image with per-theme path binding
 - [ ] **Analyze RootImageLoader.cs** (178 lines) — Image loading control
 - [ ] **Analyze RootFlyout.cs** (172 lines) — Flyout popup base
-- [ ] **Complete HomeView.cs analysis** (1,280 lines) — Grid/row layout confirmed (header, TabsControl row 1, RootSplitView row 2). Remaining: banner row contents, SystemTrayBorder structure, community switcher column layout.
-- [ ] **Complete HomeViewModel.cs analysis** (883 lines) — Pane commands confirmed (FriendsPaneToggle, DirectMessagesPaneToggle, NotificationsPaneToggle, ProfilePaneToggle), PaneViewModel/PaneOpen/SelectedTabViewModel confirmed. Remaining: Tabs collection type, tab switch logic, RightThumbWidth.
+- [ ] **Complete HomeView.cs analysis** (1,280 lines) — Grid/row layout confirmed. Remaining: banner row, SystemTrayBorder, community switcher.
+- [ ] **Complete HomeViewModel.cs analysis** (883 lines) — Pane commands confirmed. Remaining: Tabs collection, tab switch logic.
 
 ### Complete partial analysis
 
-- [ ] **Complete ChatView.cs analysis** (424 lines) — Settings > Chat page: emoji toggle, tap-to-reply toggle. May reveal additional DataStore keys.
-- [ ] **Complete App.cs analysis** (635 lines) — Application subclass: Initialize(), resource/style registration. Theme dict structure already extracted; remaining: style registration order, resource loading.
-- [ ] **Complete MessageViewModel.cs analysis** (786 lines) — Message data model: HasSelfMention, HasLocalPendingReply, content, timestamps, edit state. Critical for MessageLogger and future message plugins.
-- [ ] **Complete Style_ComboBox.cs analysis** (521 lines) — ComboBox template, dropdown, input background
-- [ ] **Complete Style_MenuItem.cs analysis** (193 lines) — MenuItem: hover states, DeleteMenuItem class. Relevant to context menu injection (Translate plugin).
-- [ ] **Complete Style_Slider.cs analysis** (238 lines) — Slider: BrandPrimary foreground, Border track background
-- [ ] **Complete Style_RootSplitView.cs analysis** (626 lines) — Main app shell layout (sidebar + content split). Important for understanding Root's top-level layout.
-- [ ] **Complete Application.cs analysis** (394 lines) — Avalonia Application base: Resources, Styles, ActualThemeVariantChanged, TryGetResource()
+- [ ] **Complete ChatView.cs analysis** (424 lines) — Settings > Chat page: emoji toggle, tap-to-reply toggle
+- [ ] **Complete App.cs analysis** (635 lines) — Application subclass: Initialize(), resource/style registration
+- [ ] **Complete MessageViewModel.cs analysis** (786 lines) — Message data model. Critical for MessageLogger.
+- [ ] **Complete Style_ComboBox.cs analysis** (521 lines) — ComboBox template, dropdown
+- [ ] **Complete Style_MenuItem.cs analysis** (193 lines) — MenuItem: hover states. Relevant to Translate context menu.
+- [ ] **Complete Style_Slider.cs analysis** (238 lines) — Slider: BrandPrimary foreground
+- [ ] **Complete Style_RootSplitView.cs analysis** (626 lines) — Main app shell layout
+- [ ] **Complete Application.cs analysis** (394 lines) — Avalonia Application base
 - [ ] **Complete ToggleSwitch.cs analysis** (88 lines) — ToggleSwitch: template parts, knob transitions
-- [ ] **Complete SimpleTheme.cs analysis** (1,022 lines) — SimpleTheme base: ThemeControlHighlightLowBrush and other base keys
+- [ ] **Complete SimpleTheme.cs analysis** (1,022 lines) — SimpleTheme base keys
 
 ### Decompile new classes (not yet in ilspy-dumps/)
 
-- [ ] **Decompile channel list / DM list views** — Channel sidebar. Low priority until channel-related plugins are planned.
+- [ ] **Decompile channel list / DM list views** — Low priority until channel-related plugins planned.
 - [ ] **Decompile navigation service** — How Root switches between pages. Would enable programmatic navigation.
 
-## Up Next (small)
-
-- [ ] **Version copy: include Uprooted version in clipboard** — The version info box at bottom-left of settings sidebar shows "Uprooted 0.4.1" but the copy button only copies Root's version. Need to intercept Root's native Button.Click handler and overwrite clipboard with all TextBlock lines (Root + Uprooted). Challenge: our handler runs before/concurrently with Root's async `SetTextAsync` — needs a delay or different interception approach.
-  - Files: `hook/SidebarInjector.cs` (InjectVersionText, ~line 1155)
-  - Current state: handler commented out with TODO marker
+---
 
 ## Ideas / Backlog
 
 Items not yet committed to but worth tracking.
 
-- [ ] **Settings detection flash after long idle** — After 5+ minutes without touching settings, the first open shows a brief flash of Root's User Profile tab before auto-navigating to About. Rapid re-opens are instant (50ms throttle works). Likely cause: LayoutUpdated stops firing when no layout changes occur during idle, so detection falls to the 200ms timer poll. May need to investigate whether the timer is drifting or `_injecting` lock is stale after long idle periods.
-  - Files: `hook/SidebarInjector.cs`
-- [ ] Simplify user-facing descriptions on About and Themes settings tabs — current text exposes too many backend/implementation details (e.g. "ResourceDictionary overrides", "reflection"). Rewrite for end users.
+- [ ] Simplify user-facing descriptions on About and Themes settings tabs — current text exposes backend details
   - Files: `hook/ContentPages.cs`
-- [ ] Structural fallback for settings page detection (currently depends on "APP SETTINGS" text)
-- [ ] Avalonia version detection + graceful degradation
-- [ ] Bridge version negotiation (`__nativeToWebRtc` / `__webRtcToNative`)
-- [ ] ESLint/Biome + Prettier for TypeScript layer
 - [ ] Plugin lifecycle error recovery (rollback on `start()` rejection)
+  - Files: `src/core/pluginLoader.ts`
+
+---
 
 ## Done
 
 Move completed items here with the date.
 
-- [x] **Rootcord: user card + button wiring overhaul** (2026-02-20) — Removed `_profileInterceptHandler` (was blocking all ProfileOpen events). Removed SystemTray reparenting (fragile, complex). Avatar + textPanel now have PointerPressed → ProfilePaneToggleCommand. 4-button cluster always-custom: P/FriendsPaneToggle, D/DirectMessagesPaneToggle, N/NotificationsPaneToggle, ⚙/ProfilePaneToggle. Dead fields removed. RevertUserBar simplified.
-- [x] **Rootcord: RefreshSelectedHighlight crash guard** (2026-02-20) — Added IsBorder() guard before every GetBorderChild call + try/catch per section. Logs diagnostic type when non-Border found. Prevents the "Object type Avalonia.Controls.Decorator does not match target type" crash on server icon click. Root cause: strip container children[1] can be Decorator in some layouts.
-- [x] **Theme Engine v2: resource-first rewrite with OKLCH** (2026-02-19) — Full rewrite of ThemeEngine.cs (2638 → ~900 lines). Targets Root's actual 32 DynamicResource keys. OKLCH palette generation. Eliminates 11 walk methods + 500ms timer.
-- [x] **Silent Typing: restored JS interception** (2026-02-19) — Replaced no-op stub with Kurumi Nanase's working fetch/XHR intercept. Both C# and JS layers now active.
-- [x] **SilentTyping: fix C# engine to actually block gRPC calls** (2026-02-19) — Root uses `Grpc.Net.Client.GrpcChannel` (not raw HttpClient) for gRPC. Broadened discovery: removed keyword gate from instance walk, removed type-name filter from static scan, increased depth 8→12, added HttpMessageHandler detection, added GrpcChannel-aware patching (extracts internal `HttpInvoker` and patches its `_handler`). Now blocks SetTypingIndicator (confirmed in log). Also: stripped em dashes from plugin descriptions, case-insensitive URL matching.
-- [x] **SilentTyping: DiagnosticListener rewrite** (2026-02-19) — Replaced 482-line HttpClient/GrpcChannel handler injection with ~90-line DiagnosticListener approach (by Kurumi Nanase). Subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0.
-- [x] **ThemeEngine: Color-vs-IBrush crash fix** (2026-02-19) — Fixed storing Color objects where Root expects IBrush in ThemeDictionaries. Added PreservedSemanticKeys to keep BrandSecondary (online indicators) at Root's original green.
-- [x] **ILSpy batch split + analysis session** (2026-02-19) — Split 10 grouped namespace dumps into 156 individual files (66 → 219 total, 145k lines). Analyzed 29 files into ROOT_CONTROL_REFERENCE.md. Fixed Style_ file split boundaries (27 files). Tagged 3 oversized files with -GREPONLY suffix. Audited and corrected all 3 Root findings docs.
-- [x] Analyze RootSettingsContainer, MainViewModel, RootMessageItemsControl, RootMenuFlyout, MainWindow, MainView, ILocalDataStore + LocalDataStore + LocalDataStoreExtensions, SaveChangesView, IPage, MenuItemPageContainerViewModel, SecureStorageImplementation (2026-02-19)
-- [x] Analyze Navigator, IRootSessionAccessor, RootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService (2026-02-19)
+- [x] **TranslateEngine shipped** (2026-02-21) — DeepL-powered message translation with language picker, API key config, context menu integration.
+- [x] **UprootedPresenceBeacon shipped** (2026-02-21) — Uprooted user detection via gRPC metadata injection.
+- [x] **ReconLogger shipped** (2026-02-21) — Visual tree + style property diagnostic dumper for development.
+- [x] **Settings UI overhaul** (2026-02-20) — DPI borders, vector icons, cycling pill, radio indicators, toggle thumb.
+- [x] **Rootcord member count tooltips** (2026-02-20)
+- [x] **Startup performance optimizations** (2026-02-21) — cache no-Foreground types in WalkAndRecolor, reduce Phase 4.5 plugin startup delays.
+- [x] **Rootcord: user card + button wiring overhaul** (2026-02-20) — Removed `_profileInterceptHandler`, avatar+textPanel→ProfilePane, 4-button cluster P/D/N/⚙.
+- [x] **Rootcord: RefreshSelectedHighlight crash guard** (2026-02-20) — IsBorder() guard + try/catch per section.
+- [x] **Theme Engine v2: resource-first rewrite with OKLCH** (2026-02-19)
+- [x] **Silent Typing: DiagnosticListener rewrite** (2026-02-19)
+- [x] **ThemeEngine: Color-vs-IBrush crash fix** (2026-02-19)
+- [x] **ILSpy batch split + analysis session** (2026-02-19) — 156 individual files from 10 grouped dumps.
+- [x] Analyze RootSettingsContainer, MainViewModel, RootMessageItemsControl, RootMenuFlyout, MainWindow, MainView, ILocalDataStore, etc. (2026-02-19)
+- [x] Analyze Navigator, IRootSessionAccessor, RootSession, IViewModelBase, DirectMessageOpenerService (2026-02-19)
 - [x] Analyze CTextBlock, CSpan, CHyperlink, CInline, CRun, CCode, CImage — markdown rendering system (2026-02-19)
-- [x] Analyze MemberProfileView, MemberProfileViewModel, ViewFactory (236 VM→View mappings) (2026-02-19)
-- [x] Decompile IRootSessionAccessor, profile popup views, MembersViewModel/CommunityLogViewModel/CommunityTabViewModel, CTextBlock/CSpan/CHyperlink/CRun/CCode (2026-02-19)
+- [x] Analyze MemberProfileView, MemberProfileViewModel, ViewFactory (2026-02-19)
+- [x] Decompile IRootSessionAccessor, profile popup views, MembersViewModel, CTextBlock/CSpan/CHyperlink/CRun/CCode (2026-02-19)
 
 ---
 

@@ -33,10 +33,6 @@ The reflection cache (`hook/AvaloniaReflection.cs`, ~2383 lines) assumes specifi
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
-**NSFW filter unvalidated**
-The NSFW filter was redesigned in v0.4.2 to use Avalonia-native visual tree scanning (Phase 4.5g) instead of DotNetBrowser JS injection. The redesign is deployed but has not been validated end-to-end with the Google Vision API in production.
-- Files: `hook/NsfwFilter.cs`
-
 **Settings page text-based detection fragile**
 The sidebar injector locates the settings page by searching the visual tree for the exact text "APP SETTINGS". If Root renames this label, native UI injection silently fails with no error visible to the user.
 - Files: `hook/VisualTreeWalker.cs`, `hook/SidebarInjector.cs`
@@ -67,11 +63,16 @@ Runtime changes made via the browser-side settings panel only update the in-memo
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
 ### Validate MessageLogger plugin
-MessageLogger (shipped WIP in v0.4.2) has working deletion detection via per-item async pollers (`HasBeenDeleted` probe every 300ms for 3s, epoch-based cancellation on channel switch) and event-driven edit detection (`HandleReplaced` with 5s grace period). Both features are deployed but need real-world validation:
-- **Validate async deletion pollers**: Confirm `HasBeenDeleted` is set within the 3s window for genuine deletions.
-- **Validate edit detection**: Confirm grace period filters send-completion Replaces while catching genuine user edits. Check for false positives.
-- **Validate edit indicators**: Amber-tinted inline cards deployed — verify layout doesn't break in different message contexts.
+MessageLogger (shipped WIP in v0.4.2) has working deletion detection (INPC-driven + self-delete fallback), edit detection (dual-strategy EditedAt + grace period), author name resolution, and visual indicators. Card injection positioning (`FindMessageGridInContainer` returns null) is the main open issue.
 - Files: `hook/MessageLogger.cs`
+
+### Validate Translate plugin
+TranslateEngine (shipped post-v0.4.2) provides DeepL-powered message translation via context menu integration. Deployed but needs real-world validation of language detection, translation quality, and config popup.
+- Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
+
+### Validate Presence Beacon
+UprootedPresenceBeacon (shipped post-v0.4.2) detects other Uprooted users via gRPC metadata injection. Deployed but needs validation.
+- Files: `hook/UprootedPresenceBeacon.cs`
 
 ---
 
@@ -308,10 +309,10 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-18 — synced with v0.4.2 (removed completed goals, updated version table, fixed code quality items)*
+*Last updated: 2026-02-21 — added Translate + Presence Beacon goals, removed stale NSFW filter issue, updated MessageLogger status*
 
 ---
 
 **Canonical for:** known issues, planned features, future direction, priority assessment
 **Not canonical for:** active tasks → [TASKS.md](../TASKS.md) | plugin roadmap → [PLUGIN_ROADMAP.md](PLUGIN_ROADMAP.md) | current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md)
-*Roadmap for Uprooted. Last updated 2026-02-19.*
+*Roadmap for Uprooted. Last updated 2026-02-21.*

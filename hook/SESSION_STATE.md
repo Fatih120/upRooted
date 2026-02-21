@@ -126,6 +126,8 @@ Key details:
 | 4.5f | SilentTypingEngine | DiagnosticListener-based interception: subscribes to .NET HTTP diagnostics, redirects SetTypingIndicator to localhost:0 (12s delay). ~90 lines, by Kurumi Nanase. |
 | 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
 | 4.5h | RootcordEngine | Rootcord sidebar plugin (8s delay, dormant if disabled) |
+| 4.5i | TranslateEngine | DeepL-powered message translation |
+| 4.5j | UprootedPresenceBeacon | Uprooted user detection via gRPC metadata |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection, type resolution (video thumbnails for LinkEmbedEngine) |
 
 ## Link Embed Engine (v0.3.3–0.4.0)
@@ -157,6 +159,15 @@ The Avalonia-native link embed engine is broadly functional:
 **Known limitations:**
 - JS-rendered OG fallback not available (some sites serve no OG in static HTML)
 - Video embeds show placeholder (no first-frame extraction — SkiaSharp cannot decode MP4/WebM video codecs)
+
+## New Files (post v0.4.2)
+
+| File | Lines | Purpose |
+|------|------:|---------|
+| `hook/TranslateEngine.cs` | 1145 | DeepL-powered message translation (Phase 4.5i) |
+| `hook/TranslateConfigPopup.cs` | 511 | Translate config popup UI (language picker, API key) |
+| `hook/UprootedPresenceBeacon.cs` | 470 | Uprooted user detection via gRPC metadata (Phase 4.5j) |
+| `hook/ReconLogger.cs` | 786 | Visual tree + style property diagnostic dumper |
 
 ## Files Modified Recently
 
@@ -294,12 +305,14 @@ See `docs/dev/TESTING.md` for full reference.
 
 ## Next Steps
 
-1. **Rootcord: validate tab-switch highlight fix** — Enable Rootcord from Uprooted plugins page, then click several server icons. Check hook log for either `RefreshHL: strip[N] child[1] is Decorator` (guard fired, crash prevented) or `RefreshHL strip[N] error: ...` (unexpected error). If Decorator guard fires, follow up to understand what Root puts in child[1] of the strip container vs what we expect (Border with TextBlock label).
-2. **Rootcord: validate user card click** — Click avatar and text panel in user card — profile pane should open (PanePlacement=Left). Click P/D/N/⚙ buttons — pane should open on the left side between server strip and channel list.
-3. **MessageLogger: validate async pollers + edit detection** — Async deletion pollers (HasBeenDeleted, 300ms/3s) deployed; injection position and edit indicators deployed. Need real-world validation: test actual deletions + edits, run `scripts/analyze-msglogger.ps1`. Confirm HasBeenDeleted fires within 3s, confirm edit cards appear after grace period.
-4. **SilentTyping: verify with second account** — C# engine confirmed blocking SetTypingIndicator in log (GrpcChannel patching working). Need second-account test to verify the typing indicator is actually suppressed on the receiving end.
-5. **Avalonia-native NSFW filter** — Phase 4.5g deployed; verify Avalonia-native redesign is working
-6. **Refine ProfileBadgeInjector heuristics** — Check tree dump logs to refine `IsProfilePopup` (may false-positive on non-profile popups); detection and dev-gating are done
+Priority order per TASKS.md: bugfixes → visual consistency → performance → anti-mitigation → organization → hardening → experimental.
+
+1. **Version copy intercept** — SidebarInjector clipboard handler commented out, needs fix for Root's async `SetTextAsync` race.
+2. **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure investigation needed.
+3. **Uprooted tab header recolor** — Injected sidebar text doesn't update on custom theme changes.
+4. **Root "Online" indicator** — Doesn't live-update with custom text color.
+5. **Structural fallback for settings detection** — Remove "APP SETTINGS" text dependency.
+6. **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, Presence Beacon all deployed but need real-world testing.
 
 ## Rootcord Plugin (v0.4.2 — 2026-02-20)
 
