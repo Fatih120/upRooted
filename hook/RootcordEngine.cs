@@ -84,7 +84,9 @@ internal class RootcordEngine
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
 
-    // (header reparenting removed — header stays with its native panel after rotation)
+    // Custom community header injected into channels panel
+    private object? _injectedHeader;       // The header Border we built
+    private object? _channelsPanelRef;     // The channels panel we modified
 
     // Flyout placement flip (member profile popups)
     private readonly HashSet<int> _flippedFlyoutIds = new();
@@ -1195,6 +1197,23 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
 
+            // Build a custom community header and inject it at the top of the channels column.
+            // Also hide the native header in the members column.
+            // Deferred 500ms so the ContentControl→MembersView/ChannelsView visual tree is ready.
+            var headerLayoutGrid = layoutGrid;
+            var headerNonSplitters = nonSplitters;
+            var headerMaxIdx = maxAssignedIdx;
+            var headerToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+            Task.Delay(500, headerToken).ContinueWith(_ =>
+            {
+                if (headerToken.IsCancellationRequested) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try { InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx); }
+                    catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader error: {ex.Message}"); }
+                });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
         }
@@ -1252,6 +1271,191 @@ internal class RootcordEngine
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
+    }
+
+    // ===== Community header injection =====
+
+    /// <summary>
+    /// Build a custom community header and inject it at the top of the channels panel.
+    /// Also hide the native header in the members panel so it's not duplicated.
+    /// Uses data from the selected CommunityTabViewModel (name, icon, member count).
+    /// </summary>
+    private void InjectChannelsHeader(object layoutGrid, List<(object child, int col)> nonSplitters, int membersIdx)
+    {
+        if (_homeViewModel == null) return;
+
+        // Get the selected tab's data
+        var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+        if (selectedTab == null || IsDmTab(selectedTab)) return;
+
+        string communityName = GetTabDisplayName(selectedTab);
+        var (attached, total) = GetTabMemberCounts(selectedTab);
+        object? iconBitmap = TryGetTabBitmap(selectedTab);
+        string initial = communityName.Length > 0 ? communityName[0].ToString().ToUpper() : "?";
+
+        // Find the channels panel (leftmost non-chat after rotation)
+        object? channelsPanel = null;
+        for (int i = 0; i < nonSplitters.Count; i++)
+        {
+            if (i == membersIdx) continue;
+            int origCol = nonSplitters[i].col;
+            var origW = _originalColWidths?.FirstOrDefault(x => x.colIdx == origCol);
+            if (origW != null && origW.Value.unit != "Star" && origW.Value.unit != "star")
+            {
+                channelsPanel = nonSplitters[i].child;
+                break;
+            }
+        }
+        if (channelsPanel == null) return;
+
+        // Skip if we already injected a header into this panel
+        if (_injectedHeader != null && _channelsPanelRef == channelsPanel) return;
+
+        // Build the header: [Icon 40x40] [Name + member count]
+        var headerBorder = _r.CreateBorder(_cardBg, 12);
+        if (headerBorder == null) return;
+        _r.SetTag(headerBorder, "rootcord-channel-header");
+        _r.SetMargin(headerBorder, 10, 10, 10, 6);
+        SetBorderStroke(headerBorder, AdjustForHighlight(_cardBg, 15), 0.5);
+
+        var headerGrid = _r.CreateGrid();
+        if (headerGrid == null) return;
+        _r.SetMargin(headerGrid, 10, 8, 10, 8);
+
+        // 3 columns: [Auto icon] [8px gap] [* text]
+        _r.AddGridColumn(headerGrid, 1.0); // col 0 — will set to Auto
+        _r.AddGridColumn(headerGrid, 1.0); // col 1 — 8px
+        _r.AddGridColumn(headerGrid, 1.0); // col 2 — Star (text)
+        var hColDefs = _r.GetColumnDefinitions(headerGrid);
+        if (hColDefs?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+        {
+            try
+            {
+                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                var pixelUnit = Enum.Parse(_r.GridUnitTypeEnum, "Pixel");
+                hColDefs[0]?.GetType().GetProperty("Width")?.SetValue(hColDefs[0],
+                    Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit));
+                hColDefs[1]?.GetType().GetProperty("Width")?.SetValue(hColDefs[1],
+                    Activator.CreateInstance(_r.GridLengthType, 8d, pixelUnit));
+                // Col 2 stays Star
+            }
+            catch { }
+        }
+
+        // Col 0: Community icon (40x40 circle)
+        var iconContainer = _r.CreateBorder(_bg, 6);
+        if (iconContainer != null)
+        {
+            _r.SetWidth(iconContainer, 40);
+            _r.SetHeight(iconContainer, 40);
+            _r.SetClipToBounds(iconContainer, true);
+            _r.SetVerticalAlignment(iconContainer, "Center");
+            _r.SetGridColumn(iconContainer, 0);
+
+            if (iconBitmap != null)
+            {
+                var img = _r.CreateImage("UniformToFill");
+                if (img != null)
+                {
+                    _r.SetImageSource(img, iconBitmap);
+                    _r.SetWidth(img, 40);
+                    _r.SetHeight(img, 40);
+                    _r.SetBorderChild(iconContainer, img);
+                }
+                else
+                    SetAvatarInitial(iconContainer, initial, _text);
+            }
+            else
+                SetAvatarInitial(iconContainer, initial, _text);
+
+            _r.AddChild(headerGrid, iconContainer);
+        }
+
+        // Col 2: Name + member count
+        var textPanel = _r.CreateStackPanel(vertical: true, spacing: 2);
+        if (textPanel != null)
+        {
+            _r.SetGridColumn(textPanel, 2);
+            _r.SetVerticalAlignment(textPanel, "Center");
+
+            var nameText = _r.CreateTextBlock(communityName, 14, _text);
+            if (nameText != null)
+            {
+                _r.SetFontWeight(nameText, "SemiBold");
+                try
+                {
+                    nameText.GetType().GetProperty("TextTrimming")?.SetValue(nameText,
+                        Enum.Parse(nameText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
+                }
+                catch { }
+                _r.AddChild(textPanel, nameText);
+            }
+
+            string countStr = total > 0 ? $"{total} members" : (attached > 0 ? $"{attached} online" : "");
+            if (countStr.Length > 0)
+            {
+                var countText = _r.CreateTextBlock(countStr, 11, _muted);
+                if (countText != null) _r.AddChild(textPanel, countText);
+            }
+
+            _r.AddChild(headerGrid, textPanel);
+        }
+
+        _r.SetBorderChild(headerBorder, headerGrid);
+
+        // Inject into the channels panel by wrapping its existing content in a Grid(2 rows)
+        var existingContent = _r.GetBorderChild(channelsPanel);
+        if (existingContent != null)
+        {
+            _r.SetBorderChild(channelsPanel, null); // detach
+
+            var wrapperGrid = _r.CreateGrid();
+            if (wrapperGrid != null)
+            {
+                _r.SetTag(wrapperGrid, "rootcord-channel-wrapper");
+                _r.AddGridRowAuto(wrapperGrid);   // Row 0: header
+                _r.AddGridRowStar(wrapperGrid);   // Row 1: channel list (fills remaining)
+
+                _r.SetGridRow(headerBorder, 0);
+                _r.AddChild(wrapperGrid, headerBorder);
+
+                _r.SetGridRow(existingContent, 1);
+                _r.AddChild(wrapperGrid, existingContent);
+
+                _r.SetBorderChild(channelsPanel, wrapperGrid);
+            }
+            else
+            {
+                _r.SetBorderChild(channelsPanel, existingContent); // rollback
+            }
+        }
+
+        _injectedHeader = headerBorder;
+        _channelsPanelRef = channelsPanel;
+
+        // Hide the native header in the members panel (Row 0-3 of MembersView's inner Grid)
+        var membersPanel = nonSplitters[membersIdx].child;
+        var walker = new VisualTreeWalker(_r);
+        foreach (var node in walker.DescendantsDepthFirst(membersPanel))
+        {
+            if (!_r.IsGrid(node)) continue;
+            var rowDefs = _r.GetRowDefinitions(node);
+            if (rowDefs == null || rowDefs.Count < 4) continue;
+
+            // Found MembersView inner Grid — hide rows 0-3
+            foreach (var child in _r.GetVisualChildren(node))
+            {
+                int row = _r.GetGridRow(child);
+                if (row <= 3) _r.SetIsVisible(child, false);
+            }
+            for (int ri = 0; ri <= 3 && ri < rowDefs.Count; ri++)
+                _r.SetRowDefinitionPixelHeight(rowDefs[ri], 0);
+
+            Logger.Log(Tag, "InjectChannelsHeader: hidden native header in members panel");
+            break;
+        }
+
+        Logger.Log(Tag, $"InjectChannelsHeader: injected '{communityName}' header into channels panel");
     }
 
     // ===== Flyout placement flip (member profile popups) =====
