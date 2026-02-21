@@ -184,7 +184,8 @@ internal static class ContentPages
         ThemeEngine? themeEngine = null, Action? onThemeChanged = null,
         Action<string>? onNavigate = null)
     {
-        Logger.Log("ContentPages", $"BuildPage('{pageName}') called");
+        using var ev = WideEvent.Begin("ContentPages", "build_page");
+        ev.Set("page", pageName);
         EnsureStaticInit();
 
         object? page = null;
@@ -200,13 +201,13 @@ internal static class ContentPages
         }
         catch (Exception ex)
         {
-            Logger.LogException("ContentPages", $"BuildPage('{pageName}') EXCEPTION", ex);
+            ev.SetError(ex);
             return null;
         }
 
         if (page == null)
         {
-            Logger.Log("ContentPages", $"BuildPage('{pageName}') returned null");
+            ev.Set("result", "null");
             return null;
         }
 
@@ -216,7 +217,7 @@ internal static class ContentPages
         r.SetTag(page, "dyn-bg:BackgroundPrimary");
         r.BindToDynamicResource(page, "Background", "BackgroundPrimary");
 
-        Logger.Log("ContentPages", $"BuildPage('{pageName}') OK");
+        ev.Set("result", "ok");
         return page;
     }
 
@@ -1447,6 +1448,10 @@ internal static class ContentPages
                     // Toggle switch for all other plugins (Planned plugins have no toggle)
                     var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
                     {
+                        using var ev = WideEvent.Begin("ContentPages", "plugin_toggle");
+                        ev.Set("plugin", pluginId);
+                        ev.Set("enabled", enabled);
+
                         settings.Plugins[pluginId] = enabled;
 
                         // Content filter uses NsfwFilterEnabled as canonical toggle
@@ -1454,7 +1459,7 @@ internal static class ContentPages
                         {
                             settings.NsfwFilterEnabled = enabled;
                             try { NsfwFilterInstance?.UpdateConfig(); }
-                            catch (Exception nex) { Logger.Log("Plugins", $"NsfwFilter.UpdateConfig error: {nex.Message}"); }
+                            catch (Exception nex) { ev.SetError(nex); }
                         }
 
                         // Rootcord: apply/revert live without restart
@@ -1471,7 +1476,7 @@ internal static class ContentPages
                                         engine.Revert();
                                 }
                             }
-                            catch (Exception rex) { Logger.Log("Plugins", $"Rootcord toggle error: {rex.Message}"); }
+                            catch (Exception rex) { ev.SetError(rex); }
                         }
 
                         // Recon Logger: enable/disable live (dev plugin)
@@ -1482,12 +1487,11 @@ internal static class ContentPages
                                 if (enabled) ReconLogger.Enable();
                                 else         ReconLogger.Disable();
                             }
-                            catch (Exception rex) { Logger.Log("Plugins", $"ReconLogger toggle error [{rex.GetType().Name}]: {rex.Message} | {rex.StackTrace?.Split('\n')[0].Trim()}"); }
+                            catch (Exception rex) { ev.SetError(rex); }
                         }
 
                         try { settings.Save(); }
-                        catch (Exception sx) { Logger.Log("Plugins", $"Save error: {sx.Message}"); }
-                        Logger.Log("Plugins", $"Plugin '{pluginId}' toggled to {enabled}");
+                        catch (Exception sx) { ev.SetError(sx); }
 
                         // Show/hide restart banner based on whether any plugin diverged from initial state
                         if (restartBanner != null && initialStates != null)
