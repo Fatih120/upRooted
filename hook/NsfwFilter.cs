@@ -104,6 +104,15 @@ internal class NsfwFilter : IDisposable
                 // Skip if we already processed this exact bitmap on this control
                 lock (_lock)
                 {
+                    // Prevent unbounded growth — image controls cycle in/out of the visual tree
+                    // during scroll virtualization, leaving stale entries. Reset when the dict
+                    // exceeds a reasonable bound so we eventually re-check recycled controls.
+                    if (_seenImages.Count > 2000)
+                    {
+                        _seenImages.Clear();
+                        Logger.Log("NsfwFilter", "Cleared _seenImages cache (size limit reached)");
+                    }
+
                     if (_seenImages.TryGetValue(imageId, out int lastBitmapId) && lastBitmapId == bitmapId)
                         continue;
                     _seenImages[imageId] = bitmapId;
