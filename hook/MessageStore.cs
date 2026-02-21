@@ -38,12 +38,15 @@ internal class MessageEdit
 ///   EDIT|msgId|channelId|editTimestamp|previousContent
 ///   DEL|msgId|channelId|deleteTimestamp[|actorId][|actorName]  ← actorId/actorName optional
 /// </summary>
-internal class MessageStore
+internal class MessageStore : IDisposable
 {
     private const string Tag = "MsgStore";
     private const string FileName = "uprooted-message-log.dat";
     private const string FileHeader = "# uprooted-message-log v1";
 
+    // Single lock for both buffer mutations AND file I/O so Truncate and FlushBuffer
+    // can't interleave (Truncate reads all lines then writes; a concurrent Flush would
+    // append new lines that Truncate then overwrites, silently dropping them).
     private static readonly object WriteLock = new();
 
     private readonly string _filePath;
@@ -55,6 +58,15 @@ internal class MessageStore
         var profileDir = PlatformPaths.GetProfileDir();
         _filePath = Path.Combine(profileDir, FileName);
         _flushTimer = new Timer(FlushBuffer, null, 5000, 5000);
+    }
+
+    public void Dispose()
+    {
+        var t = _flushTimer;
+        _flushTimer = null;
+        t?.Dispose();
+        // Flush any remaining buffered writes before shutting down.
+        FlushBuffer(null);
     }
 
     internal void RecordMessage(string msgId, string channelId, string authorId,
@@ -118,14 +130,21 @@ internal class MessageStore
                 switch (parts[0])
                 {
                     case "MSG" when parts.Length >= 7:
+                        // Skip record if timestamp is unparseable rather than inventing UtcNow,
+                        // which would make old messages falsely appear as current.
+                        if (!DateTime.TryParse(parts[5], null,
+                                System.Globalization.DateTimeStyles.RoundtripKind, out var ts))
+                        {
+                            Logger.Log(Tag, $"Skipping MSG with bad timestamp: {parts[5]}");
+                            break;
+                        }
                         var msg = new CachedMessage
                         {
                             MessageId = Dec(parts[1]),
                             ChannelId = Dec(parts[2]),
                             AuthorId = Dec(parts[3]),
                             AuthorName = Dec(parts[4]),
-                            Timestamp = DateTime.TryParse(parts[5], null,
-                                System.Globalization.DateTimeStyles.RoundtripKind, out var ts) ? ts : DateTime.UtcNow,
+                            Timestamp = ts,
                             Content = Dec(parts[6])
                         };
                         cache[msg.MessageId] = msg;
@@ -136,10 +155,15 @@ internal class MessageStore
                         var editMsgId = Dec(parts[1]);
                         if (cache.TryGetValue(editMsgId, out var editMsg))
                         {
+                            if (!DateTime.TryParse(parts[3], null,
+                                    System.Globalization.DateTimeStyles.RoundtripKind, out var et))
+                            {
+                                Logger.Log(Tag, $"Skipping EDIT with bad timestamp: {parts[3]}");
+                                break;
+                            }
                             editMsg.Edits.Add(new MessageEdit
                             {
-                                EditTime = DateTime.TryParse(parts[3], null,
-                                    System.Globalization.DateTimeStyles.RoundtripKind, out var et) ? et : DateTime.UtcNow,
+                                EditTime = et,
                                 PreviousContent = Dec(parts[4])
                             });
                         }
@@ -151,9 +175,14 @@ internal class MessageStore
                         var delMsgId = Dec(parts[1]);
                         if (cache.TryGetValue(delMsgId, out var delMsg))
                         {
+                            if (!DateTime.TryParse(parts[3], null,
+                                    System.Globalization.DateTimeStyles.RoundtripKind, out var dt))
+                            {
+                                Logger.Log(Tag, $"Skipping DEL with bad timestamp: {parts[3]}");
+                                break;
+                            }
                             delMsg.IsDeleted = true;
-                            delMsg.DeletedAt = DateTime.TryParse(parts[3], null,
-                                System.Globalization.DateTimeStyles.RoundtripKind, out var dt) ? dt : DateTime.UtcNow;
+                            delMsg.DeletedAt = dt;
                             if (parts.Length >= 5) delMsg.DeletedBy = Dec(parts[4]);
                             if (parts.Length >= 6) delMsg.DeletedByName = Dec(parts[5]);
                         }
@@ -185,56 +214,62 @@ internal class MessageStore
     {
         if (!File.Exists(_filePath)) return;
 
-        try
+        // Hold WriteLock for the full read+write cycle so FlushBuffer can't append
+        // lines that would be silently overwritten by our WriteAllText at the end.
+        lock (WriteLock)
         {
-            var allLines = File.ReadAllLines(_filePath);
-            var dataLines = new List<string>();
-            foreach (var l in allLines)
+            try
             {
-                if (!string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
-                    dataLines.Add(l);
+                var allLines = File.ReadAllLines(_filePath);
+                var dataLines = new List<string>();
+                foreach (var l in allLines)
+                {
+                    if (!string.IsNullOrWhiteSpace(l) && !l.StartsWith("#"))
+                        dataLines.Add(l);
+                }
+
+                if (dataLines.Count <= maxMessages) return;
+
+                // Keep only the newest entries
+                var kept = new List<string> { FileHeader };
+                for (int i = dataLines.Count - maxMessages; i < dataLines.Count; i++)
+                    kept.Add(dataLines[i]);
+
+                File.WriteAllText(_filePath, string.Join("\n", kept) + "\n");
+                Logger.Log(Tag, $"Truncated: {dataLines.Count} -> {maxMessages} entries");
             }
-
-            if (dataLines.Count <= maxMessages) return;
-
-            // Keep only the newest entries
-            var kept = new List<string> { FileHeader };
-            for (int i = dataLines.Count - maxMessages; i < dataLines.Count; i++)
-                kept.Add(dataLines[i]);
-
-            File.WriteAllText(_filePath, string.Join("\n", kept) + "\n");
-            Logger.Log(Tag, $"Truncated: {dataLines.Count} -> {maxMessages} entries");
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"Truncate error: {ex.Message}");
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"Truncate error: {ex.Message}");
+            }
         }
     }
 
     /// <summary>
     /// Flush buffered writes to disk. Called by timer every 5 seconds.
+    /// WriteLock is held for the entire operation so Truncate() can't interleave.
     /// </summary>
     private void FlushBuffer(object? state)
     {
-        List<string> toWrite;
         lock (WriteLock)
         {
             if (_writeBuffer.Count == 0) return;
-            toWrite = new List<string>(_writeBuffer);
+
+            var toWrite = new List<string>(_writeBuffer);
             _writeBuffer.Clear();
-        }
 
-        try
-        {
-            // Ensure file exists with header
-            if (!File.Exists(_filePath))
-                File.WriteAllText(_filePath, FileHeader + "\n");
+            try
+            {
+                // Ensure file exists with header
+                if (!File.Exists(_filePath))
+                    File.WriteAllText(_filePath, FileHeader + "\n");
 
-            File.AppendAllText(_filePath, string.Join("\n", toWrite) + "\n");
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"Flush error: {ex.Message}");
+                File.AppendAllText(_filePath, string.Join("\n", toWrite) + "\n");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"Flush error: {ex.Message}");
+            }
         }
     }
 
