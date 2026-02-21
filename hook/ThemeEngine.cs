@@ -719,20 +719,27 @@ internal class ThemeEngine
 
         _activeThemeName = themeName;
 
-        // Phase 3: Walk injected controls BEFORE updating ContentPages statics.
-        // The _walked* fields hold the PREVIOUS colors (what's on screen now).
-        // The palette has the NEW colors. Walk maps previous→new correctly.
+        // Phase 3: Merge palette (pure computation — no UI-thread work).
+        // _walked* fields still hold the PREVIOUS colors so the upcoming walk can
+        // map old→new correctly. ContentPages statics are updated in Phase 3b.
         _customPalette = MergePalettes(rootKeys, simpleThemeKeys);
-        WalkAllWindows();
 
-        // Phase 3b: NOW update ContentPages statics to match new palette
+        // Phase 3b: Update ContentPages statics to match new palette.
+        // Safe to do before the walk: _walkedText* is updated only inside
+        // UpdateWalkedColors(), which runs AFTER a successful WalkAllWindows(),
+        // so Source 1 in BuildTreeColorMap still correctly maps previous→new.
         ContentPages.UpdateLiveColors(
             rootKeys.GetValueOrDefault("BrandPrimary", GetAccentColor()),
             rootKeys.GetValueOrDefault("BackgroundPrimary", DefaultDarkBg),
             _customPalette);
 
-        // Phase 4: Follow-up delayed walk (catches controls created after initial walk)
-        ScheduleDelayedWalk(500);
+        // Phase 4: Deferred walk — runs off the critical UI-thread path.
+        // ThemeDictionary overrides (DynamicResource) auto-propagate immediately,
+        // so only hardcoded-color controls need the walk. 150ms is enough time for
+        // the initial render to settle; ScheduleWalkBurst handles any later navigation.
+        // Using a single schedule replaces the previous pattern of an immediate sync
+        // walk + a 500ms follow-up, saving ~30ms of UI-thread block at startup.
+        ScheduleDelayedWalk(150);
 
         // Phase 5: Update DWM title bar color
         if (rootKeys.TryGetValue("BackgroundPrimary", out var titleBarBg))
