@@ -19,10 +19,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Native theme settings button** — Gear button on the "Native" preset card opens Root's native Change Theme page. Uses ViewModel-driven `ListBox.SelectedItem` binding for proper navigation. New `SelectRootTab()` helper enables programmatic Root settings tab navigation by `MenuTitle` match.
 - **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
 - **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
+- **Themes page refresh button** — Added a `Refresh` button to Theme Settings that reapplies the currently active theme (`default-dark`, custom, or preset) and rebuilds the page. Uses standard Uprooted button styling (rounded border, highlight-derived stroke, hover tint, release-activated click).
+  - File: `hook/ContentPages.cs`
 
 ### Changed
 
 - **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
+- **Injected control interaction model now matches Root native semantics** — Click-like actions execute on release and are gated by in-bounds press+release (`SubscribeClickReleased`), so press-drag-off-release no longer toggles actions. Applied broadly to settings buttons, toggles, theme cards, nav items, and popup controls.
+  - Files: `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
+- **Native press feedback for injected clickable controls** — `SetCursorHand` now wires centralized press feedback (proportional shrink + subtle press shade/restore) via render transform + opacity, without causing layout reflow.
+  - File: `hook/AvaloniaReflection.cs`
 - **Card border thickness** — 1.5px → 1.0px to match Root's native divider lines; color from Root's `Border` resource
 - **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
 - **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color
@@ -58,6 +64,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - `ContentPages`: lightbox dismiss methods (`DismissPluginInfoLightbox`, `DismissPluginSettingsLightbox`, `DismissUpdateNotification`) now null the overlay ref before calling `RemoveFromOverlay`, guarding against re-entrant dismiss on rapid double-click; `NsfwFilterInstance.UpdateConfig()` calls wrapped in try/catch with logging
 
 - **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
+- **Custom Theme card interaction quirk** — Toggling Ping Color no longer bubbles into and activates the parent Custom Theme card; large Custom card press feedback is intentionally disabled to avoid over-aggressive card-scale depression.
+  - File: `hook/ContentPages.cs`
+- **Theme card no-op retrigger** — Clicking a theme card that is already active now exits early instead of reapplying/rebuilding unnecessarily.
+  - File: `hook/ContentPages.cs`
 - **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
 - **Settings header back arrow** — Structural search finds back button by child order in header Grid (not by bounds or text). Collapse pattern (Opacity/MaxWidth/MaxHeight/Width/Margin all zeroed) avoids fighting Root's `IsVisible` binding on `SelectedMenuItemPageContainer.Navigator.CanGoBack`. Title TextBlock overridden after ListBox deselection. Restores original values (Width=40, Margin=24,0,0,0) when switching back to Root tabs.
 - **Settings detection delay** — Lowered LayoutUpdated throttle from 500ms to 50ms; removed `_injecting` reentracy guard from LayoutUpdated path (both paths run on UI thread); reset stale timer lock in NullState. Detection is now near-instant on every open including rapid close/reopen cycles.

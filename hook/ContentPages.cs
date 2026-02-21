@@ -305,7 +305,7 @@ internal static class ContentPages
                         r.SetVerticalAlignment(consoleBtn, "Center");
                         r.SetCursorHand(consoleBtn);
                         SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 15), ThickBorder);
-                        r.SubscribeEvent(consoleBtn, "PointerReleased", () => LogConsole.Enable());
+                        r.SubscribeClickReleased(consoleBtn, () => LogConsole.Enable());
                         r.SubscribeEvent(consoleBtn, "PointerEntered", () =>
                             r.SetBackground(consoleBtn, ColorUtils.Lighten(consoleBtnBg, 8)));
                         r.SubscribeEvent(consoleBtn, "PointerExited", () =>
@@ -327,7 +327,7 @@ internal static class ContentPages
                     r.SetCursorHand(logBtn);
                     SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 15), ThickBorder);
                     var logPath = Logger.GetLogPath();
-                    r.SubscribeEvent(logBtn, "PointerReleased", () => OpenInExplorer(logPath));
+                    r.SubscribeClickReleased(logBtn, () => OpenInExplorer(logPath));
                     r.SubscribeEvent(logBtn, "PointerEntered", () =>
                         r.SetBackground(logBtn, ColorUtils.Lighten(logBtnBg, 8)));
                     r.SubscribeEvent(logBtn, "PointerExited", () =>
@@ -537,7 +537,7 @@ internal static class ContentPages
                     var btnTextRef = btnText;
                     var statusValueRef = statusValueText;
                     var lastCheckRef = lastCheckLabel;
-                    r.SubscribeEvent(btn, "PointerReleased", () =>
+                    r.SubscribeClickReleased(btn, () =>
                     {
                         var u = AutoUpdater.Instance;
                         if (u == null) return;
@@ -656,7 +656,7 @@ internal static class ContentPages
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
                         r.SetCursorHand(updateRestartBtn);
-                        r.SubscribeEvent(updateRestartBtn, "PointerReleased", RestartRoot);
+                        r.SubscribeClickReleased(updateRestartBtn, RestartRoot);
                         var urBtnRef = updateRestartBtn;
                         r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
                             r.SetBackground(urBtnRef, ColorUtils.Lighten(AccentGreen, 10)));
@@ -870,7 +870,7 @@ internal static class ContentPages
                         var innerRef = expInner;
                         var labelRef = expLabel;
                         var descRef = expDesc;
-                        r.SubscribeEvent(expPill, "PointerReleased", () =>
+                        r.SubscribeClickReleased(expPill, () =>
                         {
                             showExperimental[0] = !showExperimental[0];
                             var isOn = showExperimental[0];
@@ -966,7 +966,7 @@ internal static class ContentPages
                     r.SetHorizontalAlignment(restartBtn, "Right");
                     r.SetVerticalAlignment(restartBtn, "Center");
                     r.SetCursorHand(restartBtn);
-                    r.SubscribeEvent(restartBtn, "PointerReleased", RestartRoot);
+                    r.SubscribeClickReleased(restartBtn, RestartRoot);
                     r.SubscribeEvent(restartBtn, "PointerEntered", () =>
                         r.SetBackground(restartBtn, ColorUtils.Lighten("#D06818", 10)));
                     r.SubscribeEvent(restartBtn, "PointerExited", () =>
@@ -1087,7 +1087,7 @@ internal static class ContentPages
 
                 var badgeRef = filterBadge;
                 var badgeTextRef = filterBadgeText;
-                r.SubscribeEvent(filterBadge, "PointerReleased", () =>
+                r.SubscribeClickReleased(filterBadge, () =>
                 {
                     filterMode[0] = (filterMode[0] + 1) % 3;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, filterLabels[filterMode[0]]);
@@ -1279,7 +1279,7 @@ internal static class ContentPages
                     r.SetMargin(smBtn, 0, 4, 0, 0);
                     r.SetHorizontalAlignment(smBtn, "Center");
                     r.SetCursorHand(smBtn);
-                    r.SubscribeEvent(smBtn, "PointerReleased", () =>
+                    r.SubscribeClickReleased(smBtn, () =>
                     {
                         showAll[0] = !showAll[0];
                         rebuildGrid?.Invoke();
@@ -1394,7 +1394,7 @@ internal static class ContentPages
                         var gearBtnRef = gearBtn;
                         var capturedId = pluginId;
                         var capturedName = displayName;
-                        r.SubscribeEvent(gearBtn, "PointerReleased", () =>
+                        r.SubscribeClickReleased(gearBtn, () =>
                         {
                             ShowPluginSettingsLightbox(r, capturedId, capturedName, settings, font);
                         });
@@ -1429,7 +1429,7 @@ internal static class ContentPages
                         var capturedName = displayName;
                         var capturedDesc = description;
                         var capturedId = pluginId;
-                        r.SubscribeEvent(infoBtn, "PointerReleased", () =>
+                        r.SubscribeClickReleased(infoBtn, () =>
                         {
                             ShowPluginInfoLightbox(r, capturedName, capturedDesc, capturedId, font);
                         });
@@ -1464,7 +1464,7 @@ internal static class ContentPages
                         r.SetBorderChild(openBtn, openLabel);
 
                         var btnRef = openBtn;
-                        r.SubscribeEvent(openBtn, "PointerReleased", () =>
+                        r.SubscribeClickReleased(openBtn, () =>
                         {
                             onNavigate("themes");
                         });
@@ -1621,7 +1621,7 @@ internal static class ContentPages
             r.SetHeight(_infoBackdrop, windowH);
             r.SetCanvasPosition(_infoBackdrop, 0, 0);
             r.SetTag(_infoBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_infoBackdrop, "PointerReleased", () => DismissPluginInfoLightbox(r));
+            r.SubscribeClickReleased(_infoBackdrop, () => DismissPluginInfoLightbox(r));
             r.AddToOverlay(overlay, _infoBackdrop);
         }
 
@@ -1671,7 +1671,7 @@ internal static class ContentPages
                 r.SetBorderChild(closeBtn, closeText);
 
                 var closeBtnRef = closeBtn;
-                r.SubscribeEvent(closeBtn, "PointerReleased", () => DismissPluginInfoLightbox(r));
+                r.SubscribeClickReleased(closeBtn, () => DismissPluginInfoLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
                     r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
@@ -1767,7 +1767,7 @@ internal static class ContentPages
             r.SetHeight(_updateNotifyBackdrop, windowH);
             r.SetCanvasPosition(_updateNotifyBackdrop, 0, 0);
             r.SetTag(_updateNotifyBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_updateNotifyBackdrop, "PointerReleased", () => DismissUpdateNotification(r));
+            r.SubscribeClickReleased(_updateNotifyBackdrop, () => DismissUpdateNotification(r));
             r.AddToOverlay(overlay, _updateNotifyBackdrop);
         }
 
@@ -1842,7 +1842,7 @@ internal static class ContentPages
 
             var okRef = okBtn;
             var dimmedGreen = ColorUtils.Darken(AccentGreen, 15);
-            r.SubscribeEvent(okBtn, "PointerReleased", () => DismissUpdateNotification(r));
+            r.SubscribeClickReleased(okBtn, () => DismissUpdateNotification(r));
             r.SubscribeEvent(okBtn, "PointerEntered", () => r.SetBackground(okRef, dimmedGreen));
             r.SubscribeEvent(okBtn, "PointerExited", () => r.SetBackground(okRef, AccentGreen));
 
@@ -1966,7 +1966,7 @@ internal static class ContentPages
         });
 
         // Click handler
-        r.SubscribeEvent(pill, "PointerReleased", () =>
+        r.SubscribeClickReleased(pill, () =>
         {
             r.SetRenderScale(pill, 1.0);
             state = !state;
@@ -2010,11 +2010,83 @@ internal static class ContentPages
         r.SetMargin(page, 24, 24, 24, 0);
         r.SetTag(page, "uprooted-content");
 
-        // Page title
-        var pageTitle = CreateBoundText(r, "Theme Settings", 20, TextWhite, "TextPrimary");
-        r.SetFontWeight(pageTitle, "Bold");
-        ApplyFont(r, pageTitle, font);
-        r.AddChild(page, pageTitle);
+        // Page title row (title + refresh button)
+        var titleRow = r.CreatePanel();
+        if (titleRow != null)
+        {
+            var pageTitle = CreateBoundText(r, "Theme Settings", 20, TextWhite, "TextPrimary");
+            r.SetFontWeight(pageTitle, "Bold");
+            ApplyFont(r, pageTitle, font);
+            r.SetHorizontalAlignment(pageTitle, "Left");
+            r.SetVerticalAlignment(pageTitle, "Center");
+            r.AddChild(titleRow, pageTitle);
+
+            var refreshBg = AdjustForHighlight(CardBg, 4);
+            var refreshBtn = r.CreateBorder(refreshBg, 8);
+            if (refreshBtn != null)
+            {
+                var refreshText = CreateBoundText(r, "Refresh", 12, TextWhite, "TextPrimary");
+                r.SetFontWeight(refreshText, "Bold");
+                ApplyFont(r, refreshText, font);
+                r.SetHorizontalAlignment(refreshText, "Center");
+                r.SetVerticalAlignment(refreshText, "Center");
+                r.SetBorderChild(refreshBtn, refreshText);
+                r.SetPadding(refreshBtn, 12, 5, 12, 5);
+                r.SetHorizontalAlignment(refreshBtn, "Right");
+                r.SetVerticalAlignment(refreshBtn, "Center");
+                r.SetCursorHand(refreshBtn);
+                SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 15), ThickBorder);
+
+                r.SubscribeClickReleased(refreshBtn, () =>
+                {
+                    try
+                    {
+                        var active = settings.ActiveTheme;
+                        if (string.IsNullOrWhiteSpace(active))
+                            active = "default-dark";
+
+                        if (themeEngine != null)
+                        {
+                            if (active == "default-dark")
+                            {
+                                themeEngine.RevertTheme();
+                            }
+                            else if (active == "custom")
+                            {
+                                var textParam = !string.IsNullOrEmpty(settings.CustomText) && ColorUtils.IsValidHex(settings.CustomText)
+                                    ? settings.CustomText : null;
+                                themeEngine.ApplyCustomTheme(settings.CustomAccent, settings.CustomBackground, textParam);
+                            }
+                            else
+                            {
+                                themeEngine.ApplyTheme(active);
+                            }
+                        }
+
+                        if (onThemeChanged != null)
+                        {
+                            r.RunOnUIThread(() =>
+                            {
+                                try { onThemeChanged.Invoke(); }
+                                catch (Exception rx) { Logger.Log("Theme", "Refresh rebuild error: " + rx.Message); }
+                            });
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Theme", "Refresh error: " + ex.Message);
+                    }
+                });
+                r.SubscribeEvent(refreshBtn, "PointerEntered", () =>
+                    r.SetBackground(refreshBtn, ColorUtils.Lighten(refreshBg, 8)));
+                r.SubscribeEvent(refreshBtn, "PointerExited", () =>
+                    r.SetBackground(refreshBtn, refreshBg));
+
+                r.AddChild(titleRow, refreshBtn);
+            }
+
+            r.AddChild(page, titleRow);
+        }
 
         // === PRESET THEMES section ===
         // Outer container card (matches Root's native ChangeThemeView pattern)
@@ -2348,6 +2420,7 @@ internal static class ContentPages
         }
 
         bool pingActive = !string.IsNullOrEmpty(settings.CustomPingColor) && ColorUtils.IsValidHex(settings.CustomPingColor);
+        bool[] suppressCardActivate = { false };
 
         var pingHeaderPanel = r.CreatePanel();
         if (pingHeaderPanel != null)
@@ -2406,6 +2479,8 @@ internal static class ContentPages
             {
                 r.SetHorizontalAlignment(pingToggle, "Right");
                 r.SetVerticalAlignment(pingToggle, "Center");
+                r.SubscribeEvent(pingToggle, "PointerPressed", () => suppressCardActivate[0] = true);
+                r.SubscribeClickReleased(pingToggle, () => suppressCardActivate[0] = true);
                 r.AddChild(pingHeaderPanel, pingToggle);
             }
 
@@ -2476,11 +2551,16 @@ internal static class ContentPages
         });
 
         // Click handler on card to activate custom theme (matches preset cards)
-        r.SetCursorHand(card);
-        r.SubscribeEvent(card, "PointerReleased", () =>
+        r.SetCursorHand(card, enablePressFeedback: false);
+        r.SubscribeClickReleased(card, () =>
         {
             try
             {
+                if (suppressCardActivate[0])
+                {
+                    suppressCardActivate[0] = false;
+                    return;
+                }
                 if (settings.ActiveTheme == "custom") return; // already active
 
                 Logger.Log("Theme", "Custom theme card clicked");
@@ -2565,7 +2645,7 @@ internal static class ContentPages
             r.AddChild(row, swatch);
 
             r.SetCursorHand(swatch);
-            r.SubscribeEvent(swatch, "PointerReleased", () =>
+            r.SubscribeClickReleased(swatch, () =>
             {
                 ColorPickerPopup.Show(r, swatch, textBox, onColorChanged);
             });
@@ -2719,7 +2799,7 @@ internal static class ContentPages
                     }
 
                     var gearBtnRef = gearBtn;
-                    r.SubscribeEvent(gearBtn, "PointerReleased", () =>
+                    r.SubscribeClickReleased(gearBtn, () =>
                     {
                         gearClicked = true;
                         onSettings();
@@ -2763,13 +2843,14 @@ internal static class ContentPages
         }
 
         // Click handler for theme switching
-        r.SubscribeEvent(card, "PointerReleased", () =>
+        r.SubscribeClickReleased(card, () =>
         {
             try
             {
                 if (gearClicked) { gearClicked = false; return; }
                 Logger.Log("Theme", "Theme card clicked: " + themeId);
                 if (themeEngine == null) return;
+                if (settings.ActiveTheme == themeId) return;
 
                 if (themeId == "default-dark")
                 {
@@ -2928,7 +3009,7 @@ internal static class ContentPages
             r.SetHeight(_settingsBackdrop, windowH);
             r.SetCanvasPosition(_settingsBackdrop, 0, 0);
             r.SetTag(_settingsBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_settingsBackdrop, "PointerReleased", () => DismissPluginSettingsLightbox(r));
+            r.SubscribeClickReleased(_settingsBackdrop, () => DismissPluginSettingsLightbox(r));
             r.AddToOverlay(overlay, _settingsBackdrop);
         }
 
@@ -2978,7 +3059,7 @@ internal static class ContentPages
                 r.SetBorderChild(closeBtn, closeText);
 
                 var closeBtnRef = closeBtn;
-                r.SubscribeEvent(closeBtn, "PointerReleased", () => DismissPluginSettingsLightbox(r));
+                r.SubscribeClickReleased(closeBtn, () => DismissPluginSettingsLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
                     r.SetBackground(closeBtnRef, ColorUtils.Lighten(closeBtnBg, 8)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
@@ -3087,7 +3168,7 @@ internal static class ContentPages
                 var apiTextBoxRef = apiTextBox;
                 var saveBtnRef = saveBtn;
                 var saveBtnTextRef = saveBtnText;
-                r.SubscribeEvent(saveBtn, "PointerReleased", () =>
+                r.SubscribeClickReleased(saveBtn, () =>
                 {
                     var key = r.GetTextBoxText(apiTextBoxRef)?.Trim() ?? "";
 
@@ -3219,7 +3300,7 @@ internal static class ContentPages
             }
 
             var capturedThreshold = threshold;
-            r.SubscribeEvent(optionRow, "PointerReleased", () =>
+            r.SubscribeClickReleased(optionRow, () =>
             {
                 settings.NsfwThreshold = capturedThreshold;
                 try { settings.Save(); }
@@ -3492,7 +3573,7 @@ internal static class ContentPages
                     r.SetRenderScale(pillRef, 0.985);
                     r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
                 });
-                r.SubscribeEvent(pill, "PointerReleased", () =>
+                r.SubscribeClickReleased(pill, () =>
                 {
                     r.SetRenderScale(pillRef, 1.0);
                     state[0] = !state[0];
@@ -3580,7 +3661,7 @@ internal static class ContentPages
             var containerRef = container;
             bool promptVisible = false;
 
-            r.SubscribeEvent(badge, "PointerReleased", () =>
+            r.SubscribeClickReleased(badge, () =>
             {
                 var current = UprootedSettings.Load().AutoUpdateChannel;
                 if (current == "developer")
@@ -3751,7 +3832,7 @@ internal static class ContentPages
 
         if (submitBtn != null)
         {
-            r.SubscribeEvent(submitBtn, "PointerReleased", doSubmit);
+            r.SubscribeClickReleased(submitBtn, doSubmit);
             r.SubscribeEvent(submitBtn, "PointerEntered", () =>
                 r.SetBackground(submitBtn, ColorUtils.Lighten(AccentGreen, 10)));
             r.SubscribeEvent(submitBtn, "PointerExited", () =>

@@ -987,7 +987,7 @@ internal class SidebarInjector
         });
 
         // Click handler
-        _r.SubscribeEvent(outerPanel, "PointerReleased", () =>
+        _r.SubscribeClickReleased(outerPanel, () =>
         {
             _r.SetRenderScale(outerPanel, 1.0);
             OnNavItemClicked(pageName);

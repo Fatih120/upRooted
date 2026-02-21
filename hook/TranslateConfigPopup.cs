@@ -125,7 +125,7 @@ internal static class TranslateConfigPopup
             r.SetHeight(_currentBackdrop, windowH);
             r.SetCanvasPosition(_currentBackdrop, 0, 0);
             r.SetTag(_currentBackdrop, "uprooted-no-recolor");
-            r.SubscribeEvent(_currentBackdrop, "PointerReleased", () => Dismiss(r));
+            r.SubscribeClickReleased(_currentBackdrop, () => Dismiss(r));
             r.AddToOverlay(overlay, _currentBackdrop);
         }
 
@@ -268,7 +268,7 @@ internal static class TranslateConfigPopup
                 capturedR.SetRenderScale(closeBtn, 0.985);
                 capturedR.SetBackground(closeBtn, "#20FFFFFF");
             });
-            r.SubscribeEvent(closeBtn, "PointerReleased", () => Dismiss(capturedR));
+            r.SubscribeClickReleased(closeBtn, () => Dismiss(capturedR));
             r.SubscribeEvent(closeBtn, "PointerExited", () =>
             {
                 capturedR.SetRenderScale(closeBtn, 1.0);
@@ -477,7 +477,7 @@ internal static class TranslateConfigPopup
                     : ColorUtils.Lighten(basis, 8));
             });
 
-            r.SubscribeEvent(pill, "PointerReleased", () =>
+            r.SubscribeClickReleased(pill, () =>
             {
                 try
                 {
