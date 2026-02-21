@@ -1508,6 +1508,9 @@ internal class RootcordEngine
         var existingChild = _r.GetBorderChild(channelsPanel);
         if (existingChild != null && (_r.GetTag(existingChild) as string) == "rootcord-channel-wrapper") return;
 
+        // Enforce minimum width so the username in the user card is never cut off
+        _r.SetMinWidth(channelsPanel, 240);
+
         // ===== COMMUNITY INFO CARD =====
         var headerBorder = _r.CreateBorder(_cardBg, 12);
         if (headerBorder == null) return;
@@ -2399,7 +2402,7 @@ internal class RootcordEngine
             _userBar = _r.CreateBorder(_cardBg, 0);
             if (_userBar == null) return;
             _r.SetTag(_userBar, "rootcord-userbar");
-            _r.SetCornerRadius(_userBar, 0, 12, 0, 0); // only top-right rounded
+            // No rounded corners — flush edges on all sides
             // Width is set dynamically by UpdateUserBarWidth (tracks channels panel bounds)
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
