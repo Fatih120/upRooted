@@ -1358,7 +1358,7 @@ internal class AvaloniaReflection
 
     // ===== Event subscription via Expression.Lambda =====
 
-    public void SubscribeEvent(object control, string eventName, Action callback)
+    public Delegate? SubscribeEvent(object control, string eventName, Action callback)
     {
         try
         {
@@ -1367,7 +1367,7 @@ internal class AvaloniaReflection
             if (eventInfo == null)
             {
                 Logger.Log("Reflection", $"Event '{eventName}' not found on {type.Name}");
-                return;
+                return null;
             }
 
             var handlerType = eventInfo.EventHandlerType!;
@@ -1382,11 +1382,27 @@ internal class AvaloniaReflection
             var handler = lambda.Compile();
 
             eventInfo.AddEventHandler(control, handler);
+            return handler;
         }
         catch (Exception ex)
         {
             Logger.Log("Reflection", $"SubscribeEvent({eventName}) failed: {ex.Message}");
+            return null;
         }
+    }
+
+    /// <summary>
+    /// Unsubscribe a delegate previously returned by SubscribeEvent.
+    /// </summary>
+    public void UnsubscribeEvent(object control, string eventName, Delegate? handler)
+    {
+        if (handler == null) return;
+        try
+        {
+            var eventInfo = control.GetType().GetEvent(eventName);
+            eventInfo?.RemoveEventHandler(control, handler);
+        }
+        catch { }
     }
 
     // ===== Avalonia property ClearValue =====
