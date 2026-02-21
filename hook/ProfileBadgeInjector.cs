@@ -32,6 +32,7 @@ namespace Uprooted;
 internal class ProfileBadgeInjector
 {
     private const string ScannedTag = "uprooted-profile-scanned";
+    private const string NotProfileTag = "uprooted-not-profile"; // Marks confirmed non-profile overlays so retries skip them
     private const string BadgeTag = "uprooted-dev-badge";
     private const string AlphaBadgeTag = "uprooted-alpha-badge";
     private const string PresenceIconTag = "uprooted-presence-icon";
@@ -184,9 +185,9 @@ internal class ProfileBadgeInjector
     {
         try
         {
-            ScanOverlayLayer();
-            ScheduleOverlayRetry(80);
-            ScheduleOverlayRetry(200);
+            ScanOverlayLayer(tagNonProfiles: false);  // First scan: don't tag — popup may still be loading
+            ScheduleOverlayRetry(80,  tagNonProfiles: true);  // 80ms retry: tag confirmed non-profiles so the 200ms retry skips them
+            ScheduleOverlayRetry(200, tagNonProfiles: false); // 200ms final check: don't re-tag (just catch slow-loading profile popups)
         }
         catch (Exception ex)
         {
@@ -194,13 +195,13 @@ internal class ProfileBadgeInjector
         }
     }
 
-    private void ScheduleOverlayRetry(int delayMs)
+    private void ScheduleOverlayRetry(int delayMs, bool tagNonProfiles = false)
     {
         Task.Delay(delayMs).ContinueWith(_ =>
         {
             _r.RunOnUIThread(() =>
             {
-                try { ScanOverlayLayer(); }
+                try { ScanOverlayLayer(tagNonProfiles); }
                 catch { }
             });
         });
@@ -240,7 +241,11 @@ internal class ProfileBadgeInjector
         foreach (var topLevel in topLevels)
         {
             if (topLevel == _mainWindow) continue;
-            if (_r.GetTag(topLevel) == ScannedTag) continue;
+            var tag = _r.GetTag(topLevel);
+            if (tag == ScannedTag) continue;
+            // Fallback poll runs every 200ms — more than enough time for any popup to load.
+            // Skip confirmed non-profiles to avoid repeated expensive IsProfilePopup walks.
+            if (tag == NotProfileTag) continue;
 
             if (IsProfilePopup(topLevel))
             {
@@ -255,17 +260,26 @@ internal class ProfileBadgeInjector
 
                 InjectBadgeUnderUsername(topLevel);
             }
+            else
+            {
+                // Tag as confirmed non-profile so subsequent polls skip this TopLevel.
+                _r.SetTag(topLevel, NotProfileTag);
+            }
         }
     }
 
-    private void ScanOverlayLayer()
+    private void ScanOverlayLayer(bool tagNonProfiles = false)
     {
         var overlay = _r.GetOverlayLayer(_mainWindow);
         if (overlay == null) return;
 
         foreach (var child in _r.GetVisualChildren(overlay))
         {
-            if (_r.GetTag(child) == ScannedTag) continue;
+            var tag = _r.GetTag(child);
+            if (tag == ScannedTag) continue; // Already confirmed as a profile popup
+            // On retry scans (tagNonProfiles=true): also skip confirmed non-profiles.
+            // On first scan (tagNonProfiles=false): always check — popup may still be loading.
+            if (tagNonProfiles && tag == NotProfileTag) continue;
 
             if (IsProfilePopup(child))
             {
@@ -279,6 +293,11 @@ internal class ProfileBadgeInjector
                 }
 
                 InjectBadgeUnderUsername(child);
+            }
+            else if (tagNonProfiles)
+            {
+                // Mark as confirmed non-profile so the 200ms retry skips this child.
+                _r.SetTag(child, NotProfileTag);
             }
         }
     }
@@ -324,6 +343,10 @@ internal class ProfileBadgeInjector
                 if (text != null && text.Equals("ROLES", StringComparison.OrdinalIgnoreCase))
                     hasRolesText = true;
             }
+
+            // Early exit: stop walking once we have conclusive evidence.
+            // Avoids scanning remaining nodes when avatar + username are already found.
+            if (hasImage && (hasLargeText || hasRolesText)) break;
         }
 
         // Profile popup: avatar + username, or avatar + "Roles" header
