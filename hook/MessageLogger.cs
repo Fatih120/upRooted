@@ -1651,97 +1651,55 @@ internal class MessageLogger : IDisposable
 
     /// <summary>
     /// Walk into a message container to find the message content Grid (grid21 in ILSpy terms).
-    /// Tries three strategies in order, logging which succeeded for diagnostics.
     ///
-    /// Strategy 1 (primary): find RootMarkdownTextBlock → its Grid parent is the target.
-    /// Strategy 2 (fallback): find RootLinkButton (UsernameTextBlock, confirmed in same grid) → its Grid parent.
-    /// Strategy 3 (structural): find MessageBackgroundBorder → walk Panel → grid17 → Col 2 child.
+    /// Root's chat items are ContentPresenter → MessageView (UserControl). In Avalonia 11.3,
+    /// VisualExtensions.GetVisualChildren stops at the UserControl boundary — MessageView.VisualChildren
+    /// is empty. We use DescendantsHybrid which falls back to ContentControl.Content, Border.Child,
+    /// and Panel.Children when visual children are absent.
+    ///
+    /// Tries two strategies:
+    ///   1. Primary: find RootMarkdownTextBlock → its Grid parent is the injection target.
+    ///   2. Fallback: find RootLinkButton (UsernameTextBlock, confirmed in same grid at Row 0).
     ///
     /// Returns (grid, column=0) on success, (null, 0) on failure.
-    /// Logs encountered type names on miss to aid future diagnosis.
+    /// Logs anchor= and types= to aid diagnosis.
     /// </summary>
     private (object? grid, int column) FindMessageGridInContainer(object container)
     {
         var seenTypes = new HashSet<string>();
 
-        // Strategy 1: RootMarkdownTextBlock → Grid parent
-        foreach (var node in _walker.DescendantsDepthFirst(container))
+        foreach (var node in DescendantsHybrid(container, seenTypes))
         {
-            seenTypes.Add(node.GetType().Name);
-            if (node.GetType().Name != "RootMarkdownTextBlock") continue;
+            var typeName = node.GetType().Name;
 
-            var grid = _r.GetParent(node);
-            if (grid != null && _r.IsGrid(grid))
+            // Strategy 1: RootMarkdownTextBlock → Grid parent
+            if (typeName == "RootMarkdownTextBlock")
             {
-                Logger.Log(Tag, "[FMGIC] anchor=markdown");
-                return (grid, 0);
-            }
-            if (grid != null)
-            {
-                var above = _r.GetParent(grid);
-                if (above != null && _r.IsGrid(above))
+                var grid = _r.GetParent(node);
+                if (grid != null && _r.IsGrid(grid))
                 {
-                    Logger.Log(Tag, "[FMGIC] anchor=markdown+1");
-                    return (above, 0);
+                    Logger.Log(Tag, "[FMGIC] anchor=markdown");
+                    return (grid, 0);
+                }
+                if (grid != null)
+                {
+                    var above = _r.GetParent(grid);
+                    if (above != null && _r.IsGrid(above))
+                    {
+                        Logger.Log(Tag, "[FMGIC] anchor=markdown+1");
+                        return (above, 0);
+                    }
                 }
             }
-        }
 
-        // Strategy 2: RootLinkButton (UsernameTextBlock) → Grid parent
-        // UsernameTextBlock is in the same grid (grid21) at Row 0
-        foreach (var node in _walker.DescendantsDepthFirst(container))
-        {
-            if (node.GetType().Name != "RootLinkButton") continue;
-            var grid = _r.GetParent(node);
-            if (grid != null && _r.IsGrid(grid))
+            // Strategy 2: RootLinkButton (UsernameTextBlock, Row 0 of the same grid)
+            if (typeName == "RootLinkButton")
             {
-                Logger.Log(Tag, "[FMGIC] anchor=username");
-                return (grid, 0);
-            }
-        }
-
-        // Strategy 3: MessageBackgroundBorder → Panel.Children[1] (grid17) → Col 2, Row 1 child
-        object? mbBorder = null;
-        foreach (var node in _walker.DescendantsDepthFirst(container))
-        {
-            if (node.GetType().Name != "Border") continue;
-            try
-            {
-                var nameProp = node.GetType().GetProperty("Name",
-                    BindingFlags.Public | BindingFlags.Instance);
-                if (nameProp?.GetValue(node) as string == "MessageBackgroundBorder")
-                { mbBorder = node; break; }
-            }
-            catch { }
-        }
-        if (mbBorder != null)
-        {
-            // Border.Child is the Panel
-            var panel = _r.GetBorderChild(mbBorder);
-            if (panel != null)
-            {
-                // Panel.Children[1] is grid17 (index 0 = highlight border, index 1 = grid17)
-                var grid17 = _r.GetChild(panel, 1);
-                if (grid17 != null && _r.IsGrid(grid17))
+                var grid = _r.GetParent(node);
+                if (grid != null && _r.IsGrid(grid))
                 {
-                    // Col 2, Row 1 of grid17 is grid21
-                    int gc = _r.GetChildCount(grid17);
-                    for (int i = 0; i < gc; i++)
-                    {
-                        var candidate = _r.GetChild(grid17, i);
-                        if (candidate == null || !_r.IsGrid(candidate)) continue;
-                        try
-                        {
-                            int col = _r.GetGridColumn(candidate);
-                            int row = _r.GetGridRow(candidate);
-                            if (col == 2 && row == 1)
-                            {
-                                Logger.Log(Tag, "[FMGIC] anchor=structural");
-                                return (candidate, 0);
-                            }
-                        }
-                        catch { }
-                    }
+                    Logger.Log(Tag, "[FMGIC] anchor=username");
+                    return (grid, 0);
                 }
             }
         }
@@ -1750,6 +1708,71 @@ internal class MessageLogger : IDisposable
         var typeList = string.Join(",", seenTypes.Take(20));
         Logger.Log(Tag, $"[FMGIC] anchor=none types={typeList}");
         return (null, 0);
+    }
+
+    /// <summary>
+    /// Depth-first traversal that handles Avalonia 11's UserControl visual-tree boundary.
+    ///
+    /// In Avalonia 11.3, VisualExtensions.GetVisualChildren stops at UserControl/TemplatedControl
+    /// subtrees — their VisualChildren collection is empty even when fully rendered. This method
+    /// falls back to ContentControl.Content, Border.Child, and Panel.Children when visual
+    /// children are absent, allowing traversal through MessageView into its inner Grid.
+    ///
+    /// Using a visited set prevents infinite loops from any Content/Children cycles.
+    /// </summary>
+    private IEnumerable<object> DescendantsHybrid(object root, HashSet<string>? typeLog = null)
+    {
+        var stack = new Stack<object>();
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        stack.Push(root);
+
+        while (stack.Count > 0)
+        {
+            var node = stack.Pop();
+            if (!visited.Add(node)) continue;
+
+            typeLog?.Add(node.GetType().Name);
+            yield return node;
+
+            bool hadVisualKids = false;
+            foreach (var kid in _r.GetVisualChildren(node))
+            {
+                stack.Push(kid);
+                hadVisualKids = true;
+            }
+
+            if (!hadVisualKids)
+            {
+                // Fallback A: Panel.Children (Grid, StackPanel, Panel, etc.)
+                // Covers TemplatedControl cases where VisualChildren is empty.
+                var panelKids = _r.GetChildren(node);
+                if (panelKids != null && panelKids.Count > 0)
+                {
+                    for (int i = panelKids.Count - 1; i >= 0; i--)
+                        if (panelKids[i] != null) stack.Push(panelKids[i]!);
+                }
+                else
+                {
+                    // Fallback B: ContentControl.Content (UserControl, MessageView, etc.)
+                    try
+                    {
+                        var cp = node.GetType()
+                            .GetProperty("Content", BindingFlags.Public | BindingFlags.Instance);
+                        if (cp != null)
+                        {
+                            var c = cp.GetValue(node);
+                            if (c != null && c.GetType().IsClass && c is not string)
+                                stack.Push(c);
+                        }
+                    }
+                    catch { }
+
+                    // Fallback C: Border.Child
+                    var borderChild = _r.GetBorderChild(node);
+                    if (borderChild != null) stack.Push(borderChild);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -2182,36 +2205,52 @@ internal class MessageLogger : IDisposable
     }
 
     /// <summary>
-    /// Diagnostic: dump the visual tree of a container using GetVisualChildren so that
-    /// ContentPresenter and TemplatedControl subtrees are traversed correctly.
-    /// Uses the same walker as FindMessageGridInContainer for accurate results.
+    /// Diagnostic: dump the visual tree of a container using DescendantsHybrid so that
+    /// the UserControl boundary is correctly traversed. Logs up to 40 nodes.
     /// </summary>
     private void DumpContainerTree(object root, int _, int maxDepth)
     {
-        // Use a stack to track (node, depth) so we can honour maxDepth
         var stack = new Stack<(object node, int depth)>();
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
         stack.Push((root, 0));
         int total = 0;
         while (stack.Count > 0 && total < 40)
         {
             var (node, depth) = stack.Pop();
-            if (depth > maxDepth) continue;
+            if (!visited.Add(node) || depth > maxDepth) continue;
             total++;
             var typeName = node.GetType().Name;
-            var panelChildren = _r.GetChildCount(node);     // Panel.Children count (0 for non-Panels)
+            var panelKids = _r.GetChildCount(node);
             int gridCol = -1, gridRow = -1;
             try { gridCol = _r.GetGridColumn(node); } catch { }
             try { gridRow = _r.GetGridRow(node); } catch { }
             var indent = new string(' ', depth * 2);
-            Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} panelKids={panelChildren} col={gridCol} row={gridRow}");
+            Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} panelKids={panelKids} col={gridCol} row={gridRow}");
 
-            // Push visual children in reverse order so left-to-right pops first
-            var visKids = _r.GetVisualChildren(node).ToList();
-            for (int i = visKids.Count - 1; i >= 0; i--)
-                stack.Push((visKids[i], depth + 1));
+            bool hadVis = false;
+            foreach (var kid in _r.GetVisualChildren(node))
+            { stack.Push((kid, depth + 1)); hadVis = true; }
+
+            if (!hadVis)
+            {
+                var pKids = _r.GetChildren(node);
+                if (pKids != null && pKids.Count > 0)
+                    for (int i = pKids.Count - 1; i >= 0; i--)
+                        if (pKids[i] != null) stack.Push(((object)pKids[i]!, depth + 1));
+                else
+                {
+                    try
+                    {
+                        var cp = node.GetType().GetProperty("Content", BindingFlags.Public | BindingFlags.Instance);
+                        if (cp != null) { var c = cp.GetValue(node); if (c != null && c.GetType().IsClass && c is not string) stack.Push((c, depth + 1)); }
+                    }
+                    catch { }
+                    var bc = _r.GetBorderChild(node);
+                    if (bc != null) stack.Push((bc, depth + 1));
+                }
+            }
         }
-        if (total >= 40)
-            Logger.Log(Tag, "[DIAG-TREE] (truncated at 40 nodes)");
+        if (total >= 40) Logger.Log(Tag, "[DIAG-TREE] (truncated at 40 nodes)");
     }
 
     /// <summary>
