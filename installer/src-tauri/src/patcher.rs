@@ -95,10 +95,20 @@ pub fn install() -> PatchResult {
 
         // Inject before </head>
         let new_content = content.replace("</head>", &format!("    {}\n  </head>", injection));
-        if let Err(e) = fs::write(file, &new_content) {
+        // Write atomically: write to temp then rename so a crash mid-write cannot corrupt the file
+        let tmp_path = file.with_extension("html.tmp");
+        if let Err(e) = fs::write(&tmp_path, &new_content) {
             return PatchResult {
                 success: false,
-                message: format!("Failed to write {}: {}", file.display(), e),
+                message: format!("Failed to write temp file {}: {}", tmp_path.display(), e),
+                files_patched: patched,
+            };
+        }
+        if let Err(e) = fs::rename(&tmp_path, file) {
+            let _ = fs::remove_file(&tmp_path);
+            return PatchResult {
+                success: false,
+                message: format!("Failed to finalize write to {}: {}", file.display(), e),
                 files_patched: patched,
             };
         }

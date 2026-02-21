@@ -396,9 +396,12 @@ pub fn remove_env_vars() -> Result<(), String> {
                         Some(None) // skip this line
                     } else if *in_block && (line.starts_with("export CORECLR_")
                         || line.starts_with("export DOTNET_")
+                        || line.starts_with('#') // skip intermediate comment lines within the block
                         || line.is_empty())
                     {
-                        if !line.starts_with("export") {
+                        // An empty line signals the end of our block (the block has no trailing
+                        // blank line, so an empty line here is the next content's separator)
+                        if line.is_empty() {
                             *in_block = false;
                         }
                         Some(None) // skip
