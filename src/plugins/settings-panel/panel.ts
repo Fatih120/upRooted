@@ -118,6 +118,12 @@ function tryInject(): void {
     rootContentPanel = null;
     uprootedContent = null;
     activeUprootedItem = null;
+    // Remove sidebar click listener now — injectSidebarSection will re-add on next inject.
+    // Without this, the same element gets a duplicate listener if it survives the re-render.
+    if (injectedSidebar) {
+      injectedSidebar.removeEventListener("click", onSidebarClick, true);
+      injectedSidebar = null;
+    }
   }
 
   // Step 1: Find "APP SETTINGS" header to confirm we're on the settings page

@@ -63,6 +63,8 @@ function main(): void {
     // Start enabled plugins
     loader.startAll().then(() => {
       console.log(`[Uprooted] All plugins started.`);
+    }).catch((err) => {
+      console.error("[Uprooted] startAll failed:", err);
     });
   } catch (err) {
     // Visible error banner since Root has no DevTools
