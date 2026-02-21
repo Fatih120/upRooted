@@ -740,7 +740,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
                 new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.4.2",
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
                 new() { Id = "recon-logger", DisplayName = "Recon Logger", Version = "0.4.2",
                     Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
