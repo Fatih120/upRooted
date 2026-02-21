@@ -1365,6 +1365,46 @@ internal class AvaloniaReflection
         }
     }
 
+    public void AddGridColumnStar(object? grid, double starWidth = 1.0) => AddGridColumn(grid, starWidth);
+
+    public void AddGridColumnAuto(object? grid)
+    {
+        if (grid == null || ColumnDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var autoUnit = Enum.Parse(GridUnitTypeEnum, "Auto");
+            var gridLength = Activator.CreateInstance(GridLengthType, 0d, autoUnit);
+            var colDef = Activator.CreateInstance(ColumnDefinitionType);
+            ColumnDefinitionType.GetProperty("Width")?.SetValue(colDef, gridLength);
+            var colDefs = grid.GetType().GetProperty("ColumnDefinitions")?.GetValue(grid);
+            if (colDefs is System.Collections.IList colList)
+                colList.Add(colDef);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddGridColumnAuto error: {ex.Message}");
+        }
+    }
+
+    public void AddGridColumnPixel(object? grid, double pixels)
+    {
+        if (grid == null || ColumnDefinitionType == null || GridLengthType == null || GridUnitTypeEnum == null) return;
+        try
+        {
+            var pixelUnit = Enum.Parse(GridUnitTypeEnum, "Pixel");
+            var gridLength = Activator.CreateInstance(GridLengthType, pixels, pixelUnit);
+            var colDef = Activator.CreateInstance(ColumnDefinitionType);
+            ColumnDefinitionType.GetProperty("Width")?.SetValue(colDef, gridLength);
+            var colDefs = grid.GetType().GetProperty("ColumnDefinitions")?.GetValue(grid);
+            if (colDefs is System.Collections.IList colList)
+                colList.Add(colDef);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"AddGridColumnPixel error: {ex.Message}");
+        }
+    }
+
     /// <summary>
     /// Add an auto-height row definition to a Grid.
     /// </summary>

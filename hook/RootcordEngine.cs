@@ -573,9 +573,10 @@ internal class RootcordEngine
 
             // Prevent the Overlay→Inline flash in togglePane():
             // Root's togglePane() checks CommunityPaneDisplayMode==Overlay and switches to Inline.
-            // By setting CommunityPaneDisplayMode to Inline via PaneDisplayService, that condition
-            // is never true, so the mode switch never fires. The SplitView stays in Overlay mode
-            // (pane floats over content — when closed, content fills full width).
+            // We set CommunityPaneDisplayMode to CompactInline (not Overlay and not Inline) so:
+            // - The check `== Overlay` fails → no mode switch → no flash
+            // - GlobalPaneDisplayMode stays Overlay → pane content fills full width when closed
+            // We must NOT set GlobalPaneDisplayMode to Inline (that reserves 320px pane space).
             try
             {
                 if (_homeViewModel != null)
@@ -583,31 +584,32 @@ internal class RootcordEngine
                     var pds = _r.GetPropertyValue(_homeViewModel, "PaneDisplayService");
                     if (pds != null)
                     {
-                        // Set CommunityPaneDisplayMode to Inline so togglePane's condition is false
-                        var setCommunityMethod = pds.GetType().GetMethod("SetCommunityPaneDisplayMode");
-                        if (setCommunityMethod != null)
+                        // Try to set CommunityPaneDisplayMode directly (bypasses GlobalPaneDisplayMode)
+                        var commProp = pds.GetType().GetProperty("CommunityPaneDisplayMode");
+                        if (commProp != null && commProp.CanWrite)
                         {
-                            var parms = setCommunityMethod.GetParameters();
-                            if (parms.Length > 0)
-                            {
-                                var inlineEnum = Enum.Parse(parms[0].ParameterType, "Inline");
-                                setCommunityMethod.Invoke(pds, new[] { inlineEnum });
-                                Logger.Log(Tag, "PaneDisplayService.CommunityPaneDisplayMode → Inline (prevents flash)");
-                            }
+                            // Set to CompactInline — not Overlay (avoids flash) and not Inline (avoids space reservation)
+                            var compactInline = Enum.Parse(commProp.PropertyType, "CompactInline");
+                            commProp.SetValue(pds, compactInline);
+                            Logger.Log(Tag, "PaneDisplayService.CommunityPaneDisplayMode → CompactInline (prevents flash)");
                         }
                         else
                         {
-                            // Fallback: try setting GlobalPaneDisplayMode
-                            var setGlobalMethod = pds.GetType().GetMethod("SetGlobalPaneDisplayMode");
-                            if (setGlobalMethod != null)
+                            // Fallback: try SetCommunityPaneDisplayMode method
+                            var setCommunityMethod = pds.GetType().GetMethod("SetCommunityPaneDisplayMode");
+                            if (setCommunityMethod != null)
                             {
-                                var parms = setGlobalMethod.GetParameters();
+                                var parms = setCommunityMethod.GetParameters();
                                 if (parms.Length > 0)
                                 {
-                                    var inlineEnum = Enum.Parse(parms[0].ParameterType, "Inline");
-                                    setGlobalMethod.Invoke(pds, new[] { inlineEnum });
-                                    Logger.Log(Tag, "PaneDisplayService.GlobalPaneDisplayMode → Inline (fallback)");
+                                    var compactInline = Enum.Parse(parms[0].ParameterType, "CompactInline");
+                                    setCommunityMethod.Invoke(pds, new[] { compactInline });
+                                    Logger.Log(Tag, "PaneDisplayService.CommunityPaneDisplayMode → CompactInline via method");
                                 }
+                            }
+                            else
+                            {
+                                Logger.Log(Tag, "PaneDisplayService: no way to set CommunityPaneDisplayMode (will use native behavior)");
                             }
                         }
                     }
@@ -916,6 +918,10 @@ internal class RootcordEngine
                     ? (i, w.Value.Value, w.Value.UnitType)
                     : (i, 0, "Auto"));
             }
+            // Diagnostic: log ALL column definitions so we can see the exact widths
+            Logger.Log(Tag, $"SwapCommunityMembers: {gridColDefs.Count} colDefs, {nonSplitters.Count} panels, {gridSplitters.Count} splitters");
+            foreach (var (colIdx, width, unit) in _originalColWidths)
+                Logger.Log(Tag, $"  ColDef[{colIdx}] = {width} {unit}");
 
             // Rotate: move members sidebar (col 0) to rightmost, shift others left.
             // Original: [Members(col A)] [Channels(col B)] [Chat(col C)]
@@ -956,27 +962,98 @@ internal class RootcordEngine
             }
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {gridSplitters.Count} GridSplitters");
 
-            // Rotate column definition widths the same way
-            var savedWidths = new List<(double value, string unit)>();
-            foreach (var col in columns)
-            {
-                if (col < gridColDefs.Count)
-                {
-                    var w = _originalColWidths.FirstOrDefault(x => x.colIdx == col);
-                    savedWidths.Add((w.width, w.unit));
-                }
-                else savedWidths.Add((1, "Star"));
-            }
+            // Set correct column widths after rotation.
+            // The original layout is [Members=Auto] [Splitter=1px] [Chat=Star].
+            // After rotation: Members moves to the rightmost column.
+            // The chat panel (originally Star) must KEEP Star wherever it lands.
+            // The members panel (now rightmost) must be Auto.
+            // All other panels keep their original width type.
+            //
+            // Find which panel ended up in the rightmost column (that's Members now).
+            int maxAssignedCol = -1;
+            int maxAssignedIdx = -1;
             for (int i = 0; i < n; i++)
             {
-                int targetCol = columns[(i + n - 1) % n];
-                if (targetCol < gridColDefs.Count)
-                    SetColumnDefinitionWidth(gridColDefs[targetCol], savedWidths[i].value, savedWidths[i].unit);
+                int assignedCol = _r.GetGridColumn(nonSplitters[i].child);
+                if (assignedCol > maxAssignedCol) { maxAssignedCol = assignedCol; maxAssignedIdx = i; }
+            }
+
+            for (int i = 0; i < n; i++)
+            {
+                int assignedCol = _r.GetGridColumn(nonSplitters[i].child);
+                if (assignedCol >= gridColDefs.Count) continue;
+
+                if (i == maxAssignedIdx)
+                {
+                    // This is the rightmost panel (Members after rotation) → Auto
+                    SetColumnDefinitionWidth(gridColDefs[assignedCol], 0, "Auto");
+                }
+                else
+                {
+                    // Preserve original width type from this panel's source column
+                    int origCol = nonSplitters[i].col;
+                    var origWidth = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                    if (origWidth.unit == "Star" || origWidth.unit == "star")
+                        SetColumnDefinitionWidth(gridColDefs[assignedCol], origWidth.width, "Star");
+                    else if (origWidth.unit == "Auto" || origWidth.width == 0)
+                        SetColumnDefinitionWidth(gridColDefs[assignedCol], 0, "Auto");
+                    else
+                        SetColumnDefinitionWidth(gridColDefs[assignedCol], origWidth.width, origWidth.unit);
+                }
+            }
+
+            // Clamp channel list column width: if it's a large Pixel value from a previous
+            // session's resize, cap it at 240px (Discord-like default). This prevents the
+            // channel list from consuming too much space on init.
+            for (int i = 0; i < n; i++)
+            {
+                if (i == maxAssignedIdx) continue; // skip members (rightmost)
+                int assignedCol = _r.GetGridColumn(nonSplitters[i].child);
+                if (assignedCol >= gridColDefs.Count) continue;
+                var w = _r.GetColumnDefinitionWidth(gridColDefs[assignedCol]);
+                if (w != null && w.Value.UnitType == "Pixel" && w.Value.Value > 240)
+                {
+                    SetColumnDefinitionWidth(gridColDefs[assignedCol], 240, "Pixel");
+                    Logger.Log(Tag, $"SwapCommunityMembers: clamped ColDef[{assignedCol}] from {w.Value.Value}px to 240px");
+                }
+            }
+
+            // Safety: ensure at least one Star column exists for chat to fill space
+            bool hasStar = false;
+            for (int i = 0; i < gridColDefs.Count; i++)
+            {
+                var w = _r.GetColumnDefinitionWidth(gridColDefs[i]);
+                if (w?.UnitType == "Star") { hasStar = true; break; }
+            }
+            if (!hasStar)
+            {
+                // Find the panel that originally had Star and force its new column to Star
+                for (int i = 0; i < n; i++)
+                {
+                    int origCol = nonSplitters[i].col;
+                    var origWidth = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                    if (origWidth.unit == "Star" || origWidth.unit == "star")
+                    {
+                        int assignedCol = _r.GetGridColumn(nonSplitters[i].child);
+                        if (assignedCol < gridColDefs.Count)
+                        {
+                            SetColumnDefinitionWidth(gridColDefs[assignedCol], 1, "Star");
+                            Logger.Log(Tag, $"SwapCommunityMembers: forced ColDef[{assignedCol}] to Star (was {origWidth.unit})");
+                        }
+                        break;
+                    }
+                }
             }
 
             var names = string.Join("  ", nonSplitters.Select((c, idx) =>
                 $"{c.child.GetType().Name}@{c.col}→{columns[(idx + n - 1) % n]}"));
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {nonSplitters.Count} children: {names}");
+            // Diagnostic: log post-rotation column widths
+            for (int i = 0; i < gridColDefs.Count; i++)
+            {
+                var w = _r.GetColumnDefinitionWidth(gridColDefs[i]);
+                Logger.Log(Tag, $"  AFTER ColDef[{i}] = {w?.Value ?? 0} {w?.UnitType ?? "?"}");
+            }
 
             // Deep-clear right-side margins/paddings from SplitView down to the members column host
             // Level 1+2: SplitView immediate visual children (content template wrapper + their children)
@@ -996,7 +1073,8 @@ internal class RootcordEngine
             }
             catch { }
 
-            // CommunityView and its immediate children
+            // CommunityView, layoutGrid, and their immediate children — zero margins/padding
+            // so the grid stretches to fill the full SplitView content area
             try
             {
                 _r.SetMargin(communityView, 0, 0, 0, 0);
@@ -1006,6 +1084,9 @@ internal class RootcordEngine
                     _r.SetMargin(child, 0, 0, 0, 0);
                     _r.SetPadding(child, 0, 0, 0, 0);
                 }
+                // Also zero the layoutGrid itself (it has Margin=(6,0,6,0) from CommunityTabView)
+                _r.SetMargin(layoutGrid, 0, 0, 0, 0);
+                _r.SetPadding(layoutGrid, 0, 0, 0, 0);
             }
             catch { }
 
@@ -1053,6 +1134,127 @@ internal class RootcordEngine
                 }
             }
             catch { }
+
+            // Avalonia's Grid layout engine doesn't re-measure columns correctly
+            // when ColumnDefinition.Width is changed via reflection (trimmed binary).
+            // Workaround: instead of changing column definitions, set HorizontalAlignment=Stretch
+            // on the chat panel and remove the layoutGrid's existing column definitions entirely,
+            // replacing them with fresh ones.
+            try
+            {
+                // Clear ALL column definitions and re-add them with the correct sizing
+                var colDefsList = _r.GetColumnDefinitions(layoutGrid);
+                if (colDefsList != null)
+                {
+                    // Read current count before clearing
+                    int originalCount = colDefsList.Count;
+
+                    // Remove all existing column defs
+                    var clearMethod = colDefsList.GetType().GetMethod("Clear");
+                    clearMethod?.Invoke(colDefsList, null);
+
+                    // Re-add column defs with correct sizing
+                    // Find which columns need what type
+                    for (int ci = 0; ci < originalCount; ci++)
+                    {
+                        // Determine what this column should be
+                        bool isChatCol = false;
+                        bool isMembersCol = false;
+                        for (int pi = 0; pi < n; pi++)
+                        {
+                            int assignedCol = _r.GetGridColumn(nonSplitters[pi].child);
+                            if (assignedCol == ci)
+                            {
+                                if (pi == maxAssignedIdx)
+                                    isMembersCol = true;
+                                else
+                                {
+                                    int origCol = nonSplitters[pi].col;
+                                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                                    if (origW.unit == "Star" || origW.unit == "star")
+                                        isChatCol = true;
+                                }
+                            }
+                        }
+
+                        if (isChatCol)
+                            _r.AddGridColumnStar(layoutGrid, 1.0);
+                        else if (isMembersCol)
+                            _r.AddGridColumnAuto(layoutGrid);
+                        else
+                        {
+                            // Channels or splitter column — use original width
+                            var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
+                            if (origW.unit == "Pixel" && origW.width > 240)
+                                _r.AddGridColumnPixel(layoutGrid, 240); // clamp channels
+                            else if (origW.unit == "Auto" || origW.width == 0)
+                                _r.AddGridColumnAuto(layoutGrid);
+                            else if (origW.unit == "Pixel")
+                                _r.AddGridColumnPixel(layoutGrid, origW.width > 0 ? origW.width : 1);
+                            else
+                                _r.AddGridColumnPixel(layoutGrid, 1); // fallback
+                        }
+                    }
+                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt {originalCount} column definitions");
+
+                    // Clamp channels panel MaxWidth to 240px (Discord-like default)
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (i == maxAssignedIdx) continue; // skip members
+                        int origCol = nonSplitters[i].col;
+                        var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                        if (origW.unit != "Star" && origW.unit != "star")
+                        {
+                            _r.SetMaxWidth(nonSplitters[i].child, 240);
+                            Logger.Log(Tag, $"SwapCommunityMembers: clamped {nonSplitters[i].child.GetType().Name} MaxWidth to 240px");
+                        }
+                    }
+                }
+
+                // Invalidate to trigger fresh layout
+                layoutGrid.GetType().GetMethod("InvalidateMeasure")?.Invoke(layoutGrid, null);
+                layoutGrid.GetType().GetMethod("InvalidateArrange")?.Invoke(layoutGrid, null);
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: column rebuild error: {ex.Message}"); }
+
+            // Diagnostic: deferred bounds check to see actual rendered sizes
+            var diagToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+            var diagGrid = layoutGrid;
+            var diagSplitView = _rootSplitView;
+            Task.Delay(500, diagToken).ContinueWith(_ =>
+            {
+                if (diagToken.IsCancellationRequested) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try
+                    {
+                        var gridBounds = _r.GetBounds(diagGrid);
+                        var svBounds = diagSplitView != null ? _r.GetBounds(diagSplitView) : null;
+                        var diagColDefs = _r.GetColumnDefinitions(diagGrid);
+                        string colInfo = "";
+                        if (diagColDefs != null)
+                        {
+                            for (int ci = 0; ci < diagColDefs.Count; ci++)
+                            {
+                                var cw = _r.GetColumnDefinitionWidth(diagColDefs[ci]);
+                                var actualW = diagColDefs[ci]?.GetType().GetProperty("ActualWidth")?.GetValue(diagColDefs[ci]);
+                                colInfo += $" [{ci}]={cw?.Value}{cw?.UnitType}(actual={actualW})";
+                            }
+                        }
+                        Logger.Log(Tag, $"SwapCommunityMembers BOUNDS: grid={gridBounds?.W:F0}x{gridBounds?.H:F0} sv={svBounds?.W:F0}x{svBounds?.H:F0} cols:{colInfo}");
+                        foreach (var child in _r.GetVisualChildren(diagGrid))
+                        {
+                            var cb = _r.GetBounds(child);
+                            int col = _r.GetGridColumn(child);
+                            var widthProp = child.GetType().GetProperty("Width")?.GetValue(child);
+                            var maxWProp = child.GetType().GetProperty("MaxWidth")?.GetValue(child);
+                            var hAlign = child.GetType().GetProperty("HorizontalAlignment")?.GetValue(child);
+                            Logger.Log(Tag, $"  child[col{col}] {child.GetType().Name} bounds={cb?.X:F0},{cb?.Y:F0} {cb?.W:F0}x{cb?.H:F0} Width={widthProp} MaxWidth={maxWProp} HAlign={hAlign}");
+                        }
+                    }
+                    catch { }
+                });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
 
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
@@ -1450,7 +1652,14 @@ internal class RootcordEngine
         {
             var unit = Enum.Parse(_r.GridUnitTypeEnum, unitType);
             var gridLength = Activator.CreateInstance(_r.GridLengthType, value, unit);
-            colDef.GetType().GetProperty("Width")?.SetValue(colDef, gridLength);
+            var widthProp = colDef.GetType().GetProperty("Width");
+            widthProp?.SetValue(colDef, gridLength);
+
+            // Verify the set took effect
+            var readBack = widthProp?.GetValue(colDef);
+            var rbStr = readBack?.ToString() ?? "null";
+            if (!rbStr.Contains(unitType, StringComparison.OrdinalIgnoreCase))
+                Logger.Log(Tag, $"SetColumnDefinitionWidth: SET FAILED — wrote {value} {unitType}, readback={rbStr}");
         }
         catch (Exception ex)
         {
