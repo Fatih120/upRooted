@@ -281,6 +281,7 @@ internal static class ContentPages
         var pageTitleRow = r.CreatePanel();
         if (pageTitleRow != null)
         {
+            pageTitleRow.GetType().GetProperty("MinHeight")?.SetValue(pageTitleRow, 28.0);
             var pageTitle = CreateBoundText(r, "About Uprooted", 20, TextWhite, "TextPrimary");
             r.SetFontWeight(pageTitle, "Bold");
             ApplyFont(r, pageTitle, font);
@@ -300,12 +301,13 @@ internal static class ContentPages
                 {
                     var consoleBtnText = CreateBoundText(r, "Live Console", 11, "#7289DA", "TextSecondary");
                     ApplyFont(r, consoleBtnText, font);
+                    r.SetFontWeight(consoleBtnText, "Bold");
                     r.SetHorizontalAlignment(consoleBtnText, "Center");
                     var consoleBtnBg = AdjustForHighlight(CardBg, 2);
                     var consoleBtn = r.CreateBorder(consoleBtnBg, 6, consoleBtnText);
                     if (consoleBtn != null)
                     {
-                        r.SetPadding(consoleBtn, 8, 4, 8, 4);
+                        r.SetPadding(consoleBtn, 12, 5, 12, 5);
                         r.SetVerticalAlignment(consoleBtn, "Center");
                         r.SetCursorHand(consoleBtn);
                         SetBorderStroke(r, consoleBtn, AdjustForHighlight(consoleBtnBg, 4), ThickBorder);
@@ -327,12 +329,13 @@ internal static class ContentPages
                 // "Open Logs" button
                 var logBtnText = CreateBoundText(r, "Open Logs", 11, TextMuted, "TextSecondary");
                 ApplyFont(r, logBtnText, font);
+                r.SetFontWeight(logBtnText, "Bold");
                 r.SetHorizontalAlignment(logBtnText, "Center");
                 var logBtnBg = AdjustForHighlight(CardBg, 2);
                 var logBtn = r.CreateBorder(logBtnBg, 6, logBtnText);
                 if (logBtn != null)
                 {
-                    r.SetPadding(logBtn, 8, 4, 8, 4);
+                    r.SetPadding(logBtn, 12, 5, 12, 5);
                     r.SetVerticalAlignment(logBtn, "Center");
                     r.SetCursorHand(logBtn);
                     SetBorderStroke(r, logBtn, AdjustForHighlight(logBtnBg, 4), ThickBorder);
@@ -379,6 +382,7 @@ internal static class ContentPages
             r.BindToDynamicResource(versionBadge, "Background", "BrandPrimary");
             r.SetPadding(versionBadge, 8, 1, 8, 1);
             r.SetVerticalAlignment(versionBadge, "Center");
+            r.SetMargin(versionBadge, 0, -1, 0, 0);
             SetBorderStroke(r, versionBadge, AdjustForHighlight(AccentGreen, 18), ThickBorder);
             r.AddChild(titleRow, versionBadge);
             r.AddChild(cardContent, titleRow);
@@ -2096,6 +2100,7 @@ internal static class ContentPages
         var titleRow = r.CreatePanel();
         if (titleRow != null)
         {
+            titleRow.GetType().GetProperty("MinHeight")?.SetValue(titleRow, 28.0);
             var pageTitle = CreateBoundText(r, "Theme Settings", 20, TextWhite, "TextPrimary");
             r.SetFontWeight(pageTitle, "Bold");
             ApplyFont(r, pageTitle, font);
@@ -2107,7 +2112,7 @@ internal static class ContentPages
             var refreshBtn = r.CreateBorder(refreshBg, 8);
             if (refreshBtn != null)
             {
-                var refreshText = CreateBoundText(r, "Refresh", 12, TextWhite, "TextPrimary");
+                var refreshText = CreateBoundText(r, "Refresh", 11, TextWhite, "TextPrimary");
                 r.SetFontWeight(refreshText, "Bold");
                 ApplyFont(r, refreshText, font);
                 r.SetHorizontalAlignment(refreshText, "Center");
@@ -2253,7 +2258,7 @@ internal static class ContentPages
                 {
                     ($"Native ({nativeStateLabel})",  "default-dark", nativeBg, nativeAccent, "Root's app theme"),
                     ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
-                    ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Deep purple space"),
+                    ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Dark purple space"),
                     ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
                 };
 
@@ -4141,11 +4146,9 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// DPI-aware border thicknesses expressed in DIPs but targeting fixed physical pixels.
-    /// On high-DPI displays, 1 DIP can rasterize to 2+ physical pixels, so we scale down
-    /// the DIP values by RenderScaling to keep visual stroke widths stable:
-    /// - ThinBorder: 1 physical px
-    /// - ThickBorder: 2 physical px
+    /// DPI-aware border thicknesses tuned to match Root native visuals:
+    /// - ThinBorder: fixed to 1 physical px (prevents 1px lines inflating on high DPI)
+    /// - ThickBorder: native-like DIP weight (matches Root Themes card emphasis)
     /// </summary>
     private static double ThinBorder = 1.0;   // outer container cards
     private static double ThickBorder = 2.0;   // inner selectable cards, buttons
@@ -4156,8 +4159,8 @@ internal static class ContentPages
         if (scale <= 0) scale = 1.0;
 
         ThinBorder = 1.0 / scale;
-        ThickBorder = 2.0 / scale;
-        Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} (1px), ThickBorder={ThickBorder:F3} (2px)");
+        ThickBorder = 2.0;
+        Logger.Log("ContentPages", $"DPI scale={scale:F2}, ThinBorder={ThinBorder:F3} (1px), ThickBorder={ThickBorder:F3} (native DIP)");
     }
 
     /// <summary>

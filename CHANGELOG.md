@@ -30,6 +30,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/ContentPages.cs`
 - **Settings page visual consistency pass** — Normalized header/first-card spacing across About/Plugin Settings/Theme Settings and aligned card outlines closer to Root-native lightness.
   - File: `hook/ContentPages.cs`
+- **Header row/button alignment polish** — Unified title-row minimum heights and button text sizing/weight so About (`Live Console`/`Open Logs`) and Themes (`Refresh`) header controls align consistently. About version badge in the UPROOTED card title row was nudged for cleaner baseline alignment.
+  - File: `hook/ContentPages.cs`
+- **Injected Uprooted sidebar tab interaction model** — Uprooted-injected sidebar tabs now use press-to-navigate behavior, no longer apply press-shrink feedback, and render without injected border strokes.
+  - Files: `hook/SidebarInjector.cs`, `hook/AvaloniaReflection.cs`
 - **Settings interactions and visual feedback aligned with Root native UX** — Incremental UI polish across injected controls:
   - Release-only activation semantics standardized (`SubscribeClickReleased`) and drag-off-release no longer toggles.
   - Press feedback (proportional shrink + subtle press shade) now applies consistently to injected controls, with targeted opt-outs for large parent cards where child-button presses should not depress the parent.
@@ -70,7 +74,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **Dev mode teardown latency on channel switch** — Switching from Developer to Stable now immediately disables/refreshes dev-only runtime behavior (ReconLogger, Live Console, dev badge indicators, and related UI state) without requiring tab navigation or restart.
   - Files: `hook/ContentPages.cs`, `hook/LogConsole.cs`, `hook/ProfileBadgeInjector.cs`
-- **High-DPI border inflation on some laptops** — Border scaling now targets fixed physical pixel widths (thin=1px, thick=2px) to prevent 1px/2px styles rendering as 2px/3px at higher display scale factors.
+- **High-DPI border inflation on some laptops** — Thin borders now target fixed physical width (1px) to prevent inflation on high-scale displays. Thick borders were retuned to native-like emphasis weight to match Root settings visuals more closely.
   - File: `hook/ContentPages.cs`
 - **Recon Logger naming consistency** — Plugin display name standardized to `ReconLogger`.
   - File: `hook/ContentPages.cs`

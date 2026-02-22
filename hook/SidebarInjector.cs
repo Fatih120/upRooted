@@ -458,8 +458,7 @@ internal class SidebarInjector
             // Step 3: Build and insert our controls into NavContainer
             BuildAndInsertNavItems(layout);
 
-            // Step 3b: Style Root's native nav items to match our injected nav items
-            StyleNativeNavItems(layout);
+            // Step 3b: Keep Root native nav items untouched (no border injection).
 
             // Step 4: Wrap NavContainer in ScrollViewer for sidebar scrolling
             WrapInScrollViewer();
@@ -885,7 +884,7 @@ internal class SidebarInjector
         var outerPanel = _r.CreatePanel();
         if (outerPanel == null) return null;
         _r.SetTag(outerPanel, $"uprooted-nav-{pageName}");
-        _r.SetCursorHand(outerPanel);
+        _r.SetCursorHand(outerPanel, enablePressFeedback: false);
         _r.SetHeight(outerPanel, 40); // Match native ListBoxItem height exactly
         _r.SetBackground(outerPanel, "#00000000"); // Transparent BG required for hit-testing (pointer events)
         object? highlight = null;
@@ -898,23 +897,12 @@ internal class SidebarInjector
             _r.SetMargin(innerPanel, 0, 2, 0, 2);
 
             // Highlight border (behind content, full width, rounded corners)
-            // Matches Root's native ListBoxItem style: thin border matching divider lines
+            // Background-only highlight (no border). Native tabs remain untouched.
             highlight = _r.CreateBorder(cornerRadius: 12);
             if (highlight != null)
             {
                 _r.SetTag(highlight, $"uprooted-highlight-{pageName}");
                 highlight.GetType().GetProperty("Height")?.SetValue(highlight, 36.0);
-
-                // Add visible thin border matching Root's divider lines
-                var borderColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
-                var borderBrush = _r.CreateBrush(borderColor);
-                if (borderBrush != null)
-                    highlight.GetType().GetProperty("BorderBrush")?.SetValue(highlight, borderBrush);
-                if (_r.ThicknessType != null)
-                {
-                    var thickness = Activator.CreateInstance(_r.ThicknessType, 1.0, 1.0, 1.0, 1.0);
-                    highlight.GetType().GetProperty("BorderThickness")?.SetValue(highlight, thickness);
-                }
 
                 _r.AddChild(innerPanel, highlight);
             }
@@ -949,47 +937,27 @@ internal class SidebarInjector
             // Hover/selection: read Root's highlight resources for correct variant colors.
             // Dark = HighlightLight=#0AFFFFFF, HighlightNormal=#19FFFFFF, HighlightStrong=#30FFFFFF
             // Light = HighlightLight=#0A000000, HighlightNormal=#19000000, HighlightStrong=#30000000
-            var restingBorderColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
-            var hoverBorderColor = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? "#19ffffff";
             // Hover events on the outer panel (captures full area)
             _r.SubscribeEvent(outerPanel, "PointerEntered", () =>
             {
                 if (_activePage != pageName && highlight != null)
                 {
                     _r.SetBackground(highlight, hoverBgColor);
-                    var brush = _r.CreateBrush(hoverBorderColor);
-                    if (brush != null)
-                        highlight.GetType().GetProperty("BorderBrush")?.SetValue(highlight, brush);
                 }
             });
 
             _r.SubscribeEvent(outerPanel, "PointerExited", () =>
             {
-                _r.SetRenderScale(outerPanel, 1.0);
                 if (_activePage != pageName && highlight != null)
                 {
                     _r.SetBackground(highlight, (string?)null);
-                    var brush = _r.CreateBrush(restingBorderColor);
-                    if (brush != null)
-                        highlight.GetType().GetProperty("BorderBrush")?.SetValue(highlight, brush);
                 }
             });
         }
 
         _r.SubscribeEvent(outerPanel, "PointerPressed", () =>
         {
-            _r.SetRenderScale(outerPanel, 0.985);
-            if (_activePage != pageName && highlight != null)
-            {
-                var pressBg = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? hoverBgColor;
-                _r.SetBackground(highlight, pressBg);
-            }
-        });
-
-        // Click handler
-        _r.SubscribeClickReleased(outerPanel, () =>
-        {
-            _r.SetRenderScale(outerPanel, 1.0);
+            // Injected nav items are press-activated (native-feeling immediate navigation).
             OnNavItemClicked(pageName);
         });
 
@@ -1709,8 +1677,6 @@ internal class SidebarInjector
 
         // Use Root's highlight resources — adapts to Dark/Light themes
         var selectionBg = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? "#19ffffff";
-        var selectionBorder = _themeEngine.ReadLiveRootColor("HighlightStrong") ?? "#30ffffff";
-        var restingBorder = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
 
         foreach (var node in _walker.DescendantsDepthFirst(_navContainer))
         {
@@ -1720,12 +1686,6 @@ internal class SidebarInjector
             var itemPage = tag["uprooted-highlight-".Length..];
             bool isSelected = itemPage == _activePage;
             _r.SetBackground(node, isSelected ? selectionBg : null);
-
-            // Update border color: brighter when selected, subtle when resting
-            var borderHex = isSelected ? selectionBorder : restingBorder;
-            var brush = _r.CreateBrush(borderHex);
-            if (brush != null)
-                node.GetType().GetProperty("BorderBrush")?.SetValue(node, brush);
         }
     }
 
