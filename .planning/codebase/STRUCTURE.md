@@ -355,7 +355,7 @@ The installer is NOT part of the pnpm workspace because it has its own Cargo/Rus
 `scripts/build-installer.ps1` orchestrates the full installer build in 5 steps:
 
 1. `pnpm build` — TypeScript layer -> `dist/uprooted-preload.js` + `dist/uprooted.css`
-2. `dotnet build hook/ -c Release` — C# hook -> `UprootedHook.dll`
+2. `dotnet build hook/UprootedHook.csproj -c Release` — C# hook -> `UprootedHook.dll`
 3. `cl.exe` via VS Build Tools — Profiler C source -> `uprooted_profiler.dll`
 4. Stage all 5 files to `installer/src-tauri/artifacts/`
 5. `pnpm tauri build` — Tauri app -> `Uprooted Installer.exe`

@@ -8,6 +8,7 @@ namespace UprootedHook;
 /// The profiler injects IL that calls Assembly.LoadFrom + Assembly.CreateInstance("UprootedHook.Entry"),
 /// which triggers the ModuleInitializer and/or constructor to start the Uprooted injection.
 /// </summary>
+[System.Reflection.Obfuscation(Exclude = true)]
 public class Entry
 {
     private static int _initialized = 0;

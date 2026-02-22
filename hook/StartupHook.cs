@@ -5,6 +5,7 @@ using Uprooted;
 /// Must be: internal class StartupHook (no namespace) with public static void Initialize().
 /// Loaded via DOTNET_STARTUP_HOOKS env var before Root's Main() runs.
 /// </summary>
+[System.Reflection.Obfuscation(Exclude = true)]
 internal class StartupHook
 {
     private const string CurrentVersion = "0.4.2";

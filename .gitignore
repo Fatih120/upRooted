@@ -50,8 +50,18 @@ tests/**/obj/
 tools/*.dll
 tools/_build_output.txt
 
+# Build tool output (confuse, verify-obfuscation)
+tools/confuse/bin/
+tools/confuse/obj/
+tools/verify-obfuscation/bin/
+tools/verify-obfuscation/obj/
+
 # Logs and runtime artifacts
 *.log
+
+# ConfuserEx symbol maps (build artifact, not committed)
+*.symbols.map
+symbols.map
 
 # Upload / release staging artifacts
 *.sh.upload

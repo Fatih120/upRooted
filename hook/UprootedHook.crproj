@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<project outputDir="{OutputDir}" baseDir="{BaseDir}" xmlns="http://confuser.codeplex.com">
+  <!-- Protections tested on .NET 10 (bisect results):
+       rename: WORKS (ascii mode)
+       ctrl flow: WORKS (normal predicate)
+       ref proxy: WORKS (mild only — normal crashes the engine)
+       constants: BROKEN (crashes on load)
+       anti-ildasm: BROKEN (crashes on load)
+       resources: BROKEN (crashes on load) -->
+  <rule pattern="true" preset="none" inherit="false">
+    <protection id="rename">
+      <argument name="mode" value="ascii" />
+      <argument name="renameMap" value="true" />
+    </protection>
+    <protection id="ctrl flow">
+      <argument name="predicate" value="normal" />
+    </protection>
+    <protection id="ref proxy">
+      <argument name="mode" value="mild" />
+    </protection>
+  </rule>
+
+  <!-- Belt-and-suspenders: exclude entry points from rename in config too
+       (they also have [Obfuscation(Exclude=true)] attributes) -->
+  <rule pattern="member-type('type') and (full-name('UprootedHook.Entry') or full-name('Uprooted.NativeEntry') or full-name('StartupHook'))" preset="none" inherit="false">
+    <protection id="rename" action="remove" />
+  </rule>
+
+  <!-- Module added programmatically by tools/confuse/ at build time -->
+</project>

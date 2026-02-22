@@ -78,7 +78,7 @@ Each layer builds independently. See [BUILD.md](docs/install/BUILD.md) for full 
 pnpm build
 
 # C# hook
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # Console TUI installer
 cd installer/src-tauri && cargo build --release
@@ -186,7 +186,7 @@ teardown, causing a UI freeze.
 1. Push your changes to the `contrib` branch or a feature branch off `contrib`.
 2. Open a Pull Request targeting `main`.
 3. Write a clear title and description explaining what changed and why.
-4. Ensure all components build without errors (`pnpm build`, `dotnet build hook/ -c Release`).
+4. Ensure all components build without errors (`pnpm build`, `dotnet build hook/UprootedHook.csproj -c Release`).
 5. If you added code, add or update types accordingly.
 6. Link any related GitHub issues.
 7. Wait for @watchthelight to review and approve.

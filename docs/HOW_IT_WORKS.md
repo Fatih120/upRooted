@@ -722,7 +722,7 @@ For the full proxy implementation and plugin patch API, see [TypeScript Referenc
 
 ### What the installer does
 
-The install process has three layers: build the TypeScript bundle (`pnpm build`), build the C# hook (`dotnet build hook/ -c Release`), deploy files and set environment variables, then patch HTML files. Environment variables are user-scoped and persist across reboots. `DOTNET_ReadyToRun=0` is critical -- it forces JIT compilation so our profiler gets a chance to modify IL.
+The install process has three layers: build the TypeScript bundle (`pnpm build`), build the C# hook (`dotnet build hook/UprootedHook.csproj -c Release`), deploy files and set environment variables, then patch HTML files. Environment variables are user-scoped and persist across reboots. `DOTNET_ReadyToRun=0` is critical -- it forces JIT compilation so our profiler gets a chance to modify IL.
 
 For installer implementation details (detection, file deployment, environment variable management), see [Installer Reference](framework/INSTALLER.md). For end-user install/uninstall instructions, see [Installation Guide](install/INSTALLATION.md).
 

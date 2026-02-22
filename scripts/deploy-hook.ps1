@@ -9,7 +9,7 @@
       3. Relaunches Root with Uprooted
 
     Run from a Windows terminal after building inside the devcontainer:
-      dotnet build hook/ -c Release
+      dotnet build hook/UprootedHook.csproj -c Release
 
     The workspace is bind-mounted, so build output is visible from both sides.
     Unlike install-hook.ps1, this skips shortcuts, registry, and settings -- just
@@ -41,7 +41,7 @@ $Launcher = Join-Path $UprootedDir "UprootedLauncher.exe"
 
 if (-not (Test-Path (Join-Path $HookBinDir "UprootedHook.dll"))) {
     Write-Err "No build output at $HookBinDir"
-    Write-Err "Build first: dotnet build hook/ -c Release"
+    Write-Err "Build first: dotnet build hook/UprootedHook.csproj -c Release"
     Read-Host "Press Enter to exit"
     exit 1
 }

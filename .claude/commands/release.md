@@ -237,7 +237,7 @@ If the user chooses "Review changes first", show `git diff --stat` followed by t
 ### 4a. C# hook build
 
 ```bash
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 If this fails, **stop and report the error**. Do not proceed.

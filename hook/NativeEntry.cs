@@ -8,6 +8,7 @@ namespace Uprooted;
 /// Entry point called from native code via hostfxr load_assembly_and_get_function_pointer.
 /// When delegate_type_name is NULL, the method must have this exact signature.
 /// </summary>
+[System.Reflection.Obfuscation(Exclude = true)]
 public static class NativeEntry
 {
     public static int Initialize(IntPtr args, int sizeBytes)

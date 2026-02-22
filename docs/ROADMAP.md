@@ -131,7 +131,7 @@ Expand coverage to handle additional transport mechanisms (WebSocket, image beac
 
 Items derived from security research on Root Communications v0.9.86. Uprooted ships inside the same process and browser context as Root, so these findings directly affect how Uprooted handles tokens, validates input, delivers updates, and protects user privacy.
 
-See [Security Research](research/SECURITY_RESEARCH.md) for the full findings.
+See [Security Research](research/SECURITY_RESEARCH.md) for the full findings. For injection resilience and counter-strategies against potential Root mitigations, see [Mitigation Countermeasures](research/MITIGATION_COUNTERMEASURES.md). For hook DLL obfuscation, see [Obfuscation](framework/OBFUSCATION.md).
 
 ### Token handling improvements
 

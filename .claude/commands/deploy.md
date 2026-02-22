@@ -15,7 +15,7 @@ Build the C# hook and deploy it into Root. Fully autonomous — no user interven
 
 ### Step 1: Build the hook
 
-Run `dotnet build hook/ -c Release`.
+Run `dotnet build hook/UprootedHook.csproj -c Release`.
 
 If the build fails:
 - Show the first error

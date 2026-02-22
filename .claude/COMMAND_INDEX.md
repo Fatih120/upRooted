@@ -12,7 +12,7 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 ├── commands/                   # Slash commands
 │   ├── hi.md                   # /hi — onboard into the codebase
 │   ├── ok.md                   # /ok — post-work documentation sweep
-│   ├── build-hook.md           # /build-hook — dotnet build hook/ -c Release
+│   ├── build-hook.md           # /build-hook — dotnet build hook/UprootedHook.csproj -c Release
 │   ├── build-installer.md      # /build-installer — full pipeline build
 │   ├── deploy.md               # /deploy — build hook + deploy to local Root
 │   ├── inject.md               # /inject — build + close Root + deploy + relaunch (Windows only)
@@ -74,7 +74,7 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 | ------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------- |
 | `/hi`              | Two-phase onboard: orient in codebase, then ask what's planned and deep-read all relevant docs                   | Start of a new session (first time)               |
 | `/ok`              | **Doc sweep:** update session state, changelog, tasks, NEW-SESSION, CLAUDE.md to match committed code            | After committing and pushing work                 |
-| `/build-hook`      | `dotnet build hook/ -c Release`                                                                                  | Quick build check after C# changes                |
+| `/build-hook`      | `dotnet build hook/UprootedHook.csproj -c Release`                                                                                  | Quick build check after C# changes                |
 | `/build-installer` | Console TUI installer (`cargo build --release`)                                                                  | After modifying installer or before release       |
 | `/deploy`          | Build C# hook + deploy to local Root installation                                                                | Core dev loop: edit → build → deploy → test       |
 | `/inject`          | Build + close Root + deploy + relaunch (Windows only)                                                            | Native Windows: full automatic cycle              |

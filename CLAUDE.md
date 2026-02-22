@@ -144,7 +144,7 @@ uprooted-private/
 
 ```bash
 # C# hook
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # Console TUI installer (Rust)
 cd installer/src-tauri && cargo build --release

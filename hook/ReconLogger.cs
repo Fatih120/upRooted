@@ -96,6 +96,7 @@ internal static class ReconLogger
     /// <summary>
     /// Open log file and start recording. Requires Init() to have been called first.
     /// </summary>
+    [Obfuscation(Exclude = false, Feature = "-rename")]
     internal static void Enable()
     {
         if (!_initialized || _enabled) return;
@@ -116,6 +117,7 @@ internal static class ReconLogger
     /// <summary>
     /// Stop recording and close the log file immediately.
     /// </summary>
+    [Obfuscation(Exclude = false, Feature = "-rename")]
     internal static void Disable()
     {
         _enabled   = false;   // must be first — stops all handlers immediately

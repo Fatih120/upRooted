@@ -9,6 +9,7 @@
     <DebugSymbols>false</DebugSymbols>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
     <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <Obfuscate>true</Obfuscate>
   </PropertyGroup>
   <ItemGroup>
     <None Update="nsfw-filter.js">
@@ -18,4 +19,28 @@
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </None>
   </ItemGroup>
+  <!-- ConfuserEx obfuscation via tools/confuse/ CLI wrapper.
+       The Confuser.MSBuild NuGet package provides the ConfuserEx engine DLLs;
+       its MSBuild task integration is broken on .NET Core SDK, so we run
+       the engine directly through a small dotnet tool project instead. -->
+  <Target Name="ObfuscateAssembly" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
+    <PropertyGroup>
+      <_ConfuseOutputDir>$(TargetDir)confused/</_ConfuseOutputDir>
+    </PropertyGroup>
+    <Exec Command="dotnet run --project &quot;$(ProjectDir)../tools/confuse/confuse.csproj&quot; -c Release -- &quot;$(ProjectDir)UprootedHook.crproj&quot; &quot;$(TargetDir).&quot; &quot;$(_ConfuseOutputDir).&quot;"
+          WorkingDirectory="$(ProjectDir)"
+          IgnoreExitCode="false" />
+    <!-- Replace the original DLL with the obfuscated one -->
+    <Copy SourceFiles="$(_ConfuseOutputDir)UprootedHook.dll"
+          DestinationFolder="$(TargetDir)"
+          OverwriteReadOnlyFiles="true" />
+    <!-- Copy symbol map to output -->
+    <Copy SourceFiles="$(_ConfuseOutputDir)symbols.map"
+          DestinationFiles="$(TargetDir)UprootedHook.symbols.map"
+          Condition="Exists('$(_ConfuseOutputDir)symbols.map')" />
+  </Target>
+  <Target Name="VerifyObfuscation" AfterTargets="ObfuscateAssembly" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
+    <Exec Command="dotnet run --project &quot;$(ProjectDir)../tools/verify-obfuscation/verify-obfuscation.csproj&quot; -c Release -- &quot;$(TargetPath)&quot;"
+          IgnoreExitCode="false" />
+  </Target>
 </Project>

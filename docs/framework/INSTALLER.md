@@ -628,7 +628,7 @@ the correct native binary for the build target.
 ### Artifact Staging
 
 The `installer/src-tauri/artifacts/` directory is populated by `scripts/build-installer.ps1`
-before `cargo build --release`: build the C# hook (`dotnet build hook/ -c Release`),
+before `cargo build --release`: build the C# hook (`dotnet build hook/UprootedHook.csproj -c Release`),
 build the TS bundle (`pnpm build`), copy outputs to `artifacts/`, then run the
 release build. Missing artifacts cause a compile error since `include_bytes!()` is
 evaluated at compile time. See [Build Guide](../install/BUILD.md) for the full pipeline.
@@ -659,7 +659,7 @@ cd installer/src-tauri && cargo build --release
 powershell -File scripts/build-installer.ps1
 ```
 
-The production sequence: `dotnet build hook/ -c Release`, `pnpm build` (TS bundle),
+The production sequence: `dotnet build hook/UprootedHook.csproj -c Release`, `pnpm build` (TS bundle),
 copy outputs to `artifacts/`, then `cargo build --release` compiles the backend with
 `include_bytes!()` pulling from `artifacts/`. The release profile applies symbol
 stripping, LTO, single codegen unit, abort-on-panic, and size optimization to produce

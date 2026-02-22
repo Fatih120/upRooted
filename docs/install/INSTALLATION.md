@@ -159,7 +159,7 @@ Uprooted supports two injection methods. Both accomplish the same result -- load
      a backup at `Root.exe.uprooted.bak` before patching. If the exe is already
      patched, it skips this step.
 
-4. **Builds UprootedHook.dll** by running `dotnet build hook/ -c Release`.
+4. **Builds UprootedHook.dll** by running `dotnet build hook/UprootedHook.csproj -c Release`.
    Requires .NET 10 SDK.
 
 5. **Copies files** to `%LOCALAPPDATA%\Root\uprooted\`:
@@ -250,7 +250,7 @@ sudo apt install gcc nodejs
 
 3. **Builds all artifacts from source:**
    - TypeScript layer: `pnpm install && pnpm build`
-   - Hook DLL: `dotnet build hook/ -c Release`
+   - Hook DLL: `dotnet build hook/UprootedHook.csproj -c Release`
    - Profiler shared library: `gcc -shared -fPIC -O2 -o libuprooted_profiler.so tools/uprooted_profiler_linux.c`
 
 4. **Deploys files** to `~/.local/share/uprooted/`:

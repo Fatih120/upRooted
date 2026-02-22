@@ -49,7 +49,7 @@ Build new components for the Uprooted framework. This skill provides templates, 
 1. Add a private static method `Build<Name>Page(...)` in `ContentPages.cs`
 2. Add a case to the `BuildPage()` switch: `"<name>" => Build<Name>Page(r, settings, nativeFontFamily, themeEngine),`
 3. In `SidebarInjector.cs`, add a nav item in the injection method (matching the existing pattern for "uprooted", "plugins", "themes")
-4. Build: `dotnet build hook/ -c Release`
+4. Build: `dotnet build hook/UprootedHook.csproj -c Release`
 
 ## Build & Test
 
@@ -57,7 +57,7 @@ See [`CLAUDE.md` § Build](CLAUDE.md#build) for build commands.
 
 ```bash
 # Quick reference:
-dotnet build hook/ -c Release        # C# hook
+dotnet build hook/UprootedHook.csproj -c Release        # C# hook
 pnpm build                           # TypeScript bundle
 dotnet test tests/UprootedTests/     # C# tests
 ```

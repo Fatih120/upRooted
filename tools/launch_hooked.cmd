@@ -1,6 +1,6 @@
 @echo off
 REM Launch Root with Uprooted hook via DOTNET_STARTUP_HOOKS
-REM Requires hook to be built first: dotnet build hook/ -c Release
+REM Requires hook to be built first: dotnet build hook/UprootedHook.csproj -c Release
 
 setlocal
 

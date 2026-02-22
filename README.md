@@ -155,7 +155,7 @@ uprooted-private/
 
 ```bash
 # C# hook
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # TypeScript bundle
 pnpm build

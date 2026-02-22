@@ -150,7 +150,7 @@ settings pages, theme engine) via reflection.
 ### Command
 
 ```bash
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 ### Project File
@@ -384,7 +384,7 @@ powershell -File scripts/build-installer.ps1
      `dist/nsfw-filter.js`, and `dist/link-embeds.js` exist.
    - Copies all four to the artifacts directory.
 
-4. **Build C# hook** -- runs `dotnet build hook/ -c Release`.
+4. **Build C# hook** -- runs `dotnet build hook/UprootedHook.csproj -c Release`.
    - Validates `hook/bin/Release/net10.0/UprootedHook.dll` exists.
    - Copies `UprootedHook.dll` and `UprootedHook.deps.json` to artifacts.
 
@@ -441,7 +441,7 @@ For iterating on the C# hook without building the full installer:
 
 ```bash
 # 1. Rebuild the hook DLL
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # 2. Deploy to local Root installation
 powershell -File scripts/install-hook.ps1
@@ -517,7 +517,7 @@ The typical develop-test loop:
 
 # 2. Rebuild what changed
 pnpm build                          # If you changed TypeScript
-dotnet build hook/ -c Release       # If you changed C# hook
+dotnet build hook/UprootedHook.csproj -c Release       # If you changed C# hook
 
 # 3. Deploy to Root
 powershell -File scripts/install-hook.ps1
@@ -613,8 +613,8 @@ dependencies needed -- the installer is a console TUI)
 | `uprooted.css`            | `pnpm build` (CSS collection)  | Combined CSS from all built-in plugins               |
 | `nsfw-filter.js`          | `pnpm build`                    | NSFW content filter JS injection script              |
 | `link-embeds.js`          | `pnpm build`                    | Link embed JS injection script                       |
-| `UprootedHook.dll`        | `dotnet build hook/ -c Release` | Managed C# hook loaded by the profiler into Root.exe |
-| `UprootedHook.deps.json`  | `dotnet build hook/ -c Release` | .NET dependency metadata for the hook                |
+| `UprootedHook.dll`        | `dotnet build hook/UprootedHook.csproj -c Release` | Managed C# hook loaded by the profiler into Root.exe |
+| `UprootedHook.deps.json`  | `dotnet build hook/UprootedHook.csproj -c Release` | .NET dependency metadata for the hook                |
 | `uprooted_profiler.dll`   | `cl.exe` (Windows)              | Native CLR profiler that injects IL into Root's JIT  |
 | `libuprooted_profiler.so` | `gcc` (Linux)                   | Linux equivalent of the profiler                     |
 | `uprooted.exe`            | `cargo build --release` (Win)   | Self-contained Windows installer with all artifacts  |

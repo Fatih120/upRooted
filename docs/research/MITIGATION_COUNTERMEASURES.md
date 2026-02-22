@@ -72,10 +72,31 @@ This is an arms race. If Root ships a blocklist:
 - The `uiohook_proxy.c:799` prototype already sets `COMPlus_EnableDiagnostics=1` as a fallback
 - We escalate to Counter 2 (DLL proxy), which requires zero env vars
 
+### DOTNET_EnableDiagnostics=0 Is Not Sufficient
+
+Root may attempt to disable the CLR profiler by setting `DOTNET_EnableDiagnostics=0` in their
+launcher. This disables the diagnostics subsystem (EventPipe, DiagnosticServer, profiler attach)
+but does **not** disable hosting-layer features:
+
+- **`DOTNET_STARTUP_HOOKS` still works.** Startup hooks are processed by the hosting layer
+  (`hostfxr`), not the diagnostics subsystem. Our `StartupHook.cs` path survives untouched.
+  Root would need to specifically sanitize `DOTNET_STARTUP_HOOKS` as a separate action.
+- **`DOTNET_ADDITIONAL_DEPS` still works.** This hosting env var adds dependency resolution
+  paths. Root is unlikely to know about or sanitize it.
+
+If Root sets `EnableDiagnostics=0`: the profiler injection path (`COR_PROFILER`) dies, but
+the startup hook path lives. Both paths are already implemented and operational. The profiler
+path is primary (more control over IL), but the startup hook path is a complete fallback that
+provides all the same functionality.
+
+If Root sanitizes ALL `DOTNET_*` env vars: escalate to Counter 2 (DLL proxy), which requires
+zero env vars and operates at the OS loader level.
+
 ### Current State
 
 Already fully implemented. The installer sets all required vars in `HKCU\Environment` via
-`hook.rs:111-148`. No code changes required for this counter.
+`hook.rs:111-148`. Dual injection paths (profiler + startup hook) are both operational.
+No code changes required for this counter.
 
 ---
 
@@ -407,4 +428,4 @@ These counters have different production-readiness levels:
 
 **Canonical for:** mitigation analysis (5 potential Root countermeasures), counter-strategies, resilience assessment, structural weakness analysis
 **Not canonical for:** security findings → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md) | Root internals → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | RE methodology → [REVERSE_ENGINEERING.md](REVERSE_ENGINEERING.md)
-*Mitigation countermeasures. Last updated 2026-02-19.*
+*Mitigation countermeasures. Last updated 2026-02-22.*

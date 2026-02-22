@@ -15,7 +15,7 @@ Build the Uprooted C# .NET hook from the `hook/` directory.
 Run the following command from the repository root:
 
 ```
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 After the build completes:

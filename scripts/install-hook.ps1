@@ -66,7 +66,7 @@ Write-OK "Root.exe found"
 # Check for source artifacts
 $missing = @()
 if (-not (Test-Path $SrcProfilerDll)) { $missing += "uprooted_profiler.dll (run build_all.cmd)" }
-if (-not (Test-Path $SrcHookDll)) { $missing += "UprootedHook.dll (run: dotnet build hook/ -c Release)" }
+if (-not (Test-Path $SrcHookDll)) { $missing += "UprootedHook.dll (run: dotnet build hook/UprootedHook.csproj -c Release)" }
 if (-not (Test-Path $SrcLauncher)) { $missing += "UprootedLauncher.exe (run: build_launcher.cmd)" }
 
 if ($missing.Count -gt 0) {

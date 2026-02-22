@@ -17,7 +17,7 @@ Build the C# hook, stop Root, deploy the DLL, and relaunch Root with Uprooted. O
 
 ### Step 1: Build the hook
 
-Run `dotnet build hook/ -c Release`.
+Run `dotnet build hook/UprootedHook.csproj -c Release`.
 
 If the build fails:
 - Show the first error

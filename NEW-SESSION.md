@@ -35,6 +35,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | **Sidebar injection / nav items** | [HOOK_REFERENCE §SidebarInjector](docs/framework/HOOK_REFERENCE.md) → [ROOT_CONTROL_REFERENCE §Settings Page](docs/framework/ROOT_CONTROL_REFERENCE.md#settings-page-pattern) |
 | **Installer / deployment** | [INSTALLER](docs/framework/INSTALLER.md) → [BUILD](docs/install/BUILD.md) |
 | **Security / mitigation research** | [SECURITY_RESEARCH](docs/research/SECURITY_RESEARCH.md) → [MITIGATION_COUNTERMEASURES](docs/research/MITIGATION_COUNTERMEASURES.md) |
+| **Obfuscation / protected names** | [OBFUSCATION](docs/framework/OBFUSCATION.md) |
 | **ILSpy decompilation / Root controls** | [ROOT_CONTROL_REFERENCE](docs/framework/ROOT_CONTROL_REFERENCE.md) → [ILSPY_DUMP_INDEX](research/ILSPY_DUMP_INDEX.md) |
 
 **Always also read** `hook/SESSION_STATE.md` if working on any `hook/` code.

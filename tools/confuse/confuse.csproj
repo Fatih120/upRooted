@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Pull Confuser.MSBuild to ensure the package is in the NuGet cache.
+         IncludeAssets=none prevents the broken MSBuild task targets from importing. -->
+    <PackageReference Include="Confuser.MSBuild" Version="1.6.0">
+      <IncludeAssets>none</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+  <PropertyGroup>
+    <!-- ConfuserEx DLLs live in the Confuser.MSBuild NuGet package's netstandard/ folder.
+         We reference them directly since the MSBuild task integration is broken on .NET Core. -->
+    <_ConfuserLibDir>$(NuGetPackageRoot)confuser.msbuild/1.6.0/netstandard/</_ConfuserLibDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="Confuser.Core">
+      <HintPath>$(_ConfuserLibDir)Confuser.Core.dll</HintPath>
+    </Reference>
+    <Reference Include="Confuser.Protections">
+      <HintPath>$(_ConfuserLibDir)Confuser.Protections.dll</HintPath>
+    </Reference>
+    <Reference Include="Confuser.Renamer">
+      <HintPath>$(_ConfuserLibDir)Confuser.Renamer.dll</HintPath>
+    </Reference>
+    <Reference Include="Confuser.DynCipher">
+      <HintPath>$(_ConfuserLibDir)Confuser.DynCipher.dll</HintPath>
+    </Reference>
+    <Reference Include="dnlib">
+      <HintPath>$(_ConfuserLibDir)dnlib.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+  <PropertyGroup>
+    <!-- Confuser.Runtime.dll is only in the netframework/ folder (not netstandard/).
+         It contains runtime stubs injected into the obfuscated assembly.
+         ConfuserEx looks for it next to Confuser.Core.dll at runtime. -->
+    <_ConfuserFwDir>$(NuGetPackageRoot)confuser.msbuild/1.6.0/netframework/</_ConfuserFwDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="$(_ConfuserFwDir)Confuser.Runtime.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Confuser.Runtime.dll</Link>
+    </None>
+  </ItemGroup>
+</Project>

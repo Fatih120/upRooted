@@ -168,7 +168,7 @@
    - Collects CSS from `src/plugins/**/*.css` → `dist/uprooted.css`
    - Generates additional artifacts: `dist/nsfw-filter.js`, `dist/link-embeds.js`
    - Injects version constant `__UPROOTED_VERSION__` from package.json
-2. C# Hook (`dotnet build hook/ -c Release`):
+2. C# Hook (`dotnet build hook/UprootedHook.csproj -c Release`):
    - Targets `net10.0`
    - Output: `hook/bin/Release/net10.0/UprootedHook.dll` + `UprootedHook.deps.json`
 3. Native Profiler:

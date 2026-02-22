@@ -409,6 +409,7 @@ internal class MessageLogger : IDisposable
     }
 
     // Generic helper to subscribe to IObservable<T> via BCL IObserver<T>
+    [Obfuscation(Exclude = false, Feature = "-rename")]
     private static IDisposable SubscribeToObservable<T>(object observable, Action<object> onNext)
     {
         return ((IObservable<T>)observable).Subscribe(new ActionObserver<T>(v => onNext(v!)));

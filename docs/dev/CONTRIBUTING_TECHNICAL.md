@@ -70,7 +70,7 @@ access is done through runtime reflection.
 dotnet --version   # Should report 10.x.x
 
 # Build the hook
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # Output appears at:
 #   hook/bin/Release/net10.0/UprootedHook.dll
@@ -214,7 +214,7 @@ Verify that these files exist and are non-empty:
 ### C# Hook
 
 ```bash
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 Verify that these files exist:
@@ -317,7 +317,7 @@ checking logs:
 ```bash
 # 1. Build what you changed
 pnpm build                          # TypeScript changes
-dotnet build hook/ -c Release       # C# hook changes
+dotnet build hook/UprootedHook.csproj -c Release       # C# hook changes
 
 # 2. Deploy to Root
 powershell -File scripts/install-hook.ps1
@@ -511,7 +511,7 @@ source files through DevTools.
 
 ### C# Hook Changes
 
-1. **Always build before deploying.** Run `dotnet build hook/ -c Release` and
+1. **Always build before deploying.** Run `dotnet build hook/UprootedHook.csproj -c Release` and
    check for compiler warnings, not just errors.
 
 2. **Never throw exceptions from injected code.** Wrap everything in
@@ -583,7 +583,7 @@ Run through this before submitting a pull request.
 ### Build
 
 - [ ] `pnpm build` completes without errors
-- [ ] `dotnet build hook/ -c Release` completes without errors or warnings
+- [ ] `dotnet build hook/UprootedHook.csproj -c Release` completes without errors or warnings
 - [ ] `dotnet test tests/UprootedTests/` -- all tests pass
 - [ ] `dist/uprooted-preload.js` and `dist/uprooted.css` exist and are non-empty
 
@@ -657,7 +657,7 @@ Windows-specific unless noted.
 
 ```powershell
 # Deploy and test in one flow
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 powershell -File scripts/install-hook.ps1
 powershell -File scripts/test-hook.ps1
 

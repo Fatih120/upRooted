@@ -115,7 +115,7 @@ For detailed TypeScript patterns with code examples, consult `references/typescr
 
 ```bash
 # C# hook
-dotnet build hook/ -c Release
+dotnet build hook/UprootedHook.csproj -c Release
 
 # TypeScript (esbuild)
 pnpm build
