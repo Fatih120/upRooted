@@ -37,7 +37,6 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ### Infrastructure
 
-- ConfuserEx2 obfuscation integrated into the Release build pipeline
 - Translate, WhoReacted, and UserBio are force-disabled on upgrade from older versions (enable manually in Plugin Settings)
 
 ---

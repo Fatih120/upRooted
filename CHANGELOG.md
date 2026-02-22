@@ -140,8 +140,6 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Infrastructure
 
-- **ConfuserEx2 obfuscation** — Integrated ConfuserEx2 into the Release build pipeline for hook DLL obfuscation. Added as a git submodule with CI-compatible NuGet path resolution.
-  - Files: `hook/UprootedHook.csproj`, `.github/workflows/`
 - **Version-gated force-disable** — `ForceDisableOnUpgrade` entry for v0.5.0: `translate`, `who-reacted`, `user-bio` force-disabled on upgrade to prevent unvalidated plugins from running automatically.
 
 ---
