@@ -151,20 +151,22 @@ internal class UprootedPresenceBeacon
     {
         try
         {
-            // Poll for own UUID — session may not have authenticated yet at 2s
-            const int maxRetries = 12; // 12 × 5s = 60s total
+            // Poll for own UUID — session may not have authenticated yet.
+            // Root shows a login screen first; HomeViewModel only appears after auth.
+            // 60 retries × 5s = 5 minutes — enough for slow logins or 2FA.
+            const int maxRetries = 60;
             for (int attempt = 0; attempt <= maxRetries; attempt++)
             {
                 if (attempt > 0) Thread.Sleep(5_000);
                 _ownUuidStr = TryGetOwnUuid();
                 if (_ownUuidStr != null) break;
                 if (attempt == 0)
-                    Logger.Log(Tag, "Own UUID not ready — will retry every 5s (up to 60s)");
+                    Logger.Log(Tag, "Own UUID not ready — will retry every 5s (up to 5 min)");
             }
 
             if (_ownUuidStr == null)
             {
-                Logger.Log(Tag, "Own UUID not found after 60s — registration skipped");
+                Logger.Log(Tag, "Own UUID not found after 5 min — registration skipped");
                 return;
             }
 
@@ -452,7 +454,7 @@ internal class UprootedPresenceBeacon
     /// Resolve HttpMethod.Post and StringContent type from the System.Net.Http assembly.
     /// Called once after AutoUpdater.EnsureHttpResolved().
     /// </summary>
-    private static void EnsurePostResolved()
+    internal static void EnsurePostResolved()
     {
         lock (s_postLock)
         {
@@ -481,7 +483,7 @@ internal class UprootedPresenceBeacon
 
     // ===== HMAC + key =====
 
-    private static byte[] DecryptKey()
+    internal static byte[] DecryptKey()
     {
         var result = new byte[_encryptedKey.Length];
         for (int i = 0; i < _encryptedKey.Length; i++)
@@ -489,7 +491,7 @@ internal class UprootedPresenceBeacon
         return result;
     }
 
-    private static string ComputeHmacHex(string message, byte[] key)
+    internal static string ComputeHmacHex(string message, byte[] key)
     {
         using var hmac = new HMACSHA256(key);
         var hash = hmac.ComputeHash(Encoding.UTF8.GetBytes(message));

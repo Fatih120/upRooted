@@ -797,6 +797,9 @@ internal static class ContentPages
                 new() { Id = "who-reacted", DisplayName = "WhoReacted", Version = "0.4.2",
                     Description = "Shows small profile pictures of users who reacted to a message, displayed next to each reaction emoji. Up to 5 avatars shown per reaction.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
+                new() { Id = "user-bio", DisplayName = "UserBio", Version = "0.1.0",
+                    Description = "Set a short bio visible to other Uprooted users on your profile card. View Only mode lets you see others' bios without sharing your own.",
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
@@ -3249,6 +3252,8 @@ internal static class ContentPages
             BuildMessageLoggerSettings(r, content, settings, font);
         else if (pluginId == "link-embeds")
             BuildLinkEmbedSettings(r, content, settings, font);
+        else if (pluginId == "user-bio")
+            BuildUserBioSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -3683,6 +3688,90 @@ internal static class ContentPages
                 catch (Exception sx) { Logger.Log("LinkEmbedSettings", $"Save error: {sx.Message}"); }
                 LinkEmbedEngine.Instance?.RefreshTitleVisibility();
             }, scale: LightboxScale);
+    }
+
+    private static void BuildUserBioSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        BuildSettingsToggle(r, content, "View Only",
+            "See other users' bios without sharing your own",
+            settings.UserBioViewOnly, font, isEnabled =>
+            {
+                settings.UserBioViewOnly = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("UserBioSettings", $"Save error: {sx.Message}"); }
+                if (isEnabled)
+                    UserBioEngine.Instance?.DeleteBio();
+                else if (!string.IsNullOrWhiteSpace(settings.UserBioText))
+                    UserBioEngine.Instance?.RegisterBio(settings.UserBioText);
+            }, scale: LightboxScale);
+
+        if (!settings.UserBioViewOnly)
+        {
+            var bioTitle = CreateSectionHeader(r, "YOUR BIO", font, scale: LightboxScale);
+            if (bioTitle != null)
+            {
+                r.SetMargin(bioTitle, 0, 20, 0, 0);
+                r.AddChild(content, bioTitle);
+            }
+
+            var bioBox = r.CreateTextBox("Tell others about yourself...", settings.UserBioText, 200);
+            if (bioBox != null)
+            {
+                try { bioBox.GetType().GetProperty("FontSize")?.SetValue(bioBox, (double)LightboxScale.Description); }
+                catch { }
+                r.SetHeight(bioBox, 60);
+                r.SetPadding(bioBox, 10, 6, 10, 6);
+                r.SetBackground(bioBox, AdjustForHighlight(CardBg, 5));
+                r.SetForeground(bioBox, TextWhite);
+                ApplyFont(r, bioBox, font);
+                r.SetMargin(bioBox, 0, 10, 0, 0);
+                r.SetTextWrapping(bioBox, "Wrap");
+                try
+                {
+                    if (r.CornerRadiusType != null)
+                    {
+                        var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
+                        bioBox.GetType().GetProperty("CornerRadius")?.SetValue(bioBox, cr);
+                    }
+                }
+                catch { }
+
+                var counterText = CreateBoundText(r,
+                    $"{settings.UserBioText.Length}/190",
+                    LightboxScale.Description, TextDim, "TextTertiary");
+                ApplyFont(r, counterText, font);
+                r.SetMargin(counterText, 0, 6, 0, 0);
+
+                var bioBoxRef = bioBox;
+                var counterRef = counterText;
+                r.SubscribeEvent(bioBox, "LostFocus", () =>
+                {
+                    var text = r.GetTextBoxText(bioBoxRef)?.Trim() ?? "";
+                    if (text.Length > 190) text = text[..190];
+                    settings.UserBioText = text;
+                    try { settings.Save(); }
+                    catch (Exception sx) { Logger.Log("UserBioSettings", $"Save error: {sx.Message}"); }
+                    try { counterRef?.GetType().GetProperty("Text")?.SetValue(counterRef, $"{text.Length}/190"); }
+                    catch { }
+                    if (!string.IsNullOrWhiteSpace(text))
+                        UserBioEngine.Instance?.RegisterBio(text);
+                    else
+                        UserBioEngine.Instance?.DeleteBio();
+                });
+
+                r.AddChild(content, bioBox);
+                r.AddChild(content, counterText);
+            }
+
+            var helperText = CreateBoundText(r,
+                "Your bio is visible to other Uprooted users when they view your profile.",
+                LightboxScale.Description, TextDim, "TextTertiary");
+            ApplyFont(r, helperText, font);
+            if (helperText != null) r.SetTextWrapping(helperText, "Wrap");
+            r.SetMargin(helperText, 0, 6, 0, 0);
+            r.AddChild(content, helperText);
+        }
     }
 
     /// <summary>

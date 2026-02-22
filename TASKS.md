@@ -94,6 +94,9 @@ Current focus areas (in order):
 - [ ] **Presence Beacon validation** — Uprooted user detection via gRPC metadata deployed. Verify detection, badge display.
   - Files: `hook/UprootedPresenceBeacon.cs`
 
+- [ ] **WhoReacted validation** — Shows reactor avatars next to reaction pills. Verify avatar download, circular rendering, VSP recycling dedup, no UI thread blocking.
+  - Files: `hook/WhoReactedEngine.cs`
+
 ---
 
 ## ILSpy Research

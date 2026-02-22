@@ -321,13 +321,16 @@ internal class StartupHook
                 });
             pluginsStarted++;
 
-            // Phase 4.5e: Presence beacon + profile badge (no visual tree dependency)
+            // Phase 4.5e: Presence beacon + profile badge + user bio (no visual tree dependency)
             StartPluginPhase("phase4_5e_presence_badge", parentId, resolver, mainWindow!,
                 true, 100, (ev, r, w) =>
                 {
                     var beacon = new UprootedPresenceBeacon(r, w);
                     beacon.Initialize();
-                    var badge = new ProfileBadgeInjector(r, w, beacon);
+                    var bioEngine = new UserBioEngine(r, w);
+                    UserBioEngine.Instance = bioEngine;
+                    bioEngine.Initialize(beacon);
+                    var badge = new ProfileBadgeInjector(r, w, beacon, bioEngine);
                     badge.Initialize();
                 });
             pluginsStarted++;

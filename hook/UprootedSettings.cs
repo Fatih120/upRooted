@@ -50,6 +50,10 @@ internal class UprootedSettings
     public string TranslateSendFromLang  { get; set; } = "auto"; // sent from
     public string TranslateSendToLang    { get; set; } = "en";   // sent to
 
+    // User Bio settings
+    public bool   UserBioViewOnly { get; set; } = false;
+    public string UserBioText     { get; set; } = "";
+
     private static string? _settingsPath;
 
     // Time-based cache: avoid re-reading from disk on every 500ms timer tick
@@ -143,6 +147,8 @@ internal class UprootedSettings
                     case "Translate.ToLang":         settings.TranslateToLang        = val; break;
                     case "Translate.SendFromLang":   settings.TranslateSendFromLang  = val; break;
                     case "Translate.SendToLang":     settings.TranslateSendToLang    = val; break;
+                    case "UserBio.ViewOnly": settings.UserBioViewOnly = val == "true"; break;
+                    case "UserBio.Text":    settings.UserBioText = Uri.UnescapeDataString(val); break;
                     case var k when k.StartsWith("Plugin."):
                         var pluginName = k["Plugin.".Length..];
                         settings.Plugins[pluginName] = val == "true";
@@ -237,7 +243,9 @@ internal class UprootedSettings
                     "Translate.FromLang="      + TranslateFromLang,
                     "Translate.ToLang="        + TranslateToLang,
                     "Translate.SendFromLang="  + TranslateSendFromLang,
-                    "Translate.SendToLang="    + TranslateSendToLang
+                    "Translate.SendToLang="    + TranslateSendToLang,
+                    "UserBio.ViewOnly=" + (UserBioViewOnly ? "true" : "false"),
+                    "UserBio.Text=" + Uri.EscapeDataString(UserBioText)
                 };
                 foreach (var (name, enabled) in Plugins)
                     lines.Add($"Plugin.{name}={( enabled ? "true" : "false" )}");

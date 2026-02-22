@@ -93,6 +93,7 @@ internal class ProfileBadgeInjector
     private readonly VisualTreeWalker _walker;
     private readonly object _mainWindow;
     private readonly UprootedPresenceBeacon? _beacon;
+    private readonly UserBioEngine? _bioEngine;
     private Timer? _fallbackTimer;
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
@@ -109,12 +110,13 @@ internal class ProfileBadgeInjector
     private bool _alphaCommunityResolved;
     private object? _alphaCommunity;
 
-    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null)
+    public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null, UserBioEngine? bioEngine = null)
     {
         _r = resolver;
         _walker = new VisualTreeWalker(resolver);
         _mainWindow = mainWindow;
         _beacon = beacon;
+        _bioEngine = bioEngine;
     }
 
     /// <summary>
@@ -581,9 +583,16 @@ internal class ProfileBadgeInjector
             }
         }
 
-        if (!isDevUser && !isAlphaUser)
+        // Check if the viewed user has Uprooted (for bio injection — independent of badge eligibility)
+        bool isUprootedUser = userId != null && _beacon != null
+            && _beacon.TryGetCached(userId) == true;
+
+        bool needsBadges = isDevUser || isAlphaUser;
+        bool needsBio = _bioEngine != null && isUprootedUser && userId != null;
+
+        if (!needsBadges && !needsBio)
         {
-            Logger.Log("ProfileBadge", $"User \"{username}\" has no badges to inject");
+            Logger.Log("ProfileBadge", $"User \"{username}\" has no badges or bio to inject");
             return;
         }
 
@@ -624,7 +633,14 @@ internal class ProfileBadgeInjector
                             if (devBadge != null && TryInsertChild(parent, devBadge, idx + insertOffset))
                             {
                                 Logger.Log("ProfileBadge", $"Dev badge inserted at index {idx + insertOffset}");
+                                insertOffset++;
                             }
+                        }
+
+                        // Inject bio below badges (or directly below username if no badges)
+                        if (needsBio)
+                        {
+                            _bioEngine!.TryInjectBio(popup, parent, idx + insertOffset, userId!);
                         }
 
                         return;
@@ -635,7 +651,7 @@ internal class ProfileBadgeInjector
             candidate = parent;
         }
 
-        Logger.Log("ProfileBadge", "Could not find vertical panel above username — badges not injected");
+        Logger.Log("ProfileBadge", "Could not find vertical panel above username — badges/bio not injected");
     }
 
     /// <summary>

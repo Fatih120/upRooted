@@ -12,9 +12,11 @@ namespace Uprooted;
 /// a ReactionViewModel with a Reaction domain object holding a HashSet&lt;UserGuid&gt; of
 /// reactor user IDs.
 ///
-/// Pipeline (avoids blocking UI thread with HTTP):
+/// Avatar loading uses Root's own BitmapCache (handles root://asset/ URIs internally).
+///
+/// Pipeline:
 ///   1. UI thread: scan visual tree, find unprocessed ReactionViews, resolve user IDs + avatar URIs
-///   2. ThreadPool: download avatar bytes for any URIs not already cached
+///   2. ThreadPool: load avatars via BitmapCache.GetBitmapAsync (Root's internal cache + CDN)
 ///   3. UI thread: create Image controls, inject avatar panels into reaction Grid
 /// </summary>
 internal sealed class WhoReactedEngine : IDisposable
@@ -34,34 +36,32 @@ internal sealed class WhoReactedEngine : IDisposable
     private int _scanning;
     private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
 
-    // Avatar byte cache: ProfilePictureUri → downloaded bytes (thread-safe access via lock)
-    private const int MaxAvatarBytesCache = 200;
-    private readonly Dictionary<string, byte[]> _avatarBytesCache = new();
-    private readonly object _bytesCacheLock = new();
-
-    // Avatar bitmap cache: ProfilePictureUri → Bitmap object (UI thread only)
-    private readonly Dictionary<string, object> _avatarBitmapCache = new();
+    // Avatar bitmap cache: ProfilePictureUri → Bitmap object (survives VSP recycling)
+    private const int MaxBitmapCache = 200;
+    private readonly Dictionary<string, object> _bitmapCache = new();
+    private readonly object _bitmapCacheLock = new();
 
     // Failed URIs (don't retry on every tick)
     private readonly HashSet<string> _failedUris = new();
 
-    // HTTP for avatar downloads (same reflection pattern as LinkEmbedEngine)
-    private static object? s_httpClient;
-    private static MethodInfo? s_getByteArrayAsync;
-    private static bool s_httpResolved;
+    // Root's BitmapCache instance (handles root://asset/ URIs)
+    private object? _rootBitmapCache;
+    private MethodInfo? _getBitmapAsync;       // BitmapCache.GetBitmapAsync(string, string?, int)
+    private PropertyInfo? _bitmapWrapperBitmap; // BitmapWrapper.Bitmap
 
     // Reflection caches for Root's domain types (resolved once)
     private PropertyInfo? _vmReactionProp;           // ReactionViewModel.Reaction
     private FieldInfo? _vmUserCacheField;             // ReactionViewModel._globalUserCacheService
+    private FieldInfo? _vmBitmapCacheField;            // ReactionViewModel._bitmapCache
     private PropertyInfo? _reactionUsersProp;         // Reaction.Users
     private PropertyInfo? _reactionShortCodeProp;     // Reaction.ShortCode
     private PropertyInfo? _reactionMessageIdProp;     // Reaction.MessageId
     private MethodInfo? _getUsersByIdsSync;            // IGlobalUserCacheService.GetUsersByIds
+    private Type? _userGuidType;                       // RootApp.Core.Identifiers.UserGuid
     private PropertyInfo? _globalUserProfilePicProp;  // GlobalUser.ProfilePictureUri
-    private PropertyInfo? _globalUserIdProp;           // GlobalUser.Id
     private bool _reflectionResolved;
 
-    // Pending injection data (collected on UI thread, consumed after download)
+    // Pending injection data (collected on UI thread, consumed after bitmap load)
     private sealed class PendingInjection
     {
         public object ReactionView = null!;
@@ -80,10 +80,6 @@ internal sealed class WhoReactedEngine : IDisposable
     internal void Initialize()
     {
         using var ev = WideEvent.Begin(Tag, "initialize");
-
-        EnsureHttpResolved();
-        ev.Set("http_resolved", s_httpClient != null);
-
         _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
         ev.Set("scan_interval_ms", ScanIntervalMs);
     }
@@ -132,16 +128,16 @@ internal sealed class WhoReactedEngine : IDisposable
                     return;
                 }
 
-                // Phase 2: Download avatars on ThreadPool (non-blocking)
+                // Phase 2: Load avatars via BitmapCache on ThreadPool
                 ThreadPool.QueueUserWorkItem(_ =>
                 {
                     try
                     {
-                        DownloadPendingAvatars(pending, ev);
+                        LoadPendingAvatars(pending, ev);
                     }
                     catch (Exception ex)
                     {
-                        ev.Set("download_error", ex.Message);
+                        ev.Set("load_error", ex.Message);
                     }
 
                     // Phase 3: Inject on UI thread
@@ -184,7 +180,6 @@ internal sealed class WhoReactedEngine : IDisposable
             if (node.GetType().Name != "ReactionView") continue;
             scanned++;
 
-            // Already processed?
             var tag = _r.GetTag(node);
             if (tag != null && tag.StartsWith(TagPrefix, StringComparison.Ordinal))
             {
@@ -192,47 +187,29 @@ internal sealed class WhoReactedEngine : IDisposable
                 continue;
             }
 
-            // Get DataContext (ReactionViewModel)
             var vm = _r.GetDataContext(node);
             if (vm == null || !vm.GetType().Name.Contains("ReactionViewModel")) continue;
 
-            // Resolve reflection paths once
             if (!_reflectionResolved) ResolveReflection(vm);
             if (_vmReactionProp == null) continue;
 
-            // Get Reaction domain object
             var reaction = _vmReactionProp.GetValue(vm);
             if (reaction == null) continue;
 
-            // Get Users HashSet
             var users = _reactionUsersProp?.GetValue(reaction);
             if (users == null) continue;
 
-            // Build tag
             var shortCode = _reactionShortCodeProp?.GetValue(reaction) as string ?? "?";
             var messageId = _reactionMessageIdProp?.GetValue(reaction);
             var msgIdStr = messageId?.ToString() ?? "?";
             var fullTag = $"{TagPrefix}{msgIdStr}:{shortCode}";
 
-            // Tag immediately to prevent re-processing on next tick
-            _r.SetTag(node, fullTag);
-
-            // Resolve user IDs → avatar URIs
             var userCacheService = _vmUserCacheField?.GetValue(vm);
             if (userCacheService == null || _getUsersByIdsSync == null) continue;
 
-            var userIds = new List<object>();
-            if (users is IEnumerable enumerable)
-            {
-                foreach (var userId in enumerable)
-                {
-                    userIds.Add(userId);
-                    if (userIds.Count >= MaxAvatarsPerReaction) break;
-                }
-            }
-            if (userIds.Count == 0) continue;
+            var userIds = CreateTypedUserIdList(users);
+            if (userIds == null) continue;
 
-            // Resolve GlobalUser objects (synchronous — this is a cache lookup, not a network call)
             List<string> avatarUris;
             try
             {
@@ -246,9 +223,13 @@ internal sealed class WhoReactedEngine : IDisposable
             }
             if (avatarUris.Count == 0) continue;
 
-            // Find inner Grid
             var innerGrid = FindInnerGrid(node);
             if (innerGrid == null) continue;
+
+            // Tag AFTER all validation passes
+            _r.SetTag(node, fullTag);
+
+            Logger.Log(Tag, $"Queued {shortCode} with {avatarUris.Count} avatar(s)");
 
             pending.Add(new PendingInjection
             {
@@ -264,17 +245,40 @@ internal sealed class WhoReactedEngine : IDisposable
         ev.Set("pending", pending.Count);
     }
 
+    private object? CreateTypedUserIdList(object usersHashSet)
+    {
+        try
+        {
+            if (_userGuidType == null) return null;
+            var listType = typeof(List<>).MakeGenericType(_userGuidType);
+            var list = Activator.CreateInstance(listType);
+            if (list == null) return null;
+            var addMethod = listType.GetMethod("Add");
+            if (addMethod == null) return null;
+
+            int count = 0;
+            if (usersHashSet is IEnumerable enumerable)
+            {
+                foreach (var userId in enumerable)
+                {
+                    addMethod.Invoke(list, new[] { userId });
+                    count++;
+                    if (count >= MaxAvatarsPerReaction) break;
+                }
+            }
+            return count > 0 ? list : null;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"CreateTypedUserIdList error: {ex.Message}");
+            return null;
+        }
+    }
+
     private List<string> ExtractAvatarUris(object? result)
     {
         var uris = new List<string>();
-        if (result == null) return uris;
-
-        IEnumerable enumerable;
-        if (result is IEnumerable e)
-            enumerable = e;
-        else
-            return uris;
-
+        if (result is not IEnumerable enumerable) return uris;
         foreach (var user in enumerable)
         {
             if (user == null) continue;
@@ -285,51 +289,72 @@ internal sealed class WhoReactedEngine : IDisposable
         return uris;
     }
 
-    // ===== Phase 2: Download avatars (ThreadPool) =====
+    // ===== Phase 2: Load avatars via Root's BitmapCache (ThreadPool) =====
 
-    private void DownloadPendingAvatars(List<PendingInjection> pending, WideEvent ev)
+    private void LoadPendingAvatars(List<PendingInjection> pending, WideEvent ev)
     {
-        int downloaded = 0;
-        int cached = 0;
+        if (_rootBitmapCache == null || _getBitmapAsync == null)
+        {
+            ev.Set("load_error", "BitmapCache not resolved");
+            return;
+        }
 
-        // Collect all unique URIs that need downloading
+        int loaded = 0;
+        int cached = 0;
+        int failed = 0;
+
         var needed = new HashSet<string>();
         foreach (var p in pending)
             foreach (var uri in p.AvatarUris)
             {
-                lock (_bytesCacheLock)
-                {
-                    if (_avatarBytesCache.ContainsKey(uri)) { cached++; continue; }
-                }
+                lock (_bitmapCacheLock) { if (_bitmapCache.ContainsKey(uri)) { cached++; continue; } }
                 if (_failedUris.Contains(uri)) continue;
                 needed.Add(uri);
             }
 
-        // Download each unique URI
         foreach (var uri in needed)
         {
-            var bytes = DownloadBytes(uri);
-            if (bytes != null && bytes.Length > 0)
+            try
             {
-                lock (_bytesCacheLock)
+                // Call BitmapCache.GetBitmapAsync(uri, null, 120) → Task<BitmapWrapper?>
+                var task = _getBitmapAsync.Invoke(_rootBitmapCache, new object?[] { uri, null, 120 });
+                if (task == null) { failed++; continue; }
+
+                // .Result → BitmapWrapper?
+                var wrapper = task.GetType().GetProperty("Result")?.GetValue(task);
+                if (wrapper == null) { _failedUris.Add(uri); failed++; continue; }
+
+                // .Bitmap → Avalonia.Media.Imaging.Bitmap
+                if (_bitmapWrapperBitmap == null)
+                    _bitmapWrapperBitmap = wrapper.GetType().GetProperty("Bitmap");
+
+                var bitmap = _bitmapWrapperBitmap?.GetValue(wrapper);
+                if (bitmap == null) { _failedUris.Add(uri); failed++; continue; }
+
+                lock (_bitmapCacheLock)
                 {
-                    if (_avatarBytesCache.Count >= MaxAvatarBytesCache)
+                    if (_bitmapCache.Count >= MaxBitmapCache)
                     {
-                        var firstKey = _avatarBytesCache.Keys.First();
-                        _avatarBytesCache.Remove(firstKey);
+                        var firstKey = _bitmapCache.Keys.First();
+                        _bitmapCache.Remove(firstKey);
                     }
-                    _avatarBytesCache[uri] = bytes;
+                    _bitmapCache[uri] = bitmap;
                 }
-                downloaded++;
+                loaded++;
             }
-            else
+            catch (Exception ex)
             {
                 _failedUris.Add(uri);
+                failed++;
+                var inner = ex is TargetInvocationException tie ? tie.InnerException ?? ex : ex;
+                if (inner is AggregateException ae && ae.InnerException != null) inner = ae.InnerException;
+                Logger.Log(Tag, $"BitmapCache load error for {uri}: {inner.Message}");
             }
         }
 
-        ev.Set("avatars_downloaded", downloaded);
+        ev.Set("avatars_loaded", loaded);
         ev.Set("avatars_cached", cached);
+        if (failed > 0) ev.Set("avatars_failed", failed);
     }
 
     // ===== Phase 3: Inject avatars (UI thread) =====
@@ -342,15 +367,12 @@ internal sealed class WhoReactedEngine : IDisposable
         {
             try
             {
-                // Verify the ReactionView is still in the visual tree
                 var currentTag = _r.GetTag(p.ReactionView);
                 if (currentTag != p.FullTag) continue;
 
-                // Add columns to the inner Grid: spacer (4px) + avatars (Auto)
                 _r.AddGridColumnPixel(p.InnerGrid, 4);
                 _r.AddGridColumnAuto(p.InnerGrid);
 
-                // Create horizontal StackPanel for avatars
                 var avatarPanel = _r.CreateStackPanel(vertical: false, spacing: 0);
                 if (avatarPanel == null) continue;
 
@@ -363,7 +385,11 @@ internal sealed class WhoReactedEngine : IDisposable
                 {
                     if (added >= MaxAvatarsPerReaction) break;
 
-                    var avatar = CreateCircularAvatar(uri);
+                    object? bitmap;
+                    lock (_bitmapCacheLock) { _bitmapCache.TryGetValue(uri, out bitmap); }
+                    if (bitmap == null) continue;
+
+                    var avatar = CreateCircularAvatar(bitmap);
                     if (avatar == null) continue;
 
                     if (added > 0)
@@ -390,24 +416,17 @@ internal sealed class WhoReactedEngine : IDisposable
 
     // ===== Visual tree helpers =====
 
-    /// <summary>
-    /// ReactionView structure: UserControl > Panel > [borders..., Button "ReactionBorder"]
-    ///   Button.Content = Grid [Col0: emoji 16px, Col1: spacer 10px, Col2: count Auto]
-    /// </summary>
     private object? FindInnerGrid(object reactionView)
     {
         try
         {
-            foreach (var child in _r.GetVisualChildren(reactionView))
+            foreach (var node in _walker.DescendantsDepthFirst(reactionView))
             {
-                foreach (var panelChild in _r.GetVisualChildren(child))
+                if (node.GetType().Name != "Button") continue;
+                foreach (var btnChild in _walker.DescendantsDepthFirst(node))
                 {
-                    if (panelChild.GetType().Name == "Button")
-                    {
-                        var content = panelChild.GetType().GetProperty("Content")?.GetValue(panelChild);
-                        if (content != null && content.GetType().Name == "Grid")
-                            return content;
-                    }
+                    if (btnChild.GetType().Name == "Grid")
+                        return btnChild;
                 }
             }
         }
@@ -426,30 +445,12 @@ internal sealed class WhoReactedEngine : IDisposable
         catch { }
     }
 
-    // ===== Create circular avatar control (UI thread, uses byte cache) =====
+    // ===== Create circular avatar control (UI thread) =====
 
-    private object? CreateCircularAvatar(string profilePictureUri)
+    private object? CreateCircularAvatar(object bitmap)
     {
         try
         {
-            // Get or create Bitmap from cached bytes
-            if (!_avatarBitmapCache.TryGetValue(profilePictureUri, out var bitmap))
-            {
-                byte[]? bytes;
-                lock (_bytesCacheLock)
-                {
-                    _avatarBytesCache.TryGetValue(profilePictureUri, out bytes);
-                }
-                if (bytes == null || bytes.Length == 0) return null;
-
-                using var stream = new System.IO.MemoryStream(bytes);
-                bitmap = _r.CreateBitmapFromStream(stream);
-                if (bitmap == null) return null;
-
-                _avatarBitmapCache[profilePictureUri] = bitmap;
-            }
-
-            // Image control
             var image = _r.CreateImage("UniformToFill");
             if (image == null) return null;
 
@@ -457,7 +458,6 @@ internal sealed class WhoReactedEngine : IDisposable
             image.GetType().GetProperty("Width")?.SetValue(image, AvatarSize);
             image.GetType().GetProperty("Height")?.SetValue(image, AvatarSize);
 
-            // Border for circular clipping
             var border = _r.CreateBorder(cornerRadius: AvatarSize / 2.0, child: image);
             if (border == null) return null;
 
@@ -487,9 +487,31 @@ internal sealed class WhoReactedEngine : IDisposable
 
             _vmReactionProp = vmType.GetProperty("Reaction", pub);
             _vmUserCacheField = vmType.GetField("_globalUserCacheService", priv);
+            _vmBitmapCacheField = vmType.GetField("_bitmapCache", priv);
 
             if (_vmReactionProp == null) { Logger.Log(Tag, "WARN: Reaction prop not found"); return; }
-            if (_vmUserCacheField == null) { Logger.Log(Tag, "WARN: _globalUserCacheService field not found"); return; }
+            if (_vmUserCacheField == null) { Logger.Log(Tag, "WARN: _globalUserCacheService not found"); return; }
+            if (_vmBitmapCacheField == null) { Logger.Log(Tag, "WARN: _bitmapCache not found"); return; }
+
+            // Grab Root's BitmapCache instance from this ViewModel
+            _rootBitmapCache = _vmBitmapCacheField.GetValue(reactionViewModel);
+            if (_rootBitmapCache != null)
+            {
+                // Find GetBitmapAsync(string, string?, int) overload
+                var cacheType = _rootBitmapCache.GetType();
+                foreach (var m in cacheType.GetMethods(pub))
+                {
+                    if (m.Name != "GetBitmapAsync") continue;
+                    var parms = m.GetParameters();
+                    if (parms.Length == 3 && parms[0].ParameterType == typeof(string))
+                    {
+                        _getBitmapAsync = m;
+                        break;
+                    }
+                }
+                // Fallback: any GetBitmapAsync
+                _getBitmapAsync ??= cacheType.GetMethod("GetBitmapAsync", pub);
+            }
 
             // Reaction domain model
             var reaction = _vmReactionProp.GetValue(reactionViewModel);
@@ -499,13 +521,19 @@ internal sealed class WhoReactedEngine : IDisposable
                 _reactionUsersProp = rt.GetProperty("Users", pub);
                 _reactionShortCodeProp = rt.GetProperty("ShortCode", pub);
                 _reactionMessageIdProp = rt.GetProperty("MessageId", pub);
+
+                if (_reactionUsersProp != null)
+                {
+                    var usersType = _reactionUsersProp.PropertyType;
+                    if (usersType.IsGenericType)
+                        _userGuidType = usersType.GetGenericArguments().FirstOrDefault();
+                }
             }
 
             // IGlobalUserCacheService — find sync GetUsersByIds
             var userCache = _vmUserCacheField.GetValue(reactionViewModel);
             if (userCache != null)
             {
-                // Search concrete type then interfaces
                 _getUsersByIdsSync = FindSyncGetUsersByIds(userCache.GetType(), pub);
                 if (_getUsersByIdsSync == null)
                 {
@@ -516,21 +544,19 @@ internal sealed class WhoReactedEngine : IDisposable
                     }
                 }
 
-                // Resolve GlobalUser property infos from return type
                 if (_getUsersByIdsSync != null)
                 {
                     var returnType = _getUsersByIdsSync.ReturnType;
                     var guType = returnType.IsGenericType ? returnType.GetGenericArguments().FirstOrDefault() : null;
                     if (guType != null)
-                    {
                         _globalUserProfilePicProp = guType.GetProperty("ProfilePictureUri", pub);
-                        _globalUserIdProp = guType.GetProperty("Id", pub);
-                    }
                 }
             }
 
             Logger.Log(Tag, $"Reflection resolved: Reaction={_vmReactionProp != null} Users={_reactionUsersProp != null} " +
-                $"UserCache={_getUsersByIdsSync != null} ProfilePic={_globalUserProfilePicProp != null}");
+                $"UserGuid={_userGuidType?.Name} UserCache={_getUsersByIdsSync != null} " +
+                $"BitmapCache={_rootBitmapCache != null} GetBitmapAsync={_getBitmapAsync != null} " +
+                $"ProfilePic={_globalUserProfilePicProp != null}");
         }
         catch (Exception ex) { Logger.Log(Tag, $"ResolveReflection error: {ex.Message}"); }
     }
@@ -545,47 +571,5 @@ internal sealed class WhoReactedEngine : IDisposable
                 return m;
         }
         return null;
-    }
-
-    // ===== HTTP (reflection-based, same pattern as LinkEmbedEngine) =====
-
-    private static void EnsureHttpResolved()
-    {
-        if (s_httpResolved) return;
-        s_httpResolved = true;
-        try
-        {
-            Type? httpClientType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                try { httpClientType = asm.GetType("System.Net.Http.HttpClient"); if (httpClientType != null) break; }
-                catch { }
-            }
-            if (httpClientType == null) return;
-
-            s_httpClient = Activator.CreateInstance(httpClientType);
-            if (s_httpClient == null) return;
-
-            httpClientType.GetProperty("Timeout")?.SetValue(s_httpClient, TimeSpan.FromSeconds(10));
-            s_getByteArrayAsync = httpClientType.GetMethod("GetByteArrayAsync", new[] { typeof(string) });
-
-            Logger.Log(Tag, $"HTTP resolved: client={s_httpClient != null} getBytes={s_getByteArrayAsync != null}");
-        }
-        catch (Exception ex) { Logger.Log(Tag, $"HTTP resolve error: {ex.Message}"); }
-    }
-
-    /// <summary>
-    /// Downloads bytes from a URL. Called on ThreadPool, safe to block.
-    /// </summary>
-    private static byte[]? DownloadBytes(string url)
-    {
-        if (s_httpClient == null || s_getByteArrayAsync == null) return null;
-        try
-        {
-            var task = s_getByteArrayAsync.Invoke(s_httpClient, new object[] { url });
-            if (task == null) return null;
-            return task.GetType().GetProperty("Result")?.GetValue(task) as byte[];
-        }
-        catch { return null; }
     }
 }

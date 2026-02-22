@@ -1,0 +1,559 @@
+using System.Reflection;
+using System.Text;
+
+namespace Uprooted;
+
+/// <summary>
+/// User Bio engine: lets Uprooted users set a short bio (max 190 chars)
+/// visible on profile popups to other Uprooted users.
+///
+/// Bio text is stored on api.uprooted.sh using the same HMAC authentication
+/// as UprootedPresenceBeacon. The engine handles:
+///   - Registering (uploading) the local user's bio on startup
+///   - Querying another user's bio when their profile popup opens
+///   - Caching bio results with TTL
+///   - Injecting the bio TextBlock into the profile popup visual tree
+///
+/// "View Only" mode allows seeing others' bios without broadcasting your own.
+/// </summary>
+internal class UserBioEngine
+{
+    private const string Tag = "UserBio";
+    private const string ApiBase = "https://api.uprooted.sh";
+    private const string Version = "0.4.3";
+    private const int MaxBioLength = 190;
+    private const string BioTag = "uprooted-user-bio";
+
+    private readonly AvaloniaReflection _r;
+    private readonly object _mainWindow;
+
+    // Bio cache: uuid -> (bio text or null, expiry)
+    private readonly Dictionary<string, (string? bio, DateTime expiry)> _cache = new();
+    private readonly object _cacheLock = new();
+
+    private UprootedPresenceBeacon? _beacon;
+
+    /// <summary>
+    /// Static instance for access from ContentPages (settings lightbox bio sync).
+    /// </summary>
+    internal static UserBioEngine? Instance { get; set; }
+
+    internal UserBioEngine(AvaloniaReflection resolver, object mainWindow)
+    {
+        _r = resolver;
+        _mainWindow = mainWindow;
+    }
+
+    /// <summary>
+    /// Start the engine. If the user has a bio set and is not in View Only mode,
+    /// registers (uploads) the bio to the server.
+    /// </summary>
+    internal void Initialize(UprootedPresenceBeacon beacon)
+    {
+        _beacon = beacon;
+
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            // Wait for beacon to have OwnUuidStr (it polls for up to 60s)
+            // Wait for beacon to resolve OwnUuidStr (polls up to 5 min for login)
+            for (int i = 0; i < 65; i++)
+            {
+                if (_beacon.OwnUuidStr != null) break;
+                Thread.Sleep(5_000);
+            }
+
+            if (_beacon.OwnUuidStr == null)
+            {
+                Logger.Log(Tag, "Own UUID not available — bio registration skipped");
+                return;
+            }
+
+            try
+            {
+                var settings = UprootedSettings.Load();
+                if (settings.UserBioViewOnly)
+                {
+                    Logger.Log(Tag, "View Only mode — skipping bio registration");
+                    return;
+                }
+                if (string.IsNullOrWhiteSpace(settings.UserBioText))
+                {
+                    Logger.Log(Tag, "No bio text set — skipping registration");
+                    return;
+                }
+
+                RegisterBio(settings.UserBioText);
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"Initialize error: {ex.Message}");
+            }
+        });
+    }
+
+    // ===== Bio registration (upload own bio) =====
+
+    /// <summary>
+    /// Upload the user's bio to the server. Called on startup and when bio is saved.
+    /// </summary>
+    internal void RegisterBio(string bioText)
+    {
+        if (_beacon?.OwnUuidStr == null)
+        {
+            Logger.Log(Tag, "RegisterBio: Own UUID not available");
+            return;
+        }
+
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                var uuid = _beacon.OwnUuidStr;
+                var utcDayNumber = (int)((DateTime.UtcNow - DateTime.UnixEpoch).TotalDays);
+                var message = $"{uuid}:{utcDayNumber}";
+                var hmacHex = UprootedPresenceBeacon.ComputeHmacHex(message, UprootedPresenceBeacon.DecryptKey());
+
+                var bioEscaped = EscapeJsonString(bioText);
+                var body = $"{{\"uuid\":\"{uuid}\",\"token\":\"{hmacHex}\",\"ts\":{utcDayNumber},\"bio\":\"{bioEscaped}\",\"v\":\"{Version}\"}}";
+
+                var statusCode = HttpSendWithBody($"{ApiBase}/presence/bio", body, "Post");
+
+                if (statusCode is 200 or 204)
+                    Logger.Log(Tag, "Bio registered successfully");
+                else if (statusCode == 429)
+                    Logger.Log(Tag, "Bio registration rate-limited (OK)");
+                else
+                    Logger.Log(Tag, $"Bio registration failed: HTTP {statusCode}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"RegisterBio error: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Delete the user's bio from the server (when switching to View Only mode).
+    /// </summary>
+    internal void DeleteBio()
+    {
+        if (_beacon?.OwnUuidStr == null) return;
+
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            try
+            {
+                var uuid = _beacon.OwnUuidStr;
+                var utcDayNumber = (int)((DateTime.UtcNow - DateTime.UnixEpoch).TotalDays);
+                var message = $"{uuid}:{utcDayNumber}";
+                var hmacHex = UprootedPresenceBeacon.ComputeHmacHex(message, UprootedPresenceBeacon.DecryptKey());
+
+                var body = $"{{\"uuid\":\"{uuid}\",\"token\":\"{hmacHex}\",\"ts\":{utcDayNumber},\"v\":\"{Version}\"}}";
+                var statusCode = HttpSendWithBody($"{ApiBase}/presence/bio", body, "Delete");
+
+                Logger.Log(Tag, statusCode is 200 or 204
+                    ? "Bio deleted from server"
+                    : $"Bio delete returned HTTP {statusCode}");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"DeleteBio error: {ex.Message}");
+            }
+        });
+    }
+
+    // ===== Bio query API (called by ProfileBadgeInjector) =====
+
+    /// <summary>
+    /// Return cached bio for a UUID. Returns a sentinel to distinguish states:
+    ///   - non-null string (possibly empty) = cached result
+    ///   - null = not cached (caller should query async)
+    /// Empty string means "user has no bio" (still a valid cache entry).
+    /// </summary>
+    internal string? TryGetCachedBio(string uuid)
+    {
+        lock (_cacheLock)
+        {
+            if (_cache.TryGetValue(uuid, out var entry))
+            {
+                if (DateTime.UtcNow < entry.expiry)
+                    return entry.bio ?? "";
+                _cache.Remove(uuid);
+            }
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Query the server for a user's bio in the background.
+    /// Calls onResult(bioText) on a thread pool thread when complete.
+    /// bioText is null if no bio, or the bio string if found.
+    /// </summary>
+    internal void QueryBioAsync(string uuid, Action<string?> onResult)
+    {
+        ThreadPool.QueueUserWorkItem(_ =>
+        {
+            string? bio = null;
+            TimeSpan ttl = TimeSpan.FromSeconds(30); // error TTL
+            try
+            {
+                bio = FetchBio(uuid);
+                ttl = !string.IsNullOrEmpty(bio)
+                    ? TimeSpan.FromMinutes(5)   // has bio: cache 5 min
+                    : TimeSpan.FromSeconds(60); // no bio: cache 60s
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"QueryBioAsync error for {uuid[..8]}...: {ex.Message}");
+            }
+
+            lock (_cacheLock)
+                _cache[uuid] = (bio, DateTime.UtcNow + ttl);
+
+            try { onResult(bio); }
+            catch { }
+        });
+    }
+
+    /// <summary>
+    /// Invalidate a cached bio entry.
+    /// </summary>
+    internal void InvalidateBioCache(string uuid)
+    {
+        lock (_cacheLock) { _cache.Remove(uuid); }
+    }
+
+    // ===== Profile popup injection =====
+
+    /// <summary>
+    /// Try to inject a bio TextBlock into a profile popup.
+    /// Called by ProfileBadgeInjector after badges are injected.
+    /// </summary>
+    internal void TryInjectBio(object popup, object verticalPanel, int insertIndex, string userId)
+    {
+        // Skip own bio
+        if (userId == _beacon?.OwnUuidStr) return;
+
+        // Dedup: check if bio already injected in this popup
+        var walker = new VisualTreeWalker(_r);
+        foreach (var node in walker.DescendantsDepthFirst(popup))
+        {
+            if (_r.GetTag(node) == BioTag)
+                return; // already injected
+        }
+
+        // Check plugin enabled
+        var settings = UprootedSettings.Load();
+        var pluginEnabled = settings.Plugins.TryGetValue("user-bio", out var enabled) && enabled;
+        if (!pluginEnabled) return;
+
+        var cached = TryGetCachedBio(userId);
+        if (cached != null)
+        {
+            // Cache hit
+            if (!string.IsNullOrEmpty(cached))
+                InjectBioText(verticalPanel, insertIndex, cached);
+            return;
+        }
+
+        // Cache miss: query async
+        QueryBioAsync(userId, bio =>
+        {
+            if (string.IsNullOrEmpty(bio)) return;
+            _r.RunOnUIThread(() =>
+            {
+                try
+                {
+                    // Verify popup still attached
+                    if (_r.GetParent(popup) == null) return;
+
+                    // Re-check dedup (another callback may have injected)
+                    foreach (var node in walker.DescendantsDepthFirst(popup))
+                    {
+                        if (_r.GetTag(node) == BioTag)
+                            return;
+                    }
+
+                    InjectBioText(verticalPanel, insertIndex, bio);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(Tag, $"Bio inject (async) error: {ex.Message}");
+                }
+            });
+        });
+    }
+
+    /// <summary>
+    /// Create and insert a bio TextBlock into the vertical panel.
+    /// </summary>
+    private void InjectBioText(object verticalPanel, int insertIndex, string bioText)
+    {
+        try
+        {
+            // CreateTextBlock(text, fontSize, foregroundHex)
+            var textBlock = _r.CreateTextBlock(bioText, 12.0, "#9A9AAA");
+            if (textBlock == null)
+            {
+                Logger.Log(Tag, "InjectBioText: CreateTextBlock returned null");
+                return;
+            }
+
+            _r.SetTextWrapping(textBlock, "Wrap");
+            _r.SetMargin(textBlock, 0, 6, 0, 2);
+            _r.SetMaxWidth(textBlock, 240);
+            _r.SetTag(textBlock, BioTag);
+
+            // Insert into panel
+            _r.InsertChild(verticalPanel, insertIndex, textBlock);
+
+            Logger.Log(Tag, $"Bio injected: {bioText.Length} chars");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"InjectBioText error: {ex.Message}");
+        }
+    }
+
+    // ===== Network =====
+
+    private static string? FetchBio(string uuid)
+    {
+        var url = $"{ApiBase}/presence/{uuid}/bio";
+        var json = HttpGetBio(url);
+        if (json == null) return null;
+
+        // Manual JSON parse: extract "bio" value
+        return ExtractJsonStringField(json, "bio");
+    }
+
+    /// <summary>
+    /// HTTP GET for bio data. Same pattern as PresenceBeacon.HttpGetPresence.
+    /// </summary>
+    private static string? HttpGetBio(string url)
+    {
+        try
+        {
+            AutoUpdater.EnsureHttpResolved();
+            UprootedPresenceBeacon.EnsurePostResolved();
+
+            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
+                || AutoUpdater.s_httpRequestMessageType == null)
+            {
+                Logger.Log(Tag, "HttpGetBio: HTTP not resolved");
+                return null;
+            }
+
+            var httpAsm = AutoUpdater.s_httpRequestMessageType.Assembly;
+            var httpMethodType = httpAsm.GetType("System.Net.Http.HttpMethod");
+            var httpMethodGet = httpMethodType?.GetProperty("Get",
+                BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (httpMethodGet == null) return null;
+
+            var request = Activator.CreateInstance(AutoUpdater.s_httpRequestMessageType, httpMethodGet, new Uri(url));
+            if (request == null) return null;
+
+            try
+            {
+                var headers = request.GetType().GetProperty("Headers")?.GetValue(request);
+                var tryAdd = headers?.GetType().GetMethod("TryAddWithoutValidation",
+                    new[] { typeof(string), typeof(string) });
+                tryAdd?.Invoke(headers, new object[] { "Accept", "application/json" });
+            }
+            catch { }
+
+            var sendParams = AutoUpdater.s_sendAsync.GetParameters();
+            object?[] args = sendParams.Length == 1
+                ? new[] { request }
+                : new object?[] { request, System.Threading.CancellationToken.None };
+
+            var task = AutoUpdater.s_sendAsync.Invoke(AutoUpdater.s_httpClient, args);
+            var response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            if (response == null) return null;
+
+            var statusCodeProp = response.GetType().GetProperty("StatusCode");
+            var statusCode = statusCodeProp != null ? Convert.ToInt32(statusCodeProp.GetValue(response)) : -1;
+
+            // 404 = no bio set, return empty
+            if (statusCode == 404) return "";
+
+            if (statusCode >= 0 && (statusCode < 200 || statusCode >= 300))
+            {
+                Logger.Log(Tag, $"GET {url} returned HTTP {statusCode}");
+                return null;
+            }
+
+            var content = response.GetType().GetProperty("Content")?.GetValue(response);
+            if (content == null) return null;
+
+            var readTask = content.GetType().GetMethod("ReadAsStringAsync",
+                BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)?.Invoke(content, null);
+            return readTask?.GetType().GetProperty("Result")?.GetValue(readTask) as string;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"HttpGetBio error: {ex.Message}");
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Send an HTTP request with a JSON body using a specific method (Post/Delete).
+    /// </summary>
+    private static int HttpSendWithBody(string url, string jsonBody, string methodName)
+    {
+        try
+        {
+            AutoUpdater.EnsureHttpResolved();
+            UprootedPresenceBeacon.EnsurePostResolved();
+
+            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
+                || AutoUpdater.s_httpRequestMessageType == null)
+            {
+                Logger.Log(Tag, $"HttpSend({methodName}): HTTP not resolved");
+                return -1;
+            }
+
+            var httpAsm = AutoUpdater.s_httpRequestMessageType.Assembly;
+            var httpMethodType = httpAsm.GetType("System.Net.Http.HttpMethod");
+            var httpMethod = httpMethodType?.GetProperty(methodName,
+                BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (httpMethod == null)
+            {
+                Logger.Log(Tag, $"HttpSend: HttpMethod.{methodName} not found");
+                return -1;
+            }
+
+            var request = Activator.CreateInstance(AutoUpdater.s_httpRequestMessageType, httpMethod, new Uri(url));
+            if (request == null) return -1;
+
+            // Create StringContent body
+            object? bodyContent = null;
+            var stringContentType = httpAsm.GetType("System.Net.Http.StringContent");
+            if (stringContentType != null)
+            {
+                try { bodyContent = Activator.CreateInstance(stringContentType, jsonBody, Encoding.UTF8, "application/json"); }
+                catch { }
+            }
+
+            if (bodyContent == null)
+            {
+                var byteArrayContentType = httpAsm.GetType("System.Net.Http.ByteArrayContent");
+                if (byteArrayContentType != null)
+                {
+                    var bytes = Encoding.UTF8.GetBytes(jsonBody);
+                    bodyContent = Activator.CreateInstance(byteArrayContentType, bytes);
+                    if (bodyContent != null)
+                    {
+                        var contentHeaders = bodyContent.GetType().GetProperty("Headers")?.GetValue(bodyContent);
+                        var contentTypeProp = contentHeaders?.GetType().GetProperty("ContentType");
+                        if (contentTypeProp != null)
+                        {
+                            var mediaHeaderType = httpAsm.GetType("System.Net.Http.Headers.MediaTypeHeaderValue");
+                            if (mediaHeaderType != null)
+                            {
+                                var mediaHeader = Activator.CreateInstance(mediaHeaderType, "application/json");
+                                contentTypeProp.SetValue(contentHeaders, mediaHeader);
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (bodyContent == null)
+            {
+                Logger.Log(Tag, "HttpSend: cannot create body content");
+                return -1;
+            }
+
+            request.GetType().GetProperty("Content")?.SetValue(request, bodyContent);
+
+            var sendParams = AutoUpdater.s_sendAsync.GetParameters();
+            object?[] args = sendParams.Length == 1
+                ? new[] { request }
+                : new object?[] { request, System.Threading.CancellationToken.None };
+
+            var task = AutoUpdater.s_sendAsync.Invoke(AutoUpdater.s_httpClient, args);
+            var response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            if (response == null) return -1;
+
+            var statusCodeProp = response.GetType().GetProperty("StatusCode");
+            return statusCodeProp != null ? Convert.ToInt32(statusCodeProp.GetValue(response)) : -1;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"HttpSend({methodName}) error: {ex.Message}");
+            return -1;
+        }
+    }
+
+    // ===== JSON helpers (no System.Text.Json) =====
+
+    /// <summary>
+    /// Extract a string field value from a JSON object.
+    /// Handles escaped quotes within the value.
+    /// </summary>
+    private static string? ExtractJsonStringField(string json, string fieldName)
+    {
+        var key = $"\"{fieldName}\"";
+        var keyIdx = json.IndexOf(key, StringComparison.Ordinal);
+        if (keyIdx < 0) return null;
+
+        var colonIdx = json.IndexOf(':', keyIdx + key.Length);
+        if (colonIdx < 0) return null;
+
+        var openQuote = json.IndexOf('"', colonIdx + 1);
+        if (openQuote < 0) return null;
+
+        var sb = new StringBuilder();
+        for (int i = openQuote + 1; i < json.Length; i++)
+        {
+            if (json[i] == '\\' && i + 1 < json.Length)
+            {
+                char next = json[i + 1];
+                if (next == '"') { sb.Append('"'); i++; }
+                else if (next == '\\') { sb.Append('\\'); i++; }
+                else if (next == 'n') { sb.Append('\n'); i++; }
+                else if (next == 'r') { sb.Append('\r'); i++; }
+                else if (next == 't') { sb.Append('\t'); i++; }
+                else { sb.Append(json[i]); }
+            }
+            else if (json[i] == '"')
+            {
+                break;
+            }
+            else
+            {
+                sb.Append(json[i]);
+            }
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Escape a string for inclusion in a JSON value (between quotes).
+    /// </summary>
+    private static string EscapeJsonString(string s)
+    {
+        var sb = new StringBuilder(s.Length + 8);
+        foreach (char c in s)
+        {
+            switch (c)
+            {
+                case '"': sb.Append("\\\""); break;
+                case '\\': sb.Append("\\\\"); break;
+                case '\n': sb.Append("\\n"); break;
+                case '\r': sb.Append("\\r"); break;
+                case '\t': sb.Append("\\t"); break;
+                default:
+                    if (c < 0x20)
+                        sb.Append($"\\u{(int)c:X4}");
+                    else
+                        sb.Append(c);
+                    break;
+            }
+        }
+        return sb.ToString();
+    }
+}
