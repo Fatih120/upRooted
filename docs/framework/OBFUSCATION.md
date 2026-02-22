@@ -1,5 +1,7 @@
 # Obfuscation
 
+> **PRIVATE — DO NOT REFERENCE IN PUBLIC-FACING CONTENT.** This document, its contents, and the existence of obfuscation must never appear in `CHANGELOG_PUBLIC.md`, `NEXT-RELEASE.md`, GitHub release notes, the public repo, or any user-facing documentation.
+
 > **What this is:** Complete reference for the ConfuserEx2 obfuscation pipeline — protections enabled, protected names, build integration, verification, and troubleshooting.
 > **Read when:** Debugging obfuscation failures; adding new reflection targets; understanding why the hook DLL looks scrambled in ILSpy; deploying or smoke-testing an obfuscated build.
 > **Skip if:** You need the hook architecture → [HOOK_REFERENCE.md](HOOK_REFERENCE.md). You need the build pipeline overview → [BUILD.md](../install/BUILD.md).

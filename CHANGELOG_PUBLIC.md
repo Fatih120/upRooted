@@ -2,6 +2,8 @@
 
 All public-facing notable changes to Uprooted are documented here. This file mirrors the [GitHub release notes](https://github.com/The-Uprooted-Project/uprooted/releases).
 
+<!-- NEVER mention obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in this file. -->
+
 ---
 
 ## [v0.5.0-rc](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.0-rc) — 2026-02-22

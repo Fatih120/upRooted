@@ -2,6 +2,8 @@
 
 > Changes included in v0.5.0-rc. This file is replaced each release.
 
+<!-- NEVER mention obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in this file. This content flows to public release notes. -->
+
 ---
 
 # What's New in v0.5.0-rc

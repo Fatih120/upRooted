@@ -162,8 +162,10 @@ These cause real bugs -- do not violate:
 - **`DispatcherPriority` is a struct not enum** in Avalonia 11+
 - **Never gate `Logger` to developer channel only** -- stable users MUST produce logs so we can diagnose their bug reports. `Logger.Disable()` and `Logger.Enable()` do not exist. Do not add them. Do not add `_enabled` flags or channel checks inside `Logger`. This was removed intentionally -- see `hook/Logger.cs` header comment.
 - **When replicating Root UI elements, ALWAYS examine Root's source first** -- Root's .NET assemblies are fully decompilable via ILSpy. Decompiled sources live in `research/ilspy-dumps/`. Don't reinvent controls (scrollbars, themes, etc.) from scratch when Root already has working implementations you can instantiate directly or study for exact behavior. Example: `RootScrollViewer` provides overlay scrollbars natively -- use it instead of hacking stock `ScrollViewer`.
+- **Never mention obfuscation in public-facing content** -- The hook DLL is obfuscated, but this is a private implementation detail. Never reference obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in: `CHANGELOG_PUBLIC.md`, `NEXT-RELEASE.md`, GitHub release notes, README, or any content that reaches the public repo. Commit messages in this private repo are acceptable. See `docs/framework/OBFUSCATION.md` for the internal reference.
 
 ## Related Repos
 
 - **Public scaffold**: `The-Uprooted-Project/uprooted` -- TypeScript source, plugin API, theme engine
 - These repos are **strictly separate** -- never copy, reference, or leak code/commits between them
+- **Obfuscation is private-repo-only knowledge** -- never reference obfuscation, ConfuserEx, or protected names in the public repo, its release notes, or any user-facing documentation
