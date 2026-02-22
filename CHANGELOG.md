@@ -24,6 +24,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **Developer channel UI refresh** — Dev channel visuals are now unified around the Dev blue token and include a higher-contrast channel badge style (dark fill + blue outline/text). Update status suffix now uses ` [Dev]` formatting (for example: `Up to date (v0.4.2) [Dev]`) instead of `(Dev)`.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **Plugin count semantics** — Plugin count now reports against plugins available in the current context (channel + experimental visibility) and always uses `X out of Y plugins` formatting.
+  - File: `hook/ContentPages.cs`
+- **Settings page visual consistency pass** — Normalized header/first-card spacing across About/Plugin Settings/Theme Settings and aligned card outlines closer to Root-native lightness.
+  - File: `hook/ContentPages.cs`
+- **Header row/button alignment polish** — Unified title-row minimum heights and button text sizing/weight so About (`Live Console`/`Open Logs`) and Themes (`Refresh`) header controls align consistently. About version badge in the UPROOTED card title row was nudged for cleaner baseline alignment.
+  - File: `hook/ContentPages.cs`
+- **Injected Uprooted sidebar tab interaction model** — Uprooted-injected sidebar tabs now use press-to-navigate behavior, no longer apply press-shrink feedback, and render without injected border strokes.
+  - Files: `hook/SidebarInjector.cs`, `hook/AvaloniaReflection.cs`
 - **Settings interactions and visual feedback aligned with Root native UX** — Incremental UI polish across injected controls:
   - Release-only activation semantics standardized (`SubscribeClickReleased`) and drag-off-release no longer toggles.
   - Press feedback (proportional shrink + subtle press shade) now applies consistently to injected controls, with targeted opt-outs for large parent cards where child-button presses should not depress the parent.
@@ -32,6 +42,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - Theme page behavior polish: added Refresh button, prevented no-op re-toggle on already-active theme cards, and fixed multiple theme-card press/propagation quirks.
   - Preset theme card hover borders are now luminance-aware (darken in light mode / lighten in dark mode); Custom Theme card hover remains hardcoded island behavior and always lightens.
   - Experimental plugins banner/toggle light-mode visuals revised: enabled state uses a light amber surface palette in Light mode; toggle visuals now reuse the shared plugin toggle control for consistent formatting/behavior.
+  - Themes page Native preset now shows Root-state context in label (`Root` / `Dark` / `Light` / `System`) and uses state-aware preview appearance. Native gear hover is now luminance-aware (darkens in Light mode, lightens in Dark mode).
+  - Theme preview contrast tuning refined for cross-context readability (especially Light preview shown in dark/preset host and dark preset previews shown in light host).
   - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
 
 - **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
@@ -60,12 +72,19 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Dev mode teardown latency on channel switch** — Switching from Developer to Stable now immediately disables/refreshes dev-only runtime behavior (ReconLogger, Live Console, dev badge indicators, and related UI state) without requiring tab navigation or restart.
+  - Files: `hook/ContentPages.cs`, `hook/LogConsole.cs`, `hook/ProfileBadgeInjector.cs`
+- **High-DPI border inflation on some laptops** — Thin borders now target fixed physical width (1px) to prevent inflation on high-scale displays. Thick borders were retuned to native-like emphasis weight to match Root settings visuals more closely.
+  - File: `hook/ContentPages.cs`
+- **Recon Logger naming consistency** — Plugin display name standardized to `ReconLogger`.
+  - File: `hook/ContentPages.cs`
 - **Input/activation edge cases across settings UI** — Fixed regressions and interaction quirks discovered during Root-native parity pass:
   - Pointer press then drag-off then release no longer triggers injected toggles/actions.
   - Native theme card settings button no longer depresses/toggles the parent card.
   - Custom Theme Ping toggle no longer activates the entire custom card.
   - Theme cards no longer re-trigger when pressing an already active card.
   - About/Plugins/popup button border-hover styling now consistent across previously missed controls.
+  - Root native variant restoration now preserves requested state (including `System/default`) when applying/reverting Uprooted themes, fixing cases where fallback incorrectly stuck to explicit Dark/Light.
   - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
 
 - **Full codebase bug audit** — 15-commit sweep covering thread safety, timer leaks, fire-and-forget task accumulation, error handling gaps, and type correctness:

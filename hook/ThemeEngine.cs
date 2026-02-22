@@ -80,8 +80,12 @@ internal class ThemeEngine
     // Prevents the variant change handler from reverting our theme or re-injecting sidebar.
     private bool _switchingVariantForTheme;
 
-    // The variant that was active before we switched it (null = we didn't switch)
+    // Requested variant before we switched for theme brightness.
+    // Value can be null (System/Default), so _hasOriginalVariantKey tracks whether
+    // we captured a value for restoration.
     private object? _originalVariantKey;
+    private bool _hasOriginalVariantKey;
+    private string? _originalActualVariantName;
 
     // Callback for SidebarInjector to re-inject on Root variant change
     private Action? _onVariantChanged;
@@ -248,6 +252,42 @@ internal class ThemeEngine
     {
         var v = _r.GetActiveThemeVariant();
         return v?.ToString() ?? "Dark";
+    }
+
+    public string GetCurrentRootRequestedVariant()
+    {
+        var requested = _r.GetRequestedThemeVariant();
+        var name = requested?.ToString();
+        if (string.IsNullOrWhiteSpace(name) || name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+            return "System";
+        return name;
+    }
+
+    /// <summary>
+    /// Returns Root's native requested variant (pre-theme) while an Uprooted theme is active.
+    /// Falls back to current requested variant when no snapshot is available.
+    /// </summary>
+    public string GetNativeRootRequestedVariant()
+    {
+        if (_activeThemeName != null && _hasOriginalVariantKey)
+        {
+            var name = _originalVariantKey?.ToString();
+            if (string.IsNullOrWhiteSpace(name) || name.Equals("Default", StringComparison.OrdinalIgnoreCase))
+                return "System";
+            return name;
+        }
+        return GetCurrentRootRequestedVariant();
+    }
+
+    /// <summary>
+    /// Returns Root's native effective variant (pre-theme) while an Uprooted theme is active.
+    /// Falls back to current effective variant when no snapshot is available.
+    /// </summary>
+    public string GetNativeRootVariant()
+    {
+        if (_activeThemeName != null && _hasOriginalVariantKey && !string.IsNullOrWhiteSpace(_originalActualVariantName))
+            return _originalActualVariantName!;
+        return GetCurrentRootVariant();
     }
 
     // ===== DWM title bar color (Windows 11) =====
@@ -502,10 +542,10 @@ internal class ThemeEngine
         _customPalette = null;
         _customSvgMode = "auto";
 
-        // Phase 4: Restore original variant if we switched it
-        if (_originalVariantKey != null)
+        // Phase 4: Restore original requested variant if we switched it
+        if (_hasOriginalVariantKey)
         {
-            ev.Set("restore_variant", _originalVariantKey.ToString());
+            ev.Set("restore_variant", _originalVariantKey?.ToString() ?? "<null/default>");
             _switchingVariantForTheme = true;
             try
             {
@@ -515,6 +555,8 @@ internal class ThemeEngine
             {
                 _switchingVariantForTheme = false;
                 _originalVariantKey = null;
+                _hasOriginalVariantKey = false;
+                _originalActualVariantName = null;
             }
             _activeVariantDict = null;
             _activeVariantKey = null;
@@ -524,6 +566,7 @@ internal class ThemeEngine
         // This makes Avalonia re-resolve ALL DynamicResource bindings across the entire tree.
         // Our ClearValue'd controls pick up Root's native colors via inheritance/resolution.
         {
+            var requestedBefore = _r.GetRequestedThemeVariant();
             var current = _r.GetActiveThemeVariant();
             var opposite = _r.GetThemeVariantByName(
                 current?.ToString() == "Light" ? "Dark" : "Light");
@@ -533,7 +576,8 @@ internal class ThemeEngine
                 try
                 {
                     _r.SetRequestedThemeVariant(opposite);
-                    _r.SetRequestedThemeVariant(current);
+                    // Preserve true requested intent, including null/default ("System").
+                    _r.SetRequestedThemeVariant(requestedBefore);
                 }
                 finally
                 {
@@ -820,6 +864,8 @@ internal class ThemeEngine
             ev?.Set("variant_switch", "not_needed");
             ev?.Set("variant", currentName);
             _originalVariantKey = null;
+            _hasOriginalVariantKey = false;
+            _originalActualVariantName = null;
             return;
         }
 
@@ -830,11 +876,15 @@ internal class ThemeEngine
             ev?.Set("variant_switch", "target_not_found");
             ev?.Set("target_variant", targetVariant);
             _originalVariantKey = null;
+            _hasOriginalVariantKey = false;
+            _originalActualVariantName = null;
             return;
         }
 
         ev?.Set("variant_switch", currentName + "_to_" + targetVariant);
-        _originalVariantKey = currentVariant;
+        _originalVariantKey = _r.GetRequestedThemeVariant();
+        _hasOriginalVariantKey = true;
+        _originalActualVariantName = currentName;
 
         // Guard so our variant change handler skips this switch
         _switchingVariantForTheme = true;

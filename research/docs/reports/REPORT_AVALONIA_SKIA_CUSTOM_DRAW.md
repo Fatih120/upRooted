@@ -35,6 +35,7 @@ Total: **74 files** generated.
 ### Media/Platform/VisualTree batch (4 files, temporary)
 - Aggregate files for `Avalonia.Media`, `Avalonia.Platform`, `Avalonia.Visuals.Platform`, and `Avalonia.VisualTree` were decompiled during this pass to validate the custom draw call chain.
 - These unsplit aggregate files were intentionally removed after analysis to avoid repository bloat.
+- `Avalonia.Media` was later re-dumped and split again, so the key custom draw files are now retained as standalone files.
 
 Key outcome:
 - The previously missing `DrawingContext.Custom(...)` and `ImmediateDrawingContext` call chain was validated from this batch before cleanup.
@@ -106,7 +107,9 @@ Important: current renderer usage found in dumps relies on matrix-based sweep gr
 ### 5. Full call chain for custom draw operation is now confirmed
 
 Evidence:
-- validated in temporary `Avalonia.Media` aggregate decompilation during this research pass (aggregate file later removed as part of cleanup)
+- `research/ilspy-dumps/DrawingContext.cs`
+- `research/ilspy-dumps/PlatformDrawingContext.cs`
+- `research/ilspy-dumps/ImmediateDrawingContext.cs`
 - `research/ilspy-dumps/DrawingContextImpl.cs`
 
 Confirmed flow:
@@ -120,7 +123,7 @@ This is the complete bridge from scene-graph custom op to Skia canvas access.
 
 ## What Was Not Found in Earlier Dumps (resolved)
 
-- `DrawingContext.Custom(...)` and `ImmediateDrawingContext` were missing from earlier batches and were later validated via temporary `Avalonia.Media` aggregate decompilation.
+- `DrawingContext.Custom(...)` and `ImmediateDrawingContext` were missing from earlier batches and were later validated via temporary `Avalonia.Media` aggregate decompilation; these are now retained in split files (`DrawingContext.cs`, `PlatformDrawingContext.cs`, `ImmediateDrawingContext.cs`).
 - Direct Root app call sites that use `ISkiaSharpApiLease` remain out of scope for this extraction set; this is expected because lease usage is generally in custom drawing code, not necessarily in Root app controls.
 
 ## Practical Implementation Guidance (from findings)
@@ -151,6 +154,11 @@ From Avalonia rendering split:
 - `research/ilspy-dumps/ICustomHitTest.cs`
 - `research/ilspy-dumps/ImmediateRenderer.cs`
 - `research/ilspy-dumps/IHitTester.cs`
+
+From Avalonia.Media split:
+- `research/ilspy-dumps/DrawingContext.cs`
+- `research/ilspy-dumps/PlatformDrawingContext.cs`
+- `research/ilspy-dumps/ImmediateDrawingContext.cs`
 
 From SkiaSharp split:
 - `research/ilspy-dumps/SKShader.cs`

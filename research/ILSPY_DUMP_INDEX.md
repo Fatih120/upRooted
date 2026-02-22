@@ -9,7 +9,7 @@
 > Source: ILSpy/ilspycmd decompilation of Root v0.9.93 and all embedded assemblies.
 > Original 273 files: each preserves ILSpy assembly/namespace comment headers.
 > New files (2026-02-21, added via ilspycmd project mode): standard C# output, no ILSpy header.
-> Custom draw extraction update (2026-02-21): temporary aggregate dumps for `Avalonia.Media`, `Avalonia.Platform`, `Avalonia.Visuals.Platform`, `Avalonia.VisualTree`, `AvaloniaSkia`, `AvaloniaRendering`, `Avalonia.Rendering.SceneGraph`, and `SkiaSharp` were used to validate `ICustomDrawOperation` + `ISkiaSharpApiLease` rendering flow, then pruned after split/analysis to reduce bloat. Retained key artifacts include `ICustomDrawOperation.cs`, `DrawingContextImpl.cs`, `ISkiaSharpApiLease*.cs`, and `SKShader.cs`. See `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
+> Custom draw extraction update (2026-02-21): temporary aggregate dumps for `Avalonia.Media`, `Avalonia.Platform`, `Avalonia.Visuals.Platform`, `Avalonia.VisualTree`, `AvaloniaSkia`, `AvaloniaRendering`, `Avalonia.Rendering.SceneGraph`, and `SkiaSharp` were used to validate `ICustomDrawOperation` + `ISkiaSharpApiLease` rendering flow, then pruned after split/analysis to reduce bloat. Retained key artifacts include `ICustomDrawOperation.cs`, `DrawingContext.cs`, `PlatformDrawingContext.cs`, `ImmediateDrawingContext.cs`, `DrawingContextImpl.cs`, `ISkiaSharpApiLease*.cs`, and `SKShader.cs`. See `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
 
 **Total:** ~1,395 files across 16 assemblies
 
