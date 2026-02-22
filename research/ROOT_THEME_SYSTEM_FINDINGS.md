@@ -470,6 +470,12 @@ Settings are stored as integers (0/1 for booleans). Theme is stored separately v
 - Description: `TextSecondary`, `FontWeight(450)` (SemiBold), 14pt, `LineHeight(20)`
 - Toggle: `CheckBox` with `.ToggleSwitch` class, `TwoWay` binding to ViewModel property
 
+**Important distinction (sidebar menu headers):**
+- The left settings sidebar section labels (`User Settings`, `App Settings`) are not these 20pt content headers.
+- They are rendered by `MenuItemPageContainerView` and use `MenuItemForegroundConverter`.
+- Converter logic maps `IsHeaderItem=true` to `TextTertiary` (not `TextPrimary`).
+- Source: `research/ilspy-dumps/MenuItemForegroundConverter.cs`.
+
 ---
 
 ## Theme Switching Mechanism (FOUND)

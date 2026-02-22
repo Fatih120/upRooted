@@ -34,6 +34,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Changed
 
+- **Light parity pass for settings/theme UI** — fixed live recolor desyncs for native settings labels (including profile `Online` status), aligned sidebar header tint mapping with Root converter behavior, and refined Themes page preset/refresh visuals to match native button/card treatment while preserving live custom-theme updates.
+  - Files: `hook/SidebarInjector.cs`, `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
 - **Developer channel UI refresh** — Dev channel visuals are now unified around the Dev blue token and include a higher-contrast channel badge style (dark fill + blue outline/text). Update status suffix now uses ` [Dev]` formatting (for example: `Up to date (v0.4.2) [Dev]`) instead of `(Dev)`.
   - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
 - **Plugin count semantics** — Plugin count now reports against plugins available in the current context (channel + experimental visibility) and always uses `X out of Y plugins` formatting.

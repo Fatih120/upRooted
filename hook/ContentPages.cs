@@ -2114,26 +2114,56 @@ internal static class ContentPages
             r.SetVerticalAlignment(pageTitle, "Center");
             r.AddChild(titleRow, pageTitle);
 
-                var refreshBg = AdjustForHighlight(CardBg, 2);
-            var refreshBtn = r.CreateBorder(refreshBg, 8);
-            if (refreshBtn != null)
-            {
-                var refreshText = CreateBoundText(r, "Refresh", 11, TextWhite, "TextPrimary");
-                r.SetFontWeight(refreshText, "Bold");
-                ApplyFont(r, refreshText, font);
+		            var refreshBtn = CreateBoundBorder(r, CardBg, 8, "BackgroundButtonSurface");
+		            if (refreshBtn != null)
+		            {
+		                r.SetTag(refreshBtn, "dyn-bg:BackgroundButtonSurface");
+		                var refreshText = CreateBoundText(r, "Refresh", 11, TextMuted, "TextSecondary");
+	                r.SetFontWeight(refreshText, "Bold");
+	                ApplyFont(r, refreshText, font);
                 r.SetHorizontalAlignment(refreshText, "Center");
                 r.SetVerticalAlignment(refreshText, "Center");
                 r.SetBorderChild(refreshBtn, refreshText);
-                r.SetPadding(refreshBtn, 12, 5, 12, 5);
-                r.SetHorizontalAlignment(refreshBtn, "Right");
-                r.SetVerticalAlignment(refreshBtn, "Center");
-                r.SetCursorHand(refreshBtn);
-                SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 4), ThickBorder);
+	                r.SetPadding(refreshBtn, 12, 5, 12, 5);
+	                r.SetHorizontalAlignment(refreshBtn, "Right");
+	                r.SetVerticalAlignment(refreshBtn, "Center");
+	                r.SetCursorHand(refreshBtn);
+		                string RefreshBaseBg()
+		                {
+		                    var bg = themeEngine?.ReadLiveRootColor("BackgroundButtonSurface");
+		                    if (!string.IsNullOrEmpty(bg)) return bg;
+		                    var secondary = themeEngine?.ReadLiveRootColor("BackgroundSecondary") ?? CardBg;
+		                    return AdjustForHighlight(secondary, 2);
+		                }
+	                string RefreshBorder() => AdjustForHighlight(RefreshBaseBg(), 4);
+	                bool refreshHover = false;
+	                bool refreshPressed = false;
+	                void ApplyRefreshRest()
+	                {
+	                    r.SetBackground(refreshBtn, RefreshBaseBg());
+	                    r.SetOpacity(refreshBtn, 1.0);
+	                    SetBorderStroke(r, refreshBtn, RefreshBorder(), ThickBorder);
+	                }
+	                void ApplyRefreshHover()
+	                {
+	                    var baseBg = RefreshBaseBg();
+	                    r.SetBackground(refreshBtn, AdjustForHighlight(baseBg, 5));
+	                    r.SetOpacity(refreshBtn, 0.7);
+	                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(baseBg, 36), ThickBorder);
+	                }
+	                void ApplyRefreshPressed()
+	                {
+	                    var baseBg = RefreshBaseBg();
+	                    r.SetBackground(refreshBtn, AdjustForHighlight(baseBg, 5));
+	                    r.SetOpacity(refreshBtn, 0.5);
+	                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(baseBg, 36), ThickBorder);
+	                }
+	                ApplyRefreshRest();
 
-                r.SubscribeClickReleased(refreshBtn, () =>
-                {
-                    try
-                    {
+	                r.SubscribeClickReleased(refreshBtn, () =>
+	                {
+	                    try
+	                    {
                         var active = settings.ActiveTheme;
                         if (string.IsNullOrWhiteSpace(active))
                             active = "default-dark";
@@ -2156,33 +2186,58 @@ internal static class ContentPages
                             }
                         }
 
-                        if (onThemeChanged != null)
-                        {
-                            r.RunOnUIThread(() =>
-                            {
-                                try { onThemeChanged.Invoke(); }
-                                catch (Exception rx) { Logger.Log("Theme", "Refresh rebuild error: " + rx.Message); }
-                            });
-                        }
-                    }
-                    catch (Exception ex)
-                    {
-                        Logger.Log("Theme", "Refresh error: " + ex.Message);
-                    }
-                });
-                r.SubscribeEvent(refreshBtn, "PointerEntered", () =>
-                {
-                    r.SetBackground(refreshBtn, AdjustForHighlight(refreshBg, 5));
-                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 36), ThickBorder);
-                });
-                r.SubscribeEvent(refreshBtn, "PointerExited", () =>
-                {
-                    r.SetBackground(refreshBtn, refreshBg);
-                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(refreshBg, 4), ThickBorder);
-                });
+	                        if (onThemeChanged != null)
+	                        {
+	                            r.RunOnUIThread(() =>
+	                            {
+	                                try { onThemeChanged.Invoke(); }
+	                                catch (Exception rx) { Logger.Log("Theme", "Refresh rebuild error: " + rx.Message); }
+	                            });
+	                        }
+	                    }
+	                    catch (Exception ex)
+	                    {
+	                        Logger.Log("Theme", "Refresh error: " + ex.Message);
+	                    }
+	                    finally
+	                    {
+	                        // Ensure quick press+mouseleave cannot leave stale hover border.
+	                        if (refreshPressed) ApplyRefreshPressed();
+	                        else if (refreshHover) ApplyRefreshHover();
+	                        else ApplyRefreshRest();
+	                    }
+	                });
+	                r.SubscribeEvent(refreshBtn, "PointerEntered", () =>
+	                {
+	                    refreshHover = true;
+	                    if (!refreshPressed) ApplyRefreshHover();
+	                });
+	                r.SubscribeEvent(refreshBtn, "PointerExited", () =>
+	                {
+	                    refreshHover = false;
+	                    refreshPressed = false;
+	                    ApplyRefreshRest();
+	                });
+	                r.SubscribeEvent(refreshBtn, "PointerPressed", () =>
+	                {
+	                    refreshPressed = true;
+	                    ApplyRefreshPressed();
+	                });
+	                r.SubscribeEvent(refreshBtn, "PointerReleased", () =>
+	                {
+	                    refreshPressed = false;
+	                    if (refreshHover) ApplyRefreshHover();
+	                    else ApplyRefreshRest();
+	                });
+	                r.SubscribeEvent(refreshBtn, "PointerCaptureLost", () =>
+	                {
+	                    refreshHover = false;
+	                    refreshPressed = false;
+	                    ApplyRefreshRest();
+	                });
 
-                r.AddChild(titleRow, refreshBtn);
-            }
+	                r.AddChild(titleRow, refreshBtn);
+	            }
 
             r.AddChild(page, titleRow);
         }
@@ -2355,13 +2410,51 @@ internal static class ContentPages
         // regardless of what theme is active.
         const string islandBg = "#1A1A2E";
         const string islandBorder = "#333355";
+        const string islandSelectedBorder = "#56568A";
         const string islandText = "#F0F0F0";
         const string islandMuted = "#A0A0B0";
 
         var card = r.CreateBorder(islandBg, 12);
         if (card == null) return null;
         r.SetTag(card, "uprooted-no-recolor"); // Walker skips entire subtree
-        SetBorderStroke(r, card, isActive ? settings.CustomAccent : islandBorder, ThickBorder);
+        SetBorderStroke(r, card, isActive ? islandSelectedBorder : islandBorder, ThickBorder);
+        r.SetCursorHand(card, enablePressFeedback: false);
+        bool suppressCardPressFeedback = false;
+        void ResetCustomCardPress()
+        {
+            r.SetRenderScale(card, 1.0);
+            r.SetOpacity(card, 1.0);
+        }
+        Action<object?> markInteractive = ctrl =>
+        {
+            if (ctrl == null) return;
+            r.SubscribeEvent(ctrl, "PointerPressed", () =>
+            {
+                suppressCardPressFeedback = true;
+                ResetCustomCardPress();
+            });
+        };
+        r.SubscribeEvent(card, "PointerPressed", () =>
+        {
+            if (suppressCardPressFeedback) return;
+            r.SetRenderScale(card, 0.975);
+            r.SetOpacity(card, 0.92);
+        });
+        r.SubscribeEvent(card, "PointerReleased", () =>
+        {
+            ResetCustomCardPress();
+            suppressCardPressFeedback = false;
+        });
+        r.SubscribeEvent(card, "PointerExited", () =>
+        {
+            ResetCustomCardPress();
+            suppressCardPressFeedback = false;
+        });
+        r.SubscribeEvent(card, "PointerCaptureLost", () =>
+        {
+            ResetCustomCardPress();
+            suppressCardPressFeedback = false;
+        });
 
         var outerContent = r.CreateStackPanel(vertical: true, spacing: 0);
         if (outerContent == null) return card;
@@ -2491,6 +2584,7 @@ internal static class ContentPages
         // Accent row: label + textbox + swatch
         var accentSwatch = r.CreateBorder(settings.CustomAccent, 6);
         r.SetTag(accentSwatch, "uprooted-no-recolor");
+        markInteractive(accentSwatch);
         var accentRow = BuildColorInputRow(r, "Accent", settings.CustomAccent, font, accentSwatch,
             accentHex =>
             {
@@ -2502,6 +2596,7 @@ internal static class ContentPages
                 if (ColorUtils.IsValidHex(bgVal))
                     themeEngine?.UpdateCustomThemeLive(accentHex, bgVal, getCurrentTextHex());
                 debounceSave();
+                debounceRebuild();
             });
         if (accentRow != null)
         {
@@ -2512,6 +2607,7 @@ internal static class ContentPages
         // Background row: label + textbox + swatch
         var bgSwatch = r.CreateBorder(settings.CustomBackground, 6);
         r.SetTag(bgSwatch, "uprooted-no-recolor");
+        markInteractive(bgSwatch);
         var bgRow = BuildColorInputRow(r, "Background", settings.CustomBackground, font, bgSwatch,
             bgHex =>
             {
@@ -2523,6 +2619,7 @@ internal static class ContentPages
                 if (ColorUtils.IsValidHex(accentVal))
                     themeEngine?.UpdateCustomThemeLive(accentVal, bgHex, getCurrentTextHex());
                 debounceSave();
+                debounceRebuild();
             });
         if (bgRow != null)
         {
@@ -2535,6 +2632,7 @@ internal static class ContentPages
         var textSwatchColor = string.IsNullOrEmpty(settings.CustomText) ? TextWhite : settings.CustomText;
         var textSwatch = r.CreateBorder(textSwatchColor, 6);
         r.SetTag(textSwatch, "uprooted-no-recolor");
+        markInteractive(textSwatch);
         var textRow = BuildColorInputRow(r, "Text", textInitial, font, textSwatch,
             textHex =>
             {
@@ -2548,6 +2646,7 @@ internal static class ContentPages
                 if (ColorUtils.IsValidHex(accentVal) && ColorUtils.IsValidHex(bgVal))
                     themeEngine?.UpdateCustomThemeLive(accentVal, bgVal, textParam);
                 debounceSave();
+                debounceRebuild();
             });
         if (textRow != null)
         {
@@ -2559,6 +2658,9 @@ internal static class ContentPages
         accentTextBoxRef[0] = GetTextBoxFromRow(r, accentRow);
         bgTextBoxRef[0] = GetTextBoxFromRow(r, bgRow);
         textTextBoxRef[0] = GetTextBoxFromRow(r, textRow);
+        markInteractive(accentTextBoxRef[0]);
+        markInteractive(bgTextBoxRef[0]);
+        markInteractive(textTextBoxRef[0]);
 
         // ── Ping Color (merged into this card) ──
         var pingDivider = r.CreateBorder(islandBorder, 0);
@@ -2631,6 +2733,7 @@ internal static class ContentPages
                 r.SetVerticalAlignment(pingToggle, "Center");
                 r.SubscribeEvent(pingToggle, "PointerPressed", () => suppressCardActivate[0] = true);
                 r.SubscribeClickReleased(pingToggle, () => suppressCardActivate[0] = true);
+                markInteractive(pingToggle);
                 r.AddChild(pingHeaderPanel, pingToggle);
             }
 
@@ -2653,6 +2756,7 @@ internal static class ContentPages
 
         var pingSwatch = r.CreateBorder(pingInitialColor, 6);
         r.SetTag(pingSwatch, "uprooted-no-recolor");
+        markInteractive(pingSwatch);
         var pingColorRow = BuildColorInputRow(r, "Color", pingInitialColor, font, pingSwatch,
             hex =>
             {
@@ -2702,7 +2806,6 @@ internal static class ContentPages
         });
 
         // Click handler on card to activate custom theme (matches preset cards)
-        r.SetCursorHand(card, enablePressFeedback: false);
         r.SubscribeClickReleased(card, () =>
         {
             try
@@ -2832,15 +2935,55 @@ internal static class ContentPages
         UprootedSettings settings, Action? onThemeChanged,
         Action? onSettings = null)
     {
-        // Inner theme cards are "2nd-order" — lighter bg and thicker border than the container
-        var innerCardBg = AdjustForHighlight(CardBg, 4.5);
-        var borderColor = isActive ? accentColor : CardBorder;
+        // Inner theme cards use a dedicated elevated surface key so they keep
+        // directional contrast and still live-refresh with custom theme edits.
+        string GetInnerBaseBg()
+        {
+            var elevated = themeEngine?.ReadLiveRootColor("BackgroundElevated");
+            if (!string.IsNullOrEmpty(elevated)) return elevated;
+            var bg = themeEngine?.ReadLiveRootColor("BackgroundSecondary") ?? CardBg;
+            return AdjustForHighlight(bg, 4.5);
+        }
+        var innerCardBg = GetInnerBaseBg();
+        var borderColor = isActive
+            ? accentColor
+            : (themeEngine?.ReadLiveRootColor("Border") ?? CardBorder);
         var card = r.CreateBorder(innerCardBg, 12);
         if (card == null) return null;
+        r.SetTag(card, isActive
+            ? "dyn-bg:BackgroundElevated"
+            : "dyn-bg:BackgroundElevated,dyn-bb:Border");
+        r.BindToDynamicResource(card, "Background", "BackgroundElevated");
         SetBorderStroke(r, card, borderColor, ThickBorder);
-        // Native theme card contains a gear button; disable parent press feedback so
-        // pressing the gear animates only the button (not the whole card).
-        r.SetCursorHand(card, enablePressFeedback: onSettings == null);
+        // Custom press feedback so nested controls (gear) can suppress card shrink.
+        r.SetCursorHand(card, enablePressFeedback: false);
+        bool suppressNextCardPress = false;
+        void ResetThemeCardPress()
+        {
+            r.SetRenderScale(card, 1.0);
+            r.SetOpacity(card, 1.0);
+        }
+        r.SubscribeEvent(card, "PointerPressed", () =>
+        {
+            if (suppressNextCardPress) return;
+            r.SetRenderScale(card, 0.975);
+            r.SetOpacity(card, 0.92);
+        });
+        r.SubscribeEvent(card, "PointerReleased", () =>
+        {
+            ResetThemeCardPress();
+            suppressNextCardPress = false;
+        });
+        r.SubscribeEvent(card, "PointerExited", () =>
+        {
+            ResetThemeCardPress();
+            suppressNextCardPress = false;
+        });
+        r.SubscribeEvent(card, "PointerCaptureLost", () =>
+        {
+            ResetThemeCardPress();
+            suppressNextCardPress = false;
+        });
 
         // Vertical layout: preview on top, radio + name below
         var outerLayout = r.CreateStackPanel(vertical: true, spacing: 0);
@@ -2917,22 +3060,41 @@ internal static class ContentPages
         }
 
         // Hover colors (shared between card hover and gear hover suppression)
-        var restBorder = CardBorder;
-        var hoverBorder = AdjustForHighlight(CardBorder, 60);
-        var dotHoverColor = AdjustForHighlight(CardBg, 55);
+        string GetRestBorder() => themeEngine?.ReadLiveRootColor("Border") ?? CardBorder;
+        string GetHoverBorder() => AdjustForHighlight(GetRestBorder(), 60);
+        string GetDotHoverColor()
+        {
+            return AdjustForHighlight(GetInnerBaseBg(), 55);
+        }
         var dotRef = radioDot;
 
-        // Gear button for settings (e.g. Native card → Root's Change Theme page)
+        // Content host allows selected-state inner highlight + optional gear button.
         bool gearClicked = false;
         bool gearHovered = false;
-        if (onSettings != null)
+        var contentHost = r.CreatePanel();
+        if (contentHost != null)
         {
-            var overlay = r.CreatePanel();
-            if (overlay != null)
+            if (isActive)
             {
-                r.AddChild(overlay, outerLayout);
+                var selectedWash = CreateBoundBorder(r, "#00000000", 10, "HighlightNormal");
+                if (selectedWash != null)
+                {
+                    r.SetOpacity(selectedWash, 0.82);
+                    r.SetIsHitTestVisible(selectedWash, false);
+                    r.AddChild(contentHost, selectedWash);
+                }
+            }
 
-                var gearBtnBg = AdjustForHighlight(CardBg, 12);
+            r.AddChild(contentHost, outerLayout);
+
+            // Gear button for settings (e.g. Native card → Root's Change Theme page)
+            if (onSettings != null)
+            {
+                string GetGearBtnBg()
+                {
+                    return AdjustForHighlight(GetInnerBaseBg(), 12);
+                }
+                var gearBtnBg = GetGearBtnBg();
                 var gearBtn = r.CreateBorder(gearBtnBg, 11);
                 if (gearBtn != null)
                 {
@@ -2957,38 +3119,41 @@ internal static class ContentPages
                         gearClicked = true;
                         onSettings();
                     });
+                    r.SubscribeEvent(gearBtn, "PointerPressed", () =>
+                    {
+                        suppressNextCardPress = true;
+                        ResetThemeCardPress();
+                    });
                     r.SubscribeEvent(gearBtn, "PointerEntered", () =>
                     {
                         gearHovered = true;
-                        r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8));
+                        var baseBg = GetGearBtnBg();
+                        r.SetBackground(gearBtnRef, AdjustForHighlight(baseBg, 8));
                         // Remove card hover while over gear
                         if (!isActive)
                         {
-                            SetBorderStroke(r, card, restBorder, ThickBorder);
+                            SetBorderStroke(r, card, GetRestBorder(), ThickBorder);
                             if (dotRef != null) r.SetBackground(dotRef, "#00000000");
                         }
                     });
                     r.SubscribeEvent(gearBtn, "PointerExited", () =>
                     {
                         gearHovered = false;
-                        r.SetBackground(gearBtnRef, gearBtnBg);
+                        var baseBg = GetGearBtnBg();
+                        r.SetBackground(gearBtnRef, baseBg);
                         // Re-apply card hover if pointer moved back to card body
                         if (!isActive)
                         {
-                            SetBorderStroke(r, card, hoverBorder, ThickBorder);
-                            if (dotRef != null) r.SetBackground(dotRef, dotHoverColor);
+                            SetBorderStroke(r, card, GetHoverBorder(), ThickBorder);
+                            if (dotRef != null) r.SetBackground(dotRef, GetDotHoverColor());
                         }
                     });
 
-                    r.AddChild(overlay, gearBtn);
+                    r.AddChild(contentHost, gearBtn);
                 }
+            }
 
-                r.SetBorderChild(card, overlay);
-            }
-            else
-            {
-                r.SetBorderChild(card, outerLayout);
-            }
+            r.SetBorderChild(card, contentHost);
         }
         else
         {
@@ -3041,16 +3206,16 @@ internal static class ContentPages
         {
             if (!isActive && !gearHovered)
             {
-                SetBorderStroke(r, card, hoverBorder, ThickBorder);
+                SetBorderStroke(r, card, GetHoverBorder(), ThickBorder);
                 if (dotRef != null)
-                    r.SetBackground(dotRef, dotHoverColor);
+                    r.SetBackground(dotRef, GetDotHoverColor());
             }
         });
         r.SubscribeEvent(card, "PointerExited", () =>
         {
             if (!isActive)
             {
-                SetBorderStroke(r, card, restBorder, ThickBorder);
+                SetBorderStroke(r, card, GetRestBorder(), ThickBorder);
                 if (dotRef != null)
                     r.SetBackground(dotRef, "#00000000");
             }

@@ -31,12 +31,6 @@ Current focus areas (in order):
 
 ### Visual Consistency
 
-- [ ] **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text).
-  - Files: `hook/SidebarInjector.cs`
-
-- [ ] **Root "Online" indicator doesn't live-update** with custom text color changes.
-  - Files: `hook/ThemeEngine.cs`
-
 - [ ] **Settings detection flash after long idle** — After 5+ minutes without touching settings, the first open shows a brief flash of Root's User Profile tab before auto-navigating to About. Likely cause: LayoutUpdated stops firing when no layout changes occur during idle.
   - Files: `hook/SidebarInjector.cs`
 
@@ -168,6 +162,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Custom-theme visual parity pass completed** (2026-02-22) — fixed settings tab text recolor desync (including Root “Online”), corrected sidebar/header text key mapping (TextTertiary for section headers), restored/live-synced preset nested cards with directional elevated surfaces, added selected preset inner highlight wash, and matched Themes `Refresh` button styling/text behavior to About `Open Logs`.
+  - Files: `hook/SidebarInjector.cs`, `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `research/SETTINGS_HEADER_BINDINGS.md`, `research/ROOT_THEME_SYSTEM_FINDINGS.md`, `docs/framework/ROOT_CONTROL_REFERENCE.md`
 - [x] **Version copy intercept race condition fixed** (2026-02-21) — Root's async `SetTextAsync` no longer races with our clipboard write.
 - [x] **Native theme card settings button** (2026-02-21) — Gear button on "Native" preset card opens Root's native Change Theme page via ViewModel-driven ListBox.SelectedItem binding. SelectRootTab helper for programmatic Root settings navigation.
 - [x] **Structured logging overhaul** (2026-02-21) — WideEvent + TailSampler infrastructure, ~1200 Logger.Log calls migrated to ~100 wide events, 4 scan engines tail-sampled, LogConsole dev terminal.

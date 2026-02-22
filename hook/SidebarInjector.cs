@@ -76,6 +76,7 @@ internal class SidebarInjector
     private long _lastLayoutCheckMs;                       // Throttle for LayoutUpdated checks
     private bool _hasAutoNavigated;                        // Only auto-nav to About once per settings open
     private long _selectionSuppressedUntilMs;               // Suppress Root ListBox auto-select until this tick
+    private long _lastMenuRetargetMs;                      // Throttle native menu retarget while settings open
 
     // Wide event tail sampler for poll tick (150 ticks × 200ms = 30s heartbeat when fast poll,
     // or 150 ticks × 1000ms = 150s when slow poll after injection)
@@ -322,6 +323,15 @@ internal class SidebarInjector
                 ev?.MarkNotable();
                 _hasAutoNavigated = false;  // Reset so next settings open auto-navs again
                 NullState();
+            }
+
+            // Native settings tab text can be recreated/rebound over time.
+            // Re-apply dyn-fg tags periodically so custom-theme text edits stay live.
+            var nowMs = Environment.TickCount64;
+            if (_navContainer != null && nowMs - _lastMenuRetargetMs >= 300)
+            {
+                _lastMenuRetargetMs = nowMs;
+                RetargetNativeMenuText(_navContainer, _listBox);
             }
             return;
         }
@@ -618,6 +628,7 @@ internal class SidebarInjector
         _injected = false;
         _lastLayoutCheckMs = 0;                            // Allow instant LayoutUpdated detection on next settings open
         _selectionSuppressedUntilMs = 0;
+        _lastMenuRetargetMs = 0;
         Interlocked.Exchange(ref _injecting, 0);           // Clear stale timer lock from previous cycle
         // Restore fast poll interval so settings-page detection is responsive after close.
         _timer?.Change(PollIntervalMs, PollIntervalMs);
@@ -670,6 +681,7 @@ internal class SidebarInjector
         // This captures whatever Root is actually rendering — Dark, Light, or PureDark.
         // Reads foreground hex from a native nav TextBlock, background from the content panel.
         SyncContentPagesFromNativeTree(layout, nativeNavForeground);
+        RetargetNativeMenuText(layout);
 
         // 1. UPROOTED section header (matching "APP SETTINGS" style)
         var sectionHeader = BuildSectionHeader("UPROOTED", headerFontSize, headerFontWeight, headerForeground, nativeFontFamily);
@@ -788,6 +800,9 @@ internal class SidebarInjector
                 _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(header, fontWeight);
             if (foreground != null)
                 _r.TextBlockType?.GetProperty("Foreground")?.SetValue(header, foreground);
+            // Sidebar section headers are slightly dimmer than nav labels.
+            _r.SetTag(header, "dyn-fg:TextTertiary");
+            _r.BindToDynamicResource(header, "Foreground", "TextTertiary");
             if (fontFamily != null)
                 _r.SetFontFamily(header, fontFamily);
             _r.AddChild(container, header);
@@ -795,6 +810,92 @@ internal class SidebarInjector
 
         _r.AddChild(wrapper, container);
         return wrapper;
+    }
+
+    /// <summary>
+    /// Force native sidebar menu text onto deterministic dyn-fg tags:
+    /// - Section headers (IsHeaderItem=true, FontSize=12) -> TextTertiary
+    /// - Clickable menu items (FontSize=14) -> TextPrimary
+    /// Mirrors Root's MenuItemForegroundConverter behavior and prevents custom-theme preview desync.
+    /// </summary>
+    private void RetargetNativeMenuText(SettingsLayout layout)
+    {
+        RetargetNativeMenuText(layout.NavContainer, layout.ListBox);
+    }
+
+    private void RetargetNativeMenuText(object navContainer, object? listBox)
+    {
+        int headerCount = 0;
+        int itemCount = 0;
+        int statusCount = 0;
+
+        void ScanRoot(object root)
+        {
+            foreach (var node in _walker.DescendantsDepthFirst(root))
+            {
+                if (!_r.IsTextBlock(node)) continue;
+
+                string? key = null;
+                var text = _r.GetText(node)?.Trim();
+                var fs = _r.GetFontSize(node);
+
+                // Profile "Online/Away/Offline" label uses converter brushes that can desync
+                // from custom-theme text edits unless forced back to dynamic resources.
+                if (!string.IsNullOrEmpty(text) && IsProfileStatusLabel(text))
+                {
+                    key = "TextSecondary";
+                }
+                else if (fs is 14.0)
+                {
+                    key = "TextPrimary";
+                }
+                else if (fs is 12.0)
+                {
+                    // Section headers are uppercase in Root's settings menu.
+                    key = IsSettingsSectionHeader(text) ? "TextTertiary" : null;
+                }
+                else if (IsSettingsSectionHeader(text))
+                {
+                    // Structural fallback if Root tweaks header font sizes.
+                    key = "TextTertiary";
+                }
+
+                if (key == null) continue;
+                _r.SetTag(node, $"dyn-fg:{key}");
+                _r.BindToDynamicResource(node, "Foreground", key);
+                if (key == "TextTertiary") headerCount++;
+                else if (key == "TextSecondary") statusCount++;
+                else itemCount++;
+            }
+        }
+
+        if (listBox != null) ScanRoot(listBox);
+        ScanRoot(navContainer);
+
+        if (headerCount > 0 || itemCount > 0 || statusCount > 0)
+            Logger.Log("Injector", $"Retargeted native menu text: headers={headerCount}, items={itemCount}, status={statusCount}");
+    }
+
+    private static bool IsSettingsSectionHeader(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text)) return false;
+        return text.Equals("USER SETTINGS", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("APP SETTINGS", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("User Settings", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("App Settings", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsProfileStatusLabel(string text)
+    {
+        return text.Equals("Online", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Away", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Offline", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Active", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Inactive", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Disconnected", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Busy", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Do Not Disturb", StringComparison.OrdinalIgnoreCase) ||
+               text.Equals("Invisible", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

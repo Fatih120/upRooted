@@ -906,6 +906,12 @@ Each settings category is represented by one `MenuItemPageContainerViewModel` wi
 - `MenuItemSelected` event (`Action<MenuItemPageContainerViewModel>`) — fired when item is selected
 - `SelectMenuItem()` fires the event; called when `SelectedMenuItemPageContainer` changes and Navigator is empty
 
+**Menu item foreground behavior (decompiled converter):**
+- `MenuItemPageContainerView` binds `TextBlock.Foreground` via `MenuItemForegroundConverter` with `IsHeaderItem` + `ActualThemeVariant`.
+- If `IsHeaderItem == true` (`"User Settings"`, `"App Settings"`), foreground resolves to `TextTertiary`.
+- Otherwise foreground resolves to parameter/default `TextPrimary`.
+- Source: `research/ilspy-dumps/MenuItemForegroundConverter.cs`.
+
 ### Navigator (287 lines, Helpers.Navigation)
 
 `ObservableObject` subclass — manages the settings page navigation stack.

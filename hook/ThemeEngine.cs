@@ -164,7 +164,7 @@ internal class ThemeEngine
             var result = new Dictionary<string, string>();
             string[] colorKeys = { "BrandPrimary", "BrandSecondary", "BrandTertiary",
                 "TextPrimary", "TextSecondary", "TextTertiary", "TextWhite",
-                "BackgroundPrimary", "BackgroundSecondary", "BackgroundTertiary", "Input",
+                "BackgroundPrimary", "BackgroundSecondary", "BackgroundTertiary", "BackgroundElevated", "BackgroundButtonSurface", "Input",
                 "Border", "HighlightLight", "HighlightNormal", "HighlightStrong",
                 "Info", "Warning", "Error", "Muted", "Link" };
 
@@ -1344,6 +1344,8 @@ internal class ThemeEngine
         palette["BackgroundPrimary"]   = ColorUtils.OklchToHex(bL, bC, bH);
         palette["BackgroundSecondary"] = ColorUtils.OklchToHex(Math.Clamp(bL + step1, 0.05, 0.95), bC, bH);
         palette["BackgroundTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(bL + step2, 0.05, 0.95), bC, bH);
+        palette["BackgroundElevated"]  = DeriveElevatedSurface(palette["BackgroundSecondary"]);
+        palette["BackgroundButtonSurface"] = DeriveButtonSurface(palette["BackgroundSecondary"]);
         palette["Input"]               = ColorUtils.OklchToHex(Math.Clamp(bL + step3, 0.05, 0.95), bC * 0.8, bH);
 
         // --- Text colors (custom or auto-derived) ---
@@ -1363,15 +1365,24 @@ internal class ThemeEngine
             palette["TextPrimary"] = ColorUtils.OklchToHex(textL, 0.005, aH);
         }
 
-        // Secondary/Tertiary: lerp toward mid-range (L=0.50) from TextPrimary.
-        // No threshold — completely smooth across the entire lightness spectrum.
-        // Secondary = 35% toward mid, Tertiary = 60% toward mid.
+        // Secondary/Tertiary:
+        // - Dark themes: match Root's native behavior (alpha variants of TextPrimary).
+        //   This avoids overly bright "muted" text on very dark custom backgrounds.
+        // - Light themes: keep opaque derived shades for readability on light surfaces.
         {
-            var (tL, tC, tH) = ColorUtils.HexToOklch(palette["TextPrimary"]);
-            double secL = tL + (0.50 - tL) * 0.35;
-            double terL = tL + (0.50 - tL) * 0.60;
-            palette["TextSecondary"] = ColorUtils.OklchToHex(Math.Clamp(secL, 0.10, 0.90), tC, tH);
-            palette["TextTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(terL, 0.10, 0.90), tC, tH);
+            if (bL < 0.5)
+            {
+                palette["TextSecondary"] = ColorUtils.WithAlpha(palette["TextPrimary"], 0xA3);
+                palette["TextTertiary"]  = ColorUtils.WithAlpha(palette["TextPrimary"], 0x66);
+            }
+            else
+            {
+                var (tL, tC, tH) = ColorUtils.HexToOklch(palette["TextPrimary"]);
+                double secL = tL + (0.50 - tL) * 0.35;
+                double terL = tL + (0.50 - tL) * 0.60;
+                palette["TextSecondary"] = ColorUtils.OklchToHex(Math.Clamp(secL, 0.10, 0.90), tC, tH);
+                palette["TextTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(terL, 0.10, 0.90), tC, tH);
+            }
         }
         palette["TextWhite"] = "#F2F2F2";
 
@@ -1456,6 +1467,42 @@ internal class ThemeEngine
             ["ErrorColor"] = "#F03F36",
             ["ErrorBrush"] = "#F03F36",
         };
+    }
+
+    /// <summary>
+    /// Elevation step for nested card surfaces:
+    /// lighter on dark themes, darker on light themes.
+    /// </summary>
+    private static string DeriveElevatedSurface(string secondaryHex)
+    {
+        try
+        {
+            return ColorUtils.Luminance(secondaryHex) > 0.5
+                ? ColorUtils.Darken(secondaryHex, 4.5)
+                : ColorUtils.Lighten(secondaryHex, 4.5);
+        }
+        catch
+        {
+            return secondaryHex;
+        }
+    }
+
+    /// <summary>
+    /// Subtle button surface used by secondary actions (e.g. Open Logs/Refresh).
+    /// Mirrors ContentPages: AdjustForHighlight(bg, 2).
+    /// </summary>
+    private static string DeriveButtonSurface(string secondaryHex)
+    {
+        try
+        {
+            return ColorUtils.Luminance(secondaryHex) > 0.5
+                ? ColorUtils.Darken(secondaryHex, 2)
+                : ColorUtils.Lighten(secondaryHex, 2);
+        }
+        catch
+        {
+            return secondaryHex;
+        }
     }
 
     private static Dictionary<string, string> MergePalettes(
@@ -1930,6 +1977,8 @@ internal class ThemeEngine
                 ["BackgroundPrimary"]   = "#241414",
                 ["BackgroundSecondary"] = "#2C1818",
                 ["BackgroundTertiary"]  = "#1A0E0E",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#2C1818"),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#2C1818"),
                 ["Input"]               = "#1E1010",
 
                 // Text
@@ -1998,6 +2047,8 @@ internal class ThemeEngine
                 ["BackgroundPrimary"]   = "#0A041E",
                 ["BackgroundSecondary"] = "#100822",
                 ["BackgroundTertiary"]  = "#060216",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#100822"),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#100822"),
                 ["Input"]               = "#080318",
 
                 // Text
@@ -2066,6 +2117,8 @@ internal class ThemeEngine
                 ["BackgroundPrimary"]   = "#0F1210",
                 ["BackgroundSecondary"] = "#151A15",
                 ["BackgroundTertiary"]  = "#0A0D0A",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#151A15"),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#151A15"),
                 ["Input"]               = "#0C0F0C",
 
                 // Text

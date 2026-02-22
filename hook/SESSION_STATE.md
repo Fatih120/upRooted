@@ -4,6 +4,20 @@
 
 ## Shipped This Cycle
 
+### Post-v0.5.0-rc (custom-theme parity + native settings match — 2026-02-22)
+- **Settings text recolor desync resolved**:
+  - Native settings menu retargeting now continuously re-binds deterministic text keys while settings stays open.
+  - Section headers map to `TextTertiary` (converter parity), tabs to `TextPrimary`, profile status label (`Online/Away/Offline`) now stays live with custom text updates.
+- **Preset theme cards now fully live + visually correct**:
+  - Added derived `BackgroundElevated` and `BackgroundButtonSurface` palette keys for deterministic second-order surfaces.
+  - Nested preset cards now keep directional contrast (lighter on dark / darker on light), live-refresh background and inactive border, and include selected inner highlight wash (`HighlightNormal`) tuned down for parity.
+  - Press feedback behavior corrected: parent cards shrink on direct click, but nested controls (gear/toggle/swatch/textbox) suppress parent shrink.
+- **Themes `Refresh` button parity fixes**:
+  - Background, border, and text now match About `Open Logs` treatment (`TextSecondary` tint, subtle button-surface base).
+  - Pointer state machine hardened (`PointerReleased`/`PointerCaptureLost`) to prevent stuck/miscolored border state on fast press + mouse-off.
+- **Custom Theme card selected border**:
+  - Active border is now a fixed island-derived color (`islandSelectedBorder`) rather than custom accent-driven.
+
 ### Post-v0.4.2 (settings UX parity + visual polish — 2026-02-21)
 - **Root-native interaction parity pass completed** across injected settings controls:
   - Release-activation semantics standardized; drag-off-release no longer toggles.
@@ -71,9 +85,7 @@
 
 ### Known issues / TODOs
 - **DynamicResource binding via reflection silently fails** — `BindToDynamicResource` code present but doesn't propagate changes; tag-based walker is the real mechanism
-- **Root "Online" indicator and some sub-tabs** don't live-update with custom text color changes
 - **SVG style UI removed** — Root resolves SVGs at variant-load time; variant switching handles common case
-- **Uprooted tab header doesn't recolor** on custom theme changes (injected sidebar text)
 - **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
 
 ## Wide Event Logging (v0.4.3)

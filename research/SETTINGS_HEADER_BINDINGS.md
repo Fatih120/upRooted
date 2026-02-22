@@ -1,7 +1,7 @@
 # Settings Header Bindings & Back Arrow Mechanics
 
-> Findings from decompiling `RootSettingsContainer.cs` and `ProfileSettingsViewModel.cs`.
-> Source dumps: `research/ilspy-dumps/RootSettingsContainer.cs`, `research/ilspy-dumps/ProfileSettingsViewModel.cs`
+> Findings from decompiling `RootSettingsContainer.cs`, `ProfileSettingsViewModel.cs`, `MenuItemPageContainerView.cs`, and `MenuItemForegroundConverter.cs`.
+> Source dumps: `research/ilspy-dumps/RootSettingsContainer.cs`, `research/ilspy-dumps/ProfileSettingsViewModel.cs`, `research/ilspy-dumps/MenuItemPageContainerView.cs`, `research/ilspy-dumps/MenuItemForegroundConverter.cs`
 
 ## Header Grid Layout (grid9)
 
@@ -54,6 +54,23 @@ grid9.ColumnDefinitions:
 - Size: `Width = 40`, `Height = 40`
 - Margin: `(0, 0, 24, 0)`
 - Event: `Button.ClickEvent` → `onCloseButtonClicked`
+
+## Sidebar Menu Header Foreground (Converter-backed)
+
+Root's settings sidebar rows in `MenuItemPageContainerView` do not hardcode a single
+foreground key. They use a `MultiBinding` (`IsHeaderItem`, `Application.Current.ActualThemeVariant`)
+through `MenuItemForegroundConverter`.
+
+`MenuItemForegroundConverter` logic:
+
+```csharp
+if (isHeaderItem) return FindResource(ActualThemeVariant, "TextTertiary");
+return FindResource(ActualThemeVariant, parameterOr("TextPrimary"));
+```
+
+Implication:
+- Sidebar section labels (`"USER SETTINGS"`, `"APP SETTINGS"`) use `TextTertiary`.
+- Clickable menu rows use `TextPrimary` by default.
 
 ## The Back Arrow Glitch (Root Cause)
 
