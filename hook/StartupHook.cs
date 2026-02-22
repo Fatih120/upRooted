@@ -439,6 +439,18 @@ internal class StartupHook
                 });
             pluginsStarted++;
 
+            // Phase 4.5k: WhoReacted (needs reactions in chat)
+            StartPluginPhase("phase4_5k_who_reacted", parentId, resolver, mainWindow!,
+                savedSettings.ShowExperimentalPlugins
+                    && savedSettings.Plugins.TryGetValue("who-reacted", out var wrEnabled) && wrEnabled,
+                5_000, (ev, r, w) =>
+                {
+                    var engine = new WhoReactedEngine(r, w);
+                    engine.Initialize();
+                });
+            if (savedSettings.ShowExperimentalPlugins
+                && savedSettings.Plugins.TryGetValue("who-reacted", out var wrE) && wrE) pluginsStarted++;
+
             // Phase 5: DotNetBrowser discovery
             {
                 var capturedWindow = mainWindow!;

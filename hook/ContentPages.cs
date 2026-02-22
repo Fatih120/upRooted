@@ -794,6 +794,9 @@ internal static class ContentPages
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.4.2",
                     Description = "Translate received and sent messages inline. Planned for a future release.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 5 },
+                new() { Id = "who-reacted", DisplayName = "WhoReacted", Version = "0.4.2",
+                    Description = "Shows small profile pictures of users who reacted to a message, displayed next to each reaction emoji. Up to 5 avatars shown per reaction.",
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 0 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
