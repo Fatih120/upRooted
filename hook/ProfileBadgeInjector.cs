@@ -569,10 +569,16 @@ internal class ProfileBadgeInjector
         {
             if (userId != null)
             {
-                // Skip own profile: compare userId against our registered UUID (reliable, no Root property dependency)
                 bool isSelf = string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
-                if (!isSelf)
+                if (isSelf)
+                {
+                    // Self: inject immediately — we know we have Uprooted, no beacon query needed
+                    InjectPresenceIconIntoPopup(popup, usernameBlock);
+                }
+                else
+                {
                     TryInjectPresenceIcon(popup, usernameBlock, userId);
+                }
             }
             else
             {
@@ -1047,7 +1053,9 @@ internal class ProfileBadgeInjector
                     if (uid == null) return; // DataContext still not ready
 
                     bool isSelf = string.Equals(uid, _beacon?.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
-                    if (!isSelf)
+                    if (isSelf)
+                        InjectPresenceIconIntoPopup(popup, usernameBlock);
+                    else
                         TryInjectPresenceIcon(popup, usernameBlock, uid);
                 }
                 catch { }
