@@ -22,6 +22,8 @@ on:
       - "hook/**"
       - "src/**"
       - "installer/**"
+      - "tools/confuse/**"
+      - "tools/verify-obfuscation/**"
       - "tools/uprooted_profiler_linux.c"
       - "packaging/arch/**"
       - ".github/workflows/build-linux.yml"

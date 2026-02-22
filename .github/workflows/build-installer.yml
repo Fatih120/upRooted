@@ -22,6 +22,8 @@ on:
       - "hook/**"
       - "src/**"
       - "installer/**"
+      - "tools/confuse/**"
+      - "tools/verify-obfuscation/**"
       - "tools/uprooted_profiler.c"
       - "tools/uprooted_profiler.def"
       - "tools/uprooted_profiler_linux.c"
