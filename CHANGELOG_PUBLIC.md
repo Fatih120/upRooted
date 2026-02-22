@@ -8,29 +8,40 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ## [v0.5.0-rc](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.0-rc) — 2026-02-22
 
+This is a big one. Since the last release we shipped new plugins, reworked the entire custom theme system, rebuilt Rootcord's user card, added a presence beacon with community badges, overhauled the settings UI, and made startup meaningfully faster.
+
 ### New
 
-- **Translate plugin** — A translate button in the compose bar lets you rewrite your draft in another language before sending. Powered by DeepL, with language picker and auto-translate mode. Experimental.
-- **Presence Beacon + community badges** — Uprooted users get role-based badges on their profile popups (Dev and Alpha tiers). Detection is instant via event-driven overlay monitoring.
-- **UserBio plugin** — Displays user bio on profile popups. Experimental.
-- **WhoReacted plugin** — Shows who reacted to a message by displaying reactor avatars next to reaction pills. Experimental.
-- **Structured logging** — The entire hook logging system was rewritten with structured wide events and tail sampling. Dev-channel users get a new "Live Console" button for real-time log streaming.
+- **Translate plugin** — A translate button in the compose bar lets you rewrite your draft in another language before sending. Powered by DeepL, with language picker and API key config. The engine self-gates on the plugin toggle so you can turn it on and off without a restart. Experimental.
+- **Presence Beacon + community badges** — Uprooted now runs a background presence beacon that registers with the Uprooted API. Role-based badges appear on profile popups: Developers get a Dev badge, alpha testers get an Alpha badge. Roles are fetched once per session and cached, so badge injection is instant.
+- **UserBio plugin** — View and edit user bios on profile popups. Experimental.
+- **WhoReacted plugin** — Shows who reacted to a message by displaying reactor avatars next to reaction pills. Uses Root's native BitmapCache for efficient avatar loading. Experimental.
+- **Structured logging** — The entire hook logging system was rewritten from freeform strings to structured wide events with machine-parseable key=value pairs. ~1200 individual log calls consolidated into ~100 wide events. Four scan engines use tail sampling (30-second heartbeat summaries instead of per-tick logging). Dev-channel users get a new "Live Console" button for real-time log streaming via named pipe.
+- **ReconLogger** — Dev-channel diagnostic tool that captures visual tree and style property data during UI development.
+- **Planned plugin tier** — New status level for plugins that are visible in the UI but not yet functional.
 
 ### Improvements
 
-- **Rootcord overhaul** — User card rebuilt from scratch with proper button wiring. Community header matches Root's native style. Server icon click crash fixed. Promoted from Experimental to Alpha.
-- **Custom theme system reworked** — Themes apply live on every keystroke. Full OKLCH lightness range (light backgrounds work). Custom text color input. Tag-based visual tree walker for instant recoloring.
-- **Settings UI polish** — Cards-in-a-card layout, DPI-aware borders, vector icons, cycling filter toggle, Root-native typography, luminance-aware hover states, and interaction model aligned with Root's native press/release behavior.
-- **Startup performance** — Three rounds of optimizations: faster profiler init, event-driven assembly detection, 56% faster reflection resolve, and tighter plugin startup delays.
-- **Native theme settings button** — The "Native" preset card now has a gear button that opens Root's native Change Theme page.
+- **Rootcord overhaul** — User card rebuilt from scratch. The old approach tried to reparent Root's native SystemTray border, which was fragile. The new card is fully custom: avatar and username open the profile pane, and a 4-button cluster (Friends, DMs, Notifications, Settings) uses native HomeViewModel commands. Server icon click crash fixed (Decorator type guard). Member count tooltips on server icons. Live toggle without restart.
+- **Custom theme system reworked** — Themes apply live on every keystroke (no more "Apply" button). Full OKLCH lightness range (0.05–0.93, light backgrounds work). Smooth derivation curve instead of hard dark/light threshold. Custom text color input. Tag-based visual tree walker with `dyn-fg:`, `dyn-bg:`, `dyn-bb:` attributes for instant recoloring. No-recolor island on the custom theme card. Light theme variant switching triggers `SetRequestedThemeVariant(Light)` so SVGs resolve correctly.
+- **Settings UI polish** — Cards-in-a-card layout with second-order styling. DPI-aware borders computed from `RenderScaling` (pixel-perfect at 100%, 125%, 150%, 200%). Vector icons using Material Design SVG paths. 20px Bold page titles, 14px Bold section headers. Radio indicators with pixel-perfect centering at all DPI scales. Cycling pill filter (All/Enabled/Disabled) replaces dropdown. Plugin sort: stability tier before enabled state. Restart banners with burnt orange tint. Experimental plugins banner with amber warning. Native theme settings button on the "Native" preset card. Nav item borders using Root's HighlightLight/Normal/Strong resources.
+- **Overlay scrollbar** — Settings pages now use overlay scrollbar positioning that matches Root's native behavior, eliminating content width displacement.
+- **Settings detection** — LayoutUpdated throttle lowered from 500ms to 50ms. Settings open detection is near-instant. Back arrow found by child order instead of text matching, hidden via collapse pattern. Auto-nav guard prevents re-navigation on theme variant changes.
+- **Startup performance** — Phase 0 (HTML patch verification) runs in parallel on ThreadPool. Readiness polling at 50ms instead of 500ms (removes ~900ms worst-case). Diagnostic scans gated to dev channel. Single shared settings read for all Phase 4.5 plugins.
+- **Native theme settings button** — The "Native" preset card now has a gear button that opens Root's native Change Theme page via ViewModel-driven ListBox binding.
 
 ### Fixes
 
+- **Theme revert** — Reverting now triggers a variant toggle to force DynamicResource re-resolution
+- **Named color crash** — `Color.ToString()` returns "White" for #FFFFFFFF; colors now extracted via byte properties
+- **Online status dots** — BrandSecondary no longer overridden (was turning all online indicators into accent color)
+- **Custom ping color bleed** — Ping color override no longer affects buttons and active-state UI globally
+- **ResourceDictionary lookups** — Switched to full resolution chain for merged dictionaries
+- **Theme preview swatch hover** — Fixed with hit-test visibility
+- **Version migration** — INI parser was missing the Version case; upgrade detection now works
 - Fixed dev mode teardown latency when switching from Developer to Stable channel
 - Fixed high-DPI border inflation on some laptops
-- Fixed multiple theme card interaction quirks (press propagation, no-op retrigger, ping color bleed)
 - Fixed settings header back arrow and title on rapid re-opens
-- Fixed settings detection delay (50ms vs previous 500ms)
 - Full codebase bug audit: thread safety, timer leaks, fire-and-forget tasks, error handling across 15 files
 - Fixed PresenceBeacon UUID discovery race condition
 - Fixed MessageLogger traversal and injection bugs on Avalonia 11.3
@@ -40,6 +51,13 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 ### Infrastructure
 
 - Translate, WhoReacted, and UserBio are force-disabled on upgrade from older versions (enable manually in Plugin Settings)
+
+### Known Issues
+
+- **MessageLogger: card positioning** — Container structure may have changed; needs investigation
+- **NSFW filter** — Not yet validated with the Google Vision API in production
+- **SilentTyping** — Not yet validated with two simultaneous accounts
+- **Uprooted tab header** — Does not recolor when a custom theme changes
 
 ---
 
