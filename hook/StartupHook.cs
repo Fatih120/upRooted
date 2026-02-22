@@ -8,7 +8,7 @@ using Uprooted;
 [System.Reflection.Obfuscation(Exclude = true)]
 internal class StartupHook
 {
-    private const string CurrentVersion = "0.4.2";
+    private const string CurrentVersion = "0.5.0-rc";
 
     // Version migration: plugins to force-disable when upgrading to (or through) a given version.
     // Users who skip versions get all intermediate entries applied cumulatively.
@@ -16,6 +16,7 @@ internal class StartupHook
     private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
     {
         { "0.4.0", new[] { "message-logger", "content-filter" } },
+        { "0.5.0", new[] { "translate", "who-reacted", "user-bio" } },
     };
 
     // Static reference keeps FileSystemWatcher alive for process lifetime

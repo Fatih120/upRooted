@@ -6,10 +6,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [Unreleased]
+## [0.5.0-rc] - 2026-02-22
 
 ### Added
 
+- **Translate plugin** — DeepL-powered message translation. A globe button is injected into Root's compose bar; click it to pick a target language and Uprooted rewrites your draft in place before sending. Config popup with language picker and API key. Auto-translate mode available.
+  - Files: `hook/TranslateEngine.cs` (new), `hook/TranslateConfigPopup.cs` (new)
+- **Presence Beacon + community badges** — Background presence beacon registers with the Uprooted API 10s after startup. Role-based badges on profile popups: Dev badge for developers, Alpha badge for testers. Session role cache for instant badge injection. Event-driven detection via `OverlayLayer.Children.CollectionChanged` with 500ms fallback poll.
+  - File: `hook/UprootedPresenceBeacon.cs` (new)
+- **UserBio plugin** — Displays user bio information on profile popups.
+  - File: `hook/UserBioEngine.cs` (new)
+- **WhoReacted plugin** — Shows reactor avatars next to reaction pills in chat messages. Uses Root's native `BitmapCache` for avatar loading.
+  - File: `hook/WhoReactedEngine.cs` (new)
+- **ReconLogger** — Dev-channel-only diagnostic tool that dumps visual tree data and style properties to the hook log. Useful for UI development and debugging.
+  - File: `hook/ReconLogger.cs` (new)
 - **Wide event structured logging** — New `WideEvent` builder emits structured `[Category|operation] key=value key=value dur_ms=N` log lines following [loggingsucks.com](https://loggingsucks.com) methodology. ~1200 freeform `Logger.Log` calls migrated to ~100 wide events across 11 files. Old format still works (backwards compatible).
   - Files: `hook/WideEvent.cs` (new), `hook/Logger.cs`
 - **Tail sampling for scan engines** — `TailSampler` aggregates high-frequency scan timer results into 30-second heartbeat summaries. Applied to 4 scan engines (LinkEmbedEngine, MessageLogger, NsfwFilter, ThemeEngine), eliminating thousands of repetitive log lines per session.
@@ -69,6 +79,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Typography** — Page titles 20px Bold, section headers 14px Bold TextPrimary, About page → "About Uprooted"
 - **Button borders** — Accent buttons get `AdjustForHighlight(color, 30)` 1.5px borders with Bold text; Developer/Stable border updates on toggle
 - **Restart button** — Deeper burnt orange (`#D06818`)
+- **Rootcord overhaul** — 17 fixes plus theme integration and drag-to-reorder. User card rebuilt from scratch with custom 4-button cluster (Friends, DMs, Notifications, Settings). Community header rebuilt to match Root's native MembersView. Server icon crash on `RefreshSelectedHighlight` fixed with type guards. Min/max width constraints on channels and chat panels. Promoted from Experimental to Alpha.
+  - File: `hook/RootcordEngine.cs`
+- **Startup performance** — Three rounds of optimizations: (1) profiler startup — removed R2R disable, cleared event mask, reduced delays; (2) event-driven detection — replaced polling with assembly load events, deferred diagnostics to dev channel; (3) reflection resolve 56% faster, tighter plugin startup delays. Single settings read shared across Phase 4.5 plugins.
+  - Files: `hook/StartupHook.cs`, `hook/AvaloniaReflection.cs`, `tools/uprooted_profiler.c`
 
 ### Fixed
 
@@ -109,6 +123,26 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Settings header back arrow** — Structural search finds back button by child order in header Grid (not by bounds or text). Collapse pattern (Opacity/MaxWidth/MaxHeight/Width/Margin all zeroed) avoids fighting Root's `IsVisible` binding on `SelectedMenuItemPageContainer.Navigator.CanGoBack`. Title TextBlock overridden after ListBox deselection. Restores original values (Width=40, Margin=24,0,0,0) when switching back to Root tabs.
 - **Settings detection delay** — Lowered LayoutUpdated throttle from 500ms to 50ms; removed `_injecting` reentracy guard from LayoutUpdated path (both paths run on UI thread); reset stale timer lock in NullState. Detection is now near-instant on every open including rapid close/reopen cycles.
 - **Title disappearing on rapid re-opens** — Selection suppression re-deselection now re-applies CollapseBackButton + SetHeaderTitle to restore header state that the binding fallback destroys
+- **PresenceBeacon UUID discovery race** — `RunOnUIThread` race condition caused UUID discovery to always return null. Fixed async dispatch flow.
+  - File: `hook/UprootedPresenceBeacon.cs`
+- **MessageLogger hybrid traversal** — Avalonia 11.3 `UserControl` boundary broke visual tree walk; replaced with hybrid traversal that crosses the boundary.
+  - File: `hook/MessageLogger.cs`
+- **MessageLogger injection bugs** — 5 fixes: diagnostic dump, grid fallback, row cleanup, recycling, and scroll position.
+  - File: `hook/MessageLogger.cs`
+- **Patcher CRLF preservation** — HTML patcher now preserves CRLF line endings, re-patches on install, and escapes XSS in injected paths.
+  - File: `installer/src-tauri/src/patcher.rs`
+- **Command injection in DesktopNotification** — Eliminated shell command injection vulnerability and process handle leak.
+  - File: `hook/DesktopNotification.cs`
+- **TranslateEngine resource leaks** — Shared `HttpClient`, thread-safe caches, size caps to prevent unbounded growth.
+  - File: `hook/TranslateEngine.cs`
+- **LinkEmbedEngine cache caps** — Capped metadata and embed caches to prevent unbounded memory growth.
+  - File: `hook/LinkEmbedEngine.cs`
+
+### Infrastructure
+
+- **ConfuserEx2 obfuscation** — Integrated ConfuserEx2 into the Release build pipeline for hook DLL obfuscation. Added as a git submodule with CI-compatible NuGet path resolution.
+  - Files: `hook/UprootedHook.csproj`, `.github/workflows/`
+- **Version-gated force-disable** — `ForceDisableOnUpgrade` entry for v0.5.0: `translate`, `who-reacted`, `user-bio` force-disabled on upgrade to prevent unvalidated plugins from running automatically.
 
 ---
 
@@ -530,6 +564,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.0-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.2...v0.5.0-rc
 [0.4.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0

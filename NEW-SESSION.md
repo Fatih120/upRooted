@@ -4,7 +4,7 @@
 
 ## 1. Identity
 
-**Uprooted** v0.4.2 — client mod framework for Root Communications desktop (v0.9.93+).
+**Uprooted** v0.5.0-rc — client mod framework for Root Communications desktop (v0.9.93+).
 Private repo (`The-Uprooted-Project/uprooted-private`). Contributors: `watchthelight` + `agomusio`.
 
 ## 2. Architecture
@@ -133,4 +133,4 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 ---
 
-*Quick-start reference for Uprooted v0.4.2. Last updated 2026-02-21.*
+*Quick-start reference for Uprooted v0.5.0-rc. Last updated 2026-02-22.*

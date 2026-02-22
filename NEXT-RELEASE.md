@@ -1,10 +1,10 @@
 # Next Release
 
-> Changes since v0.4.2. This file is replaced each release.
+> Changes included in v0.5.0-rc. This file is replaced each release.
 
 ---
 
-# What's New Since v0.4.2
+# What's New in v0.5.0-rc
 
 This is a big one. Since the last release we shipped a new plugin, reworked the entire custom theme system, rebuilt Rootcord's user card, added a presence beacon with community badges, overhauled the settings UI, and made startup meaningfully faster. A lot happened.
 

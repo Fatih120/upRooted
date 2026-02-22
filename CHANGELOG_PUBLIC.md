@@ -4,6 +4,44 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## [v0.5.0-rc](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.0-rc) — 2026-02-22
+
+### New
+
+- **Translate plugin** — A translate button in the compose bar lets you rewrite your draft in another language before sending. Powered by DeepL, with language picker and auto-translate mode. Experimental.
+- **Presence Beacon + community badges** — Uprooted users get role-based badges on their profile popups (Dev and Alpha tiers). Detection is instant via event-driven overlay monitoring.
+- **UserBio plugin** — Displays user bio on profile popups. Experimental.
+- **WhoReacted plugin** — Shows who reacted to a message by displaying reactor avatars next to reaction pills. Experimental.
+- **Structured logging** — The entire hook logging system was rewritten with structured wide events and tail sampling. Dev-channel users get a new "Live Console" button for real-time log streaming.
+
+### Improvements
+
+- **Rootcord overhaul** — User card rebuilt from scratch with proper button wiring. Community header matches Root's native style. Server icon click crash fixed. Promoted from Experimental to Alpha.
+- **Custom theme system reworked** — Themes apply live on every keystroke. Full OKLCH lightness range (light backgrounds work). Custom text color input. Tag-based visual tree walker for instant recoloring.
+- **Settings UI polish** — Cards-in-a-card layout, DPI-aware borders, vector icons, cycling filter toggle, Root-native typography, luminance-aware hover states, and interaction model aligned with Root's native press/release behavior.
+- **Startup performance** — Three rounds of optimizations: faster profiler init, event-driven assembly detection, 56% faster reflection resolve, and tighter plugin startup delays.
+- **Native theme settings button** — The "Native" preset card now has a gear button that opens Root's native Change Theme page.
+
+### Fixes
+
+- Fixed dev mode teardown latency when switching from Developer to Stable channel
+- Fixed high-DPI border inflation on some laptops
+- Fixed multiple theme card interaction quirks (press propagation, no-op retrigger, ping color bleed)
+- Fixed settings header back arrow and title on rapid re-opens
+- Fixed settings detection delay (50ms vs previous 500ms)
+- Full codebase bug audit: thread safety, timer leaks, fire-and-forget tasks, error handling across 15 files
+- Fixed PresenceBeacon UUID discovery race condition
+- Fixed MessageLogger traversal and injection bugs on Avalonia 11.3
+- Fixed command injection vulnerability in DesktopNotification
+- Fixed HTML patcher CRLF preservation and XSS escape
+
+### Infrastructure
+
+- ConfuserEx2 obfuscation integrated into the Release build pipeline
+- Translate, WhoReacted, and UserBio are force-disabled on upgrade from older versions (enable manually in Plugin Settings)
+
+---
+
 ## [v0.4.2](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.4.2) — 2026-02-20
 
 ### New
