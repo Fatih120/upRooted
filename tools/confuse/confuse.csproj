@@ -12,13 +12,16 @@
       <IncludeAssets>none</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
     </PackageReference>
+    <!-- dnlib is bundled inside Confuser.MSBuild's non-standard netstandard/ folder,
+         so MSBuild can't resolve it as a transitive dependency. Adding it as a direct
+         PackageReference lets NuGet handle resolution and copy-to-output properly. -->
+    <PackageReference Include="dnlib" Version="3.4.0" />
   </ItemGroup>
   <PropertyGroup>
     <!-- ConfuserEx DLLs live in the Confuser.MSBuild NuGet package's netstandard/ folder.
          We reference them directly since the MSBuild task integration is broken on .NET Core.
          GeneratePathProperty gives us $(PkgConfuser_MSBuild) which reliably points to the
-         package root regardless of NuGet cache location (fixes CI where $(NuGetPackageRoot)
-         path construction fails). -->
+         package root regardless of NuGet cache location. -->
     <_ConfuserLibDir>$(PkgConfuser_MSBuild)/netstandard/</_ConfuserLibDir>
   </PropertyGroup>
   <ItemGroup>
@@ -33,9 +36,6 @@
     </Reference>
     <Reference Include="Confuser.DynCipher">
       <HintPath>$(_ConfuserLibDir)Confuser.DynCipher.dll</HintPath>
-    </Reference>
-    <Reference Include="dnlib">
-      <HintPath>$(_ConfuserLibDir)dnlib.dll</HintPath>
     </Reference>
   </ItemGroup>
   <PropertyGroup>
