@@ -119,7 +119,7 @@ internal class RootcordEngine
     private CancellationTokenSource? _applyCts;
 
     private const string Tag = "Rootcord";
-    private const double StripWidth = 70;
+    private const double StripWidth = 64;
     private const double IconSize = 42;
     private const double IconCornerRadius = 21;
     private const double IconSpacing = 4;
@@ -1861,7 +1861,7 @@ internal class RootcordEngine
         var headerBorder = _r.CreateBorder(_cardBg, 12);
         if (headerBorder == null) return;
         _r.SetTag(headerBorder, "rootcord-channel-header");
-        _r.SetMargin(headerBorder, 10, 10, 10, 6);
+        _r.SetMargin(headerBorder, 10, 10, 10, 10);
         SetBorderStroke(headerBorder, AdjustForHighlight(_cardBg, 15), 0.5);
 
         var cardGrid = _r.CreateGrid();
@@ -1994,7 +1994,11 @@ internal class RootcordEngine
         if (headerStack == null) return;
         _r.SetTag(headerStack, "rootcord-channel-header-outer");
         _r.AddChild(headerStack, headerBorder);
-        if (tabSwitcher != null) _r.AddChild(headerStack, tabSwitcher);
+        if (tabSwitcher != null)
+        {
+            _r.SetMargin(tabSwitcher, 10, 0, 10, 10);
+            _r.AddChild(headerStack, tabSwitcher);
+        }
 
         // ===== INJECT: wrap channels panel content in [header | channel list] grid =====
         var existingContent = _r.GetBorderChild(channelsPanel);
@@ -2767,7 +2771,7 @@ internal class RootcordEngine
         _r.SetBorderBrush(_serverStripBorder, _border);
         _r.SetBorderThickness(_serverStripBorder, 0, 0, 0.5, 0); // right edge only
         // Inner padding for breathing room on both sides
-        _r.SetPadding(_serverStripBorder, 8, 0, 8, 0);
+        _r.SetPadding(_serverStripBorder, 5, 0, 5, 0);
 
         // Place in HomeView Grid: Column 0, spanning all rows
         _r.SetGridColumn(_serverStripBorder, 0);
@@ -3348,11 +3352,14 @@ internal class RootcordEngine
         var bgColor = _cardBg;
         var bgHover = AdjustForHighlight(_cardBg, 10);
 
-        // Outer container: holds the pill indicator + icon
-        var container = _r.CreateStackPanel(vertical: false, spacing: 0);
+        // Outer container: Grid with 2 Auto columns [pill | icon], centered as a unit.
+        // The Grid itself is centered in the strip, keeping icon alignment stable on resize.
+        var container = _r.CreateGrid();
         if (container == null) return null;
         _r.SetHorizontalAlignment(container, "Center");
         _r.SetTag(container, $"rootcord-icon-{displayName}");
+        _r.AddGridColumnAuto(container); // Col 0: pill
+        _r.AddGridColumnAuto(container); // Col 1: icon
 
         // Selection pill (Discord-style left indicator)
         var pillBorder = _r.CreateBorder(isSelected ? _accent : "#00000000", 2);
@@ -3362,6 +3369,7 @@ internal class RootcordEngine
             _r.SetHeight(pillBorder, isSelected ? PillHeight : 8);
             _r.SetVerticalAlignment(pillBorder, "Center");
             _r.SetMargin(pillBorder, 0, 0, 3, 0);
+            _r.SetGridColumn(pillBorder, 0);
             _r.AddChild(container, pillBorder);
         }
 
@@ -3371,6 +3379,7 @@ internal class RootcordEngine
 
         _r.SetWidth(iconBorder, IconSize);
         _r.SetHeight(iconBorder, IconSize);
+        _r.SetGridColumn(iconBorder, 1);
         _r.SetCursorHand(iconBorder);
         _r.SetClipToBounds(iconBorder, true);
         _r.SetBorderThickness(iconBorder, 0); // prevent square stroke outline
@@ -3494,6 +3503,7 @@ internal class RootcordEngine
                     _r.SetMargin(badge, 0, 0, -1, 0);
                     _r.AddChild(iconWrapper, badge);
                 }
+                _r.SetGridColumn(iconWrapper, 1);
                 _r.AddChild(container, iconWrapper);
                 return container;
             }
@@ -3512,11 +3522,13 @@ internal class RootcordEngine
         var bgColor = _cardBg;
         var bgHover = AdjustForHighlight(_cardBg, 10);
 
-        // Outer container: pill + icon (same pattern as BuildServerIcon)
-        var container = _r.CreateStackPanel(vertical: false, spacing: 0);
+        // Outer container: Grid with 2 Auto columns [pill | icon], centered as a unit
+        var container = _r.CreateGrid();
         if (container == null) return null;
         _r.SetHorizontalAlignment(container, "Center");
         _r.SetTag(container, "rootcord-home");
+        _r.AddGridColumnAuto(container); // Col 0: pill
+        _r.AddGridColumnAuto(container); // Col 1: icon
 
         // Selection pill
         var pillBorder = _r.CreateBorder(isDmSelected ? _accent : "#00000000", 2);
@@ -3526,6 +3538,7 @@ internal class RootcordEngine
             _r.SetHeight(pillBorder, isDmSelected ? PillHeight : 8);
             _r.SetVerticalAlignment(pillBorder, "Center");
             _r.SetMargin(pillBorder, 0, 0, 3, 0);
+            _r.SetGridColumn(pillBorder, 0);
             _r.AddChild(container, pillBorder);
         }
 
@@ -3534,6 +3547,7 @@ internal class RootcordEngine
         if (iconBorder == null) return container;
         _r.SetWidth(iconBorder, IconSize);
         _r.SetHeight(iconBorder, IconSize);
+        _r.SetGridColumn(iconBorder, 1);
         _r.SetCursorHand(iconBorder);
         _r.SetClipToBounds(iconBorder, true);
 
@@ -3699,8 +3713,7 @@ internal class RootcordEngine
         _r.SetWidth(sep, 28);
         _r.SetHeight(sep, 1);
         _r.SetHorizontalAlignment(sep, "Center");
-        // Shift right slightly to align with icon center (pill offsets the icon)
-        _r.SetMargin(sep, PillWidth, 6, 0, 6);
+        _r.SetMargin(sep, 0, 6, 0, 6);
         return sep;
     }
 

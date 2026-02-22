@@ -6,28 +6,21 @@ namespace Uprooted;
 /// <summary>
 /// Message logger plugin — preserves deleted messages and tracks edits.
 ///
-/// Deletion detection: Root's ObservableCollection is a WINDOWED/VIRTUALIZED data source.
-/// Remove events fire for BOTH genuine deletions AND buffer management (scroll-off,
-/// window shifts). We use the DeletedAt property on the bridge target (Message model)
-/// as the primary signal — non-null DateTimeOffset means genuine deletion, null means
-/// buffer management. Also subscribes to INotifyPropertyChanged for instant detection.
+/// Deletion detection: subscribes to Channel.Messages.ConnectMessages() (DynamicData
+/// IObservable&lt;IChangeSet&lt;Message&gt;&gt;) which fires Remove events only for genuine
+/// deletions (not virtualization buffer management). Falls back to ObservableCollection
+/// subscription if ConnectMessages() is unavailable.
 ///
-/// Display: Deleted messages are re-injected into the chat as red-tinted inline panels
-/// (since Root removes them entirely). Right-click shows "Clear message history" to
-/// actually remove the persisted message.
+/// Edit detection: content snapshot comparison on Replace/Refresh change events.
+/// Root shows "(edited)" natively — we only persist edit history, no visual indicators.
 ///
-/// Edit detection: Content snapshot comparison on each poll tick.
+/// Display: Deleted messages are re-injected into the chat as red-tinted inline panels.
+/// Right-click shows "Clear message history" to remove the persisted message.
 /// </summary>
 internal class MessageLogger : IDisposable
 {
     private const string Tag = "MsgLogger";
     private const int ScanIntervalMs = 500;
-    /// <summary>
-    /// Seconds after a message's Add event during which Replace events are treated as
-    /// send-completion content settling (not genuine edits). Genuine user edits arrive
-    /// well after this window; send-completion Replaces arrive within 0.5-2s.
-    /// </summary>
-    private const double EditGracePeriodSeconds = 5.0;
 
     private readonly AvaloniaReflection _r;
     private readonly VisualTreeWalker _walker;
@@ -38,86 +31,48 @@ internal class MessageLogger : IDisposable
     private int _scanning;
     private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
 
-    // Discovery results
+    // Message caches
+    private readonly Dictionary<string, CachedMessage> _messageCache = new();
+    private readonly Dictionary<string, string> _contentSnapshot = new();
+
+    // DynamicData subscription (primary path)
+    private IDisposable? _changeSetSub;
+    private object? _currentContentVM;
+    private bool _usingDynamicData;
+
+    // Fallback: ObservableCollection subscription
     private object? _chatItemsControl;
     private object? _currentItemsSource;
-    private Type? _messageItemType;
-
-    // Per-type property accessor cache (different ViewModel types have different PropertyInfo)
-    private readonly Dictionary<Type, TypeProps> _typePropsCache = new();
-    private bool _propertiesResolved; // true once at least one type is resolved
-
-    private class TypeProps
-    {
-        public PropertyInfo? Bridge;     // ViewModel.Message bridge (null if direct)
-        public PropertyInfo? MessageId;
-        public PropertyInfo? Content;
-        public PropertyInfo? AuthorId;
-        public PropertyInfo? Timestamp;
-        public PropertyInfo? DeletedAt;      // DateTimeOffset? — non-null means deleted
-        public PropertyInfo? EditedAt;       // DateTimeOffset? — non-null means edited
-        public PropertyInfo? SenderMember;   // Message.SenderMember (IMessageContainerMember)
-    }
-
-    // Collection subscription
     private Delegate? _collectionChangedHandler;
     private EventInfo? _collectionChangedEvent;
     private bool _subscribed;
 
-    // Channel tracking
-    private string _currentChannelId = "";
-    private int _freshnessCounter;
+    // Property resolution (per-type cache)
+    private readonly Dictionary<Type, TypeProps> _typePropsCache = new();
+    private bool _propertiesResolved;
 
-    // Deletion detection via CollectionChanged Remove events (buffered + debounced)
-    private readonly List<BufferedRemove> _pendingRemoves = new();
-    private int _deletionEpoch;       // incremented on channel switch / bulk remove — cancels running pollers
-    private int _boolDumpCount;       // limits diagnostic property dumps to first 3 removes
-
-    // Diagnostic counters: track Add/Remove correlation per flush window
-    private int _addsSinceFlush;
-    private int _removesSinceFlush;
-
-    private struct BufferedRemove
+    private class TypeProps
     {
-        public string MessageId;
-        public string Content;
-        public object? ViewModel;       // the ViewModel item (for re-reading bridge target)
-        public object? BridgeTarget;    // captured bridge target (may become stale)
-        public TypeProps? Props;        // property accessor for DeletedAt read
-        public int RemoveIndex;         // OldStartingIndex from the event args
+        public PropertyInfo? Bridge;
+        public PropertyInfo? MessageId;
+        public PropertyInfo? Content;
+        public PropertyInfo? AuthorId;
+        public PropertyInfo? Timestamp;
+        public PropertyInfo? DeletedAt;
+        public PropertyInfo? EditedAt;
+        public PropertyInfo? SenderMember;
     }
 
-    // Message caches
-    private readonly Dictionary<string, CachedMessage> _messageCache = new();
-    private readonly Dictionary<string, string> _contentSnapshot = new();
-    // Edit detection: tracks messages seen via Add events (not initial snapshot), with Add timestamp.
-    // Used by HandleReplaced to gate Replace events — only messages in this dict past
-    // EditGracePeriodSeconds are eligible. SnapshotMessages does NOT populate this.
-    private readonly Dictionary<string, DateTime> _addedViaEvent = new();
-
-    // PropertyChanged subscriptions for instant deletion/edit detection
-    // Keyed by msgId → (bridgeTarget, handler) for cleanup on channel switch
-    private readonly Dictionary<string, (object target, Delegate handler)> _propertyChangedSubs = new();
+    // Channel tracking
+    private string _currentChannelId = "";
+    private int _channelCheckCounter;
 
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
-
-    // Recycling cleanup tracking — tag → (grid21, RowDefinition, ContentPresenter container, DataContextChanged handler)
-    // Allows cleanup of both the card child and the extra RowDefinition when a ContentPresenter is recycled.
     private readonly Dictionary<string, (object grid, object rowDef, object? container, Delegate? dcHandler)> _injectedRowDefs = new();
 
-    // Audit log integration: entries received before the message was cached in the visual tree.
-    // Keyed by messageId. Applied the next time the message is added to _messageCache via HandleAdded.
-    // All access is on the UI thread (SetAuditLogEngine dispatches OnEntry to UI thread).
+    // Audit log integration
     private readonly Dictionary<string, AuditLogEntry> _pendingAuditDeletes = new();
-
-    // Insertion-order tracking — used for injection positioning (timestamp-based is unreliable
-    // because Root timestamps may not resolve correctly or may be UtcNow on cache miss)
-    private readonly List<string> _orderedIds = new();
-    private readonly Dictionary<string, int> _orderedIdIndex = new();
-
-    // One-time diagnostic tree dump (1E)
-    private bool _firstTreeDumpDone;
 
     // Avalonia types for context menu (resolved lazily)
     private Type? _contextMenuType;
@@ -150,15 +105,37 @@ internal class MessageLogger : IDisposable
         {
             try
             {
-                RunDiscoveryScan();
-                // Subscribe immediately — don't wait for timer tick
-                if (_chatItemsControl != null && _currentItemsSource != null)
+                // Try DynamicData subscription first (primary path)
+                var contentVM = FindContentViewModel();
+                if (contentVM != null && TrySubscribeConnectMessages(contentVM))
                 {
-                    SubscribeToCollection(_currentItemsSource);
-                    SnapshotMessages(_currentItemsSource);
+                    _currentContentVM = contentVM;
+                    _usingDynamicData = true;
+                    ev.Set("mode", "dynamic_data");
                 }
+                else
+                {
+                    // Fallback: ObservableCollection subscription
+                    FindChatItemsControl();
+                    if (_chatItemsControl != null)
+                    {
+                        _currentItemsSource = ReadItemsSource(_chatItemsControl);
+                        if (_currentItemsSource != null)
+                        {
+                            ResolvePropsFromCollection(_currentItemsSource);
+                            SubscribeToCollection(_currentItemsSource);
+                            SnapshotMessages(_currentItemsSource);
+                        }
+                    }
+                    ev.Set("mode", "collection_fallback");
+                }
+
+                // Also find chat control for visual injection (needed by both paths)
+                if (_chatItemsControl == null)
+                    FindChatItemsControl();
+                ReadCurrentChannelId();
             }
-            catch (Exception ex) { Logger.LogException(Tag, "Discovery error", ex); }
+            catch (Exception ex) { Logger.LogException(Tag, "Initialize error", ex); }
         });
 
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
@@ -170,98 +147,73 @@ internal class MessageLogger : IDisposable
         var t = _scanTimer;
         _scanTimer = null;
         t?.Dispose();
+        UnsubscribeConnectMessages();
+        UnsubscribeCollection();
         _store.Dispose();
     }
 
     // ===== Audit Log Integration =====
 
-    /// <summary>
-    /// Wire an AuditLogEngine to this logger. OnEntry fires on the UI thread,
-    /// so ProcessAuditEntry can safely access _messageCache and other UI-thread state.
-    /// </summary>
     internal void SetAuditLogEngine(AuditLogEngine engine)
     {
         engine.OnEntry += entry =>
         {
-            // OnEntry is already dispatched to the UI thread by AuditLogEngine.ParseDataFrame.
             try { ProcessAuditEntry(entry); }
             catch (Exception ex) { Logger.Log(Tag, $"ProcessAuditEntry: {ex.Message}"); }
         };
         Logger.Log(Tag, "AuditLogEngine wired");
     }
 
-    /// <summary>
-    /// Process a decoded audit log entry.
-    ///
-    /// Phase 1: ActionMessageDelete/Edit are both -1/-2 (sentinels), so this is a no-op.
-    ///          OnEntry still fires for diagnostic logging in AuditLogEngine.
-    ///
-    /// Phase 2+: Update AuditLogEngine.ActionMessageDelete/Edit constants and rebuild.
-    ///           This method then handles audit-driven deletions with actor attribution.
-    /// </summary>
     private void ProcessAuditEntry(AuditLogEntry entry)
     {
-        if (entry.ActionType == AuditLogEngine.ActionMessageDelete)
+        if (entry.ActionType != AuditLogEngine.ActionMessageDelete) return;
+        if (string.IsNullOrEmpty(entry.MessageId)) return;
+
+        using var ev = WideEvent.Begin(Tag, "audit_delete");
+        ev.Set("msg_id", entry.MessageId);
+        ev.Set("actor_id", entry.ActorId);
+        ev.Set("actor_name", entry.ActorName);
+
+        if (_messageCache.TryGetValue(entry.MessageId, out var cached))
         {
-            if (string.IsNullOrEmpty(entry.MessageId)) return;
-
-            using var ev = WideEvent.Begin(Tag, "audit_delete");
-            ev.Set("msg_id", entry.MessageId);
-            ev.Set("actor_id", entry.ActorId);
-            ev.Set("actor_name", entry.ActorName);
-            ev.Set("channel", entry.ChannelId);
-
-            if (_messageCache.TryGetValue(entry.MessageId, out var cached))
+            if (!cached.IsDeleted)
             {
-                // Message is already cached — apply deletion with actor info
-                if (!cached.IsDeleted)
-                {
-                    cached.IsDeleted = true;
-                    cached.DeletedAt = DateTime.UtcNow;
-                    cached.DeletedBy = entry.ActorId;
-                    cached.DeletedByName = entry.ActorName;
-                    _store.RecordDeletion(cached.MessageId, cached.ChannelId,
-                        cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
-                    ev.Set("result", "marked_deleted");
-                }
-                else if (string.IsNullOrEmpty(cached.DeletedBy) && !string.IsNullOrEmpty(entry.ActorId))
-                {
-                    // Already marked deleted (from visual tree), but now we have actor info
-                    cached.DeletedBy = entry.ActorId;
-                    cached.DeletedByName = entry.ActorName;
-                    ev.Set("result", "actor_added");
-                }
-                else
-                {
-                    ev.Set("result", "already_deleted");
-                }
-
-                // If a card is already injected for this message, remove it so the next
-                // scan tick re-injects it with the updated actor name in the label.
-                if (!string.IsNullOrEmpty(entry.ActorName))
-                {
-                    var cardTag = $"uprooted-del:{entry.MessageId}";
-                    if (_injectedCards.TryGetValue(cardTag, out var existingCard))
-                    {
-                        var parent = _r.GetParent(existingCard);
-                        if (parent != null) RemoveChild(parent, existingCard);
-                        _injectedCards.Remove(cardTag);
-                        ev.Set("card_refreshed", true);
-                    }
-                }
+                cached.IsDeleted = true;
+                cached.DeletedAt = DateTime.UtcNow;
+                cached.DeletedBy = entry.ActorId;
+                cached.DeletedByName = entry.ActorName;
+                _store.RecordDeletion(cached.MessageId, cached.ChannelId,
+                    cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
+                ev.Set("result", "marked_deleted");
+            }
+            else if (string.IsNullOrEmpty(cached.DeletedBy) && !string.IsNullOrEmpty(entry.ActorId))
+            {
+                cached.DeletedBy = entry.ActorId;
+                cached.DeletedByName = entry.ActorName;
+                ev.Set("result", "actor_added");
             }
             else
             {
-                // Message not cached yet — store for application when it's next seen in Add event
-                _pendingAuditDeletes[entry.MessageId] = entry;
-                ev.Set("result", "pending_queued");
+                ev.Set("result", "already_deleted");
+            }
+
+            // Refresh card with actor name
+            if (!string.IsNullOrEmpty(entry.ActorName))
+            {
+                var cardTag = $"uprooted-del:{entry.MessageId}";
+                if (_injectedCards.TryGetValue(cardTag, out var existingCard))
+                {
+                    var parent = _r.GetParent(existingCard);
+                    if (parent != null) RemoveChild(parent, existingCard);
+                    _injectedCards.Remove(cardTag);
+                    ev.Set("card_refreshed", true);
+                }
             }
         }
-        else if (entry.ActionType == AuditLogEngine.ActionMessageEdit)
+        else
         {
-            Logger.Log(Tag, $"[audit] EDIT: msg={entry.MessageId} actor={entry.ActorId}");
-            // Edit handling is primarily via CollectionChanged Replace events.
-            // Audit log confirms the edit happened; actor info could be recorded if needed.
+            _pendingAuditDeletes[entry.MessageId] = entry;
+            ev.Set("result", "pending_queued");
         }
     }
 
@@ -284,33 +236,15 @@ internal class MessageLogger : IDisposable
                 using var ev = WideEvent.BeginSampled(Tag, "scan_tick", _sampler);
                 try
                 {
-                    int srcCount = 0;
-                    try
-                    {
-                        if (_currentItemsSource != null)
-                            srcCount = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
-                    }
-                    catch { }
-                    ev.Set("subscribed", _subscribed);
-                    ev.Set("resolved", _propertiesResolved);
-                    ev.Set("src_items", srcCount);
-                    ev.Set("snapshots", _contentSnapshot.Count);
+                    ev.Set("mode", _usingDynamicData ? "dd" : "coll");
                     ev.Set("cache", _messageCache.Count);
+                    ev.Set("snapshots", _contentSnapshot.Count);
 
-                    EnsureCollectionSubscription();
-                    if (_propertiesResolved)
-                    {
-                        FlushPendingRemoves(settings, ev);
-                        // Edit detection is event-driven (HandleReplaced), not poll-based.
-                        // PollEdits is kept for reference but not called.
-                        InjectDeletedMessageCards(settings, ev);
-                        InjectEditIndicators(settings, ev);
-                    }
+                    _channelCheckCounter++;
+                    CheckForChannelSwitch();
+                    InjectDeletedMessageCards(settings, ev);
                 }
-                catch (Exception ex)
-                {
-                    ev.SetError(ex);
-                }
+                catch (Exception ex) { ev.SetError(ex); }
                 finally { Interlocked.Exchange(ref _scanning, 0); }
             });
 
@@ -324,12 +258,351 @@ internal class MessageLogger : IDisposable
         }
     }
 
-    // ===== Phase 1: Discovery =====
+    // ===== DynamicData Subscription =====
 
-    private void RunDiscoveryScan()
+    /// <summary>
+    /// Walk visual tree to find TextChannelContentViewModel or DirectMessageContentViewModel.
+    /// </summary>
+    private object? FindContentViewModel()
     {
-        using var ev = WideEvent.Begin(Tag, "discovery_scan");
+        try
+        {
+            foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+            {
+                var dc = ReadDC(node);
+                if (dc == null) continue;
+                var typeName = dc.GetType().Name;
+                if (typeName == "TextChannelContentViewModel" ||
+                    typeName == "DirectMessageContentViewModel")
+                    return dc;
+            }
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"FindContentVM error: {ex.Message}"); }
+        return null;
+    }
 
+    /// <summary>
+    /// Navigate from content ViewModel to IMessageService, call ConnectMessages(), subscribe.
+    /// Paths: TextChannelContentVM.Channel.Messages / DirectMessageContentVM.DirectMessageViewModel.DirectMessage.Messages
+    /// </summary>
+    private bool TrySubscribeConnectMessages(object contentVM)
+    {
+        try
+        {
+            var vmType = contentVM.GetType();
+            object? messageService = null;
+
+            if (vmType.Name == "TextChannelContentViewModel")
+            {
+                var channel = vmType.GetProperty("Channel")?.GetValue(contentVM);
+                messageService = channel?.GetType().GetProperty("Messages")?.GetValue(channel);
+            }
+            else if (vmType.Name == "DirectMessageContentViewModel")
+            {
+                var dmVM = vmType.GetProperty("DirectMessageViewModel")?.GetValue(contentVM);
+                var dm = dmVM?.GetType().GetProperty("DirectMessage")?.GetValue(dmVM);
+                messageService = dm?.GetType().GetProperty("Messages")?.GetValue(dm);
+            }
+
+            if (messageService == null)
+            {
+                Logger.Log(Tag, $"[dd] Failed to resolve IMessageService from {vmType.Name}");
+                return false;
+            }
+
+            // Find ConnectMessages method (instance or extension)
+            var connectMethod = FindConnectMessagesMethod(messageService);
+            if (connectMethod == null)
+            {
+                Logger.Log(Tag, "[dd] ConnectMessages method not found");
+                return false;
+            }
+
+            // Invoke to get IObservable<IChangeSet<Message>>
+            object? observable = connectMethod.IsStatic
+                ? connectMethod.Invoke(null, new[] { messageService })
+                : connectMethod.Invoke(messageService, null);
+
+            if (observable == null)
+            {
+                Logger.Log(Tag, "[dd] ConnectMessages returned null");
+                return false;
+            }
+
+            // Find IObservable<T> interface on the result
+            var iObservableIface = observable.GetType().GetInterfaces()
+                .FirstOrDefault(i => i.IsGenericType && i.GetGenericTypeDefinition() == typeof(IObservable<>));
+            if (iObservableIface == null)
+            {
+                Logger.Log(Tag, "[dd] Result does not implement IObservable<T>");
+                return false;
+            }
+
+            var changeSetType = iObservableIface.GetGenericArguments()[0]; // IChangeSet<Message>
+
+            // Resolve Message type properties BEFORE subscribing (avoids race)
+            if (changeSetType.IsGenericType)
+            {
+                var messageType = changeSetType.GetGenericArguments().FirstOrDefault();
+                if (messageType != null)
+                    TryResolvePropertyAccessors(messageType);
+            }
+
+            // Subscribe via generic helper
+            var subscribeHelper = typeof(MessageLogger)
+                .GetMethod(nameof(SubscribeToObservable), BindingFlags.NonPublic | BindingFlags.Static)!
+                .MakeGenericMethod(changeSetType);
+
+            _changeSetSub = (IDisposable)subscribeHelper.Invoke(null,
+                new object[] { observable, new Action<object>(OnChangeSetReceived) })!;
+
+            Logger.Log(Tag, $"[dd] Subscribed to ConnectMessages via {vmType.Name}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"[dd] Subscribe error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Find ConnectMessages — instance method on the service type, then scan loaded
+    /// assemblies for a static extension method.
+    /// </summary>
+    private static MethodInfo? FindConnectMessagesMethod(object messageService)
+    {
+        var msType = messageService.GetType();
+
+        // Try instance method
+        var method = msType.GetMethod("ConnectMessages", BindingFlags.Public | BindingFlags.Instance);
+        if (method != null) return method;
+
+        // Try interfaces
+        foreach (var iface in msType.GetInterfaces())
+        {
+            method = iface.GetMethod("ConnectMessages", BindingFlags.Public | BindingFlags.Instance);
+            if (method != null) return method;
+        }
+
+        // Scan loaded assemblies for static extension method
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try
+            {
+                foreach (var type in asm.GetTypes())
+                {
+                    if (!type.IsClass || !type.IsAbstract || !type.IsSealed) continue;
+                    foreach (var m in type.GetMethods(BindingFlags.Public | BindingFlags.Static))
+                    {
+                        if (m.Name != "ConnectMessages") continue;
+                        var parms = m.GetParameters();
+                        if (parms.Length >= 1 && parms[0].ParameterType.IsAssignableFrom(msType))
+                            return m;
+                    }
+                }
+            }
+            catch { } // Skip assemblies that throw on GetTypes()
+        }
+
+        return null;
+    }
+
+    // Generic helper to subscribe to IObservable<T> via BCL IObserver<T>
+    private static IDisposable SubscribeToObservable<T>(object observable, Action<object> onNext)
+    {
+        return ((IObservable<T>)observable).Subscribe(new ActionObserver<T>(v => onNext(v!)));
+    }
+
+    private class ActionObserver<T> : IObserver<T>
+    {
+        private readonly Action<T> _onNext;
+        internal ActionObserver(Action<T> onNext) => _onNext = onNext;
+        public void OnNext(T value) { try { _onNext(value); } catch { } }
+        public void OnError(Exception error) { }
+        public void OnCompleted() { }
+    }
+
+    private void UnsubscribeConnectMessages()
+    {
+        try { _changeSetSub?.Dispose(); } catch { }
+        _changeSetSub = null;
+        _currentContentVM = null;
+        _usingDynamicData = false;
+    }
+
+    // ===== DynamicData Change Handlers =====
+
+    private void OnChangeSetReceived(object changeSet)
+    {
+        _r.RunOnUIThread(() =>
+        {
+            try
+            {
+                if (changeSet is not System.Collections.IEnumerable enumerable) return;
+
+                foreach (var change in enumerable)
+                {
+                    var changeType = change.GetType();
+                    var reason = changeType.GetProperty("Reason")?.GetValue(change);
+                    if (reason == null) continue;
+
+                    // Navigate Change<T>.Item.Current to get the Message object
+                    var itemChange = changeType.GetProperty("Item")?.GetValue(change);
+                    var current = itemChange?.GetType().GetProperty("Current")?.GetValue(itemChange);
+                    if (current == null) continue;
+
+                    switch (reason.ToString())
+                    {
+                        case "Add":
+                            HandleMessageAdded(current);
+                            break;
+                        case "Remove":
+                            HandleMessageRemoved(current);
+                            break;
+                        case "Replace":
+                        case "Refresh":
+                            HandleMessageRefreshed(current);
+                            break;
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"[dd] ChangeSet error: {ex.Message}"); }
+        });
+    }
+
+    private void HandleMessageAdded(object message)
+    {
+        var msgId = ReadMessageId(message);
+        if (msgId == null) return;
+
+        _contentSnapshot[msgId] = ReadContent(message) ?? "";
+        CacheMessage(message, msgId);
+
+        // Apply pending audit log deletion
+        if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
+        {
+            _pendingAuditDeletes.Remove(msgId);
+            if (_messageCache.TryGetValue(msgId, out var cached))
+            {
+                cached.IsDeleted = true;
+                cached.DeletedAt = DateTime.UtcNow;
+                cached.DeletedBy = pendingAudit.ActorId;
+                cached.DeletedByName = pendingAudit.ActorName;
+                _store.RecordDeletion(cached.MessageId, cached.ChannelId,
+                    cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
+                Logger.Log(Tag, $"[audit] Applied pending delete on Add: {msgId}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// ConnectMessages Remove = genuine deletion. No disambiguation needed.
+    /// </summary>
+    private void HandleMessageRemoved(object message)
+    {
+        var msgId = ReadMessageId(message);
+        if (msgId == null) return;
+
+        if (_messageCache.TryGetValue(msgId, out var cached))
+        {
+            if (!cached.IsDeleted)
+            {
+                using var ev = WideEvent.Begin(Tag, "msg_deleted");
+                cached.IsDeleted = true;
+                cached.DeletedAt = DateTime.UtcNow;
+                _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
+                ev.Set("msg_id", msgId);
+                ev.Set("content", Truncate(cached.Content, 80));
+                ev.Set("source", "connect_messages");
+            }
+        }
+        else
+        {
+            // Not in cache — create entry from the message being removed
+            var content = ReadContent(message) ?? "";
+            if (!string.IsNullOrEmpty(content))
+            {
+                using var ev = WideEvent.Begin(Tag, "msg_deleted");
+                var newCached = new CachedMessage
+                {
+                    MessageId = msgId,
+                    ChannelId = _currentChannelId,
+                    AuthorName = "Unknown",
+                    Timestamp = DateTime.UtcNow,
+                    Content = content,
+                    IsDeleted = true,
+                    DeletedAt = DateTime.UtcNow
+                };
+                _messageCache[msgId] = newCached;
+                _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
+                    "", "Unknown", newCached.Timestamp, content);
+                _store.RecordDeletion(msgId, newCached.ChannelId, DateTime.UtcNow);
+                ev.Set("msg_id", msgId);
+                ev.Set("content", Truncate(content, 80));
+                ev.Set("source", "connect_messages_uncached");
+            }
+        }
+
+        _contentSnapshot.Remove(msgId);
+    }
+
+    /// <summary>
+    /// Detect edits by comparing content to snapshot. EditedAt non-null confirms genuine edit.
+    /// </summary>
+    private void HandleMessageRefreshed(object message)
+    {
+        var settings = UprootedSettings.Load();
+        if (!settings.MessageLoggerLogEdits) return;
+
+        var msgId = ReadMessageId(message);
+        if (msgId == null) return;
+
+        var newContent = ReadContent(message) ?? "";
+        _contentSnapshot.TryGetValue(msgId, out var oldContent);
+        _contentSnapshot[msgId] = newContent;
+
+        // Update cache content
+        if (_messageCache.TryGetValue(msgId, out var existing))
+            existing.Content = newContent;
+        else
+            CacheMessage(message, msgId);
+
+        if (string.IsNullOrEmpty(oldContent) || oldContent == newContent) return;
+
+        // Confirm via EditedAt — null means content settling, not a genuine edit
+        var tp = GetTypeProps(message);
+        if (tp?.EditedAt != null)
+        {
+            var target = GetMessageTarget(message, tp);
+            if (target != null)
+            {
+                try
+                {
+                    var val = tp.EditedAt.GetValue(target);
+                    if (val == null) return; // Not edited — just send-completion settling
+                }
+                catch { }
+            }
+        }
+
+        if (_messageCache.TryGetValue(msgId, out var cached))
+        {
+            using var ev = WideEvent.Begin(Tag, "msg_edited");
+            cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
+            cached.Content = newContent;
+            _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, oldContent);
+            ev.Set("msg_id", msgId);
+            ev.Set("old", Truncate(oldContent, 40));
+            ev.Set("new", Truncate(newContent, 40));
+            ev.Set("source", "connect_messages");
+        }
+    }
+
+    // ===== Fallback: ObservableCollection Subscription =====
+
+    private void FindChatItemsControl()
+    {
         var settingsText = _walker.FindFirstTextBlock(_mainWindow, "APP SETTINGS");
         object? settingsSubtree = null;
         if (settingsText != null)
@@ -347,408 +620,48 @@ internal class MessageLogger : IDisposable
         {
             if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
             var typeName = node.GetType().Name;
-            if (typeName.Contains("ItemsControl") || typeName == "ListBox" || typeName == "ItemsRepeater")
-                InspectItemsControl(node);
-        }
-
-        // Walk up from CTextBlock for ViewModel property resolution
-        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
-        {
-            if (settingsSubtree != null && IsDescendantOf(node, settingsSubtree)) continue;
-            if (node.GetType().Name != "CTextBlock") continue;
-
-            var current = node;
-            for (int i = 0; i < 15 && current != null; i++)
-            {
-                object? dc = ReadDC(current);
-                if (dc != null && !_propertiesResolved &&
-                    dc.GetType().Name.Contains("Message", StringComparison.OrdinalIgnoreCase))
-                    TryResolvePropertyAccessors(dc.GetType());
-                current = _r.GetParent(current);
-            }
-            if (_propertiesResolved) break;
-        }
-
-        ReadCurrentChannelId();
-        ev.Set("resolved", _propertiesResolved);
-        ev.Set("has_control", _chatItemsControl != null);
-        ev.Set("channel", _currentChannelId);
-    }
-
-    private void InspectItemsControl(object ic)
-    {
-        var typeName = ic.GetType().Name;
-        object? source = ReadItemsSource(ic);
-        if (source == null) return;
-
-        var sourceType = source.GetType();
-        bool hasINCC = sourceType.GetInterfaces().Any(i => i.Name == "INotifyCollectionChanged");
-        int count = 0;
-        try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
-        catch { }
-
-        // Only adopt the actual chat message collection
-        bool isChat = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
-        if (!isChat && count > 0)
-        {
-            try
-            {
-                var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
-                if (en != null && en.MoveNext() && en.Current != null)
-                    isChat = en.Current.GetType().Name.Contains("MessageViewModel");
-            }
-            catch { }
-        }
-
-        if (isChat && hasINCC && _chatItemsControl == null)
-        {
-            // Resolve properties from first item (only for chat controls, not emoji pickers etc.)
-            if (count > 0)
-            {
-                try
-                {
-                    var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
-                    if (en != null && en.MoveNext() && en.Current != null)
-                        TryResolvePropertyAccessors(en.Current.GetType());
-                }
-                catch { }
-            }
-
-            Logger.Log(Tag, $"Chat collection found: {typeName}, {count} items");
-            _chatItemsControl = ic;
-            _currentItemsSource = source;
-        }
-    }
-
-    private void ReadCurrentChannelId()
-    {
-        if (_chatItemsControl == null) return;
-        var current = _chatItemsControl;
-        for (int i = 0; i < 10 && current != null; i++)
-        {
-            object? dc = ReadDC(current);
-            if (dc != null)
-            {
-                var t = dc.GetType();
-                var prop = t.GetProperty("ChannelId", BindingFlags.Public | BindingFlags.Instance)
-                    ?? t.GetProperty("MessageContainerId", BindingFlags.Public | BindingFlags.Instance)
-                    ?? t.GetProperty("ContainerId", BindingFlags.Public | BindingFlags.Instance);
-                if (prop != null)
-                {
-                    var val = prop.GetValue(dc)?.ToString();
-                    if (!string.IsNullOrEmpty(val))
-                    { _currentChannelId = val!; return; }
-                }
-                if (t.Name.Contains("TextChannel") || t.Name.Contains("Content"))
-                { _currentChannelId = $"dc:{dc.GetHashCode()}"; return; }
-            }
-            current = _r.GetParent(current);
-        }
-    }
-
-    // ===== Property Resolution =====
-
-    /// <summary>
-    /// Resolve property accessors for a specific ViewModel type. Results are cached
-    /// per-type since different ViewModels (MessageViewModel, ChannelStartMessageViewModel)
-    /// have separate PropertyInfo objects that only work on their own type.
-    /// </summary>
-    private TypeProps? TryResolvePropertyAccessors(Type type)
-    {
-        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
-
-        var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-        var tp = new TypeProps
-        {
-            DeletedAt = FindProp(props, "DeletedAt", "HasBeenDeleted", "IsDeleted"),
-            EditedAt = FindProp(props, "EditedAt", "HasBeenEdited", "IsEdited")
-        };
-
-        // Try direct resolution first
-        if (TryResolveOnProps(props, type.Name, null, tp))
-        {
-            _typePropsCache[type] = tp;
-            _propertiesResolved = true;
-            _messageItemType = type;
-            return tp;
-        }
-
-        // Try nested properties (e.g. ViewModel.Message)
-        foreach (var prop in props)
-        {
-            if (prop.PropertyType.IsClass && prop.PropertyType != typeof(string) &&
-                !prop.PropertyType.IsArray && prop.PropertyType.Namespace != "System")
-            {
-                var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
-                if (TryResolveOnProps(nested, prop.PropertyType.Name, prop, tp))
-                {
-                    // DeletedAt/EditedAt may live on the bridge target, not the ViewModel
-                    if (tp.DeletedAt == null)
-                        tp.DeletedAt = FindProp(nested, "DeletedAt", "HasBeenDeleted", "IsDeleted");
-                    if (tp.EditedAt == null)
-                        tp.EditedAt = FindProp(nested, "EditedAt", "HasBeenEdited", "IsEdited");
-
-                    Logger.Log(Tag, $"Resolved via {type.Name}.{prop.Name} (DeletedAt={tp.DeletedAt?.Name ?? "?"}, EditedAt={tp.EditedAt?.Name ?? "?"})");
-                    _typePropsCache[type] = tp;
-                    _propertiesResolved = true;
-                    _messageItemType = type;
-                    return tp;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /// <summary>
-    /// Get or resolve the TypeProps for an item. This is the main entry point
-    /// for reading properties — automatically handles type mismatches.
-    /// </summary>
-    private TypeProps? GetTypeProps(object item)
-    {
-        var type = item.GetType();
-        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
-        return TryResolvePropertyAccessors(type);
-    }
-
-    private bool TryResolveOnProps(PropertyInfo[] props, string typeName, PropertyInfo? bridge, TypeProps tp)
-    {
-        var id = FindProp(props, "MessageId", "Id", "Uuid", "Nonce");
-        var content = FindProp(props, "MessageContent", "Content", "Text", "Body", "RawContent");
-        if (id == null || content == null) return false;
-
-        tp.Bridge = bridge;
-        tp.MessageId = id;
-        tp.Content = content;
-        tp.AuthorId = FindProp(props, "SenderUserId", "AuthorId", "SenderId", "UserId");
-        tp.Timestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp", "CreatedAt");
-
-        tp.SenderMember = FindProp(props, "SenderMember");
-
-        Logger.Log(Tag, $"Props on {typeName}{(bridge != null ? $" (via .{bridge.Name})" : "")}: " +
-            $"Id={id.Name}, Content={content.Name}, " +
-            $"DeletedAt={tp.DeletedAt?.Name ?? "?"}, EditedAt={tp.EditedAt?.Name ?? "?"}, SenderMember={tp.SenderMember?.Name ?? "?"}");
-        return true;
-    }
-
-    private static PropertyInfo? FindProp(PropertyInfo[] props, params string[] names)
-    {
-        foreach (var n in names)
-            foreach (var p in props)
-                if (p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) return p;
-        return null;
-    }
-
-    // ===== Collection Subscription =====
-
-    private void EnsureCollectionSubscription()
-    {
-        if (_chatItemsControl == null)
-        {
-            Logger.Log(Tag, "[ensure] no chatItemsControl — rediscovering");
-            TryRediscoverChat();
-            return;
-        }
-
-        // Every ~15 ticks (7.5s at 500ms interval), verify we're still tracking the ACTIVE
-        // RootMessageItemsControl. Root creates new control instances on channel switch;
-        // the old one may linger alive in the tree but with stale data.
-        _freshnessCounter++;
-        if (_freshnessCounter >= 15)
-        {
-            _freshnessCounter = 0;
-            var activeControl = FindActiveMessageControl();
-            if (activeControl != null && !ReferenceEquals(activeControl, _chatItemsControl))
-            {
-                var activeSource = ReadItemsSource(activeControl);
-                int activeCount = 0;
-                try { activeCount = (int)(activeSource?.GetType().GetProperty("Count")?.GetValue(activeSource) ?? 0); }
-                catch { }
-                Logger.Log(Tag, $"[ensure] Active control changed — switching to {activeControl.GetType().Name} with {activeCount} items");
-                // Flush buffered removes before discarding — real deletions from old channel shouldn't be lost
-                var flushSettings = UprootedSettings.Load();
-                FlushPendingRemoves(flushSettings);
-                UnsubscribeCollection();
-                _chatItemsControl = activeControl;
-                _currentItemsSource = activeSource;
-                _deletionEpoch++;
-                _contentSnapshot.Clear();
-                _addedViaEvent.Clear();
-                _pendingRemoves.Clear();
-                ClearInjectedCards("active control changed");
-                ReadCurrentChannelId();
-                if (activeSource != null)
-                {
-                    SubscribeToCollection(activeSource);
-                    SnapshotMessages(activeSource);
-                }
-                return;
-            }
-        }
-
-        var currentSource = ReadItemsSource(_chatItemsControl);
-        if (currentSource == null)
-        {
-            Logger.Log(Tag, "[ensure] ItemsSource is null — control may be dead, rediscovering");
-            _subscribed = false;
-            TryRediscoverChat();
-            return;
-        }
-
-        // Check if the control is still in the visual tree
-        bool controlAlive = _r.GetParent(_chatItemsControl) != null;
-
-        if (!ReferenceEquals(currentSource, _currentItemsSource))
-        {
-            int newCount = 0;
-            try { newCount = (int)(currentSource.GetType().GetProperty("Count")?.GetValue(currentSource) ?? 0); }
-            catch { }
-            Logger.Log(Tag, $"[ensure] ItemsSource ref changed — new count={newCount}, alive={controlAlive}");
-            // Flush buffered removes before discarding — real deletions from old source shouldn't be lost
-            var flushSettings = UprootedSettings.Load();
-            FlushPendingRemoves(flushSettings);
-            UnsubscribeCollection();
-            _currentItemsSource = currentSource;
-            _deletionEpoch++;
-            _contentSnapshot.Clear();
-            _addedViaEvent.Clear();
-            _pendingRemoves.Clear();
-            ClearInjectedCards("ItemsSource ref changed");
-            ReadCurrentChannelId();
-            SubscribeToCollection(currentSource);
-            SnapshotMessages(currentSource);
-        }
-        else if (!controlAlive)
-        {
-            Logger.Log(Tag, "[ensure] Control orphaned — rediscovering");
-            UnsubscribeCollection();
-            _chatItemsControl = null;
-            _currentItemsSource = null;
-            TryRediscoverChat();
-        }
-        else if (!_subscribed)
-        {
-            SubscribeToCollection(currentSource);
-            SnapshotMessages(currentSource);
-        }
-    }
-
-    /// <summary>
-    /// Quick scan to find a RootMessageItemsControl that differs from the one we're
-    /// currently tracking. Returns null if the current control is still the only active one.
-    /// If multiple exist, returns the one with a different ItemsSource reference (new channel).
-    /// </summary>
-    private object? FindActiveMessageControl()
-    {
-        try
-        {
-            object? lastFound = null;
-            foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
-            {
-                var tn = node.GetType().Name;
-                if (!tn.Contains("Message", StringComparison.OrdinalIgnoreCase) ||
-                    !tn.Contains("ItemsControl")) continue;
-
-                var source = ReadItemsSource(node);
-                if (source == null) continue;
-
-                int count = 0;
-                try { count = (int)(source.GetType().GetProperty("Count")?.GetValue(source) ?? 0); }
-                catch { }
-
-                if (count == 0) continue;
-
-                // If this is a DIFFERENT control or has a different ItemsSource, prefer it
-                if (!ReferenceEquals(node, _chatItemsControl) ||
-                    !ReferenceEquals(source, _currentItemsSource))
-                    return node;
-
-                lastFound = node;
-            }
-            return lastFound;
-        }
-        catch { }
-        return null;
-    }
-
-    private void TryRediscoverChat()
-    {
-        using var ev = WideEvent.Begin(Tag, "rediscover");
-        object? bestControl = null;
-        object? bestSource = null;
-        int bestCount = 0;
-
-        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
-        {
-            var tn = node.GetType().Name;
-            // Look for RootMessageItemsControl specifically, or any message-related ItemsControl
-            bool isMessageControl = tn.Contains("Message", StringComparison.OrdinalIgnoreCase);
-            if (!isMessageControl && !tn.Contains("ItemsControl") && tn != "ListBox") continue;
+            if (!typeName.Contains("ItemsControl") && typeName != "ListBox") continue;
 
             var source = ReadItemsSource(node);
             if (source == null) continue;
-
             var sourceType = source.GetType();
-            bool hasINCC = sourceType.GetInterfaces().Any(i => i.Name == "INotifyCollectionChanged");
-            if (!hasINCC) continue;
+            if (!sourceType.GetInterfaces().Any(i => i.Name == "INotifyCollectionChanged")) continue;
 
             int count = 0;
             try { count = (int)(sourceType.GetProperty("Count")?.GetValue(source) ?? 0); }
             catch { }
 
-            // Check if items are message-like
-            bool isChat = isMessageControl;
+            bool isChat = typeName.Contains("Message", StringComparison.OrdinalIgnoreCase);
             if (!isChat && count > 0)
             {
                 try
                 {
                     var en = (source as System.Collections.IEnumerable)?.GetEnumerator();
                     if (en != null && en.MoveNext() && en.Current != null)
-                    {
-                        // For generic controls, ONLY trust explicit MessageViewModel type name
-                        // (don't call TryResolvePropertyAccessors — emoji/reaction items can
-                        // have matching property names like Id/Content and produce false positives)
                         isChat = en.Current.GetType().Name.Contains("MessageViewModel");
-                    }
                 }
                 catch { }
             }
 
-            if (!isChat) continue;
-
-            // Prefer message-named controls (RootMessageItemsControl) over generic ones
-            bool bestIsMessageNamed = bestControl != null &&
-                bestControl.GetType().Name.Contains("Message", StringComparison.OrdinalIgnoreCase);
-            bool shouldReplace = bestControl == null
-                || (isMessageControl && !bestIsMessageNamed)    // message-named always beats generic
-                || (isMessageControl == bestIsMessageNamed && count > bestCount); // same tier: more items wins
-
-            if (shouldReplace)
+            if (isChat && _chatItemsControl == null)
             {
-                bestControl = node;
-                bestSource = source;
-                bestCount = count;
+                Logger.Log(Tag, $"Chat control found: {typeName}, {count} items");
+                _chatItemsControl = node;
+                _currentItemsSource = source;
+                break;
             }
         }
+    }
 
-        if (bestControl != null && bestSource != null)
+    private void ResolvePropsFromCollection(object collection)
+    {
+        try
         {
-            ev.Set("found", bestControl.GetType().Name);
-            ev.Set("items", bestCount);
-            _chatItemsControl = bestControl;
-            _deletionEpoch++;
-            _currentItemsSource = bestSource;
-            _contentSnapshot.Clear();
-            _addedViaEvent.Clear();
-            ClearInjectedCards("rediscover: new control found");
-            ReadCurrentChannelId();
-            SubscribeToCollection(bestSource);
-            SnapshotMessages(bestSource);
+            var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
+            if (en != null && en.MoveNext() && en.Current != null)
+                TryResolvePropertyAccessors(en.Current.GetType());
         }
-        else
-        {
-            ev.Set("found", "none");
-        }
+        catch { }
     }
 
     private void SubscribeToCollection(object collection)
@@ -776,12 +689,11 @@ internal class MessageLogger : IDisposable
             _collectionChangedHandler = handler;
             _collectionChangedEvent = ev;
             _subscribed = true;
-            _pendingRemoves.Clear();
-            Logger.Log(Tag, "Subscribed to CollectionChanged");
+            Logger.Log(Tag, "Subscribed to CollectionChanged (fallback)");
         }
         catch (Exception ex)
         {
-            Logger.Log(Tag, $"Subscribe error: {ex.Message}");  // rare error — keep as diagnostic
+            Logger.Log(Tag, $"Subscribe error: {ex.Message}");
             _subscribed = false;
         }
     }
@@ -795,183 +707,13 @@ internal class MessageLogger : IDisposable
         _subscribed = false;
     }
 
-    // ===== PropertyChanged Subscription for Instant Detection =====
-
-    /// <summary>
-    /// Subscribe to INotifyPropertyChanged on the Message bridge target for instant
-    /// DeletedAt/EditedAt detection. PropertyChanged is a standard CLR event (not a
-    /// RoutedEvent), so EventInfo.AddEventHandler is safe here.
-    /// </summary>
-    private void SubscribePropertyChanged(object item, string msgId)
-    {
-        if (_propertyChangedSubs.ContainsKey(msgId)) return;
-
-        var tp = GetTypeProps(item);
-        if (tp == null) return;
-
-        object? target = GetMessageTarget(item, tp);
-        if (target == null) return;
-
-        try
-        {
-            var pcEvent = target.GetType().GetEvent("PropertyChanged");
-            if (pcEvent == null) return;
-
-            // Build handler using Expression.Lambda to match the exact delegate type
-            // PropertyChanged uses PropertyChangedEventHandler(object, PropertyChangedEventArgs)
-            var handlerType = pcEvent.EventHandlerType;
-            if (handlerType == null) return;
-
-            var invokeMethod = handlerType.GetMethod("Invoke");
-            if (invokeMethod == null) return;
-
-            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
-            if (paramTypes.Length != 2) return;
-
-            var capturedMsgId = msgId;
-            var capturedEpoch = _deletionEpoch;
-            var callback = new Action<object, object>((sender, args) =>
-            {
-                try
-                {
-                    // Abort if epoch changed (channel switch)
-                    if (_deletionEpoch != capturedEpoch) return;
-
-                    // Read PropertyName from the args
-                    var propNameProp = args.GetType().GetProperty("PropertyName");
-                    var propName = propNameProp?.GetValue(args) as string;
-                    if (propName == null) return;
-
-                    if (propName == "DeletedAt")
-                        OnDeletedAtChanged(capturedMsgId, sender);
-                    else if (propName == "EditedAt")
-                        OnEditedAtChanged(capturedMsgId, sender);
-                }
-                catch (Exception ex) { Logger.Log(Tag, $"[INPC] handler error: {ex.Message}"); }
-            });
-
-            var sParam = Expression.Parameter(paramTypes[0], "sender");
-            var eParam = Expression.Parameter(paramTypes[1], "e");
-            var body = Expression.Invoke(
-                Expression.Constant(callback),
-                Expression.Convert(sParam, typeof(object)),
-                Expression.Convert(eParam, typeof(object)));
-            var handler = Expression.Lambda(handlerType, body, sParam, eParam).Compile();
-
-            pcEvent.AddEventHandler(target, handler);
-            _propertyChangedSubs[msgId] = (target, handler);
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"[INPC] Subscribe error for {msgId}: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Called when DeletedAt changes on a subscribed message — instant deletion detection.
-    /// </summary>
-    private void OnDeletedAtChanged(string msgId, object sender)
-    {
-        _r.RunOnUIThread(() =>
-        {
-            try
-            {
-                if (_messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
-                {
-                    using var ev = WideEvent.Begin(Tag, "msg_deleted");
-                    cached.IsDeleted = true;
-                    cached.DeletedAt = DateTime.UtcNow;
-                    _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
-                    ev.Set("msg_id", msgId);
-                    ev.Set("content", Truncate(cached.Content, 80));
-                    ev.Set("source", "inpc");
-
-                    var settings = UprootedSettings.Load();
-                    InjectDeletedMessageCards(settings);
-                }
-            }
-            catch (Exception ex) { Logger.Log(Tag, $"[INPC] OnDeletedAt error: {ex.Message}"); }
-        });
-    }
-
-    /// <summary>
-    /// Called when EditedAt changes on a subscribed message — instant edit detection.
-    /// </summary>
-    private void OnEditedAtChanged(string msgId, object sender)
-    {
-        _r.RunOnUIThread(() =>
-        {
-            try
-            {
-                if (_messageCache.TryGetValue(msgId, out var cached))
-                {
-                    // Capture previous content from snapshot before it's updated
-                    _contentSnapshot.TryGetValue(msgId, out var prevContent);
-
-                    // Read current content from the message model
-                    string? currentContent = null;
-                    if (_propertyChangedSubs.TryGetValue(msgId, out var sub))
-                    {
-                        var tp = _typePropsCache.Values.FirstOrDefault(t => t.SenderMember != null) ??
-                                 _typePropsCache.Values.FirstOrDefault();
-                        if (tp?.Content != null)
-                        {
-                            try { currentContent = tp.Content.GetValue(sub.target) as string; }
-                            catch { }
-                        }
-                    }
-
-                    if (!string.IsNullOrEmpty(prevContent) &&
-                        !string.IsNullOrEmpty(currentContent) &&
-                        prevContent != currentContent)
-                    {
-                        using var ev = WideEvent.Begin(Tag, "msg_edited");
-                        cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prevContent });
-                        cached.Content = currentContent;
-                        _contentSnapshot[msgId] = currentContent;
-                        _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, prevContent);
-                        ev.Set("msg_id", msgId);
-                        ev.Set("old", Truncate(prevContent, 40));
-                        ev.Set("new", Truncate(currentContent, 40));
-                        ev.Set("source", "inpc");
-
-                        var settings = UprootedSettings.Load();
-                        InjectEditIndicators(settings);
-                    }
-                }
-            }
-            catch (Exception ex) { Logger.Log(Tag, $"[INPC] OnEditedAt error: {ex.Message}"); }
-        });
-    }
-
-    /// <summary>
-    /// Unsubscribe all PropertyChanged handlers. Called on channel switch / epoch change.
-    /// </summary>
-    private void UnsubscribeAllPropertyChanged()
-    {
-        foreach (var (msgId, sub) in _propertyChangedSubs)
-        {
-            try
-            {
-                var pcEvent = sub.target.GetType().GetEvent("PropertyChanged");
-                pcEvent?.RemoveEventHandler(sub.target, sub.handler);
-            }
-            catch { }
-        }
-        if (_propertyChangedSubs.Count > 0)
-            Logger.Log(Tag, $"Unsubscribed {_propertyChangedSubs.Count} INPC handlers");
-        _propertyChangedSubs.Clear();
-    }
-
     private void SnapshotMessages(object collection)
     {
         if (!_propertiesResolved) return;
-        _orderedIds.Clear();
-        _orderedIdIndex.Clear();
         using var ev = WideEvent.Begin(Tag, "snapshot");
         try
         {
-            int snapshotCount = 0;
+            int count = 0;
             var en = (collection as System.Collections.IEnumerable)?.GetEnumerator();
             if (en == null) return;
             while (en.MoveNext())
@@ -982,22 +724,20 @@ internal class MessageLogger : IDisposable
                 if (msgId == null) continue;
                 _contentSnapshot[msgId] = ReadContent(item) ?? "";
                 CacheMessage(item, msgId);
-                if (!_orderedIdIndex.ContainsKey(msgId))
-                {
-                    _orderedIdIndex[msgId] = _orderedIds.Count;
-                    _orderedIds.Add(msgId);
-                }
-                snapshotCount++;
+                count++;
             }
-            ev.Set("messages", snapshotCount);
+            ev.Set("messages", count);
         }
         catch (Exception ex) { ev.SetError(ex); }
     }
 
-    // ===== CollectionChanged =====
-
+    /// <summary>
+    /// Minimal CollectionChanged handler for fallback mode.
+    /// Remove events check DeletedAt immediately — no pollers.
+    /// </summary>
     private void OnCollectionChanged(object args)
     {
+        if (!_propertiesResolved) return;
         try
         {
             var argsType = args.GetType();
@@ -1005,550 +745,281 @@ internal class MessageLogger : IDisposable
 
             switch (action)
             {
-                case 0: // Add — cache new messages for content preservation
+                case 0: // Add
+                {
                     var newItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
-                    if (newItems != null) HandleAdded(newItems);
-                    break;
+                    if (newItems == null) break;
+                    foreach (var item in newItems)
+                    {
+                        if (item == null) continue;
+                        var msgId = ReadMessageId(item);
+                        if (msgId == null) continue;
+                        _contentSnapshot[msgId] = ReadContent(item) ?? "";
+                        CacheMessage(item, msgId);
 
-                case 1: // Remove — buffer for debounced deletion detection
+                        if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
+                        {
+                            _pendingAuditDeletes.Remove(msgId);
+                            if (_messageCache.TryGetValue(msgId, out var cached))
+                            {
+                                cached.IsDeleted = true;
+                                cached.DeletedAt = DateTime.UtcNow;
+                                cached.DeletedBy = pendingAudit.ActorId;
+                                cached.DeletedByName = pendingAudit.ActorName;
+                                _store.RecordDeletion(cached.MessageId, cached.ChannelId,
+                                    cached.DeletedAt.Value, cached.DeletedBy, cached.DeletedByName);
+                            }
+                        }
+                    }
+                    break;
+                }
+
+                case 1: // Remove — check DeletedAt immediately (no pollers)
+                {
                     var oldItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
-                    int removeIndex = -1;
-                    try { removeIndex = (int)(argsType.GetProperty("OldStartingIndex")?.GetValue(args) ?? -1); }
-                    catch { }
-                    if (oldItems != null) HandleRemoved(oldItems, removeIndex);
-                    break;
+                    if (oldItems == null) break;
+                    foreach (var item in oldItems)
+                    {
+                        if (item == null) continue;
+                        var msgId = ReadMessageId(item);
+                        if (msgId == null) continue;
 
-                case 2: // Replace — snapshot update + event-driven edit detection
-                    var oldReplaceItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+                        var tp = GetTypeProps(item);
+                        var target = tp != null ? GetMessageTarget(item, tp) : null;
+                        bool isDeleted = false;
+                        if (target != null && tp?.DeletedAt != null)
+                        {
+                            try
+                            {
+                                var val = tp.DeletedAt.GetValue(target);
+                                isDeleted = val is DateTimeOffset || (val is bool b && b);
+                            }
+                            catch { }
+                        }
+
+                        if (isDeleted && _messageCache.TryGetValue(msgId, out var cached) && !cached.IsDeleted)
+                        {
+                            using var ev = WideEvent.Begin(Tag, "msg_deleted");
+                            cached.IsDeleted = true;
+                            cached.DeletedAt = DateTime.UtcNow;
+                            _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
+                            ev.Set("msg_id", msgId);
+                            ev.Set("source", "collection_fallback");
+                        }
+                        _contentSnapshot.Remove(msgId);
+                    }
+                    break;
+                }
+
+                case 2: // Replace — edit detection
+                {
                     var newReplaceItems = argsType.GetProperty("NewItems")?.GetValue(args) as System.Collections.IList;
-                    if (newReplaceItems != null) HandleReplaced(oldReplaceItems, newReplaceItems);
-                    break;
+                    var oldReplaceItems = argsType.GetProperty("OldItems")?.GetValue(args) as System.Collections.IList;
+                    if (newReplaceItems == null) break;
 
-                case 4: // Reset — Root rebuilt the collection, force re-discovery
-                    Logger.Log(Tag, "Collection Reset — forcing re-discovery");
-                    _deletionEpoch++;
+                    var settings = UprootedSettings.Load();
+                    for (int i = 0; i < newReplaceItems.Count; i++)
+                    {
+                        var newItem = newReplaceItems[i];
+                        if (newItem == null) continue;
+                        var msgId = ReadMessageId(newItem);
+                        if (msgId == null) continue;
+
+                        var newContent = ReadContent(newItem) ?? "";
+                        _contentSnapshot.TryGetValue(msgId, out var oldContent);
+                        if (string.IsNullOrEmpty(oldContent) && oldReplaceItems != null && i < oldReplaceItems.Count)
+                        {
+                            var oldItem = oldReplaceItems[i];
+                            if (oldItem != null) oldContent = ReadContent(oldItem) ?? "";
+                        }
+
+                        _contentSnapshot[msgId] = newContent;
+                        if (_messageCache.TryGetValue(msgId, out var existingCached))
+                            existingCached.Content = newContent;
+                        else
+                            CacheMessage(newItem, msgId);
+
+                        if (!settings.MessageLoggerLogEdits) continue;
+                        if (string.IsNullOrEmpty(oldContent) || oldContent == newContent) continue;
+
+                        bool confirmed = ReadHasBeenEdited(newItem) != false;
+                        if (confirmed && _messageCache.TryGetValue(msgId, out var cached))
+                        {
+                            using var ev = WideEvent.Begin(Tag, "msg_edited");
+                            cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
+                            cached.Content = newContent;
+                            _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, oldContent);
+                            ev.Set("msg_id", msgId);
+                            ev.Set("source", "collection_fallback");
+                        }
+                    }
+                    break;
+                }
+
+                case 4: // Reset
+                    Logger.Log(Tag, "Collection Reset — clearing state");
                     _contentSnapshot.Clear();
-                    _addedViaEvent.Clear();
-                    _orderedIds.Clear();
-                    _orderedIdIndex.Clear();
-                    _pendingRemoves.Clear();
-                    ClearInjectedCards("CollectionChanged Reset (action=4)");
+                    ClearInjectedCards("collection reset");
                     UnsubscribeCollection();
                     _chatItemsControl = null;
                     _currentItemsSource = null;
-                    _subscribed = false;
                     break;
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"CollectionChanged error: {ex.Message}"); }
     }
 
-    private void HandleAdded(System.Collections.IList items)
+    // ===== Channel Switch Detection =====
+
+    private void CheckForChannelSwitch()
     {
-        if (!_propertiesResolved) return;
-        foreach (var item in items)
+        if (_usingDynamicData)
         {
-            if (item == null) continue;
-            var msgId = ReadMessageId(item);
-            if (msgId == null) continue;
-            _contentSnapshot[msgId] = ReadContent(item) ?? "";
-            // Record Add timestamp for edit detection grace-period gating.
-            // Only messages seen via Add events (not initial snapshot) are eligible.
-            _addedViaEvent[msgId] = DateTime.UtcNow;
-            CacheMessage(item, msgId);
+            // Every 15 ticks (~7.5s), check if the content VM changed
+            if (_channelCheckCounter % 15 != 0) return;
 
-            // Subscribe to PropertyChanged on the bridge target for instant deletion/edit detection
-            SubscribePropertyChanged(item, msgId);
-
-            // Apply any pending audit log deletion that arrived before this message was cached
-            if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
+            var currentVM = FindContentViewModel();
+            if (currentVM != null && !ReferenceEquals(currentVM, _currentContentVM))
             {
-                _pendingAuditDeletes.Remove(msgId);
-                if (_messageCache.TryGetValue(msgId, out var auditCached))
+                Logger.Log(Tag, "[dd] Channel switch detected — resubscribing");
+                UnsubscribeConnectMessages();
+                _contentSnapshot.Clear();
+                ClearInjectedCards("channel switch");
+
+                if (TrySubscribeConnectMessages(currentVM))
                 {
-                    auditCached.IsDeleted = true;
-                    auditCached.DeletedAt = DateTime.UtcNow;
-                    auditCached.DeletedBy = pendingAudit.ActorId;
-                    auditCached.DeletedByName = pendingAudit.ActorName;
-                    _store.RecordDeletion(auditCached.MessageId, auditCached.ChannelId,
-                        auditCached.DeletedAt.Value, auditCached.DeletedBy, auditCached.DeletedByName);
-                    Logger.Log(Tag, $"[audit] Applied pending delete on Add: {msgId} by @{pendingAudit.ActorName}");
+                    _currentContentVM = currentVM;
+                    _usingDynamicData = true;
                 }
+                ReadCurrentChannelId();
+                // Re-find chat control for visual injection
+                _chatItemsControl = null;
+                FindChatItemsControl();
             }
-
-            if (!_orderedIdIndex.ContainsKey(msgId))
-            {
-                _orderedIdIndex[msgId] = _orderedIds.Count;
-                _orderedIds.Add(msgId);
-            }
-            _addsSinceFlush++;
         }
-        Logger.Log(Tag, $"[add-event] +{items.Count} (total adds since flush: {_addsSinceFlush})");
-    }
-
-    /// <summary>
-    /// Called on CollectionChanged Replace (action=2). Updates snapshots and detects genuine
-    /// edits using two strategies:
-    ///   1. Primary: Check if EditedAt is non-null on new item (confirms genuine edit regardless
-    ///      of timing). This bypasses the grace period entirely.
-    ///   2. Fallback: Grace-period gating — the message must have arrived via an Add event and
-    ///      the Replace must arrive more than EditGracePeriodSeconds after the Add.
-    /// </summary>
-    private void HandleReplaced(System.Collections.IList? oldItems, System.Collections.IList newItems)
-    {
-        if (!_propertiesResolved) return;
-        var settings = UprootedSettings.Load();
-
-        for (int i = 0; i < newItems.Count; i++)
+        else
         {
-            var newItem = newItems[i];
-            if (newItem == null) continue;
-            var msgId = ReadMessageId(newItem);
-            if (msgId == null) continue;
-            var newContent = ReadContent(newItem) ?? "";
-
-            // Capture old content from snapshot BEFORE overwriting it.
-            // Fall back to OldItems if not in snapshot (e.g. first Replace after restart).
-            _contentSnapshot.TryGetValue(msgId, out var oldContent);
-            if (string.IsNullOrEmpty(oldContent) && oldItems != null && i < oldItems.Count)
+            // Periodically try to upgrade from fallback to DynamicData
+            if (_channelCheckCounter % 30 == 0)
             {
-                var oldItem = oldItems[i];
-                if (oldItem != null) oldContent = ReadContent(oldItem) ?? "";
-            }
-
-            // Always update snapshot and cache with new content.
-            _contentSnapshot[msgId] = newContent;
-            if (_messageCache.TryGetValue(msgId, out var existingCached))
-                existingCached.Content = newContent;
-            else
-                CacheMessage(newItem, msgId);
-
-            // Re-subscribe PropertyChanged on the new item (Replace swaps the ViewModel)
-            SubscribePropertyChanged(newItem, msgId);
-
-            // Edit detection — gated by Add-event eligibility.
-            if (!settings.MessageLoggerLogEdits) continue;
-            if (string.IsNullOrEmpty(oldContent) || oldContent == newContent) continue;
-
-            // Strategy 1: EditedAt non-null on new item → confirmed edit (bypasses grace period)
-            bool? editedAtConfirmed = ReadHasBeenEdited(newItem);
-            bool confirmedByEditedAt = editedAtConfirmed == true;
-
-            // Strategy 2: Grace-period gating (fallback for items without EditedAt)
-            bool confirmedByGracePeriod = false;
-            if (!confirmedByEditedAt && _addedViaEvent.TryGetValue(msgId, out var addTime))
-            {
-                double ageSeconds = (DateTime.UtcNow - addTime).TotalSeconds;
-                if (ageSeconds < EditGracePeriodSeconds)
+                var vm = FindContentViewModel();
+                if (vm != null && TrySubscribeConnectMessages(vm))
                 {
-                    Logger.Log(Tag, $"[edit-gate] {msgId}: age={ageSeconds:F1}s < grace ({EditGracePeriodSeconds}s), EditedAt={editedAtConfirmed}, skipping");
-                    continue;
-                }
-                confirmedByGracePeriod = true;
-            }
-
-            if (!confirmedByEditedAt && !confirmedByGracePeriod) continue;
-
-            if (_messageCache.TryGetValue(msgId, out var cached))
-            {
-                using var ev = WideEvent.Begin(Tag, "msg_edited");
-                cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = oldContent });
-                cached.Content = newContent;
-                _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, oldContent);
-                ev.Set("msg_id", msgId);
-                ev.Set("method", confirmedByEditedAt ? "EditedAt" : "grace-period");
-                ev.Set("old", Truncate(oldContent, 40));
-                ev.Set("new", Truncate(newContent, 40));
-                ev.Set("source", "replace_event");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Buffer removed items and spawn a fast async poller per item.
-    ///
-    /// Captures the ViewModel and bridge target references NOW (while alive).
-    /// Root sets DeletedAt asynchronously after the Remove event, so we
-    /// poll the stored references every 300ms for up to 3s.
-    /// The poller also re-reads the bridge from the ViewModel on each tick
-    /// (in case Root replaces the bridge target object).
-    /// An epoch counter cancels pollers after channel switches.
-    /// </summary>
-    private void HandleRemoved(System.Collections.IList items, int removeIndex)
-    {
-        if (!_propertiesResolved) return;
-        foreach (var item in items)
-        {
-            if (item == null) continue;
-            var msgId = ReadMessageId(item);
-            if (msgId == null) continue;
-
-            // Skip already-deleted messages — don't spawn pollers for them (prevents spam)
-            if (_messageCache.TryGetValue(msgId, out var alreadyCached) && alreadyCached.IsDeleted)
-            {
-                Logger.Log(Tag, $"[remove-event] skipped (already deleted): {msgId}");
-                continue;
-            }
-
-            var content = ReadContent(item) ?? "";
-
-            // Also check cache for richer content (sometimes ViewModel content is empty on removal)
-            if (string.IsNullOrEmpty(content) && alreadyCached != null)
-                content = alreadyCached.Content;
-
-            // Capture ViewModel + bridge target references
-            var tp = GetTypeProps(item);
-            object? bridgeTarget = null;
-            if (tp != null)
-            {
-                try { bridgeTarget = GetMessageTarget(item, tp); }
-                catch { }
-            }
-
-            _removesSinceFlush++;
-            var buffered = new BufferedRemove
-            {
-                MessageId = msgId,
-                Content = content,
-                ViewModel = item,
-                BridgeTarget = bridgeTarget,
-                Props = tp,
-                RemoveIndex = removeIndex,
-            };
-            _pendingRemoves.Add(buffered);
-            Logger.Log(Tag, $"[remove-event] buffered: {msgId} idx={removeIndex} bridgeTarget={bridgeTarget != null} ({Truncate(content, 40)})");
-
-            // Spawn async poller
-            if (tp != null)
-            {
-                var epoch = _deletionEpoch;
-                var doDump = _boolDumpCount < 3;
-                if (doDump) _boolDumpCount++;
-                StartDeletionPoller(buffered, epoch, doDump);
-            }
-        }
-    }
-
-    /// <summary>
-    /// Async poller: checks DeletedAt every 300ms for up to 3s.
-    ///
-    /// On each tick:
-    ///   1. Check epoch — abort if channel switched
-    ///   2. Re-read bridge target from ViewModel (catches bridge replacement)
-    ///   3. Read DeletedAt from both captured and fresh bridge targets
-    ///   4. If non-null → mark as deleted + inject card on UI thread
-    ///
-    /// Fallback: If DeletedAt stays null after 3s (Root doesn't set it for self-deletes),
-    /// check if the message is actually absent from the live collection. If gone, it's
-    /// a genuine deletion.
-    ///
-    /// On first and last attempt for the first few removes, dumps boolean +
-    /// DateTimeOffset? properties on the bridge target for diagnostics.
-    /// </summary>
-    private void StartDeletionPoller(BufferedRemove remove, int epochAtRemoval, bool dumpBoolProps)
-    {
-        Task.Run(async () =>
-        {
-            for (int attempt = 0; attempt < 10; attempt++)
-            {
-                await Task.Delay(300);
-
-                // Epoch check: abort if channel switched
-                if (_deletionEpoch != epochAtRemoval)
-                {
-                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: epoch changed ({epochAtRemoval}->{_deletionEpoch}), aborting");
+                    UnsubscribeCollection();
+                    _currentContentVM = vm;
+                    _usingDynamicData = true;
+                    Logger.Log(Tag, "[dd] Upgraded from fallback to DynamicData");
+                    ReadCurrentChannelId();
                     return;
                 }
-
-                // Try BOTH the captured bridge target AND a fresh re-read from the ViewModel
-                bool? valCaptured = ReadDeferredHasBeenDeleted(remove.BridgeTarget, remove.Props);
-                bool? valFresh = ReadFreshHasBeenDeleted(remove.ViewModel, remove.Props);
-
-                if (valCaptured == true || valFresh == true)
-                {
-                    Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=non-null at attempt {attempt} ({(attempt + 1) * 300}ms) captured={valCaptured} fresh={valFresh}");
-                    _r.RunOnUIThread(() =>
-                    {
-                        if (_deletionEpoch != epochAtRemoval) return;
-                        MarkAsDeleted(remove);
-                        var settings = UprootedSettings.Load();
-                        InjectDeletedMessageCards(settings);
-                    });
-                    return;
-                }
-
-                // Diagnostic: dump all boolean + DateTimeOffset? properties on first and last attempt
-                if (dumpBoolProps && (attempt == 0 || attempt == 9))
-                    DumpBooleanProperties(remove, attempt);
             }
 
-            // After 3s, DeletedAt still null. Root doesn't set it for self-initiated deletes.
-            // Fallback: check if the message is absent from the live collection — if gone, it's
-            // a genuine deletion (not buffer management, which re-adds at a different index).
-            if (_deletionEpoch != epochAtRemoval) return;
-
-            _r.RunOnUIThread(() =>
+            // Fallback channel switch: check ItemsSource ref
+            if (_chatItemsControl == null)
             {
-                try
+                FindChatItemsControl();
+                if (_chatItemsControl != null)
                 {
-                    if (_deletionEpoch != epochAtRemoval) return;
-
-                    // Check if the message ID is still in the live collection
-                    bool stillPresent = IsMessageInCollection(remove.MessageId);
-                    if (!stillPresent && !string.IsNullOrEmpty(remove.Content))
+                    _currentItemsSource = ReadItemsSource(_chatItemsControl);
+                    if (_currentItemsSource != null && !_subscribed)
                     {
-                        Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=null but ABSENT from collection — marking as deleted (self-delete fallback)");
-                        MarkAsDeleted(remove);
-                        var settings = UprootedSettings.Load();
-                        InjectDeletedMessageCards(settings);
-                    }
-                    else
-                    {
-                        Logger.Log(Tag, $"[async-poll] {remove.MessageId}: DeletedAt=null, present={stillPresent} — buffer management");
+                        ResolvePropsFromCollection(_currentItemsSource);
+                        SubscribeToCollection(_currentItemsSource);
+                        SnapshotMessages(_currentItemsSource);
                     }
                 }
-                catch (Exception ex) { Logger.Log(Tag, $"[async-poll] fallback error: {ex.Message}"); }
-            });
-        });
-    }
+                ReadCurrentChannelId();
+                return;
+            }
 
-    /// <summary>
-    /// Check if a message ID is currently present in the live collection.
-    /// Must be called on the UI thread.
-    /// </summary>
-    private bool IsMessageInCollection(string msgId)
-    {
-        if (_currentItemsSource == null) return false;
-        try
-        {
-            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
-            if (en == null) return false;
-            while (en.MoveNext())
+            var currentSource = ReadItemsSource(_chatItemsControl);
+            if (currentSource == null)
             {
-                if (en.Current == null) continue;
-                var id = ReadMessageId(en.Current);
-                if (id == msgId) return true;
+                _subscribed = false;
+                _chatItemsControl = null;
+                _currentItemsSource = null;
+                return;
+            }
+
+            if (!ReferenceEquals(currentSource, _currentItemsSource))
+            {
+                UnsubscribeCollection();
+                _currentItemsSource = currentSource;
+                _contentSnapshot.Clear();
+                ClearInjectedCards("ItemsSource changed");
+                ReadCurrentChannelId();
+                ResolvePropsFromCollection(currentSource);
+                SubscribeToCollection(currentSource);
+                SnapshotMessages(currentSource);
             }
         }
-        catch { }
-        return false;
     }
 
-    /// <summary>
-    /// Re-read DeletedAt from ViewModel by re-traversing the bridge.
-    /// Catches cases where Root replaces the bridge target object after removal.
-    /// </summary>
-    private static bool? ReadFreshHasBeenDeleted(object? viewModel, TypeProps? props)
+    private void ReadCurrentChannelId()
     {
-        if (viewModel == null || props == null) return null;
-        try
+        // Try reading from content VM (most reliable)
+        if (_currentContentVM != null)
         {
-            object? target = viewModel;
-            if (props.Bridge != null)
-                target = props.Bridge.GetValue(viewModel);
-            if (target == null || props.DeletedAt == null) return null;
-            var val = props.DeletedAt.GetValue(target);
-            // DateTimeOffset? — non-null means deleted; also handle legacy bool
-            if (val is bool b) return b;
-            if (val is DateTimeOffset) return true;
-            if (props.DeletedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
-            return null;
-        }
-        catch { return null; }
-    }
-
-    /// <summary>
-    /// Diagnostic: log boolean + DateTimeOffset? properties on the bridge target.
-    /// Reveals which property Root uses for deletion/edit signaling.
-    /// </summary>
-    private static void DumpBooleanProperties(BufferedRemove remove, int attempt)
-    {
-        try
-        {
-            var target = remove.BridgeTarget;
-            if (target == null) return;
-            var tag = attempt == 0 ? "prop-dump-t0" : "prop-dump-t3s";
-            var props = target.GetType().GetProperties(
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
-            foreach (var p in props)
+            try
             {
-                if (!p.CanRead) continue;
-
-                // Dump bool properties
-                if (p.PropertyType == typeof(bool))
+                var vmType = _currentContentVM.GetType();
+                var channelProp = vmType.GetProperty("Channel");
+                if (channelProp != null)
                 {
-                    try
-                    {
-                        var v = p.GetValue(target);
-                        Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
-                    }
-                    catch { }
+                    var channel = channelProp.GetValue(_currentContentVM);
+                    var id = channel?.GetType().GetProperty("Id")?.GetValue(channel)?.ToString();
+                    if (!string.IsNullOrEmpty(id)) { _currentChannelId = id!; return; }
                 }
-                // Dump DateTimeOffset? and DateTimeOffset properties (DeletedAt, EditedAt, PinnedAt etc.)
-                else if (p.PropertyType == typeof(DateTimeOffset?) || p.PropertyType == typeof(DateTimeOffset))
+                var dmVmProp = vmType.GetProperty("DirectMessageViewModel");
+                if (dmVmProp != null)
                 {
-                    try
-                    {
-                        var v = p.GetValue(target);
-                        Logger.Log("MsgLogger", $"[{tag}] {remove.MessageId}: {p.Name}={v}");
-                    }
-                    catch { }
+                    var dmVM = dmVmProp.GetValue(_currentContentVM);
+                    var dm = dmVM?.GetType().GetProperty("DirectMessage")?.GetValue(dmVM);
+                    var id = dm?.GetType().GetProperty("Id")?.GetValue(dm)?.ToString();
+                    if (!string.IsNullOrEmpty(id)) { _currentChannelId = id!; return; }
                 }
             }
-        }
-        catch { }
-    }
-
-    /// <summary>
-    /// Flush buffered removes: cleanup content snapshots and detect bulk channel switches.
-    /// Actual deletion detection is handled by async pollers (StartDeletionPoller).
-    /// This just manages housekeeping and the bulk safety net.
-    /// </summary>
-    private void FlushPendingRemoves(UprootedSettings settings, WideEvent? scanEv = null)
-    {
-        if (_pendingRemoves.Count == 0)
-        {
-            _addsSinceFlush = 0;
-            _removesSinceFlush = 0;
-            return;
+            catch { }
         }
 
-        int count = _pendingRemoves.Count;
-
-        int collectionSize = 0;
-        try
+        // Fallback: walk up from chat control
+        if (_chatItemsControl == null) return;
+        var current = _chatItemsControl;
+        for (int i = 0; i < 10 && current != null; i++)
         {
-            if (_currentItemsSource != null)
-                collectionSize = (int)(_currentItemsSource.GetType().GetProperty("Count")?.GetValue(_currentItemsSource) ?? 0);
-        }
-        catch { }
-
-        scanEv?.Set("flush_removes", count);
-        scanEv?.Set("flush_adds", _addsSinceFlush);
-        scanEv?.Set("flush_collection_size", collectionSize);
-
-        // Bulk safety net: 10+ removes is a channel switch
-        if (count >= 10)
-        {
-            _deletionEpoch++;
-            scanEv?.Set("bulk_channel_switch", true);
-            scanEv?.Set("epoch", _deletionEpoch);
-            scanEv?.MarkNotable();
-            _pendingRemoves.Clear();
-            _contentSnapshot.Clear();
-            _addedViaEvent.Clear();
-            _orderedIds.Clear();
-            _orderedIdIndex.Clear();
-            ClearInjectedCards("bulk removes (channel switch)");
-            _addsSinceFlush = 0;
-            _removesSinceFlush = 0;
-            return;
-        }
-
-        // Clean up content snapshots for removed messages
-        foreach (var removed in _pendingRemoves)
-            _contentSnapshot.Remove(removed.MessageId);
-
-        _pendingRemoves.Clear();
-        _addsSinceFlush = 0;
-        _removesSinceFlush = 0;
-    }
-
-    /// <summary>
-    /// Mark a buffered remove as a genuine deletion — persist to cache and store.
-    /// </summary>
-    private void MarkAsDeleted(BufferedRemove removed)
-    {
-        if (_messageCache.TryGetValue(removed.MessageId, out var cached) && !cached.IsDeleted)
-        {
-            using var ev = WideEvent.Begin(Tag, "msg_deleted");
-            cached.IsDeleted = true;
-            cached.DeletedAt = DateTime.UtcNow;
-            _store.RecordDeletion(removed.MessageId, cached.ChannelId, DateTime.UtcNow);
-            ev.Set("msg_id", removed.MessageId);
-            ev.Set("content", Truncate(cached.Content, 80));
-            ev.Set("source", "poll");
-        }
-        else if (!_messageCache.ContainsKey(removed.MessageId) && !string.IsNullOrEmpty(removed.Content))
-        {
-            using var ev = WideEvent.Begin(Tag, "msg_deleted");
-            var newCached = new CachedMessage
+            object? dc = ReadDC(current);
+            if (dc != null)
             {
-                MessageId = removed.MessageId,
-                ChannelId = _currentChannelId,
-                AuthorId = "",
-                AuthorName = "Unknown",
-                Timestamp = DateTime.UtcNow,
-                Content = removed.Content,
-                IsDeleted = true,
-                DeletedAt = DateTime.UtcNow
-            };
-            _messageCache[removed.MessageId] = newCached;
-            _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
-                newCached.AuthorId, newCached.AuthorName, newCached.Timestamp, newCached.Content);
-            _store.RecordDeletion(removed.MessageId, newCached.ChannelId, DateTime.UtcNow);
-            ev.Set("msg_id", removed.MessageId);
-            ev.Set("content", Truncate(removed.Content, 80));
-            ev.Set("source", "poll_uncached");
-        }
-    }
-
-    // ===== Edit Detection via Polling =====
-
-    private void PollEdits(UprootedSettings settings)
-    {
-        if (!settings.MessageLoggerLogEdits || _currentItemsSource == null) return;
-        try
-        {
-            var en = (_currentItemsSource as System.Collections.IEnumerable)?.GetEnumerator();
-            if (en == null) return;
-            while (en.MoveNext())
-            {
-                var item = en.Current;
-                if (item == null) continue;
-                var msgId = ReadMessageId(item);
-                if (msgId == null) continue;
-
-                var content = ReadContent(item) ?? "";
-                if (_contentSnapshot.TryGetValue(msgId, out var prev) &&
-                    prev != content && prev.Length > 0)
+                var t = dc.GetType();
+                var prop = t.GetProperty("ChannelId", BindingFlags.Public | BindingFlags.Instance)
+                    ?? t.GetProperty("MessageContainerId", BindingFlags.Public | BindingFlags.Instance)
+                    ?? t.GetProperty("ContainerId", BindingFlags.Public | BindingFlags.Instance);
+                if (prop != null)
                 {
-                    bool? hasBeenEdited = ReadHasBeenEdited(item);
-                    // null = property not discoverable; treat as confirmed (unknown Root version)
-                    bool confirmed = hasBeenEdited != false;
-                    if (confirmed && _messageCache.TryGetValue(msgId, out var cached))
-                    {
-                        cached.Edits.Add(new MessageEdit { EditTime = DateTime.UtcNow, PreviousContent = prev });
-                        cached.Content = content;
-                        _store.RecordEdit(msgId, cached.ChannelId, DateTime.UtcNow, prev);
-                        Logger.Log(Tag, $"MSG EDIT: {Truncate(prev, 30)} -> {Truncate(content, 30)}");
-                    }
+                    var val = prop.GetValue(dc)?.ToString();
+                    if (!string.IsNullOrEmpty(val)) { _currentChannelId = val!; return; }
                 }
-                _contentSnapshot[msgId] = content;
             }
+            current = _r.GetParent(current);
         }
-        catch (Exception ex) { Logger.Log(Tag, $"PollEdits error: {ex.Message}"); }
     }
 
-    // ===== Phase 3: Visual — inject deleted message cards inline =====
+    // ===== Visual Injection — Deleted Message Cards =====
 
-    /// <summary>
-    /// For each deleted message in the current channel, inject a red-tinted inline card
-    /// into the nearest visible message's layout Grid as a new row. This follows the
-    /// LinkEmbedEngine pattern — injecting into message Grids rather than the
-    /// VirtualizingStackPanel (which doesn't arrange non-data-bound children).
-    ///
-    /// When the VSP recycles a message container (scroll), the card is lost. The next
-    /// scan tick detects the missing tag and re-injects.
-    /// </summary>
     private void InjectDeletedMessageCards(UprootedSettings settings, WideEvent? scanEv = null)
     {
-        if (!settings.MessageLoggerLogDeletes || _chatItemsControl == null) return;
+        if (!settings.MessageLoggerLogDeletes) return;
+
+        if (_chatItemsControl == null)
+        {
+            FindChatItemsControl();
+            if (_chatItemsControl == null) return;
+        }
 
         object? vsp = FindMessagePanel();
         if (vsp == null) return;
 
-        // Build list of visible messages with their containers (VSP realized items), in VSP order
+        // Build list of visible messages with their containers
         var visibleMessages = new List<(string msgId, object container)>();
         int childCount = _r.GetChildCount(vsp);
         for (int i = 0; i < childCount; i++)
@@ -1564,28 +1035,12 @@ internal class MessageLogger : IDisposable
 
         if (visibleMessages.Count == 0) return;
 
-        // Count deleted messages for this channel
-        int deletedInChannel = 0, totalDeleted = 0;
+        int deletedInChannel = 0;
         foreach (var c in _messageCache.Values)
-        {
-            if (c.IsDeleted) totalDeleted++;
             if (c.IsDeleted && c.ChannelId == _currentChannelId) deletedInChannel++;
-        }
-
-        // One-time tree dump (1E): on first call with both deleted + visible messages
-        if (!_firstTreeDumpDone && deletedInChannel > 0 && visibleMessages.Count > 0)
-        {
-            _firstTreeDumpDone = true;
-            Logger.Log(Tag, "[DIAG-TREE] === One-time visual tree dump ===");
-            Logger.Log(Tag, $"[DIAG-TREE] VSP type: {vsp.GetType().Name}");
-            var firstContainer = visibleMessages[0].container;
-            DumpContainerTree(firstContainer, 1, 8);
-            Logger.Log(Tag, "[DIAG-TREE] === End tree dump ===");
-        }
 
         int injected = 0, skipped = 0;
 
-        // For each deleted message in current channel
         foreach (var cached in _messageCache.Values)
         {
             if (!cached.IsDeleted || cached.ChannelId != _currentChannelId) continue;
@@ -1594,41 +1049,34 @@ internal class MessageLogger : IDisposable
 
             var cardTag = $"uprooted-del:{cached.MessageId}";
 
-            // Find the best visible message to attach to: the visible message with the largest
-            // insertion-order index that still precedes the deleted message in collection order.
-            // This is more reliable than timestamp comparison (timestamps may not resolve correctly).
+            // Timestamp-based positioning: find the visible message just before the deleted one
             object? targetContainer = null;
-            int deletedOrder = _orderedIdIndex.TryGetValue(cached.MessageId, out var doi) ? doi : int.MaxValue;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
-                if (_orderedIdIndex.TryGetValue(visibleMessages[i].msgId, out var vIdx) && vIdx <= deletedOrder)
+                if (_messageCache.TryGetValue(visibleMessages[i].msgId, out var visCached) &&
+                    visCached.Timestamp <= cached.Timestamp)
                 { targetContainer = visibleMessages[i].container; break; }
             }
-            // Fallback: attach to the first visible message (deleted msg older than all visible)
             if (targetContainer == null)
                 targetContainer = visibleMessages[0].container;
             if (targetContainer == null) { skipped++; continue; }
 
-            // Find the message layout Grid inside the container
             var (grid, col) = FindMessageGridInContainer(targetContainer);
             if (grid == null) { skipped++; continue; }
 
-            // Dedup: check if card already exists in this Grid (tag-based)
+            // Dedup: check if card already exists
             bool exists = false;
             var gridChildren = _r.GetChildren(grid);
             if (gridChildren != null)
-            {
                 foreach (var c in gridChildren)
                     if (c != null && _r.GetTag(c) == cardTag) { exists = true; break; }
-            }
             if (exists) { skipped++; continue; }
 
             var card = BuildDeletedMessageCard(cached, cardTag);
             if (card == null) { skipped++; continue; }
 
-            // Add a new Auto-height row to the Grid and place the card there
             var (newRow, rowDef) = AddAutoRowToGrid(grid);
-            if (newRow < 0) { skipped++; continue; }   // bail — don't add at invalid row 99
+            if (newRow < 0) { skipped++; continue; }
 
             _r.SetGridRow(card, newRow);
             _r.SetGridColumn(card, col);
@@ -1650,77 +1098,44 @@ internal class MessageLogger : IDisposable
     }
 
     /// <summary>
-    /// Walk into a message container to find the message content Grid (grid21 in ILSpy terms).
-    ///
-    /// Root's chat items are ContentPresenter → MessageView (UserControl). In Avalonia 11.3,
-    /// VisualExtensions.GetVisualChildren stops at the UserControl boundary — MessageView.VisualChildren
-    /// is empty. We use DescendantsHybrid which falls back to ContentControl.Content, Border.Child,
-    /// and Panel.Children when visual children are absent.
-    ///
-    /// Tries two strategies:
-    ///   1. Primary: find RootMarkdownTextBlock → its Grid parent is the injection target.
-    ///   2. Fallback: find RootLinkButton (UsernameTextBlock, confirmed in same grid at Row 0).
-    ///
-    /// Returns (grid, column=0) on success, (null, 0) on failure.
-    /// Logs anchor= and types= to aid diagnosis.
+    /// Walk into a message container to find the content Grid.
+    /// Tries RootMarkdownTextBlock parent, then RootLinkButton parent.
     /// </summary>
     private (object? grid, int column) FindMessageGridInContainer(object container)
     {
-        var seenTypes = new HashSet<string>();
-
-        foreach (var node in DescendantsHybrid(container, seenTypes))
+        foreach (var node in DescendantsHybrid(container))
         {
             var typeName = node.GetType().Name;
 
-            // Strategy 1: RootMarkdownTextBlock → Grid parent
             if (typeName == "RootMarkdownTextBlock")
             {
                 var grid = _r.GetParent(node);
                 if (grid != null && _r.IsGrid(grid))
-                {
-                    Logger.Log(Tag, "[FMGIC] anchor=markdown");
                     return (grid, 0);
-                }
                 if (grid != null)
                 {
                     var above = _r.GetParent(grid);
                     if (above != null && _r.IsGrid(above))
-                    {
-                        Logger.Log(Tag, "[FMGIC] anchor=markdown+1");
                         return (above, 0);
-                    }
                 }
             }
 
-            // Strategy 2: RootLinkButton (UsernameTextBlock, Row 0 of the same grid)
             if (typeName == "RootLinkButton")
             {
                 var grid = _r.GetParent(node);
                 if (grid != null && _r.IsGrid(grid))
-                {
-                    Logger.Log(Tag, "[FMGIC] anchor=username");
                     return (grid, 0);
-                }
             }
         }
 
-        // All strategies failed — log encountered types for future diagnosis
-        var typeList = string.Join(",", seenTypes.Take(20));
-        Logger.Log(Tag, $"[FMGIC] anchor=none types={typeList}");
         return (null, 0);
     }
 
     /// <summary>
-    /// Depth-first traversal that handles Avalonia 11's UserControl visual-tree boundary.
-    ///
-    /// In Avalonia 11.3, VisualExtensions.GetVisualChildren stops at UserControl/TemplatedControl
-    /// subtrees — their VisualChildren collection is empty even when fully rendered. This method
-    /// falls back to ContentControl.Content, Border.Child, and Panel.Children when visual
-    /// children are absent, allowing traversal through MessageView into its inner Grid.
-    ///
-    /// Using a visited set prevents infinite loops from any Content/Children cycles.
+    /// Depth-first traversal handling Avalonia 11's UserControl visual-tree boundary.
+    /// Falls back to Content/Children/Border.Child when visual children are empty.
     /// </summary>
-    private IEnumerable<object> DescendantsHybrid(object root, HashSet<string>? typeLog = null)
+    private IEnumerable<object> DescendantsHybrid(object root)
     {
         var stack = new Stack<object>();
         var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
@@ -1730,21 +1145,14 @@ internal class MessageLogger : IDisposable
         {
             var node = stack.Pop();
             if (!visited.Add(node)) continue;
-
-            typeLog?.Add(node.GetType().Name);
             yield return node;
 
             bool hadVisualKids = false;
             foreach (var kid in _r.GetVisualChildren(node))
-            {
-                stack.Push(kid);
-                hadVisualKids = true;
-            }
+            { stack.Push(kid); hadVisualKids = true; }
 
             if (!hadVisualKids)
             {
-                // Fallback A: Panel.Children (Grid, StackPanel, Panel, etc.)
-                // Covers TemplatedControl cases where VisualChildren is empty.
                 var panelKids = _r.GetChildren(node);
                 if (panelKids != null && panelKids.Count > 0)
                 {
@@ -1753,7 +1161,6 @@ internal class MessageLogger : IDisposable
                 }
                 else
                 {
-                    // Fallback B: ContentControl.Content (UserControl, MessageView, etc.)
                     try
                     {
                         var cp = node.GetType()
@@ -1767,7 +1174,6 @@ internal class MessageLogger : IDisposable
                     }
                     catch { }
 
-                    // Fallback C: Border.Child
                     var borderChild = _r.GetBorderChild(node);
                     if (borderChild != null) stack.Push(borderChild);
                 }
@@ -1775,68 +1181,30 @@ internal class MessageLogger : IDisposable
         }
     }
 
-    /// <summary>
-    /// Add a new Auto-height RowDefinition to a Grid.
-    /// Returns (rowIndex, rowDefObject) on success, (-1, null) on failure.
-    /// The caller must store rowDefObject for later cleanup via RemoveRowDefinition.
-    /// </summary>
-    private (int row, object? rowDef) AddAutoRowToGrid(object grid)
+    private object? FindMessagePanel()
     {
-        try
+        if (_chatItemsControl == null) return null;
+        foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
         {
-            var rowDefsProp = grid.GetType().GetProperty("RowDefinitions");
-            var rowDefs = rowDefsProp?.GetValue(grid);
-            if (rowDefs == null) return (-1, null);
-
-            int count = 0;
-            var countProp = rowDefs.GetType().GetProperty("Count");
-            if (countProp != null)
-                count = (int)countProp.GetValue(rowDefs)!;
-
-            if (_r.GridLengthType != null && _r.GridUnitTypeEnum != null)
+            var name = node.GetType().Name;
+            if (name.Contains("VirtualizingStackPanel") || name.Contains("StackPanel"))
             {
-                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
-                var autoLength = Activator.CreateInstance(_r.GridLengthType, 1.0, autoUnit);
-
-                var rowDefType = _r.GridType?.Assembly.GetType("Avalonia.Controls.RowDefinition");
-                if (rowDefType != null)
-                {
-                    var rowDef = Activator.CreateInstance(rowDefType);
-                    rowDefType.GetProperty("Height")?.SetValue(rowDef, autoLength);
-
-                    var addMethod = rowDefs.GetType().GetMethod("Add");
-                    addMethod?.Invoke(rowDefs, new[] { rowDef });
-
-                    return (count, rowDef);
-                }
+                if (_r.GetChildCount(node) >= 1) return node;
             }
         }
-        catch (Exception ex) { Logger.Log(Tag, $"AddAutoRowToGrid error: {ex.Message}"); }
-        return (-1, null);
+        return null;
     }
 
-    private void SetGridColumnSpan(object control, int span)
-    {
-        if (_r.GridType == null) return;
-        var setColumnSpan = _r.GridType.GetMethod("SetColumnSpan",
-            BindingFlags.Public | BindingFlags.Static);
-        setColumnSpan?.Invoke(null, new object[] { control, span });
-    }
+    // ===== Card Building =====
 
-    /// <summary>
-    /// Build a deleted message card: red-tinted background stripe with preserved content.
-    /// Right-click context menu has "Clear message history".
-    /// </summary>
     private object? BuildDeletedMessageCard(CachedMessage cached, string tag)
     {
         try
         {
-            // Message content — white text, wrapping
             var body = _r.CreateTextBlock(cached.Content, 13, "#DDDDDD");
             if (body == null) return null;
             _r.SetTextWrapping(body, "Wrap");
 
-            // If we have actor attribution, wrap body + actor label in a StackPanel
             object? cardContent = body;
             if (!string.IsNullOrEmpty(cached.DeletedByName) || !string.IsNullOrEmpty(cached.DeletedBy))
             {
@@ -1857,11 +1225,9 @@ internal class MessageLogger : IDisposable
                 }
             }
 
-            // Full-width red-tinted background stripe
             var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: cardContent);
             if (card == null) return null;
 
-            // Red left accent border (3px) via nested border
             var leftAccent = _r.CreateBorder("#60FF4444", cornerRadius: 0, child: null);
             if (leftAccent != null)
             {
@@ -1869,7 +1235,6 @@ internal class MessageLogger : IDisposable
                 _r.SetHorizontalAlignment(leftAccent, "Left");
             }
 
-            // Wrap in a panel to overlay the left accent
             var wrapper = _r.CreatePanel();
             if (wrapper != null)
             {
@@ -1881,7 +1246,6 @@ internal class MessageLogger : IDisposable
                 return wrapper;
             }
 
-            // Fallback if panel creation fails
             _r.SetTag(card, tag);
             _r.SetPadding(card, 8, 4, 8, 4);
             AttachContextMenu(card, cached);
@@ -1894,11 +1258,6 @@ internal class MessageLogger : IDisposable
         }
     }
 
-    /// <summary>
-    /// Attach a ContextMenu with "Clear message history" to a control.
-    /// When clicked, removes the persisted deleted message from cache and store,
-    /// and removes the visual card.
-    /// </summary>
     private void AttachContextMenu(object card, CachedMessage cached)
     {
         try
@@ -1906,14 +1265,10 @@ internal class MessageLogger : IDisposable
             ResolveContextMenuTypes();
             if (_contextMenuType == null || _menuItemType == null) return;
 
-            // Create MenuItem
             var menuItem = Activator.CreateInstance(_menuItemType);
             if (menuItem == null) return;
-
-            // Set Header text
             _menuItemType.GetProperty("Header")?.SetValue(menuItem, "Clear message history");
 
-            // Subscribe to Click event
             var clickEvent = _menuItemType.GetEvent("Click");
             if (clickEvent != null)
             {
@@ -1923,342 +1278,85 @@ internal class MessageLogger : IDisposable
                 {
                     try
                     {
-                        // Remove from cache
                         _messageCache.Remove(capturedId);
                         _store.RecordClear(capturedId);
-
-                        // Remove the visual card
                         var parent = _r.GetParent(capturedCard);
-                        if (parent != null)
-                            RemoveChild(parent, capturedCard);
-
-                        var cardTag = $"uprooted-del:{capturedId}";
-                        _injectedCards.Remove(cardTag);
-
+                        if (parent != null) RemoveChild(parent, capturedCard);
+                        _injectedCards.Remove($"uprooted-del:{capturedId}");
                         Logger.Log(Tag, $"Cleared history: {capturedId}");
                     }
                     catch (Exception ex) { Logger.Log(Tag, $"Clear error: {ex.Message}"); }
                 });
 
-                // Build lambda: (sender, e) => callback()
                 var handlerType = clickEvent.EventHandlerType!;
-                var invokeMethod = handlerType.GetMethod("Invoke")!;
-                var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+                var paramTypes = handlerType.GetMethod("Invoke")!.GetParameters()
+                    .Select(p => p.ParameterType).ToArray();
                 var sParam = Expression.Parameter(paramTypes[0], "s");
                 var eParam = Expression.Parameter(paramTypes[1], "e");
                 var invokeBody = Expression.Invoke(Expression.Constant(callback));
-                var lambda = Expression.Lambda(handlerType, invokeBody, sParam, eParam);
-                clickEvent.AddEventHandler(menuItem, lambda.Compile());
+                clickEvent.AddEventHandler(menuItem,
+                    Expression.Lambda(handlerType, invokeBody, sParam, eParam).Compile());
             }
 
-            // Create ContextMenu and add the MenuItem
             var contextMenu = Activator.CreateInstance(_contextMenuType);
             if (contextMenu == null) return;
-
-            // ContextMenu.Items is an ItemCollection — use Add method
             var itemsProp = _contextMenuType.GetProperty("Items");
             var itemsObj = itemsProp?.GetValue(contextMenu);
-            if (itemsObj != null)
-            {
-                var addMethod = itemsObj.GetType().GetMethod("Add", new[] { typeof(object) });
-                addMethod?.Invoke(itemsObj, new[] { menuItem });
-            }
-
-            // Set ContextMenu on the card
+            itemsObj?.GetType().GetMethod("Add", new[] { typeof(object) })
+                ?.Invoke(itemsObj, new[] { menuItem });
             card.GetType().GetProperty("ContextMenu")?.SetValue(card, contextMenu);
         }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"ContextMenu error: {ex.Message}");
-        }
+        catch (Exception ex) { Logger.Log(Tag, $"ContextMenu error: {ex.Message}"); }
     }
 
     private void ResolveContextMenuTypes()
     {
         if (_contextMenuTypesResolved) return;
         _contextMenuTypesResolved = true;
-
-        // Find types from Avalonia.Controls assembly
         var controlsAsm = _r.ControlType?.Assembly;
         if (controlsAsm == null) return;
-
         _contextMenuType = controlsAsm.GetType("Avalonia.Controls.ContextMenu");
         _menuItemType = controlsAsm.GetType("Avalonia.Controls.MenuItem");
-
-        Logger.Log(Tag, $"ContextMenu types: menu={_contextMenuType != null}, item={_menuItemType != null}");
     }
 
-    /// <summary>
-    /// For each message with edit history in the current channel, inject an amber-tinted
-    /// inline card into the message's layout Grid (below the message text) showing the
-    /// previous content and an "(edited)" label. Mirrors InjectDeletedMessageCards().
-    /// </summary>
-    private void InjectEditIndicators(UprootedSettings settings, WideEvent? scanEv = null)
-    {
-        if (!settings.MessageLoggerLogEdits || _chatItemsControl == null) return;
+    // ===== Grid Helpers =====
 
-        var vsp = FindMessagePanel();
-        if (vsp == null) return;
-
-        // Build msgId → container map from visible VSP children
-        var visible = new Dictionary<string, object>();
-        int childCount = _r.GetChildCount(vsp);
-        for (int i = 0; i < childCount; i++)
-        {
-            var child = _r.GetChild(vsp, i);
-            if (child == null) continue;
-            var dc = ReadDC(child);
-            var msgId = dc != null ? ReadMessageId(dc) : null;
-            if (msgId != null) visible[msgId] = child;
-        }
-
-        int editInjected = 0;
-        foreach (var cached in _messageCache.Values)
-        {
-            if (cached.Edits.Count == 0 || cached.IsDeleted) continue;
-            if (!visible.TryGetValue(cached.MessageId, out var container)) continue;
-
-            var editTag = $"uprooted-edit:{cached.MessageId}";
-
-            var (grid, col) = FindMessageGridInContainer(container);
-            if (grid == null) continue;
-
-            // Dedup check
-            var gridChildren = _r.GetChildren(grid);
-            if (gridChildren != null)
-            {
-                bool exists = false;
-                foreach (var c in gridChildren)
-                    if (c != null && _r.GetTag(c) == editTag) { exists = true; break; }
-                if (exists) continue;
-            }
-
-            var card = BuildEditIndicatorCard(cached, editTag);
-            if (card == null) continue;
-
-            var (newRow, rowDef) = AddAutoRowToGrid(grid);
-            if (newRow < 0) continue;   // bail — don't add at invalid row 99
-
-            _r.SetGridRow(card, newRow);
-            _r.SetGridColumn(card, col);
-            SetGridColumnSpan(card, 99);
-            _r.AddChild(grid, card);
-            _injectedCards[editTag] = card;
-            SubscribeContainerDataContextChanged(editTag, container, grid, rowDef!);
-            editInjected++;
-        }
-
-        if (editInjected > 0)
-        {
-            scanEv?.Set("edit_injected", editInjected);
-            scanEv?.MarkNotable();
-        }
-    }
-
-    /// <summary>
-    /// Build an edit indicator card: amber-tinted background stripe showing the previous
-    /// content (faded, italic) and an "(edited)" label. Mirrors BuildDeletedMessageCard().
-    /// </summary>
-    private object? BuildEditIndicatorCard(CachedMessage cached, string tag)
+    private (int row, object? rowDef) AddAutoRowToGrid(object grid)
     {
         try
         {
-            var lastEdit = cached.Edits[cached.Edits.Count - 1];
-            string editLabel = cached.Edits.Count > 1
-                ? $"(edited {cached.Edits.Count}x)"
-                : "(edited)";
+            var rowDefs = grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid);
+            if (rowDefs == null) return (-1, null);
 
-            // Previous content — faded, italic
-            var prevText = _r.CreateTextBlock(lastEdit.PreviousContent, 13, "#99BBBBBB");
-            if (prevText == null) return null;
-            _r.SetTextWrapping(prevText, "Wrap");
-            SetFontStyleItalic(prevText);
+            int count = (int)(rowDefs.GetType().GetProperty("Count")?.GetValue(rowDefs) ?? 0);
 
-            // "(edited)" label — very small, faded amber
-            var label = _r.CreateTextBlock(editLabel, 10, "#99D4A843");
-            if (label == null) return null;
-            _r.SetMargin(label, 0, 2, 0, 0);
-
-            // Stack previous content + label vertically
-            var inner = _r.CreateStackPanel(vertical: true, spacing: 0);
-            if (inner == null) return null;
-            _r.AddChild(inner, prevText);
-            _r.AddChild(inner, label);
-
-            // Amber-tinted background stripe
-            var card = _r.CreateBorder("#1AFFCC44", cornerRadius: 0, child: inner);
-            if (card == null) return null;
-            _r.SetPadding(card, 8, 4, 8, 4);
-
-            // Amber left accent border (3px)
-            var leftAccent = _r.CreateBorder("#50FFCC44", cornerRadius: 0, child: null);
-            if (leftAccent != null)
+            if (_r.GridLengthType != null && _r.GridUnitTypeEnum != null)
             {
-                leftAccent.GetType().GetProperty("Width")?.SetValue(leftAccent, 3.0);
-                _r.SetHorizontalAlignment(leftAccent, "Left");
-            }
-
-            var wrapper = _r.CreatePanel();
-            if (wrapper != null)
-            {
-                _r.AddChild(wrapper, card);
-                if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
-                _r.SetTag(wrapper, tag);
-                return wrapper;
-            }
-
-            _r.SetTag(card, tag);
-            return card;
-        }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"BuildEditCard error: {ex.Message}");
-            return null;
-        }
-    }
-
-    private void SetFontStyleItalic(object textBlock)
-    {
-        try
-        {
-            var prop = textBlock.GetType().GetProperty("FontStyle");
-            if (prop == null) return;
-            var ft = prop.PropertyType;
-            if (ft.IsEnum)
-                prop.SetValue(textBlock, Enum.Parse(ft, "Italic"));
-        }
-        catch { }
-    }
-
-    /// <summary>
-    /// Apply "(edited)" text indicators on visible messages that have edit history.
-    /// </summary>
-    private void ApplyEditIndicators()
-    {
-        if (_chatItemsControl == null) return;
-
-        foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
-        {
-            object? dc = ReadDC(node);
-            if (dc == null) continue;
-            // Only process items we have resolved property accessors for
-            if (!_typePropsCache.ContainsKey(dc.GetType()) && TryResolvePropertyAccessors(dc.GetType()) == null)
-                continue;
-
-            var msgId = ReadMessageId(dc);
-            if (msgId == null) continue;
-            if (!_messageCache.TryGetValue(msgId, out var cached)) continue;
-            if (cached.Edits.Count == 0) continue;
-
-            // Find RootMarkdownTextBlock to inject sibling
-            object? mdBlock = null;
-            foreach (var child in _walker.DescendantsDepthFirst(node))
-            {
-                if (child.GetType().Name == "RootMarkdownTextBlock")
-                { mdBlock = child; break; }
-            }
-            if (mdBlock == null) continue;
-
-            var parent = _r.GetParent(mdBlock);
-            if (parent == null) continue;
-
-            var editTag = $"uprooted-edit:{cached.MessageId}";
-            var children = _r.GetChildren(parent);
-            if (children != null)
-            {
-                bool exists = false;
-                foreach (var c in children)
-                    if (c != null && _r.GetTag(c) == editTag) { exists = true; break; }
-                if (exists) continue;
-            }
-
-            var editCount = cached.Edits.Count;
-            var label = _r.CreateTextBlock(
-                $"(edited{(editCount > 1 ? $" {editCount}x" : "")})",
-                10, "#88FF9999");
-            if (label == null) continue;
-            _r.SetTag(label, editTag);
-            _r.SetMargin(label, 4, 2, 0, 0);
-            _r.AddChild(parent, label);
-        }
-    }
-
-    /// <summary>
-    /// Find the panel that holds message containers (VirtualizingStackPanel or similar).
-    /// </summary>
-    private object? FindMessagePanel()
-    {
-        if (_chatItemsControl == null) return null;
-
-        // Walk children of the ItemsControl to find the items host panel
-        foreach (var node in _walker.DescendantsDepthFirst(_chatItemsControl))
-        {
-            var name = node.GetType().Name;
-            if (name.Contains("VirtualizingStackPanel") || name.Contains("StackPanel"))
-            {
-                // Make sure it has message items as children
-                int childCount = _r.GetChildCount(node);
-                if (childCount >= 1) return node;
-            }
-        }
-        return null;
-    }
-
-    /// <summary>
-    /// Diagnostic: dump the visual tree of a container using DescendantsHybrid so that
-    /// the UserControl boundary is correctly traversed. Logs up to 40 nodes.
-    /// </summary>
-    private void DumpContainerTree(object root, int _, int maxDepth)
-    {
-        var stack = new Stack<(object node, int depth)>();
-        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
-        stack.Push((root, 0));
-        int total = 0;
-        while (stack.Count > 0 && total < 40)
-        {
-            var (node, depth) = stack.Pop();
-            if (!visited.Add(node) || depth > maxDepth) continue;
-            total++;
-            var typeName = node.GetType().Name;
-            var panelKids = _r.GetChildCount(node);
-            int gridCol = -1, gridRow = -1;
-            try { gridCol = _r.GetGridColumn(node); } catch { }
-            try { gridRow = _r.GetGridRow(node); } catch { }
-            var indent = new string(' ', depth * 2);
-            Logger.Log(Tag, $"[DIAG-TREE] {indent}{typeName} panelKids={panelKids} col={gridCol} row={gridRow}");
-
-            bool hadVis = false;
-            foreach (var kid in _r.GetVisualChildren(node))
-            { stack.Push((kid, depth + 1)); hadVis = true; }
-
-            if (!hadVis)
-            {
-                var pKids = _r.GetChildren(node);
-                if (pKids != null && pKids.Count > 0)
-                    for (int i = pKids.Count - 1; i >= 0; i--)
-                        if (pKids[i] != null) stack.Push(((object)pKids[i]!, depth + 1));
-                else
+                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                var autoLength = Activator.CreateInstance(_r.GridLengthType, 1.0, autoUnit);
+                var rowDefType = _r.GridType?.Assembly.GetType("Avalonia.Controls.RowDefinition");
+                if (rowDefType != null)
                 {
-                    try
-                    {
-                        var cp = node.GetType().GetProperty("Content", BindingFlags.Public | BindingFlags.Instance);
-                        if (cp != null) { var c = cp.GetValue(node); if (c != null && c.GetType().IsClass && c is not string) stack.Push((c, depth + 1)); }
-                    }
-                    catch { }
-                    var bc = _r.GetBorderChild(node);
-                    if (bc != null) stack.Push((bc, depth + 1));
+                    var rowDef = Activator.CreateInstance(rowDefType);
+                    rowDefType.GetProperty("Height")?.SetValue(rowDef, autoLength);
+                    rowDefs.GetType().GetMethod("Add")?.Invoke(rowDefs, new[] { rowDef });
+                    return (count, rowDef);
                 }
             }
         }
-        if (total >= 40) Logger.Log(Tag, "[DIAG-TREE] (truncated at 40 nodes)");
+        catch (Exception ex) { Logger.Log(Tag, $"AddAutoRowToGrid error: {ex.Message}"); }
+        return (-1, null);
     }
 
-    /// <summary>
-    /// Subscribe to the ContentPresenter container's DataContextChanged event.
-    /// When Root recycles the container (DataContext changes to a different message),
-    /// we immediately remove the injected card and RowDefinition before they corrupt
-    /// the new message's layout.
-    /// </summary>
+    private void SetGridColumnSpan(object control, int span)
+    {
+        if (_r.GridType == null) return;
+        _r.GridType.GetMethod("SetColumnSpan", BindingFlags.Public | BindingFlags.Static)
+            ?.Invoke(null, new object[] { control, span });
+    }
+
+    // ===== Recycling Cleanup =====
+
     private void SubscribeContainerDataContextChanged(string cardTag, object container, object grid, object rowDef)
     {
         try
@@ -2266,14 +1364,13 @@ internal class MessageLogger : IDisposable
             var dcEvent = container.GetType().GetEvent("DataContextChanged");
             if (dcEvent == null)
             {
-                // No DataContextChanged event — store without cleanup subscription
                 _injectedRowDefs[cardTag] = (grid, rowDef, null, null);
                 return;
             }
 
             var handlerType = dcEvent.EventHandlerType!;
-            var invokeMethod = handlerType.GetMethod("Invoke")!;
-            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+            var paramTypes = handlerType.GetMethod("Invoke")!.GetParameters()
+                .Select(p => p.ParameterType).ToArray();
 
             var capturedTag = cardTag;
             var callback = new Action(() =>
@@ -2282,7 +1379,6 @@ internal class MessageLogger : IDisposable
                 catch { }
             });
 
-            // Build (object sender, <EventArgs> e) => callback() delegate matching any event signature
             var sParam = Expression.Parameter(paramTypes[0], "s");
             var eParam = paramTypes.Length > 1
                 ? Expression.Parameter(paramTypes[1], "e")
@@ -2303,28 +1399,19 @@ internal class MessageLogger : IDisposable
         }
     }
 
-    /// <summary>
-    /// Clean up a single injected card entry: remove the card from the grid's Children,
-    /// remove the RowDefinition from the grid's RowDefinitions, and unsubscribe
-    /// the DataContextChanged handler from the container.
-    /// Must be called on the UI thread.
-    /// </summary>
     private void CleanupInjectedRow(string cardTag)
     {
         if (!_injectedRowDefs.TryGetValue(cardTag, out var entry)) return;
         _injectedRowDefs.Remove(cardTag);
 
-        // Remove injected card from grid.Children
         if (_injectedCards.TryGetValue(cardTag, out var card))
         {
             _r.GetChildren(entry.grid)?.Remove(card);
             _injectedCards.Remove(cardTag);
         }
 
-        // Remove injected RowDefinition from grid.RowDefinitions
         RemoveRowDefinition(entry.grid, entry.rowDef);
 
-        // Unsubscribe DataContextChanged
         if (entry.dcHandler != null && entry.container != null)
         {
             try
@@ -2336,9 +1423,6 @@ internal class MessageLogger : IDisposable
         }
     }
 
-    /// <summary>
-    /// Remove a RowDefinition object from a Grid's RowDefinitions collection.
-    /// </summary>
     private static void RemoveRowDefinition(object grid, object rowDef)
     {
         try
@@ -2355,13 +1439,12 @@ internal class MessageLogger : IDisposable
         if (total > 0)
             Logger.Log(Tag, $"Clearing {total} cards: {reason}");
 
-        // Clean up tracked entries: card child + RowDefinition + DataContextChanged handler
-        var tags = _injectedCards.Keys.ToList();  // snapshot — CleanupInjectedRow mutates both dicts
+        var tags = _injectedCards.Keys.ToList();
         foreach (var tag in tags)
             CleanupInjectedRow(tag);
 
-        // Clean up any RowDef-only entries (should not happen normally, safety net)
-        foreach (var (tag, entry) in _injectedRowDefs)
+        // Safety net for orphaned RowDef-only entries
+        foreach (var (_, entry) in _injectedRowDefs)
         {
             RemoveRowDefinition(entry.grid, entry.rowDef);
             if (entry.dcHandler != null && entry.container != null)
@@ -2372,47 +1455,81 @@ internal class MessageLogger : IDisposable
             }
         }
         _injectedRowDefs.Clear();
-        _injectedCards.Clear();  // safety — should be empty after CleanupInjectedRow calls
-
-        UnsubscribeAllPropertyChanged();
-        _boolDumpCount = 0; // reset so next epoch gets fresh diagnostic dumps
+        _injectedCards.Clear();
     }
 
-    // ===== Message helpers =====
+    // ===== Property Resolution =====
 
-    private void CacheMessage(object item, string msgId)
+    private TypeProps? TryResolvePropertyAccessors(Type type)
     {
-        if (_messageCache.ContainsKey(msgId)) return;
-        var cached = ExtractCachedMessage(item, msgId);
-        if (cached != null)
+        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
+
+        var props = type.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+        var tp = new TypeProps();
+
+        // Hard-coded paths: try known property names first
+        tp.MessageId = FindProp(props, "MessageId", "Id");
+        tp.Content = FindProp(props, "MessageContent", "Content");
+        tp.DeletedAt = FindProp(props, "DeletedAt");
+        tp.EditedAt = FindProp(props, "EditedAt");
+
+        if (tp.MessageId != null && tp.Content != null)
         {
-            _messageCache[msgId] = cached;
-            _store.RecordMessage(cached.MessageId, cached.ChannelId,
-                cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
+            tp.AuthorId = FindProp(props, "SenderUserId", "AuthorId");
+            tp.Timestamp = FindProp(props, "SentAtUtc", "SentAt", "Timestamp");
+            tp.SenderMember = FindProp(props, "SenderMember");
+            Logger.Log(Tag, $"Props on {type.Name}: Id={tp.MessageId.Name}, Content={tp.Content.Name}");
+            _typePropsCache[type] = tp;
+            _propertiesResolved = true;
+            return tp;
         }
+
+        // Try nested properties (ViewModel.Message bridge)
+        foreach (var prop in props)
+        {
+            if (!prop.PropertyType.IsClass || prop.PropertyType == typeof(string) ||
+                prop.PropertyType.IsArray || prop.PropertyType.Namespace == "System") continue;
+
+            var nested = prop.PropertyType.GetProperties(BindingFlags.Public | BindingFlags.Instance);
+            var nestedId = FindProp(nested, "MessageId", "Id");
+            var nestedContent = FindProp(nested, "MessageContent", "Content");
+
+            if (nestedId != null && nestedContent != null)
+            {
+                tp.Bridge = prop;
+                tp.MessageId = nestedId;
+                tp.Content = nestedContent;
+                tp.DeletedAt = FindProp(nested, "DeletedAt") ?? tp.DeletedAt;
+                tp.EditedAt = FindProp(nested, "EditedAt") ?? tp.EditedAt;
+                tp.AuthorId = FindProp(nested, "SenderUserId", "AuthorId");
+                tp.Timestamp = FindProp(nested, "SentAtUtc", "SentAt", "Timestamp");
+                tp.SenderMember = FindProp(nested, "SenderMember");
+                Logger.Log(Tag, $"Props on {type.Name} via .{prop.Name}: Id={nestedId.Name}, Content={nestedContent.Name}");
+                _typePropsCache[type] = tp;
+                _propertiesResolved = true;
+                return tp;
+            }
+        }
+
+        return null;
     }
 
-    /// <summary>
-    /// Read DeletedAt from a stored bridge target reference (deferred read).
-    /// Called at flush time, 1.5–3s after the Remove event, giving Root time to set the flag.
-    /// DeletedAt is DateTimeOffset? — non-null means deleted.
-    /// Returns true/false/null. Handles disposed objects gracefully.
-    /// </summary>
-    private static bool? ReadDeferredHasBeenDeleted(object? bridgeTarget, TypeProps? props)
+    private TypeProps? GetTypeProps(object item)
     {
-        if (bridgeTarget == null || props?.DeletedAt == null) return null;
-        try
-        {
-            var val = props.DeletedAt.GetValue(bridgeTarget);
-            // DateTimeOffset? — non-null means deleted; also handle legacy bool
-            if (val is bool b) return b;
-            if (val is DateTimeOffset) return true;
-            // null DateTimeOffset? = not deleted
-            if (props.DeletedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
-            return null;
-        }
-        catch { return null; }
+        var type = item.GetType();
+        if (_typePropsCache.TryGetValue(type, out var cached)) return cached;
+        return TryResolvePropertyAccessors(type);
     }
+
+    private static PropertyInfo? FindProp(PropertyInfo[] props, params string[] names)
+    {
+        foreach (var n in names)
+            foreach (var p in props)
+                if (p.Name.Equals(n, StringComparison.OrdinalIgnoreCase)) return p;
+        return null;
+    }
+
+    // ===== Message Helpers =====
 
     private object? GetMessageTarget(object item, TypeProps tp)
     {
@@ -2450,7 +1567,6 @@ internal class MessageLogger : IDisposable
         try
         {
             var val = tp.EditedAt.GetValue(t);
-            // DateTimeOffset? — non-null means edited; also handle legacy bool
             if (val is bool b) return b;
             if (val is DateTimeOffset) return true;
             if (tp.EditedAt.PropertyType == typeof(DateTimeOffset?) && val == null) return false;
@@ -2459,10 +1575,6 @@ internal class MessageLogger : IDisposable
         catch { return null; }
     }
 
-    /// <summary>
-    /// Resolve author display name via the deep chain: Message.SenderMember.GlobalUser.UserName.
-    /// Falls back to SenderMember.GlobalUser.ToString() if UserName is missing.
-    /// </summary>
     private static string? ReadAuthorName(object messageTarget, TypeProps tp)
     {
         if (tp.SenderMember == null) return null;
@@ -2470,13 +1582,10 @@ internal class MessageLogger : IDisposable
         {
             var sender = tp.SenderMember.GetValue(messageTarget);
             if (sender == null) return null;
-
-            var globalUserProp = sender.GetType().GetProperty("GlobalUser",
-                BindingFlags.Public | BindingFlags.Instance);
-            var globalUser = globalUserProp?.GetValue(sender);
+            var globalUser = sender.GetType().GetProperty("GlobalUser",
+                BindingFlags.Public | BindingFlags.Instance)?.GetValue(sender);
             if (globalUser == null) return null;
 
-            // Try UserName first, then DisplayName, then Name
             var userNameProp = globalUser.GetType().GetProperty("UserName",
                 BindingFlags.Public | BindingFlags.Instance)
                 ?? globalUser.GetType().GetProperty("DisplayName",
@@ -2487,13 +1596,23 @@ internal class MessageLogger : IDisposable
             var name = userNameProp?.GetValue(globalUser) as string;
             if (!string.IsNullOrEmpty(name)) return name;
 
-            // Fallback: ToString on GlobalUser
             var str = globalUser.ToString();
             if (!string.IsNullOrEmpty(str) && str != globalUser.GetType().FullName) return str;
-
             return null;
         }
         catch { return null; }
+    }
+
+    private void CacheMessage(object item, string msgId)
+    {
+        if (_messageCache.ContainsKey(msgId)) return;
+        var cached = ExtractCachedMessage(item, msgId);
+        if (cached != null)
+        {
+            _messageCache[msgId] = cached;
+            _store.RecordMessage(cached.MessageId, cached.ChannelId,
+                cached.AuthorId, cached.AuthorName, cached.Timestamp, cached.Content);
+        }
     }
 
     private CachedMessage? ExtractCachedMessage(object item, string msgId)
@@ -2511,7 +1630,6 @@ internal class MessageLogger : IDisposable
                 if (v is DateTimeOffset dto) ts = dto.UtcDateTime;
                 else if (v is DateTime dt) ts = dt;
             }
-            // Resolve author: direct AuthorId prop, or deep chain SenderMember.GlobalUser.UserName
             string authorId = tp.AuthorId != null ? (tp.AuthorId.GetValue(t)?.ToString() ?? "") : "";
             string authorName = ReadAuthorName(t, tp) ?? "Unknown";
 

@@ -1062,7 +1062,7 @@ internal class ProfileBadgeInjector
     /// Build the compact "Uprooted Dev" pill badge (gold) displayed below the username.
     /// Only injected when on the developer channel for known developer usernames.
     /// </summary>
-    private object? CreateDevBadgePill() => CreateBadgePill("Uprooted Dev", DevBadgeColor, BadgeTag);
+    private object? CreateDevBadgePill() => CreateBadgePill("$Uprooted Dev_", DevBadgeColor, BadgeTag);
 
     /// <summary>
     /// Build the compact "Alpha User" pill badge (blue) displayed below the username.
