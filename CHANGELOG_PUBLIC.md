@@ -50,7 +50,7 @@ This is a big one. Since the last release we shipped new plugins, reworked the e
 
 ### Infrastructure
 
-- Translate, WhoReacted, and UserBio are force-disabled on upgrade from older versions (enable manually in Plugin Settings)
+- All experimental plugins are force-disabled on every version upgrade to prevent startup hangs (enable manually in Plugin Settings after confirming the update is stable)
 
 ### Known Issues
 

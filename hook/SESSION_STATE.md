@@ -4,8 +4,9 @@
 
 ## Current State Summary
 
-The Theme Engine is the most recently active area. Major work this session:
+The Theme Engine is the most recently active area, with a critical startup safety fix applied this session.
 
+- **Experimental plugin safe upgrade** — ALL experimental plugins are now blanket-disabled on every version upgrade via `ExperimentalPlugins` array in `StartupHook.cs`. This prevents startup hangs when unstable plugins survive across versions. The `ShowExperimentalPlugins` flag is also reset. Users re-enable manually from Settings > Plugins.
 - **Theme Engine rebrand** — Renamed from "Themes" to "Theme Engine" across sidebar tab, page header, plugin card, About status field. Plugin enabled logic now reflects actual theme state.
 - **8 preset themes** — Crimson, Cosmic Smoothie, Loki, Marine, Oreo, Sakura (first light preset), Ember. 2×4 grid layout. Loki reworked: gold as BrandPrimary, green as secondary.
 - **Light theme palette adaptation** — Border/Muted formulas fixed (`- offset * dir` for symmetric direction). Direction-aware: Brand, Link, Info/Warning, Mentions, DropShadow. `IsValidHex` accepts 8-digit hex. Preset SVG mode is `"auto"` (luminance-based).
@@ -18,6 +19,7 @@ The Theme Engine is the most recently active area. Major work this session:
 - **Version copy intercept** — fixed (2026-02-21): Root's async `SetTextAsync` race no longer races with our clipboard write
 - **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure needs investigation
 - **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, PresenceBeacon all deployed but need real-world testing
+- **AppImage v0.5.0 detection failure** — Linux user reports v0.5.0 fails to detect/patch AppImage while v0.4.2 works. Needs `--diagnose` output from the user to investigate further.
 
 ## Startup Phases
 

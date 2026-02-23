@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Experimental plugins cause hang on boot after update** — Users who enabled experimental plugins before updating could get stuck in an unrecoverable hang on startup, requiring manual settings file deletion to recover. Version migration now blanket-disables ALL experimental plugins (rootcord, who-reacted, message-logger, content-filter, translate, user-bio, recon-logger) and sets `ShowExperimentalPlugins=false` on every version upgrade. Users re-enable manually from Settings > Plugins.
+  - File: `hook/StartupHook.cs`
 - **Rootcord doesn't update on theme revert or variant change** — `ThemeEngine.RevertTheme()` never called `ContentPages.UpdateLiveColors`, so Rootcord and LinkEmbeds kept stale cached colors when switching to the Native theme or when Root auto-reverted on variant change. Added `ReadLiveRootColors` → `UpdateLiveColors` at end of `RevertTheme()` and in `ActualThemeVariantChanged` handler.
   - File: `hook/ThemeEngine.cs`
 - **Rootcord user bar inner controls don't refresh on theme change** — `RefreshAllUiColors()` only updated the outer border, missing username text, status text, avatar background, and action button icons. Added tracking fields and extended refresh to all user bar children.

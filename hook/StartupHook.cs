@@ -13,10 +13,19 @@ internal class StartupHook
     // Version migration: plugins to force-disable when upgrading to (or through) a given version.
     // Users who skip versions get all intermediate entries applied cumulatively.
     // Omit a version entirely to leave all user plugin toggles untouched for that release.
+    // NOTE: Experimental plugins are blanket-disabled on EVERY upgrade (see ExperimentalPlugins).
     private static readonly Dictionary<string, string[]> ForceDisableOnUpgrade = new()
     {
         { "0.4.0", new[] { "message-logger", "content-filter" } },
         { "0.5.0", new[] { "translate", "who-reacted", "user-bio" } },
+    };
+
+    // All experimental plugin IDs. Blanket-disabled on every version upgrade to prevent
+    // hangs/crashes from unstable plugins surviving across versions. Users re-enable manually.
+    private static readonly string[] ExperimentalPlugins = new[]
+    {
+        "rootcord", "who-reacted", "message-logger", "content-filter",
+        "translate", "user-bio", "recon-logger",
     };
 
     // Static reference keeps FileSystemWatcher alive for process lifetime
@@ -93,6 +102,8 @@ internal class StartupHook
                     ev.Set("from", migrationSettings.Version);
                     ev.Set("to", CurrentVersion);
                     var disabled = new List<string>();
+
+                    // 1. Per-version targeted disables (for non-experimental plugins)
                     foreach (var (version, disableList) in ForceDisableOnUpgrade)
                     {
                         if (AutoUpdater.CompareVersions(version, migrationSettings.Version) > 0 &&
@@ -107,7 +118,25 @@ internal class StartupHook
                             }
                         }
                     }
+
+                    // 2. Blanket-disable ALL experimental plugins on every upgrade.
+                    // Experimental plugins are unstable and may cause hangs/crashes
+                    // after version changes. Users can re-enable from Settings > Plugins.
+                    foreach (var pluginId in ExperimentalPlugins)
+                    {
+                        if (migrationSettings.Plugins.TryGetValue(pluginId, out var wasEnabled) && wasEnabled)
+                        {
+                            migrationSettings.Plugins[pluginId] = false;
+                            if (pluginId == "content-filter")
+                                migrationSettings.NsfwFilterEnabled = false;
+                            if (!disabled.Contains(pluginId))
+                                disabled.Add(pluginId);
+                        }
+                    }
+                    migrationSettings.ShowExperimentalPlugins = false;
+
                     ev.Set("disabled_plugins", string.Join(",", disabled));
+                    ev.Set("experimental_reset", true);
                     migrationSettings.Version = CurrentVersion;
                     migrationSettings.Save();
                     ev.Set("result", "ok");
