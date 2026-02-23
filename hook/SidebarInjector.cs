@@ -149,8 +149,6 @@ internal class SidebarInjector
         // Populate default plugin entries if not already set
         if (!_settings.Plugins.ContainsKey("sentry-blocker"))
             _settings.Plugins["sentry-blocker"] = true;
-        if (!_settings.Plugins.ContainsKey("themes"))
-            _settings.Plugins["themes"] = true;
         if (!_settings.Plugins.ContainsKey("content-filter"))
             _settings.Plugins["content-filter"] = _settings.NsfwFilterEnabled;
     }

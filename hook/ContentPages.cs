@@ -956,22 +956,87 @@ internal static class ContentPages
                         r.AddChild(devGrid, engCard);
                     }
 
-                    // Row 1, Column 0: Recon Logger
-                    var reconCard = BuildInnerCard("Recon Logger", reconContent =>
-                    {
-                        var reconSettings = UprootedSettings.Load();
-                        bool reconCurrent = reconSettings.Plugins.TryGetValue("recon-logger", out var rv) && rv;
-                        BuildSettingsToggle(r, reconContent, "Record pointer events, bounds, and transforms", "Logs to rootcord_recon.log",
-                            reconCurrent, font, enabled =>
-                            {
-                                ToggleReconLogger(enabled);
-                                var s = UprootedSettings.Load();
-                                s.Plugins["recon-logger"] = enabled;
-                                s.Save();
-                            });
-                    });
+                    // Row 1, Column 0: Recon Logger (plugin card format)
+                    var reconCard = r.CreateBorder(innerBg, 12);
                     if (reconCard != null)
                     {
+                        SetBorderStroke(r, reconCard, innerBorderColor, ThickBorder);
+                        r.SetTag(reconCard, "dyn-bg:BackgroundElevated,dyn-bb:Border");
+                        r.BindToDynamicResource(reconCard, "Background", "BackgroundElevated");
+                        r.BindToDynamicResource(reconCard, "BorderBrush", "Border");
+                        reconCard.GetType().GetProperty("MinHeight")?.SetValue(reconCard, innerMinHeight);
+
+                        var reconContent = r.CreateGrid();
+                        if (reconContent != null)
+                        {
+                            r.SetMargin(reconContent, 16, 14, 16, 14);
+                            r.AddGridRowStar(reconContent);
+                            r.AddGridRowAuto(reconContent);
+
+                            var reconInner = r.CreateStackPanel(vertical: true, spacing: 0);
+
+                            // Top row: name (left) + toggle (right)
+                            var reconTopRow = r.CreatePanel();
+                            if (reconTopRow != null)
+                            {
+                                var reconName = CreateBoundText(r, "ReconLogger", 14, TextWhite, "TextPrimary");
+                                r.SetFontWeight(reconName, "Bold");
+                                ApplyFont(r, reconName, font);
+                                r.SetHorizontalAlignment(reconName, "Left");
+                                r.SetVerticalAlignment(reconName, "Center");
+                                r.SetMargin(reconName, 0, 0, 60, 0);
+                                r.AddChild(reconTopRow, reconName);
+
+                                var reconSettings2 = UprootedSettings.Load();
+                                bool reconCurrent = reconSettings2.Plugins.TryGetValue("recon-logger", out var rv) && rv;
+                                var reconToggle = BuildToggleSwitch(r, reconCurrent, font, enabled =>
+                                {
+                                    ToggleReconLogger(enabled);
+                                    var s = UprootedSettings.Load();
+                                    s.Plugins["recon-logger"] = enabled;
+                                    s.Save();
+                                    r.RunOnUIThread(() => onRefreshCurrentPage?.Invoke());
+                                });
+                                if (reconToggle != null)
+                                {
+                                    r.SetHorizontalAlignment(reconToggle, "Right");
+                                    r.SetVerticalAlignment(reconToggle, "Center");
+                                    r.AddChild(reconTopRow, reconToggle);
+                                }
+                                r.AddChild(reconInner, reconTopRow);
+                            }
+
+                            // Description
+                            var reconDesc = CreateBoundText(r, "Record pointer events, bounds, and transforms. Logs to rootcord_recon.log.", 13, TextMuted, "TextSecondary");
+                            if (reconDesc != null)
+                            {
+                                ApplyFont(r, reconDesc, font);
+                                r.SetTextWrapping(reconDesc, "Wrap");
+                                r.SetMargin(reconDesc, 0, 8, 0, 0);
+                            }
+                            r.AddChild(reconInner, reconDesc);
+                            r.AddChild(reconContent, reconInner);
+
+                            // Dev status badge
+                            var devStatusColor = TestingColors[4];
+                            var reconBadge = r.CreateBorder(ColorUtils.WithAlpha(devStatusColor, 0x20), 6);
+                            if (reconBadge != null)
+                            {
+                                r.SetMargin(reconBadge, 0, 8, 0, 0);
+                                r.SetGridRow(reconBadge, 1);
+                                r.SetHorizontalAlignment(reconBadge, "Left");
+                                r.SetPadding(reconBadge, 8, 3, 8, 3);
+                                SetBorderStroke(r, reconBadge, ColorUtils.WithAlpha(devStatusColor, 0x60), 1);
+                                var reconBadgeText = r.CreateTextBlock("Dev", 11, devStatusColor);
+                                r.SetFontWeight(reconBadgeText, "Bold");
+                                ApplyFont(r, reconBadgeText, font);
+                                r.SetBorderChild(reconBadge, reconBadgeText);
+                                r.AddChild(reconContent, reconBadge);
+                            }
+
+                            r.SetBorderChild(reconCard, reconContent);
+                        }
+
                         r.SetGridColumn(reconCard, 0);
                         r.SetGridRow(reconCard, 1);
                         r.SetMargin(reconCard, 0, 0, 6, 0);
@@ -1197,7 +1262,8 @@ internal static class ContentPages
                     settings.Save();
                     rebuildGrid?.Invoke();
                 }, offColor: AdjustForHighlight(CardBg, isLightUi ? 14 : 8),
-                   onColor: warnBorderOn);
+                   onColor: warnBorderOn,
+                   onThumbColor: "#FFFFFF");
                 if (expPill != null)
                 {
                     r.SetHorizontalAlignment(expPill, "Right");
@@ -1459,9 +1525,12 @@ internal static class ContentPages
         var cardObjects = new List<object>();
         foreach (var plugin in KnownPlugins ?? Array.Empty<PluginInfo>())
         {
-            // Content filter uses NsfwFilterEnabled as its canonical toggle
+            // Content filter uses NsfwFilterEnabled as its canonical toggle.
+            // ThemeEngine uses the live ActiveThemeName (same logic as About page count).
             bool isEnabled = plugin.Id == "content-filter"
                 ? settings.NsfwFilterEnabled
+                : plugin.Id == "themes"
+                ? (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
                 : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
             var card = BuildPluginCard(r, settings, plugin.Id, plugin.DisplayName,
                 plugin.Description, isEnabled, font, themeEngine,
@@ -2269,7 +2338,8 @@ internal static class ContentPages
     /// ON: AccentGreen pill, thumb right. OFF: dim pill, thumb left.
     /// </summary>
     private static object? BuildToggleSwitch(AvaloniaReflection r, bool initialState, object? font,
-        Action<bool>? onToggled = null, string? offColor = null, string? onColor = null)
+        Action<bool>? onToggled = null, string? offColor = null, string? onColor = null,
+        string? onThumbColor = null)
     {
         bool state = initialState;
         bool isHover = false;
@@ -2288,8 +2358,8 @@ internal static class ContentPages
 
         // Thumb (circle inside) — 16x16 in 24-high pill ensures even centering gaps
         // at both 100% and 150% DPI: (24-16)*scale is always even.
-        // Thumb color contrasts with the current pill background.
-        var thumbColor = ContrastText(pillColor);
+        // Thumb color contrasts with the current pill background; onThumbColor overrides when ON.
+        var thumbColor = (state && onThumbColor != null) ? onThumbColor : ContrastText(pillColor);
         var thumb = r.CreateBorder(thumbColor, 8);
         if (thumb != null)
         {
@@ -2322,7 +2392,7 @@ internal static class ContentPages
             if (thumb != null)
             {
                 r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
-                r.SetBackground(thumb, ContrastText(state ? accentColor : dimColor));
+                r.SetBackground(thumb, (state && onThumbColor != null) ? onThumbColor : ContrastText(state ? accentColor : dimColor));
             }
 
             onToggled?.Invoke(state);
