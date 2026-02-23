@@ -4300,12 +4300,15 @@ internal static class ContentPages
 
                     // Save channel
                     var s = UprootedSettings.Load();
+                    // If switching from developer, disable dev-only plugins
+                    if (newChannel != "developer" && s.AutoUpdateChannel == "developer")
+                        ApplyChannelRuntimeState(r, s);
                     s.AutoUpdateChannel = newChannel;
                     s.Save();
-
-                    ApplyChannelRuntimeState(r, s);
                     Logger.Log("AutoUpdate", $"Switched to {newChannel} channel");
-                    onRefreshCurrentPage?.Invoke();
+                    // Don't call onRefreshCurrentPage here — the visual toggle already
+                    // updates pill/labels. Rebuilding the page would reset the tap counter
+                    // needed for the dev channel easter egg.
                 });
 
                 r.SubscribeEvent(pill, "PointerEntered", () =>
