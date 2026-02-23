@@ -4,8 +4,12 @@
 
 ## Current State Summary
 
-Verbose CLR profiler diagnostics and Linux installer fixes are the most recent work.
+Dev Console UX polish and ThemeEngine enabled-state fixes are the most recent work.
 
+- **ProfileBadge/Injector log spam eliminated** — Fallback tick (200ms) and poll tick no longer emit raw START/END logs on every cycle. `ProfileBadgeInjector` now uses `TailSampler` + `WideEvent.BeginSampled`. `SidebarInjector` redundant plain `Logger.Log` lines removed (already had `WideEvent.BeginSampled`).
+- **ReconLogger card redesigned** — Dev Console ReconLogger card rebuilt in plugin card format: bold name left, toggle right, description, "Dev" status badge. Toggle now refreshes the About page so Dev Plugins count updates immediately.
+- **ThemeEngine enabled state fixed** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort all now use `themeEngine.ActiveThemeName` (not `settings.Plugins["themes"]`, which was always `true` from legacy migration). `SidebarInjector` no longer force-sets `Plugins["themes"] = true` for new installs.
+- **Experimental Plugins toggle dot** — `BuildToggleSwitch` gains `onThumbColor` override param. Experimental toggle passes `"#FFFFFF"` to prevent amber pill → black dot from `ContrastText`.
 - **Verbose CLR profiler catch handler** — Both Windows and Linux profilers now inject a 27-byte verbose catch handler into the IL try/catch that loads the hook DLL. On failure, prints full exception + attempted DLL path to console via `Console.WriteLine`. Falls back to 3-byte silent catch if metadata token creation fails. Pre-flight check at profiler init logs DLL existence and file size.
 - **Twemoji emoji rendering** — Emoji in user bio text now rendered as Twemoji images via `UserBioEngine`.
 - **Linux installer fixes** — Stripped UTF-8 BOM from bash installer shebang. Diagnose now checks correct `$PROFILE_DIR` path for hook log.

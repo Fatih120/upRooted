@@ -6,6 +6,21 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [Unreleased]
+
+### Fixed
+
+- **ReconLogger Dev Console card now matches plugin card format** — Replaced simple title + `BuildSettingsToggle` layout with full plugin card layout: bold name left, toggle right, description, "Dev" status badge. Toggle now calls `onRefreshCurrentPage` so the Dev Plugins count on the About page updates immediately.
+  - File: `hook/ContentPages.cs`
+- **ThemeEngine always counted as enabled when native theme active** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort used `settings.Plugins["themes"]` (always `true` due to legacy migration) instead of `themeEngine.ActiveThemeName`. All three sites now use the live theme engine state, matching the About page count logic. `SidebarInjector` default init no longer force-sets `Plugins["themes"] = true` for new installs.
+  - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
+- **Experimental Plugins toggle thumb black on amber pill** — `ContrastText(amber)` returned black. `BuildToggleSwitch` now accepts an `onThumbColor` override; experimental toggle passes `"#FFFFFF"` to hardcode white.
+  - File: `hook/ContentPages.cs`
+- **ProfileBadge and Injector poll ticks flooding live console** — `ProfileBadgeInjector` 200ms fallback tick emitted raw `Logger.Log` START/END on every cycle with no sampler. Added `TailSampler` + `WideEvent.BeginSampled`. `SidebarInjector` poll tick already used `WideEvent.BeginSampled` but also had redundant plain `Logger.Log` START/END lines bypassing the sampler; removed.
+  - Files: `hook/ProfileBadgeInjector.cs`, `hook/SidebarInjector.cs`
+
+---
+
 ## [0.5.1-dev4] - 2026-02-23
 
 ### Added
