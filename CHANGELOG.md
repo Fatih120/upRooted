@@ -10,204 +10,83 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 
-- **4 new preset themes** — Marine (ocean blue), Oreo (monochrome lavender), Sakura (light pink — first light preset), Ember (warm charcoal orange). Preset grid now 2×4 layout.
-  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
-- **Accent-aware text contrast** — `ContrastText()` helper returns black or white text based on background luminance. Applied to version badge, Check for Updates, Restart, Save API Key, Go, Got it buttons, channel badge, and toggle switch thumbs.
-  - File: `hook/ContentPages.cs`
-
-### Changed
-
-- **Themes → Theme Engine rebrand** — Plugin DisplayName, sidebar tab, header title, and About status field all renamed. Plugin description updated to reflect 8 presets and full engine capabilities.
-  - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
-- **ThemeEngine plugin enabled logic** — Now reflects whether a theme override is actually active (`ActiveThemeName != null && != "default-dark"`) instead of a settings toggle. Shows disabled on native themes.
-  - File: `hook/ContentPages.cs`
-- **Loki preset reworked** — BrandPrimary changed from green to gold (`#D4A847`). Green moved to BrandSecondary/Tertiary. ThemeAccentColor/Brush now gold. Buttons, version badge, and SelfMention all use gold.
-  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
-- **Preset SVG mode auto-detect** — Changed from hardcoded `"dark"` to `"auto"` for both runtime and startup reconciliation. `ThemeNeedsDarkSvgs` checks BackgroundPrimary luminance, supporting light presets like Sakura.
-  - File: `hook/ThemeEngine.cs`
-- **Same-family variant pulse** — `ForceVectorRefreshPulse` and RevertTheme Phase 5 now toggle Dark↔PureDark instead of Dark↔Light, preventing transient SVG desync (light icons flashing on dark backgrounds).
-  - File: `hook/ThemeEngine.cs`
-- **Toggle switch hardcoded on-colors** — Experimental plugins toggle uses warning border color; ping color toggle uses island selected border. Both match their enclosing card palettes instead of theme accent.
-  - File: `hook/ContentPages.cs`
-
-### Fixed
-
-- **Custom light theme palette adaptation** — Border and Muted formulas used `+ offset * (1-dir)` which collapsed to zero offset on light backgrounds, making borders invisible. Changed to `- offset * dir` for symmetric lightening (dark bg) / darkening (light bg). Also adapted: BrandSecondary/Tertiary, Link chroma, Info/Warning threshold, RoleMention/ChannelMention interpolation, OtherMention alpha, DropShadow gray base.
-  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
-- **`IsValidHex` rejected 8-digit hex** — Regex `^#[0-9A-Fa-f]{6}$` rejected `#AARRGGBB` format from `ReadLiveRootColors()`. On native Light startup, `ThemeNeedsDarkSvgs` defaulted to dark SVGs (light icons on light bg). Fixed regex to accept both 6 and 8 digit hex.
-  - File: `hook/ColorUtils.cs`
-- **Sidebar ghost highlights during live preview** — `BindToDynamicResource` on nav highlight created permanent subscriptions never disposed on deselection. Resource changes during color picker drag caused all previously-selected tabs to highlight. Fix: only bind the Themes tab (the only one needing live refresh).
-  - File: `hook/SidebarInjector.cs`
-- **Crimson preset desync on native theme switch** — `PrepareForNewTheme` only removed stale keys (in old but not new theme). Overlapping palette keys leaked across variant boundaries when switching between themes requiring different variants. Fix: remove ALL keys from current variant dict before transition.
-  - File: `hook/ThemeEngine.cs`
-- **Version info text lightening on theme revert** — Root's native "Root Version" and "System Info" TextBlocks lightened to TextPrimary after custom→dark revert because walker's bind-once replaced their original foreground. Fix: bind them to TextTertiary during injection so they have a stable base binding.
-  - File: `hook/SidebarInjector.cs`
-- **CardBorder fallback too faint** — `WithAlpha(textBase, 0x19)` (10% opacity) in `ApplyThemedColors` fallback was nearly invisible. Bumped to `0x33` (20%).
-  - File: `hook/ContentPages.cs`
-
-- **Translate plugin** — DeepL-powered message translation. A globe button is injected into Root's compose bar; click it to pick a target language and Uprooted rewrites your draft in place before sending. Config popup with language picker and API key. Auto-translate mode available.
-  - Files: `hook/TranslateEngine.cs` (new), `hook/TranslateConfigPopup.cs` (new)
-- **Presence Beacon + community badges** — Background presence beacon registers with the Uprooted API 10s after startup. Role-based badges on profile popups: Dev badge for developers, Alpha badge for testers. Session role cache for instant badge injection. Event-driven detection via `OverlayLayer.Children.CollectionChanged` with 500ms fallback poll.
-  - File: `hook/UprootedPresenceBeacon.cs` (new)
-- **UserBio plugin** — Displays user bio information on profile popups.
-  - File: `hook/UserBioEngine.cs` (new)
-- **WhoReacted plugin** — Shows reactor avatars next to reaction pills in chat messages. Uses Root's native `BitmapCache` for avatar loading.
-  - File: `hook/WhoReactedEngine.cs` (new)
-- **ReconLogger** — Dev-channel-only diagnostic tool that dumps visual tree data and style properties to the hook log. Useful for UI development and debugging.
-  - File: `hook/ReconLogger.cs` (new)
-- **Wide event structured logging** — New `WideEvent` builder emits structured `[Category|operation] key=value key=value dur_ms=N` log lines following [loggingsucks.com](https://loggingsucks.com) methodology. ~1200 freeform `Logger.Log` calls migrated to ~100 wide events across 11 files. Old format still works (backwards compatible).
-  - Files: `hook/WideEvent.cs` (new), `hook/Logger.cs`
-- **Tail sampling for scan engines** — `TailSampler` aggregates high-frequency scan timer results into 30-second heartbeat summaries. Applied to 4 scan engines (LinkEmbedEngine, MessageLogger, NsfwFilter, ThemeEngine), eliminating thousands of repetitive log lines per session.
-  - File: `hook/TailSampler.cs` (new)
-- **Log Console** — Dev-channel-only "Live Console" button on the About page opens a named pipe server that streams log lines in real time. `Logger.OnLine` callback feeds new lines to the pipe.
-  - File: `hook/LogConsole.cs` (new)
-- **Native theme settings button** — Gear button on the "Native" preset card opens Root's native Change Theme page. Uses ViewModel-driven `ListBox.SelectedItem` binding for proper navigation. New `SelectRootTab()` helper enables programmatic Root settings tab navigation by `MenuTitle` match.
-- **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
-- **DynamicResource binding** — `BindToDynamicResource` in AvaloniaReflection creates live resource bindings via `GetResourceObservable(key)` + `Bind()`. Now used successfully by the bind-once walker to convert untagged controls to auto-updating DynamicResource bindings.
-- **Themes page refresh button** — Added a `Refresh` button to Theme Settings that reapplies the currently active theme (`default-dark`, custom, or preset) and rebuilds the page. Uses standard Uprooted button styling (rounded border, highlight-derived stroke, hover tint, release-activated click).
-  - File: `hook/ContentPages.cs`
-
-### Changed
-
-- **Theme switch performance: in-place switching + bind-once walker + WeakRef live preview** — Eliminated theme switch lag and live preview desync:
-  - `PrepareForNewTheme` replaces `RevertTheme` for theme-to-theme transitions — removes only stale ThemeDictionary keys, shared keys stay for overwrite (no flash of Root defaults).
-  - Bind-once walker: untagged controls get `BindToDynamicResource` + `dyn-fg:` tag on first walk pass. Controls auto-update from ThemeDictionary changes; subsequent walks use efficient tag-based path.
-  - `_dynTaggedControls` (`List<WeakReference<object>>`) tracks discovered dyn-tagged controls. Live preview iterates this list directly — O(~16) instead of O(500+) full tree walk.
-  - `ColorToPaletteKey` static lookup maps known ARGB text colors to palette key names for bind-once targeting.
-  - `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` computed palette keys for gear/info button DynamicResource binding.
-  - Card borders now bound to `DynamicResource("Border")` at all 4 creation points in ContentPages.
-  - Nav highlight bound to `DynamicResource("HighlightNormal")` for live variant-change updates.
-  - `RegisterDynTaggedControl(object)` public API for external callers (SidebarInjector) to register controls in the WeakRef list.
-  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
-- **Light parity pass for settings/theme UI** — fixed live recolor desyncs for native settings labels (including profile `Online` status), aligned sidebar header tint mapping with Root converter behavior, and refined Themes page preset/refresh visuals to match native button/card treatment while preserving live custom-theme updates.
-  - Files: `hook/SidebarInjector.cs`, `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
-- **Developer channel UI refresh** — Dev channel visuals are now unified around the Dev blue token and include a higher-contrast channel badge style (dark fill + blue outline/text). Update status suffix now uses ` [Dev]` formatting (for example: `Up to date (v0.4.2) [Dev]`) instead of `(Dev)`.
-  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
-- **Plugin count semantics** — Plugin count now reports against plugins available in the current context (channel + experimental visibility) and always uses `X out of Y plugins` formatting.
-  - File: `hook/ContentPages.cs`
-- **Settings page visual consistency pass** — Normalized header/first-card spacing across About/Plugin Settings/Theme Settings and aligned card outlines closer to Root-native lightness.
-  - File: `hook/ContentPages.cs`
-- **Header row/button alignment polish** — Unified title-row minimum heights and button text sizing/weight so About (`Live Console`/`Open Logs`) and Themes (`Refresh`) header controls align consistently. About version badge in the UPROOTED card title row was nudged for cleaner baseline alignment.
-  - File: `hook/ContentPages.cs`
-- **Injected Uprooted sidebar tab interaction model** — Uprooted-injected sidebar tabs now use press-to-navigate behavior, no longer apply press-shrink feedback, and render without injected border strokes.
-  - Files: `hook/SidebarInjector.cs`, `hook/AvaloniaReflection.cs`
-- **Settings interactions and visual feedback aligned with Root native UX** — Incremental UI polish across injected controls:
-  - Release-only activation semantics standardized (`SubscribeClickReleased`) and drag-off-release no longer toggles.
-  - Press feedback (proportional shrink + subtle press shade) now applies consistently to injected controls, with targeted opt-outs for large parent cards where child-button presses should not depress the parent.
-  - Button border emphasis retuned: subtler resting borders and stronger hover borders on action buttons; gray utility buttons tuned separately from transparent text-only controls.
-  - Accent-backed button labels now stay fixed white instead of inheriting Root Light-mode `TextPrimary`.
-  - Theme page behavior polish: added Refresh button, prevented no-op re-toggle on already-active theme cards, and fixed multiple theme-card press/propagation quirks.
-  - Preset theme card hover borders are now luminance-aware (darken in light mode / lighten in dark mode); Custom Theme card hover remains hardcoded island behavior and always lightens.
-  - Experimental plugins banner/toggle light-mode visuals revised: enabled state uses a light amber surface palette in Light mode; toggle visuals now reuse the shared plugin toggle control for consistent formatting/behavior.
-  - Themes page Native preset now shows Root-state context in label (`Root` / `Dark` / `Light` / `System`) and uses state-aware preview appearance. Native gear hover is now luminance-aware (darkens in Light mode, lightens in Dark mode).
-  - Theme preview contrast tuning refined for cross-context readability (especially Light preview shown in dark/preset host and dark preset previews shown in light host).
-  - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
-
-- **Logging format** — Log lines now support two formats: the original `[HH:mm:ss.fff] [Category] message` and the new structured `[HH:mm:ss.fff] [Category|operation] key=value dur_ms=N`. Logger.cs grew from 113 to ~170 lines with the addition of `EmitWideEvent` and `OnLine` callback support.
-- **Injected control interaction model now matches Root native semantics** — Click-like actions execute on release and are gated by in-bounds press+release (`SubscribeClickReleased`), so press-drag-off-release no longer toggles actions. Applied broadly to settings buttons, toggles, theme cards, nav items, and popup controls.
-  - Files: `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`, `hook/TranslateConfigPopup.cs`
-- **Native press feedback for injected clickable controls** — `SetCursorHand` now wires centralized press feedback (proportional shrink + subtle press shade/restore) via render transform + opacity, without causing layout reflow.
-  - File: `hook/AvaloniaReflection.cs`
-- **Card border thickness** — 1.5px → 1.0px to match Root's native divider lines; color from Root's `Border` resource
-- **Nav item borders** — Visible 1px borders using Root's highlight resources, adapts to light/dark
-- **Custom theme island** — Hardcoded colors immune to walker recoloring; ping toggle uses hardcoded off-color
-- **ScrollViewer** — `HorizontalScrollBarVisibility = Disabled` on content ScrollViewers for correct width
-- **Plugin filter** — Cycling toggle pill with Bold text, `AdjustForHighlight` 1.5px border, `MinWidth` to prevent width jitter
-- **Plugin sort** — Stability tier prioritized over enabled/disabled (Stable always before Beta)
-- **Themes "Open" button** — Sized to match toggle switches (44×24)
-- **Experimental banner** — Theme-aware toggle: theme colors when off, amber warning when on; 20px icon hidden when off
-- **Restart banners** — Title + subtitle layout, burnt orange tint (`#2A1D15`/`#D06818`), accent-format restart buttons
-- **Vector icons** — Plugin card gear/info icons use `Shapes.Path` with `Stretch.Uniform` (Material Design 24x24); replaced `PathIcon` which didn't scale
-- **Plugin card text** — Bold plugin names (was silently failing), Bold status badges with 1px border
-- **Cards-in-a-card layout** — Preset and custom theme sections use Root-native two-level card hierarchy (outer container + inner 2nd-order cards with lighter bg, thicker borders, Grid column layout)
-- **DPI-aware borders** — `ThinBorder` (1px physical) and `ThickBorder` (next pixel boundary) computed from `RenderScaling`; always visually distinct at any DPI
-- **Radio indicators** — Grid overlay with sibling Borders (18×18 ring + 10×10 centered dot); `(18-10)*scale` always even for perfect centering at 100%/150%
-- **Toggle switch** — Thumb 18→16 for even centering gaps at all DPI scales
-- **Typography** — Page titles 20px Bold, section headers 14px Bold TextPrimary, About page → "About Uprooted"
-- **Button borders** — Accent buttons get `AdjustForHighlight(color, 30)` 1.5px borders with Bold text; Developer/Stable border updates on toggle
-- **Restart button** — Deeper burnt orange (`#D06818`)
-- **Rootcord overhaul** — 17 fixes plus theme integration and drag-to-reorder. User card rebuilt from scratch with custom 4-button cluster (Friends, DMs, Notifications, Settings). Community header rebuilt to match Root's native MembersView. Server icon crash on `RefreshSelectedHighlight` fixed with type guards. Min/max width constraints on channels and chat panels. Promoted from Experimental to Alpha.
-  - File: `hook/RootcordEngine.cs`
-- **Startup performance** — Three rounds of optimizations: (1) profiler startup — removed R2R disable, cleared event mask, reduced delays; (2) event-driven detection — replaced polling with assembly load events, deferred diagnostics to dev channel; (3) reflection resolve 56% faster, tighter plugin startup delays. Single settings read shared across Phase 4.5 plugins.
-  - Files: `hook/StartupHook.cs`, `hook/AvaloniaReflection.cs`, `tools/uprooted_profiler.c`
-
-### Fixed
-
-- **Theme switch flash-of-defaults** — Switching between Uprooted themes caused a brief flash of Root's default colors because `RevertTheme()` removed all overrides before re-applying. `PrepareForNewTheme` now does in-place key diffing — removes only stale keys, shared keys stay for overwrite.
-  - File: `hook/ThemeEngine.cs`
-- **Live preview desync on Root native text** — The untagged Foreground walker destructively overwrote DynamicResource bindings via `prop.SetValue`, causing Root's native TextBlocks (channels, timestamps, usernames) to stop responding to ThemeDictionary updates until the next 100ms walk pass. Bind-once pattern now preserves DynamicResource bindings.
-  - File: `hook/ThemeEngine.cs`
-- **Bind-once tag overwrite bug** — The bind-once walker block was not guarded by `else`, causing it to run on already-dyn-tagged controls. A control with `dyn-bg:BackgroundElevated,dyn-bb:Border` would have its tag overwritten to `dyn-fg:TextPrimary`, destroying bg/bb bindings.
-  - File: `hook/ThemeEngine.cs`
-- **Card borders not updating during live preview** — Card borders had `dyn-bb:Border` walker tags but no `BindToDynamicResource` for `BorderBrush`. Added at all 4 card creation points.
-  - File: `hook/ContentPages.cs`
-- **Gear icon background stale until Refresh** — Theme/plugin card gear buttons used computed colors with no DynamicResource binding. New `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` palette keys enable live binding.
-  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
-- **Nav highlight not updating on variant change** — Selected nav highlight read `HighlightNormal` once at build time. Now bound to `DynamicResource("HighlightNormal")`.
-  - File: `hook/SidebarInjector.cs`
-- **`SetValueStylePriority` misnamed** — Method used `Enum.ToObject(bpType, 0)` which is `BindingPriority.LocalValue`, not Style priority. Renamed to `SetValueLocalPriority`; field `_bindingPriorityStyle` → `_bindingPriorityLocal`.
-  - File: `hook/AvaloniaReflection.cs`
-- **Theme switching semantics (tab open vs. theme change)** — Opening Root/Uprooted settings tabs no longer changes the active theme state. Theme state now changes only when the user performs an actual theme selection action.
-  - File: `hook/SidebarInjector.cs`
-- **Light → Root Dark while custom theme active** — Fixed the no-op transition path by forcing `PureDark` (instead of `Dark`) when applying a dark Uprooted theme from native Light, so later native `Root Dark` selection becomes a real `PureDark -> Dark` transition.
-  - File: `hook/ThemeEngine.cs`
-- **Native menu retarget log spam** — Throttled repeated `Retargeted native menu text` logs while settings is open; forced rebind passes still log immediately.
-  - File: `hook/SidebarInjector.cs`
-- **Dev mode teardown latency on channel switch** — Switching from Developer to Stable now immediately disables/refreshes dev-only runtime behavior (ReconLogger, Live Console, dev badge indicators, and related UI state) without requiring tab navigation or restart.
-  - Files: `hook/ContentPages.cs`, `hook/LogConsole.cs`, `hook/ProfileBadgeInjector.cs`
-- **High-DPI border inflation on some laptops** — Thin borders now target fixed physical width (1px) to prevent inflation on high-scale displays. Thick borders were retuned to native-like emphasis weight to match Root settings visuals more closely.
-  - File: `hook/ContentPages.cs`
-- **Recon Logger naming consistency** — Plugin display name standardized to `ReconLogger`.
-  - File: `hook/ContentPages.cs`
-- **Input/activation edge cases across settings UI** — Fixed regressions and interaction quirks discovered during Root-native parity pass:
-  - Pointer press then drag-off then release no longer triggers injected toggles/actions.
-  - Native theme card settings button no longer depresses/toggles the parent card.
-  - Custom Theme Ping toggle no longer activates the entire custom card.
-  - Theme cards no longer re-trigger when pressing an already active card.
-  - About/Plugins/popup button border-hover styling now consistent across previously missed controls.
-  - Root native variant restoration now preserves requested state (including `System/default`) when applying/reverting Uprooted themes, fixing cases where fallback incorrectly stuck to explicit Dark/Light.
-  - File: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
-
-- **Full codebase bug audit** — 15-commit sweep covering thread safety, timer leaks, fire-and-forget task accumulation, error handling gaps, and type correctness:
-  - `UprootedSettings`: thread-safe cache read (local copy prevents TOCTOU null return), atomic `Save()` via temp-rename, `OrdinalIgnoreCase` plugins dict
-  - `MessageStore`: `IDisposable` + timer disposal, `WriteLock` covers full file I/O (prevents Truncate/FlushBuffer interleave), skip records with bad timestamps instead of inventing `UtcNow`
-  - `MessageLogger`, `AuditLogEngine`, `LinkEmbedEngine`: `IDisposable` added; each disposes its `_scanTimer` on shutdown. `MessageLogger` also disposes its owned `MessageStore`.
-  - `ClearUrlsEngine`, `SidebarInjector`: redundant `Task.Delay().ContinueWith()` timeout tasks removed (accumulated thousands of orphaned background tasks per hour; `finally` blocks already reset the guard)
-  - `NsfwFilter`: `_seenImages` dictionary now capped at 2000 entries to prevent unbounded growth during long sessions
-  - `RootcordEngine`: `Task.Delay(300)` in `SubscribeTabChanges` and `Task.Delay(350)` in `OpenSettingsDirectly` now receive a `CancellationToken` cancelled in `Revert()`, preventing stale callbacks from firing after the plugin is disabled
-  - `Logger`: static constructor wrapped in try/catch with `Path.GetTempPath()` fallback — prevents `TypeInitializationException` from crashing the entire hook if the profile directory is unresolvable
-  - `HtmlPatchVerifier`: `_debounceTimer = null` added after disposal in `Dispose()` to prevent use-after-free
-  - `StartupHook`: diagnostic `DumpVisualTreeColors` exception now logged instead of silently swallowed
-  - `plugin.ts` / `pluginLoader.ts`: `Patch` handler signatures restricted to synchronous return types — `Promise<>` return would silently break `before()` cancellation because the bridge proxy cannot await
-  - `ContentPages`: lightbox dismiss methods (`DismissPluginInfoLightbox`, `DismissPluginSettingsLightbox`, `DismissUpdateNotification`) now null the overlay ref before calling `RemoveFromOverlay`, guarding against re-entrant dismiss on rapid double-click; `NsfwFilterInstance.UpdateConfig()` calls wrapped in try/catch with logging
-
-- **Theme revert** — Variant toggle + `RestoreTaggedControls` for complete restoration
-- **Custom Theme card interaction quirk** — Toggling Ping Color no longer bubbles into and activates the parent Custom Theme card; large Custom card press feedback is intentionally disabled to avoid over-aggressive card-scale depression.
-  - File: `hook/ContentPages.cs`
-- **Theme card no-op retrigger** — Clicking a theme card that is already active now exits early instead of reapplying/rebuilding unnecessarily.
-  - File: `hook/ContentPages.cs`
-- **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation to About tab
-- **Settings header back arrow** — Structural search finds back button by child order in header Grid (not by bounds or text). Collapse pattern (Opacity/MaxWidth/MaxHeight/Width/Margin all zeroed) avoids fighting Root's `IsVisible` binding on `SelectedMenuItemPageContainer.Navigator.CanGoBack`. Title TextBlock overridden after ListBox deselection. Restores original values (Width=40, Margin=24,0,0,0) when switching back to Root tabs.
-- **Settings detection delay** — Lowered LayoutUpdated throttle from 500ms to 50ms; removed `_injecting` reentracy guard from LayoutUpdated path (both paths run on UI thread); reset stale timer lock in NullState. Detection is now near-instant on every open including rapid close/reopen cycles.
-- **Title disappearing on rapid re-opens** — Selection suppression re-deselection now re-applies CollapseBackButton + SetHeaderTitle to restore header state that the binding fallback destroys
-- **PresenceBeacon UUID discovery race** — `RunOnUIThread` race condition caused UUID discovery to always return null. Fixed async dispatch flow.
+- **Translate plugin** — DeepL-powered message translation via compose bar globe button. Config popup with language picker and API key. Auto-translate mode available.
+  - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
+- **Presence Beacon + community badges** — Background beacon registers with the Uprooted API. Role-based badges (Dev, Alpha) on profile popups with session role cache. Event-driven detection via `OverlayLayer.Children.CollectionChanged` with 500ms fallback poll.
   - File: `hook/UprootedPresenceBeacon.cs`
-- **MessageLogger hybrid traversal** — Avalonia 11.3 `UserControl` boundary broke visual tree walk; replaced with hybrid traversal that crosses the boundary.
-  - File: `hook/MessageLogger.cs`
-- **MessageLogger injection bugs** — 5 fixes: diagnostic dump, grid fallback, row cleanup, recycling, and scroll position.
-  - File: `hook/MessageLogger.cs`
-- **Patcher CRLF preservation** — HTML patcher now preserves CRLF line endings, re-patches on install, and escapes XSS in injected paths.
-  - File: `installer/src-tauri/src/patcher.rs`
-- **Command injection in DesktopNotification** — Eliminated shell command injection vulnerability and process handle leak.
-  - File: `hook/DesktopNotification.cs`
-- **TranslateEngine resource leaks** — Shared `HttpClient`, thread-safe caches, size caps to prevent unbounded growth.
-  - File: `hook/TranslateEngine.cs`
-- **LinkEmbedEngine cache caps** — Capped metadata and embed caches to prevent unbounded memory growth.
-  - File: `hook/LinkEmbedEngine.cs`
+- **UserBio plugin** — Displays user bio information on profile popups.
+  - File: `hook/UserBioEngine.cs`
+- **WhoReacted plugin** — Shows reactor avatars next to reaction pills in chat messages.
+  - File: `hook/WhoReactedEngine.cs`
+- **ReconLogger** — Dev-channel-only visual tree diagnostic tool.
+  - File: `hook/ReconLogger.cs`
+- **Wide event structured logging** — `WideEvent` builder emits structured `key=value dur_ms=N` log lines. `TailSampler` aggregates high-frequency scan results into 30-second heartbeat summaries. `LogConsole` streams log lines in real time via named pipe (dev-channel only).
+  - Files: `hook/WideEvent.cs`, `hook/TailSampler.cs`, `hook/LogConsole.cs`, `hook/Logger.cs`
+- **8 preset themes** — Crimson, Cosmic Smoothie, Loki, Marine, Oreo, Sakura (first light preset), Ember. 2×4 grid layout with native theme card.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **Custom theme engine** — Auto-apply on keystroke via `UpdateCustomThemeLive`. Full OKLCH lightness range (light backgrounds work). Smooth direction-aware palette derivation. Custom text color input. Variant switching for light backgrounds. Refresh button on Theme Engine page.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **DynamicResource binding** — `BindToDynamicResource` creates live resource bindings via `GetResourceObservable(key)` + `Bind()`. Used by the bind-once walker, card borders, nav highlights, and gear buttons.
+  - File: `hook/AvaloniaReflection.cs`
+- **Accent-aware text contrast** — `ContrastText()` returns black or white text based on background luminance. Applied to all accent-bg buttons (version badge, Check for Updates, Restart, channel badge, etc.) and toggle switch thumbs.
+  - File: `hook/ContentPages.cs`
+- **Native theme settings button** — Gear button on the "Native" preset card navigates to Root's Change Theme page via ViewModel-driven `ListBox.SelectedItem` binding.
+
+### Changed
+
+- **Themes → Theme Engine** — Plugin renamed to ThemeEngine across sidebar tab, page header, About status field, and plugin card. Plugin enabled logic now reflects whether a theme override is actually active.
+  - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
+- **Theme switch performance** — Eliminated theme switch lag and live preview desync:
+  - `PrepareForNewTheme` removes all keys from the current variant dict (color + SVG), preventing cross-variant palette and SVG leaks. New theme writes fresh keys to the resolved dict.
+  - Bind-once walker: untagged controls get `BindToDynamicResource` + `dyn-fg:` tag on first pass, then auto-update from ThemeDictionary changes.
+  - `_dynTaggedControls` (`List<WeakReference<object>>`) enables O(~16) live preview instead of O(500+) full tree walks.
+  - `BackgroundButtonOnElevated`/`BackgroundButtonOnSecondary` computed palette keys for gear/info button DynamicResource binding.
+  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`
+- **Light theme palette adaptation** — Border/Muted formulas changed from `+ offset*(1-dir)` (collapsed to zero on light bg) to `- offset*dir` (symmetric). Direction-aware: BrandSecondary/Tertiary, Link chroma, Info/Warning threshold, RoleMention/ChannelMention interpolation, OtherMention alpha, DropShadow gray base. `IsValidHex` extended to accept 8-digit `#AARRGGBB` hex. Preset SVG mode changed from hardcoded `"dark"` to `"auto"` (luminance-based).
+  - Files: `hook/ThemeEngine.cs`, `hook/ColorUtils.cs`, `hook/ContentPages.cs`
+- **Same-family variant pulse** — `ForceVectorRefreshPulse` and RevertTheme Phase 5 now toggle Dark↔PureDark instead of Dark↔Light, preventing transient SVG desync.
+  - File: `hook/ThemeEngine.cs`
+- **Loki preset reworked** — BrandPrimary changed from green to gold (`#D4A847`). Green moved to BrandSecondary/Tertiary. All buttons, badges, and SelfMention now gold.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **Settings UI overhaul** — Cards-in-a-card layout, DPI-aware borders (1px physical thin / next-pixel thick), 20px Bold page titles, Grid radio indicators, 16px toggle thumbs, `Shapes.Path` vector icons, cycling plugin filter pill, stability-tier sort, burnt orange restart banners, luminance-aware hover borders.
+  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`
+- **Interaction model** — Release-only activation (`SubscribeClickReleased`), centralized press feedback via `SetCursorHand`, hardcoded toggle on-colors for experimental/ping switches matching their enclosing card palettes, no-recolor island for custom theme card.
+  - Files: `hook/ContentPages.cs`, `hook/AvaloniaReflection.cs`, `hook/SidebarInjector.cs`
+- **Developer channel UI** — Unified around Dev blue token. Higher-contrast badge (dark fill + blue outline). `[Dev]` suffix formatting.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **Rootcord overhaul** — User card rebuilt with custom 4-button cluster. Community header matches native MembersView. Server icon crash fixed. Member count tooltips. Live toggle. Promoted to Alpha.
+  - File: `hook/RootcordEngine.cs`
+- **Startup performance** — Profiler: removed R2R disable, cleared event mask. Event-driven assembly detection. Reflection resolve 56% faster. Single settings read for Phase 4.5 plugins.
+  - Files: `hook/StartupHook.cs`, `hook/AvaloniaReflection.cs`, `tools/uprooted_profiler.c`
+- **Sidebar** — Re-injects on variant change with fresh native colors. Press-to-navigate tabs. Version text bound to `TextTertiary` for stable revert.
+  - File: `hook/SidebarInjector.cs`
+
+### Fixed
+
+- **Crimson preset desync** — Overlapping palette keys leaked across variant boundaries during theme-to-theme transitions requiring different variants. `PrepareForNewTheme` now removes ALL keys from current variant dict.
+- **Sidebar ghost highlights** — `BindToDynamicResource` on nav highlights created permanent subscriptions. Resource changes during live preview caused all previously-selected tabs to highlight. Fix: only bind the Themes tab.
+- **Version info text lightening on revert** — Root's native version TextBlocks lost their dim foreground after custom→dark revert. Fix: bind to `TextTertiary` during injection.
+- **CardBorder fallback too faint** — `WithAlpha(textBase, 0x19)` (10%) bumped to `0x33` (20%).
+- **Bind-once tag overwrite** — Walker block not guarded by `else`, ran on already-tagged controls and destroyed multi-part `dyn-bg:X,dyn-bb:Y` tags.
+- **`SetValueStylePriority` misnamed** — Actually used `BindingPriority.LocalValue` (enum 0). Renamed to `SetValueLocalPriority`.
+- **Light → Root Dark transition** — Forced `PureDark` instead of `Dark` so later native Dark selection is a real transition.
+- **Settings detection** — LayoutUpdated throttle 500ms→50ms, removed `_injecting` guard, near-instant on every open.
+- **Settings header** — Back button found by child order, collapsed via Opacity/MaxWidth pattern. Title restored on rapid re-opens.
+- **Theme card no-op retrigger** — Already-active cards now exit early.
+- **Auto-nav on variant change** — `_hasAutoNavigated` flag prevents re-navigation.
+- **Dev mode teardown** — Developer→Stable immediately disables runtime dev behavior.
+- **DPI border inflation** — Thin borders target 1px physical width.
+- **Native menu retarget log spam** — Throttled repeated logs.
+- **PresenceBeacon UUID discovery race** — Fixed async `RunOnUIThread` dispatch.
+- **MessageLogger** — Hybrid traversal crosses UserControl boundary. 5 injection fixes.
+- **Patcher CRLF preservation** — Preserves line endings, escapes XSS in injected paths.
+- **Command injection in DesktopNotification** — Eliminated vulnerability and handle leak.
+- **Resource leaks** — TranslateEngine shared HttpClient, LinkEmbedEngine cache caps.
+- **Full codebase bug audit** — 15-commit sweep: thread-safe settings, atomic Save, IDisposable on timers, orphaned task cleanup, NsfwFilter cap, RootcordEngine cancellation tokens, Logger fallback, HtmlPatchVerifier use-after-free, lightbox re-entrant dismiss guards.
 
 ### Infrastructure
 
-- **Version-gated force-disable** — `ForceDisableOnUpgrade` entry for v0.5.0: `translate`, `who-reacted`, `user-bio` force-disabled on upgrade to prevent unvalidated plugins from running automatically.
+- **Version-gated force-disable** — `translate`, `who-reacted`, `user-bio` force-disabled on v0.5.0 upgrade.
 
 ---
 
