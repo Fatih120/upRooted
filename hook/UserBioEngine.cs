@@ -220,6 +220,31 @@ internal class UserBioEngine
     }
 
     /// <summary>
+    /// Fire-and-forget bio query that warms the cache.
+    /// Safe to call speculatively — skips if already cached.
+    /// </summary>
+    internal void PrefetchBio(string uuid)
+    {
+        if (TryGetCachedBio(uuid) != null) return;
+        QueryBioAsync(uuid, _ => { });
+    }
+
+    /// <summary>
+    /// Pre-download Twemoji bitmaps for all emoji in the given text on the current thread
+    /// (expected to be called from a ThreadPool thread). This moves emoji HTTP latency
+    /// off the UI thread so that InjectBioText/TryInjectFormattedBio only hits the cache.
+    /// </summary>
+    internal void PredownloadEmojiBitmaps(string text)
+    {
+        if (!ContainsEmoji(text)) return;
+        foreach (var (_, codepoints) in SplitEmoji(text))
+        {
+            if (codepoints != null)
+                GetOrDownloadEmojiBitmap(codepoints);
+        }
+    }
+
+    /// <summary>
     /// Invalidate a cached bio entry.
     /// </summary>
     internal void InvalidateBioCache(string uuid)
@@ -271,6 +296,9 @@ internal class UserBioEngine
         QueryBioAsync(userId, bio =>
         {
             if (string.IsNullOrEmpty(bio)) return;
+            // Pre-download emoji bitmaps on this ThreadPool thread so the UI thread
+            // only hits the bitmap cache (no HTTP latency during injection).
+            PredownloadEmojiBitmaps(bio);
             _r.RunOnUIThread(() =>
             {
                 try

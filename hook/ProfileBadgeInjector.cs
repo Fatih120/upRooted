@@ -603,6 +603,15 @@ internal class ProfileBadgeInjector
         bool isUprootedUser = isOwnProfile || (userId != null && _beacon != null
             && _beacon.TryGetCached(userId) == true);
 
+        // Speculative bio prefetch: when presence is unknown, start the bio HTTP fetch
+        // in parallel with the presence query so the bio is cached by the time presence
+        // confirms the user has Uprooted. Non-Uprooted users get a cheap 404/empty result.
+        if (_bioEngine != null && userId != null && !isOwnProfile && _beacon != null
+            && _beacon.TryGetCached(userId) == null)
+        {
+            _bioEngine.PrefetchBio(userId);
+        }
+
         bool needsBadges = isDevUser || isAlphaUser;
         bool needsBio = _bioEngine != null && isUprootedUser && userId != null;
 
@@ -1024,18 +1033,79 @@ internal class ProfileBadgeInjector
             _beacon.QueryAsync(userId, result =>
             {
                 if (!result) return;
+
+                // Presence confirmed — ensure bio is cached (backup in case speculative prefetch missed)
+                _bioEngine?.PrefetchBio(userId);
+
                 _r.RunOnUIThread(() =>
                 {
                     try
                     {
                         if (_r.GetParent(popup) == null) return; // popup detached — skip
                         InjectPresenceIconIntoPopup(popup, usernameBlock);
+
+                        // Deferred bio injection: presence just confirmed this is an Uprooted user,
+                        // so inject bio now if it wasn't injected during the initial badge pass
+                        // (which would have skipped bio because isUprootedUser was false).
+                        TryDeferredBioInjection(popup, usernameBlock, userId);
                     }
                     catch (Exception ex) { Logger.Log("ProfileBadge", $"Presence icon async inject error: {ex.Message}"); }
                 });
             });
         }
         // cached == false → user doesn't have Uprooted, skip
+    }
+
+    /// <summary>
+    /// Inject bio into a profile popup after the presence callback confirms the user has Uprooted.
+    /// Called from the presence callback's UI-thread dispatch. Reuses <see cref="IsVerticalPanel"/>
+    /// to walk up from usernameBlock, finds the insert index after any existing badges, then calls
+    /// <see cref="UserBioEngine.TryInjectBio"/>. Dedup is safe — TryInjectBio checks BioTag internally.
+    /// </summary>
+    private void TryDeferredBioInjection(object popup, object usernameBlock, string userId)
+    {
+        if (_bioEngine == null) return;
+
+        try
+        {
+            var candidate = usernameBlock;
+            for (int up = 0; up < 8; up++)
+            {
+                var parent = _r.GetParent(candidate);
+                if (parent == null) break;
+
+                if (IsVerticalPanel(parent))
+                {
+                    var children = _r.GetChildren(parent);
+                    if (children != null)
+                    {
+                        var idx = children.IndexOf(candidate);
+                        if (idx >= 0)
+                        {
+                            // Scan forward past any existing badges to find the right insert position
+                            int insertIdx = idx + 1;
+                            while (insertIdx < children.Count)
+                            {
+                                var childTag = _r.GetTag(children[insertIdx]);
+                                if (childTag == BadgeTag || childTag == AlphaBadgeTag)
+                                    insertIdx++;
+                                else
+                                    break;
+                            }
+
+                            _bioEngine.TryInjectBio(popup, parent, insertIdx, userId);
+                            return;
+                        }
+                    }
+                }
+
+                candidate = parent;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"TryDeferredBioInjection error: {ex.Message}");
+        }
     }
 
     /// <summary>

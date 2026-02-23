@@ -4,6 +4,7 @@
 #
 # Usage: ./install-uprooted-linux.sh [--root-path /path/to/Root.AppImage]
 #        ./install-uprooted-linux.sh --prebuilt [--root-path /path/to/Root.AppImage]
+#        ./install-uprooted-linux.sh --channel canary --prebuilt
 #        ./install-uprooted-linux.sh --auto-deps  (auto-install missing build deps)
 #        ./install-uprooted-linux.sh --uninstall
 #        ./install-uprooted-linux.sh --repair [--prebuilt]
@@ -24,6 +25,7 @@ INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
 VERSION="0.5.1-dev4"
+CHANNEL="stable"
 AUTO_DEPS=false
 ROOT_EXEC=""        # actual binary/AppRun to exec (may differ from ROOT_PATH)
 SQUASHFS_ROOT=""    # set when using an extracted AppImage
@@ -40,6 +42,17 @@ warn()  { echo -e "${YELLOW}[!]${NC} $1"; }
 error() { echo -e "${RED}[-]${NC} $1"; }
 die()   { error "$1"; exit 1; }
 
+# ── Channel → GitHub repo mapping ──
+
+channel_repo() {
+    case "$CHANNEL" in
+        stable) echo "The-Uprooted-Project/uprooted" ;;
+        canary) echo "The-Uprooted-Project/uprooted-canary" ;;
+        dev)    echo "The-Uprooted-Project/uprooted-private" ;;
+        *)      die "Unknown channel: $CHANNEL (use stable, canary, or dev)" ;;
+    esac
+}
+
 # ── Resolve latest release version from GitHub API ──
 
 resolve_latest_version() {
@@ -48,24 +61,43 @@ resolve_latest_version() {
         return
     fi
 
-    local api_url="https://api.github.com/repos/The-Uprooted-Project/uprooted/releases/latest"
+    local repo
+    repo=$(channel_repo)
+
+    # /releases/latest only returns non-prerelease; canary/dev are always prerelease
+    local api_url
+    if [[ "$CHANNEL" == "stable" ]]; then
+        api_url="https://api.github.com/repos/${repo}/releases/latest"
+    else
+        api_url="https://api.github.com/repos/${repo}/releases?per_page=1"
+    fi
+
+    local curl_opts=(-sL --max-time 10)
+    if [[ "$CHANNEL" == "dev" && -n "${GITHUB_TOKEN:-}" ]]; then
+        curl_opts+=(-H "Authorization: Bearer $GITHUB_TOKEN")
+    fi
+
     local response
-    response=$(curl -sL --max-time 10 "$api_url" 2>/dev/null) || {
+    response=$(curl "${curl_opts[@]}" "$api_url" 2>/dev/null) || {
         warn "Could not reach GitHub API, using bundled version v$VERSION"
         return
     }
 
     local tag
-    tag=$(echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | grep -o '"v[^"]*"' | tr -d '"')
+    tag=$(echo "$response" | grep -o '"tag_name"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | grep -o '"v[^"]*"' | tr -d '"')
 
     if [[ -z "$tag" ]]; then
-        warn "Could not parse latest version from GitHub API, using bundled v$VERSION"
+        if [[ "$CHANNEL" == "dev" ]]; then
+            warn "Could not fetch latest dev release (is GITHUB_TOKEN set?), using bundled v$VERSION"
+        else
+            warn "Could not parse latest version from GitHub API, using bundled v$VERSION"
+        fi
         return
     fi
 
     local latest="${tag#v}"
     if [[ "$latest" != "$VERSION" ]]; then
-        log "Latest release: v$latest (script bundled: v$VERSION)"
+        log "Latest $CHANNEL release: v$latest (script bundled: v$VERSION)"
         VERSION="$latest"
     fi
 }
@@ -415,6 +447,14 @@ CREATE_DESKTOP=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --root-path) ROOT_PATH="$2"; shift 2 ;;
+        --channel)
+            CHANNEL="$2"
+            case "$CHANNEL" in
+                stable|canary|dev) ;;
+                *) die "Unknown channel: $CHANNEL (use stable, canary, or dev)" ;;
+            esac
+            shift 2
+            ;;
         --diagnose)
             MODE="diagnose"
             shift
@@ -441,6 +481,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --help|-h)
             echo "Usage: $0 [--root-path /path/to/Root.AppImage] [--prebuilt] [--desktop]"
+            echo "       $0 --channel canary --prebuilt"
             echo "       $0 --uninstall"
             echo "       $0 --repair [--prebuilt]"
             echo "       $0 --diagnose"
@@ -450,6 +491,10 @@ while [[ $# -gt 0 ]]; do
             echo "Options:"
             echo "  --root-path    Path to Root.AppImage (auto-detected if not given)"
             echo "  --prebuilt     Download pre-built artifacts instead of building from source"
+            echo "  --channel CH   Download from a specific release channel:"
+            echo "                   stable  — public stable releases (default)"
+            echo "                   canary  — bleeding-edge canary builds"
+            echo "                   dev     — private dev builds (requires GITHUB_TOKEN)"
             echo "  --auto-deps    Auto-install missing build dependencies without prompting"
             echo "  --desktop      Create a .desktop file for launching Root with Uprooted"
             echo "  --uninstall    Remove Uprooted completely (patches, env vars, files)"
@@ -855,9 +900,18 @@ check_prereqs() {
 download_prebuilt() {
     resolve_latest_version
 
-    local artifacts_url="https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
+    local repo
+    repo=$(channel_repo)
+    local artifacts_url="https://github.com/${repo}/releases/download/v${VERSION}/uprooted-linux-artifacts.tar.gz"
 
-    log "Downloading pre-built artifacts (v$VERSION)..."
+    log "Downloading pre-built artifacts (v$VERSION, $CHANNEL channel)..."
+
+    if [[ "$CHANNEL" == "dev" && -z "${GITHUB_TOKEN:-}" ]]; then
+        error "The dev channel requires a GitHub token for the private repo."
+        error "  Set GITHUB_TOKEN in your environment, e.g.:"
+        error "    GITHUB_TOKEN=ghp_xxxx ./install-uprooted-linux.sh --channel dev --prebuilt"
+        die "  Create a token at: https://github.com/settings/tokens"
+    fi
 
     if ! command -v curl &>/dev/null && ! command -v wget &>/dev/null; then
         die "Neither curl nor wget found. Install one and try again."
@@ -868,13 +922,18 @@ download_prebuilt() {
     local tarball="$tmpdir/uprooted-linux-artifacts.tar.gz"
 
     if command -v curl &>/dev/null; then
+        local curl_opts=(-sL -w "%{http_code}" -o "$tarball" --max-time 120)
+        if [[ "$CHANNEL" == "dev" && -n "${GITHUB_TOKEN:-}" ]]; then
+            curl_opts+=(-H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/octet-stream")
+        fi
+
         local http_code
-        http_code=$(curl -sL -w "%{http_code}" -o "$tarball" --max-time 120 "$artifacts_url" 2>/dev/null) || http_code="000"
+        http_code=$(curl "${curl_opts[@]}" "$artifacts_url" 2>/dev/null) || http_code="000"
 
         if [[ "$http_code" == "404" ]]; then
             rm -rf "$tmpdir"
-            error "Version v$VERSION not found on GitHub (HTTP 404)."
-            error "  Check available releases: https://github.com/The-Uprooted-Project/uprooted/releases"
+            error "Version v$VERSION not found on $CHANNEL channel (HTTP 404)."
+            error "  Check available releases: https://github.com/${repo}/releases"
             die "  Run with --diagnose for more info."
         elif [[ "$http_code" != "200" && "$http_code" != "000" ]]; then
             rm -rf "$tmpdir"
@@ -887,7 +946,12 @@ download_prebuilt() {
             die "  Check your internet connection and try again."
         fi
     else
-        if ! wget -q -O "$tarball" "$artifacts_url" 2>/dev/null; then
+        local wget_opts=(-q -O "$tarball")
+        if [[ "$CHANNEL" == "dev" && -n "${GITHUB_TOKEN:-}" ]]; then
+            wget_opts+=(--header="Authorization: Bearer $GITHUB_TOKEN" --header="Accept: application/octet-stream")
+        fi
+
+        if ! wget "${wget_opts[@]}" "$artifacts_url" 2>/dev/null; then
             rm -rf "$tmpdir"
             error "Failed to download pre-built artifacts."
             error "  URL: $artifacts_url"
