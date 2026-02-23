@@ -55,6 +55,10 @@ internal class ThemeEngine
     private long _lastLiveUpdateTick;
     private long _lastLiveWalkTick;
 
+    // Previous live preview palettes — diff against these to skip unchanged keys
+    private Dictionary<string, string>? _prevLiveRootKeys;
+    private Dictionary<string, string>? _prevLiveSimpleKeys;
+
     // Track what colors the walker LAST painted onto injected controls.
     // Used by BuildTreeColorMap as the map SOURCE (what's actually on screen),
     // instead of ContentPages statics which drift between walks.
@@ -104,6 +108,17 @@ internal class ThemeEngine
     // Guard: true while we're programmatically switching the variant for theme application.
     // Prevents the variant change handler from reverting our theme or re-injecting sidebar.
     private bool _switchingVariantForTheme;
+
+    // Guard: true while we're writing to ThemeDictionaries (OverrideThemeDictKeys, SetThemeDictValue, etc.).
+    // ThemeDictionary writes trigger ActualThemeVariantChanged synchronously, which would
+    // otherwise clear _svgSetIsDark and (during live preview) call RevertTheme every frame.
+    private bool _writingThemeDicts;
+
+    // Tracks which SVG set is currently active in the variant dict.
+    // true = Dark SVGs, false = Light SVGs, null = unknown (needs check).
+    // Set after variant resolution or successful swap; cleared on revert/external change.
+    // Prevents expensive sentinel checks + ~220-entry enumeration on every theme switch.
+    private bool? _svgSetIsDark;
 
     // Requested variant before we switched for theme brightness.
     // Value can be null (System/Default), so _hasOriginalVariantKey tracks whether
@@ -534,18 +549,72 @@ internal class ThemeEngine
         }
 
         ev.Set("action", "incremental");
+        long liveT0 = Environment.TickCount64;
         _customAccent = accentHex;
         _customBg = bgHex;
         _customSvgMode = svgMode;
         var simpleKeys = DeriveSimpleThemeKeys(accentHex, bgHex);
         _customPalette = MergePalettes(rootKeys, simpleKeys);
 
-        // Update ThemeDictionaries
-        OverrideThemeDictKeys(rootKeys);
-        SwapSvgPathsIfNeeded(rootKeys, svgMode);
+        // Diff-based update: only write keys whose hex value actually changed.
+        // During color picker drag, most palette keys stay identical frame-to-frame.
+        // Guard: ThemeDictionary writes trigger ActualThemeVariantChanged synchronously.
+        // Without this, each SetThemeDictValue fires the handler which reverts the theme.
+        int changedRoot = 0;
+        if (_prevLiveRootKeys != null)
+        {
+            _writingThemeDicts = true;
+            try
+            {
+                foreach (var (key, hex) in rootKeys)
+                {
+                    if (!_prevLiveRootKeys.TryGetValue(key, out var prev) ||
+                        !string.Equals(prev, hex, StringComparison.OrdinalIgnoreCase))
+                    {
+                        if (!PreservedSemanticKeys.Contains(key))
+                        {
+                            try { SetThemeDictValue(key, hex); _overriddenThemeDictKeys.Add(key); changedRoot++; }
+                            catch { }
+                        }
+                    }
+                }
+            }
+            finally { _writingThemeDicts = false; }
+        }
+        else
+        {
+            OverrideThemeDictKeys(rootKeys);
+            changedRoot = rootKeys.Count;
+        }
+        _prevLiveRootKeys = rootKeys;
+        ev.Set("changed_root", changedRoot);
 
-        // Update Styles[0].Resources
-        OverrideSimpleThemeKeys(simpleKeys);
+        int changedSimple = 0;
+        var styleRes = _r.GetStyleResources(0);
+        if (styleRes != null && _prevLiveSimpleKeys != null)
+        {
+            foreach (var (key, hex) in simpleKeys)
+            {
+                if (!_prevLiveSimpleKeys.TryGetValue(key, out var prev) ||
+                    !string.Equals(prev, hex, StringComparison.OrdinalIgnoreCase))
+                {
+                    try
+                    {
+                        bool isBrush = key.Contains("Brush") || key.EndsWith("Fill");
+                        if (isBrush) { var b = _r.CreateBrush(hex); if (b != null) { _r.AddResource(styleRes, key, b); changedSimple++; } }
+                        else { var c = _r.ParseColor(hex); if (c != null) { _r.AddResource(styleRes, key, c); changedSimple++; } }
+                    }
+                    catch { }
+                }
+            }
+        }
+        else
+        {
+            OverrideSimpleThemeKeys(simpleKeys);
+            changedSimple = simpleKeys.Count;
+        }
+        _prevLiveSimpleKeys = simpleKeys;
+        ev.Set("changed_simple", changedSimple);
 
         // Fast path: update only known dyn-tagged controls (O(~16) vs O(500+) tree walk).
         // ThemeDictionary updates handle DynamicResource-bound controls instantly.
@@ -575,6 +644,10 @@ internal class ThemeEngine
         // Re-apply ping color if set
         if (!string.IsNullOrEmpty(_customPingColor))
             ApplyPingColorToThemeDicts();
+
+        long liveT1 = Environment.TickCount64;
+        if (liveT1 - liveT0 > 5)
+            Logger.Log("Theme", $"LIVE_TIMING: total={liveT1-liveT0}ms changedRoot={changedRoot} changedSimple={changedSimple} walked={walked} dynUpdated={dynUpdated}");
     }
 
     /// <summary>Remove all theme overrides and restore Root defaults.</summary>
@@ -637,6 +710,9 @@ internal class ThemeEngine
         _activeThemeName = null;
         _customPalette = null;
         _customSvgMode = "auto";
+        _svgSetIsDark = null;
+        _prevLiveRootKeys = null;
+        _prevLiveSimpleKeys = null;
 
         // Phase 4: Optionally restore original requested variant snapshot.
         // For user-initiated native theme changes while an Uprooted theme is active,
@@ -753,19 +829,46 @@ internal class ThemeEngine
         _walkTimer?.Dispose();
         _walkTimer = null;
 
-        // 2. Remove ALL overridden keys (color + SVG) from the current variant dict.
-        //    When the new theme requires a different variant (e.g., Dark→Light),
-        //    keys left in the old dict would never be cleaned —
-        //    RemoveThemeDictOverrides only targets _activeVariantDict, which moves
-        //    to the new variant. Removing all keys here prevents both palette and
-        //    SVG path leaks across variant boundaries. No visible flash: the
-        //    variant switch, OverrideThemeDictKeys, and SwapSvgPathsIfNeeded all
-        //    happen in the same synchronous UI-thread frame.
-        var allKeys = _overriddenThemeDictKeys.ToList();
-        foreach (var key in allKeys)
-            RemoveThemeDictKey(key);
-        if (allKeys.Count > 0)
-            Logger.Log("Theme", "PrepareForNewTheme: removed " + allKeys.Count + " keys from current variant");
+        // 2. Remove overridden keys — strategy depends on whether variant will change.
+        //    Cross-variant (dark↔light): remove ALL keys from old dict (it's being abandoned,
+        //    keys left behind would leak into Root's native palette for that variant).
+        //    Same-variant (dark→dark): skip removal — OverrideThemeDictKeys overwrites via
+        //    indexer (dict[key] = value). Only remove stale keys not in the new theme.
+        bool newNeedsDark = ThemeNeedsDarkSvgs(newRootKeys);
+        var currentVariant = _r.GetActiveThemeVariant()?.ToString() ?? "Dark";
+        bool currentIsDark = currentVariant != "Light";
+        bool variantWillChange = newNeedsDark != currentIsDark;
+
+        _writingThemeDicts = true;
+        try
+        {
+            if (variantWillChange)
+            {
+                // Cross-variant: remove ALL keys from old dict (it's being abandoned)
+                var allKeys = _overriddenThemeDictKeys.ToList();
+                foreach (var key in allKeys)
+                    RemoveThemeDictKey(key);
+                if (allKeys.Count > 0)
+                    Logger.Log("Theme", "PrepareForNewTheme: removed " + allKeys.Count + " keys (cross-variant)");
+            }
+            else
+            {
+                // Same-variant: only remove stale keys not in the new theme.
+                // Keys present in both are overwritten in-place by OverrideThemeDictKeys.
+                int staleRemoved = 0;
+                foreach (var key in _overriddenThemeDictKeys.ToList())
+                {
+                    if (!newRootKeys.ContainsKey(key) && !key.EndsWith("SVG"))
+                    {
+                        RemoveThemeDictKey(key);
+                        staleRemoved++;
+                    }
+                }
+                if (staleRemoved > 0)
+                    Logger.Log("Theme", "PrepareForNewTheme: removed " + staleRemoved + " stale keys (same-variant)");
+            }
+        }
+        finally { _writingThemeDicts = false; }
 
         // 3. Clear Style originals tracking — Phase 2 will re-save for the new theme.
         //    Do NOT restore to Root defaults (that causes the flash we're avoiding).
@@ -775,6 +878,11 @@ internal class ThemeEngine
         // 4. Reset active theme name so ApplyThemeInternal sets it fresh
         _activeThemeName = null;
         _customPalette = null;
+        _prevLiveRootKeys = null;
+        _prevLiveSimpleKeys = null;
+
+        // 5. Clear SVG tracking — variant may change, let ApplyThemeInternal re-derive
+        _svgSetIsDark = null;
     }
 
     /// <summary>Set a custom ping/reply highlight color.</summary>
@@ -808,19 +916,29 @@ internal class ThemeEngine
                     var palette = GetPalette();
                     if (palette != null)
                     {
-                        foreach (var key in pingKeys)
+                        _writingThemeDicts = true;
+                        try
                         {
-                            if (palette.TryGetValue(key, out var hex))
-                                SetThemeDictValue(key, hex);
+                            foreach (var key in pingKeys)
+                            {
+                                if (palette.TryGetValue(key, out var hex))
+                                    SetThemeDictValue(key, hex);
+                            }
                         }
+                        finally { _writingThemeDicts = false; }
                     }
                 }
                 else
                 {
                     // No theme active — remove our overrides so Root's defaults reassert
                     EnsureVariantDictResolved();
-                    foreach (var key in pingKeys)
-                        RemoveThemeDictKey(key);
+                    _writingThemeDicts = true;
+                    try
+                    {
+                        foreach (var key in pingKeys)
+                            RemoveThemeDictKey(key);
+                    }
+                    finally { _writingThemeDicts = false; }
                 }
 
                 // Restore SimpleTheme ErrorColor/ErrorBrush
@@ -927,10 +1045,12 @@ internal class ThemeEngine
 
         // Theme-to-theme transition: lightweight in-place prep (no flash of Root defaults).
         // Only full RevertTheme for first-time apply (no active theme yet).
+        long t0 = Environment.TickCount64;
         if (_activeThemeName != null)
             PrepareForNewTheme(rootKeys);
         else
             RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
+        long t1 = Environment.TickCount64;
 
         // Subscribe to variant changes (once)
         SubscribeToVariantChanges();
@@ -939,20 +1059,29 @@ internal class ThemeEngine
         // Dark backgrounds need Dark variant (light-colored SVGs).
         // Light backgrounds need Light variant (dark-colored SVGs).
         SwitchVariantIfNeeded(rootKeys, ev);
+        long t2 = Environment.TickCount64;
 
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
+        // SwitchVariantIfNeeded already set the variant to match theme brightness,
+        // so the resolved variant natively provides the correct SVG set.
+        // Cache this so SwapSvgPathsIfNeeded can skip its expensive enumeration.
+        var resolvedVariantName = _activeVariantKey?.ToString() ?? "Dark";
+        _svgSetIsDark = resolvedVariantName != "Light";
         OverrideThemeDictKeys(rootKeys);
+        long t3 = Environment.TickCount64;
         // SVG set must match theme brightness. Custom themes use their configured mode;
         // presets use "auto" which checks BackgroundPrimary luminance (supports both
         // dark-family and light-family presets like Sakura).
         string svgMode = themeName == "custom" ? _customSvgMode : "auto";
         var svgSwapped = SwapSvgPathsIfNeeded(rootKeys, svgMode);
+        long t4 = Environment.TickCount64;
         ev.Set("svg_swapped", svgSwapped);
         // Pulse only when we actually touched SVG paths; avoid unnecessary variant
         // churn on regular theme switches.
         if (svgSwapped > 0)
             ForceVectorRefreshPulse("apply_internal");
+        long t5 = Environment.TickCount64;
 
         // Phase 2: Override Styles[0].Resources with SimpleTheme keys
         var styleRes = _r.GetStyleResources(0);
@@ -995,7 +1124,9 @@ internal class ThemeEngine
                 }
             }
         }
+        long t6 = Environment.TickCount64;
         ev.Set("style_overrides", styleOverrides);
+        Logger.Log("Theme", $"TIMING: prep={t1-t0}ms variant={t2-t1}ms dictKeys={t3-t2}ms svgSwap={t4-t3}ms pulse={t5-t4}ms styles={t6-t5}ms total={t6-t0}ms (svgSetIsDark={_svgSetIsDark}, svgSwapped={svgSwapped})");
 
         _activeThemeName = themeName;
 
@@ -1074,6 +1205,12 @@ internal class ThemeEngine
 
         // Need to switch. Get the target ThemeVariant object.
         var targetKey = _r.GetThemeVariantByName(targetVariant);
+        if (targetKey == null && targetVariant == "PureDark")
+        {
+            // PureDark not available in this Root build — fall back to Dark
+            targetVariant = "Dark";
+            targetKey = _r.GetThemeVariantByName(targetVariant);
+        }
         if (targetKey == null)
         {
             ev?.Set("variant_switch", "target_not_found");
@@ -1252,24 +1389,29 @@ internal class ThemeEngine
 
         int count = 0;
         int skipped = 0;
-        foreach (var (key, hex) in rootKeys)
+        _writingThemeDicts = true;
+        try
         {
-            if (PreservedSemanticKeys.Contains(key))
+            foreach (var (key, hex) in rootKeys)
             {
-                skipped++;
-                continue;
-            }
-            try
-            {
-                SetThemeDictValue(key, hex);
-                _overriddenThemeDictKeys.Add(key);
-                count++;
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("Theme", "  ThemeDict override failed for " + key + ": " + ex.Message);
+                if (PreservedSemanticKeys.Contains(key))
+                {
+                    skipped++;
+                    continue;
+                }
+                try
+                {
+                    SetThemeDictValue(key, hex);
+                    _overriddenThemeDictKeys.Add(key);
+                    count++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Theme", "  ThemeDict override failed for " + key + ": " + ex.Message);
+                }
             }
         }
+        finally { _writingThemeDicts = false; }
         if (skipped > 0)
             Logger.Log("Theme", "ThemeDictionaries: " + skipped + " semantic keys preserved");
         Logger.Log("Theme", "ThemeDictionaries: " + count + " keys overridden");
@@ -1338,15 +1480,20 @@ internal class ThemeEngine
         if (_activeVariantDict == null || _overriddenThemeDictKeys.Count == 0) return;
 
         int removed = 0;
-        foreach (var key in _overriddenThemeDictKeys)
+        _writingThemeDicts = true;
+        try
         {
-            try
+            foreach (var key in _overriddenThemeDictKeys)
             {
-                if (_r.RemoveResource(_activeVariantDict, key))
-                    removed++;
+                try
+                {
+                    if (_r.RemoveResource(_activeVariantDict, key))
+                        removed++;
+                }
+                catch { }
             }
-            catch { }
         }
+        finally { _writingThemeDicts = false; }
         Logger.Log("Theme", "ThemeDictionaries: removed " + removed + "/" + _overriddenThemeDictKeys.Count + " overrides");
         _overriddenThemeDictKeys.Clear();
 
@@ -1411,6 +1558,13 @@ internal class ThemeEngine
         if (svgMode == "light") needsDark = false;
         else if (svgMode == "dark") needsDark = true;
         else needsDark = ThemeNeedsDarkSvgs(rootKeys);  // auto
+
+        // Fast exit: we already know the active SVG set matches what's needed.
+        // Set after variant resolution in ApplyThemeInternal or after a previous swap.
+        // Skips 4 sentinel reflection calls + ~220-entry enumeration.
+        if (_svgSetIsDark == needsDark)
+            return 0;
+
         var neededFolder = needsDark ? DarkSvgFolder : LightSvgFolder;
         var sourceFolder = needsDark ? LightSvgFolder : DarkSvgFolder;
 
@@ -1431,6 +1585,7 @@ internal class ThemeEngine
         }
         if (sawSentinel && !sawSourceFolder && !sawNonTarget)
         {
+            _svgSetIsDark = needsDark;
             Logger.Log("Theme", "SVG swap fast-path hit (sentinels already in target folder)");
             return 0;
         }
@@ -1477,18 +1632,24 @@ internal class ThemeEngine
             }
         }
 
-        foreach (var (key, path) in svgEntries)
+        _writingThemeDicts = true;
+        try
         {
-            var newPath = path.Replace(sourceFolder, neededFolder);
-            try
+            foreach (var (key, path) in svgEntries)
             {
-                _r.AddResource(_activeVariantDict, key, newPath);
-                _overriddenThemeDictKeys.Add(key);
-                swapped++;
+                var newPath = path.Replace(sourceFolder, neededFolder);
+                try
+                {
+                    _r.AddResource(_activeVariantDict, key, newPath);
+                    _overriddenThemeDictKeys.Add(key);
+                    swapped++;
+                }
+                catch { }
             }
-            catch { }
         }
+        finally { _writingThemeDicts = false; }
 
+        _svgSetIsDark = needsDark;
         Logger.Log("Theme", $"SVG swap: {swapped} paths overridden");
         return swapped;
     }
@@ -1588,14 +1749,19 @@ internal class ThemeEngine
         _r.SubscribeActualThemeVariantChanged(() =>
         {
             // Skip if WE triggered the variant change (for SVG/theme purposes)
-            if (_switchingVariantForTheme)
+            // or if we're writing to ThemeDictionaries (dict writes trigger this event
+            // synchronously, which would clear _svgSetIsDark and revert during live preview).
+            if (_switchingVariantForTheme || _writingThemeDicts)
             {
-                Logger.Log("Theme", "Variant change from our own switch — skipping handler");
+                Logger.Log("Theme", $"ActualThemeVariant changed (SUPPRESSED: switching={_switchingVariantForTheme} writing={_writingThemeDicts})");
                 return;
             }
 
             var newVariant = GetCurrentRootVariant();
-            Logger.Log("Theme", $"ActualThemeVariant changed -> {newVariant}");
+            Logger.Log("Theme", $"ActualThemeVariant changed -> {newVariant} (UNGUARDED — will process)");
+
+            // External variant change invalidates our SVG set tracking
+            _svgSetIsDark = null;
 
             if (_activeThemeName != null)
             {
@@ -1643,19 +1809,23 @@ internal class ThemeEngine
         var hex = _customPingColor;
 
         // SelfMention keys — background wash and inline mention pills
-        SetThemeDictValue("SelfMention", ColorUtils.WithAlpha(hex, 0x66));
-        _overriddenThemeDictKeys.Add("SelfMention");
-        SetThemeDictValue("SelfMentionBackground", ColorUtils.WithAlpha(hex, 0x26));
-        _overriddenThemeDictKeys.Add("SelfMentionBackground");
-        SetThemeDictValue("SelfMentionBorder", ColorUtils.WithAlpha(hex, 0x4D));
-        _overriddenThemeDictKeys.Add("SelfMentionBorder");
-
         // Left border stripe — Root uses DynamicResourceExtension("Error") for the
         // MessageBackgroundBorder.BorderBrush on mention messages. Override Error with
         // a neon version of the ping color (OKLCH: boost lightness to 0.75, max chroma).
         var neonHex = MakeNeon(hex);
-        SetThemeDictValue("Error", neonHex);
-        _overriddenThemeDictKeys.Add("Error");
+        _writingThemeDicts = true;
+        try
+        {
+            SetThemeDictValue("SelfMention", ColorUtils.WithAlpha(hex, 0x66));
+            _overriddenThemeDictKeys.Add("SelfMention");
+            SetThemeDictValue("SelfMentionBackground", ColorUtils.WithAlpha(hex, 0x26));
+            _overriddenThemeDictKeys.Add("SelfMentionBackground");
+            SetThemeDictValue("SelfMentionBorder", ColorUtils.WithAlpha(hex, 0x4D));
+            _overriddenThemeDictKeys.Add("SelfMentionBorder");
+            SetThemeDictValue("Error", neonHex);
+            _overriddenThemeDictKeys.Add("Error");
+        }
+        finally { _writingThemeDicts = false; }
 
         // Also override SimpleTheme highlight keys for AvaloniaEdit caret/selection
         var styleRes = _r.GetStyleResources(0);
