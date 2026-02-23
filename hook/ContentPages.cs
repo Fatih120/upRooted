@@ -2388,7 +2388,7 @@ internal static class ContentPages
                     ("Loki",     "loki",                   "#0F1210", "#D4A847", "Gold and green"),
                     ("Marine",   "marine",                 "#253059", "#6FC7ED", "Ocean blue depths"),
                     ("Oreo",     "oreo",                   "#0B0B0B", "#C1C3FF", "Monochrome lavender"),
-                    ("Sakura",   "sakura",                 "#FFCEFA", "#84C2FF", "Land of Harmony"),
+                    ("Sakura",   "sakura",                 "#FAC6F6", "#84C2FF", "Land of Harmony"),
                     ("Ember",    "ember",                  "#1A0F0A", "#FF6B2B", "Warm charcoal glow"),
                 };
 
@@ -3147,10 +3147,23 @@ internal static class ContentPages
 
         // Hover colors (shared between card hover and gear hover suppression)
         string GetRestBorder() => themeEngine?.ReadLiveRootColor("Border") ?? CardBorder;
-        string GetHoverBorder() => AdjustForHighlight(GetRestBorder(), 60);
+        string GetHoverBorder()
+        {
+            var border = GetRestBorder();
+            var bg = GetInnerBaseBg();
+            // Direction from card bg — border's own luminance can be mid-range
+            // (Sakura #D4A0D0 L≈0.45) and pick the wrong direction on light hosts.
+            return ColorUtils.Luminance(bg) > 0.5
+                ? ColorUtils.Darken(border, 70)
+                : ColorUtils.Lighten(border, 60);
+        }
         string GetDotHoverColor()
         {
-            return AdjustForHighlight(GetInnerBaseBg(), 55);
+            var bg = GetInnerBaseBg();
+            // More aggressive on light hosts to match Root native Light hover.
+            return ColorUtils.Luminance(bg) > 0.5
+                ? ColorUtils.Darken(bg, 70)
+                : ColorUtils.Lighten(bg, 55);
         }
         var dotRef = radioDot;
 

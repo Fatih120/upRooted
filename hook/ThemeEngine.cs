@@ -533,16 +533,13 @@ internal class ThemeEngine
         ev.Set("svg_mode", svgMode);
 
         // Check if brightness crossed the dark/light threshold — if so, need a full
-        // re-apply to switch Root's variant (for correct SVGs).
+        // re-apply to swap SVG icon paths (variant is NOT switched).
         var rootKeys = GenerateV2Palette(accentHex, bgHex, textHex);
         bool themeNeedsDark = ThemeNeedsDarkSvgs(rootKeys);
-        var currentVariantName = _r.GetActiveThemeVariant()?.ToString() ?? "Dark";
-        bool currentIsDark = currentVariantName != "Light";
-        if (themeNeedsDark != currentIsDark)
+        if (_svgSetIsDark != null && themeNeedsDark != _svgSetIsDark.Value)
         {
             ev.Set("action", "threshold_reapply");
             ev.Set("needs_dark", themeNeedsDark);
-            ev.Set("variant", currentVariantName);
             ApplyCustomTheme(accentHex, bgHex, textHex, svgMode);
             _lastLiveUpdateTick = Environment.TickCount64;
             return;
@@ -829,44 +826,24 @@ internal class ThemeEngine
         _walkTimer?.Dispose();
         _walkTimer = null;
 
-        // 2. Remove overridden keys — strategy depends on whether variant will change.
-        //    Cross-variant (dark↔light): remove ALL keys from old dict (it's being abandoned,
-        //    keys left behind would leak into Root's native palette for that variant).
-        //    Same-variant (dark→dark): skip removal — OverrideThemeDictKeys overwrites via
-        //    indexer (dict[key] = value). Only remove stale keys not in the new theme.
-        bool newNeedsDark = ThemeNeedsDarkSvgs(newRootKeys);
-        var currentVariant = _r.GetActiveThemeVariant()?.ToString() ?? "Dark";
-        bool currentIsDark = currentVariant != "Light";
-        bool variantWillChange = newNeedsDark != currentIsDark;
-
+        // 2. Remove stale overridden keys not in the new theme.
+        //    Variant is never switched — all themes write to the same variant dict, so
+        //    keys present in both old and new theme are overwritten in-place by
+        //    OverrideThemeDictKeys. Only remove keys that would leak (not in new theme).
         _writingThemeDicts = true;
         try
         {
-            if (variantWillChange)
+            int staleRemoved = 0;
+            foreach (var key in _overriddenThemeDictKeys.ToList())
             {
-                // Cross-variant: remove ALL keys from old dict (it's being abandoned)
-                var allKeys = _overriddenThemeDictKeys.ToList();
-                foreach (var key in allKeys)
-                    RemoveThemeDictKey(key);
-                if (allKeys.Count > 0)
-                    Logger.Log("Theme", "PrepareForNewTheme: removed " + allKeys.Count + " keys (cross-variant)");
-            }
-            else
-            {
-                // Same-variant: only remove stale keys not in the new theme.
-                // Keys present in both are overwritten in-place by OverrideThemeDictKeys.
-                int staleRemoved = 0;
-                foreach (var key in _overriddenThemeDictKeys.ToList())
+                if (!newRootKeys.ContainsKey(key) && !key.EndsWith("SVG"))
                 {
-                    if (!newRootKeys.ContainsKey(key) && !key.EndsWith("SVG"))
-                    {
-                        RemoveThemeDictKey(key);
-                        staleRemoved++;
-                    }
+                    RemoveThemeDictKey(key);
+                    staleRemoved++;
                 }
-                if (staleRemoved > 0)
-                    Logger.Log("Theme", "PrepareForNewTheme: removed " + staleRemoved + " stale keys (same-variant)");
             }
+            if (staleRemoved > 0)
+                Logger.Log("Theme", "PrepareForNewTheme: removed " + staleRemoved + " stale keys");
         }
         finally { _writingThemeDicts = false; }
 
@@ -1063,11 +1040,9 @@ internal class ThemeEngine
 
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
-        // SwitchVariantIfNeeded already set the variant to match theme brightness,
-        // so the resolved variant natively provides the correct SVG set.
-        // Cache this so SwapSvgPathsIfNeeded can skip its expensive enumeration.
-        var resolvedVariantName = _activeVariantKey?.ToString() ?? "Dark";
-        _svgSetIsDark = resolvedVariantName != "Light";
+        // Don't cache _svgSetIsDark from variant name — variant is NOT switched, so
+        // actual SVG state can differ from variant. Let SwapSvgPathsIfNeeded inspect
+        // sentinels to determine the real state.
         OverrideThemeDictKeys(rootKeys);
         long t3 = Environment.TickCount64;
         // SVG set must match theme brightness. Custom themes use their configured mode;
@@ -1165,85 +1140,19 @@ internal class ThemeEngine
     }
 
     /// <summary>
-    /// Switch Root's variant to match theme brightness so SVGs load correctly.
-    /// Dark themes need Dark variant (light-colored SVG icons).
-    /// Light themes need Light variant (dark-colored SVG icons).
-    /// Sets _originalVariantKey so RevertTheme can restore it.
+    /// Previously switched Root's RequestedThemeVariant to match theme brightness.
+    /// This caused Root's native theme page to display the wrong selection (Dark user
+    /// sees "Light" when Sakura is active, and vice versa).
+    /// Now a no-op — SVG icon paths are handled independently by SwapSvgPathsIfNeeded,
+    /// which runs after theme dict writes and swaps folder paths regardless of variant.
     /// </summary>
     private void SwitchVariantIfNeeded(Dictionary<string, string> rootKeys, WideEvent? ev = null)
     {
-        // Determine what variant the theme needs based on background luminance.
-        // For dark themes coming from native Light, prefer PureDark instead of Dark so
-        // a later native "Root Dark" click is a real transition (PureDark -> Dark),
-        // not a no-op (Dark -> Dark).
-        bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys); // luminance <= 0.3 → dark SVGs
-        string targetVariant = themeIsDark ? "Dark" : "Light";
-
-        var currentVariant = _r.GetActiveThemeVariant();
-        var currentName = currentVariant?.ToString() ?? "Dark";
-
-        // PureDark uses Dark SVGs, so treat it as Dark for comparison
+        bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys);
+        var currentName = _r.GetActiveThemeVariant()?.ToString() ?? "Dark";
         bool currentIsDark = currentName != "Light";
-
-        if (themeIsDark == currentIsDark)
-        {
-            // Already on the right variant family — no switch needed.
-            // Preserve any existing native snapshot from a prior theme apply so the
-            // Native card and RevertTheme still know the real pre-theme variant.
-            ev?.Set("variant_switch", "not_needed");
-            ev?.Set("variant", currentName);
-            return;
-        }
-
-        // If Root was Light before we applied a dark theme, force PureDark.
-        // This keeps dark-family resources while preserving a meaningful Root Dark switch.
-        var requestedBefore = _r.GetRequestedThemeVariant();
-        var requestedBeforeName = requestedBefore?.ToString();
-        if (themeIsDark && string.Equals(requestedBeforeName, "Light", StringComparison.OrdinalIgnoreCase))
-            targetVariant = "PureDark";
-
-        // Need to switch. Get the target ThemeVariant object.
-        var targetKey = _r.GetThemeVariantByName(targetVariant);
-        if (targetKey == null && targetVariant == "PureDark")
-        {
-            // PureDark not available in this Root build — fall back to Dark
-            targetVariant = "Dark";
-            targetKey = _r.GetThemeVariantByName(targetVariant);
-        }
-        if (targetKey == null)
-        {
-            ev?.Set("variant_switch", "target_not_found");
-            ev?.Set("target_variant", targetVariant);
-            return;
-        }
-
-        ev?.Set("variant_switch", currentName + "_to_" + targetVariant);
-
-        // Only capture native snapshot on the FIRST variant switch from native.
-        // Subsequent switches (e.g., light preset → dark preset → light preset)
-        // preserve the original native state for correct RevertTheme restoration
-        // and accurate Native card display.
-        if (!_hasOriginalVariantKey)
-        {
-            _originalVariantKey = requestedBefore;
-            _hasOriginalVariantKey = true;
-            _originalActualVariantName = currentName;
-        }
-
-        // Guard so our variant change handler skips this switch
-        _switchingVariantForTheme = true;
-        try
-        {
-            _r.SetRequestedThemeVariant(targetKey);
-        }
-        finally
-        {
-            _switchingVariantForTheme = false;
-        }
-
-        // Clear cached variant dict so EnsureVariantDictResolved picks up the new one
-        _activeVariantDict = null;
-        _activeVariantKey = null;
+        ev?.Set("variant_switch", themeIsDark == currentIsDark ? "not_needed" : "skipped_svg_handles");
+        ev?.Set("variant", currentName);
     }
 
     // ===== ThemeDictionaries Override =====
@@ -2998,14 +2907,14 @@ internal class ThemeEngine
                 ["BrandSecondary"] = "#5EA0D8",
                 ["BrandTertiary"]  = "#4A88B8",
 
-                ["BackgroundPrimary"]   = "#FFCEFA",
-                ["BackgroundSecondary"] = "#F4C0EE",
-                ["BackgroundTertiary"]  = "#FFD6FC",
-                ["BackgroundElevated"]  = DeriveElevatedSurface("#F4C0EE"),
-                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#F4C0EE"), 12),
-                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#F4C0EE", 12),
-                ["BackgroundButtonSurface"] = DeriveButtonSurface("#F4C0EE"),
-                ["Input"]               = "#FFD2F8",
+                ["BackgroundPrimary"]   = "#FAC6F6",
+                ["BackgroundSecondary"] = "#F6C2F0",
+                ["BackgroundTertiary"]  = "#F2BEEC",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#F6C2F0"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#F6C2F0"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#F6C2F0", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#F6C2F0"),
+                ["Input"]               = "#F8C4F2",
 
                 ["TextPrimary"]   = "#2A1028",
                 ["TextSecondary"] = "#5A3858",
@@ -3039,15 +2948,15 @@ internal class ThemeEngine
                 ["ChannelMentionBorder"]      = "#33D07000",
                 ["ChannelMentionText"]        = "#D07000",
 
-                ["ScrollShadow"] = "#FFCEFA",
+                ["ScrollShadow"] = "#FAC6F6",
                 ["DropShadow"]   = "#506B6B6B",
             },
             SimpleThemeKeys: new Dictionary<string, string>
             {
                 ["ThemeAccentColor"]  = "#84C2FF",
                 ["ThemeAccentBrush"]  = "#84C2FF",
-                ["ThemeControlHighlightLowColor"] = "#F4C0EE",
-                ["ThemeControlHighlightLowBrush"] = "#F4C0EE",
+                ["ThemeControlHighlightLowColor"] = "#F6C2F0",
+                ["ThemeControlHighlightLowBrush"] = "#F6C2F0",
                 ["HighlightForegroundColor"] = "#84C2FF",
                 ["HighlightForegroundBrush"] = "#84C2FF",
                 ["ErrorColor"] = "#F03F36",
