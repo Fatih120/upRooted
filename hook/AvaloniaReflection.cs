@@ -161,6 +161,21 @@ internal class AvaloniaReflection
     private PropertyInfo? _appResources;              // Application.Resources
     private PropertyInfo? _resourcesMergedDicts;       // IResourceDictionary.MergedDictionaries
 
+    // Cached reflection for resource dict operations (hot path — called ~80x per theme switch)
+    private PropertyInfo? _dictIndexerCache;
+    private Type? _dictIndexerCacheType;
+    private MethodInfo? _dictRemoveCache;
+    private Type? _dictRemoveCacheType;
+    private MethodInfo? _dictTryGetResourceCache;
+    private Type? _dictTryGetResourceCacheType;
+
+    // Cached constructor for ImmutableSolidColorBrush(uint) — called ~35x per theme switch
+    private System.Reflection.ConstructorInfo? _iscbUintCtor;
+    private bool _iscbUintCtorResolved;
+
+    // Cached Color property for SolidColorBrush
+    private PropertyInfo? _brushColorProp;
+
     // DynamicResource binding support
     private bool _dynamicResourceResolved;
     private Type? _dynamicResourceExtType;             // DynamicResourceExtension
@@ -1120,7 +1135,8 @@ internal class AvaloniaReflection
             // SolidColorBrush(Color) constructor is trimmed in Root's single-file binary.
             // Use parameterless constructor + Color property setter instead.
             var brush = Activator.CreateInstance(SolidColorBrushType);
-            SolidColorBrushType.GetProperty("Color")?.SetValue(brush, color);
+            _brushColorProp ??= SolidColorBrushType.GetProperty("Color");
+            _brushColorProp?.SetValue(brush, color);
             return brush;
         }
         catch { return null; }
@@ -1141,9 +1157,24 @@ internal class AvaloniaReflection
         {
             // Primary: uint constructor — Root uses this pattern extensively, guaranteed not trimmed.
             // Parse hex → uint ARGB ourselves to avoid dependency on Color.Parse.
+            // Constructor is cached after first resolution to avoid Activator overhead (~35 calls per theme switch).
             uint argb = ParseHexToArgb(hex);
-            var brush = Activator.CreateInstance(ImmutableSolidColorBrushType, argb);
-            if (brush != null) return brush;
+            if (!_iscbUintCtorResolved)
+            {
+                _iscbUintCtor = ImmutableSolidColorBrushType.GetConstructor(new[] { typeof(uint) });
+                _iscbUintCtorResolved = true;
+            }
+            if (_iscbUintCtor != null)
+            {
+                var brush = _iscbUintCtor.Invoke(new object[] { argb });
+                if (brush != null) return brush;
+            }
+            else
+            {
+                // Fallback to Activator if constructor lookup failed
+                var brush = Activator.CreateInstance(ImmutableSolidColorBrushType, argb);
+                if (brush != null) return brush;
+            }
         }
         catch
         {
@@ -2469,10 +2500,10 @@ internal class AvaloniaReflection
         if (dict == null) return null;
         try
         {
-            // Use TryGetValue or indexer
-            var indexer = dict.GetType().GetProperty("Item",
-                System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance,
-                null, null, new[] { typeof(object) }, null);
+            var dictType = dict.GetType();
+            var indexer = dictType == _dictIndexerCacheType
+                ? _dictIndexerCache
+                : CacheDictIndexer(dictType);
             if (indexer != null)
             {
                 return indexer.GetValue(dict, new object[] { key });
@@ -2494,16 +2525,27 @@ internal class AvaloniaReflection
         {
             // Try TryGetResource(object key, ThemeVariant? theme, out object? value)
             // This is the proper Avalonia resource lookup that resolves through MergedDictionaries and deferred values.
-            MethodInfo? tryGetMethod = null;
-            foreach (var m in dict.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance))
+            var dictType = dict.GetType();
+            MethodInfo? tryGetMethod;
+            if (dictType == _dictTryGetResourceCacheType)
             {
-                if (m.Name != "TryGetResource") continue;
-                var ps = m.GetParameters();
-                if (ps.Length == 3 && ps[2].IsOut)
+                tryGetMethod = _dictTryGetResourceCache;
+            }
+            else
+            {
+                tryGetMethod = null;
+                foreach (var m in dictType.GetMethods(BindingFlags.Public | BindingFlags.Instance))
                 {
-                    tryGetMethod = m;
-                    break;
+                    if (m.Name != "TryGetResource") continue;
+                    var ps = m.GetParameters();
+                    if (ps.Length == 3 && ps[2].IsOut)
+                    {
+                        tryGetMethod = m;
+                        break;
+                    }
                 }
+                _dictTryGetResourceCache = tryGetMethod;
+                _dictTryGetResourceCacheType = dictType;
             }
 
             if (tryGetMethod != null)
@@ -2556,11 +2598,10 @@ internal class AvaloniaReflection
         if (dict == null || value == null) return;
         try
         {
-            // ResourceDictionary implements IDictionary<object, object?>
-            // Use the indexer via reflection
-            var indexer = dict.GetType().GetProperty("Item",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, null, new[] { typeof(object) }, null);
+            var dictType = dict.GetType();
+            var indexer = dictType == _dictIndexerCacheType
+                ? _dictIndexerCache
+                : CacheDictIndexer(dictType);
             if (indexer != null)
             {
                 indexer.SetValue(dict, value, new object[] { key });
@@ -2568,7 +2609,7 @@ internal class AvaloniaReflection
             }
 
             // Fallback: try Add method
-            var addMethod = dict.GetType().GetMethod("Add",
+            var addMethod = dictType.GetMethod("Add",
                 BindingFlags.Public | BindingFlags.Instance,
                 null, new[] { typeof(object), typeof(object) }, null);
             addMethod?.Invoke(dict, new[] { (object)key, value });
@@ -2579,6 +2620,16 @@ internal class AvaloniaReflection
         }
     }
 
+    private PropertyInfo? CacheDictIndexer(Type dictType)
+    {
+        var indexer = dictType.GetProperty("Item",
+            BindingFlags.Public | BindingFlags.Instance,
+            null, null, new[] { typeof(object) }, null);
+        _dictIndexerCache = indexer;
+        _dictIndexerCacheType = dictType;
+        return indexer;
+    }
+
     /// <summary>
     /// Removes a key from a ResourceDictionary.
     /// </summary>
@@ -2587,9 +2638,10 @@ internal class AvaloniaReflection
         if (dict == null) return false;
         try
         {
-            var removeMethod = dict.GetType().GetMethod("Remove",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(object) }, null);
+            var dictType = dict.GetType();
+            var removeMethod = dictType == _dictRemoveCacheType
+                ? _dictRemoveCache
+                : CacheDictRemove(dictType);
             if (removeMethod != null)
             {
                 removeMethod.Invoke(dict, new object[] { key });
@@ -2598,6 +2650,16 @@ internal class AvaloniaReflection
         }
         catch { }
         return false;
+    }
+
+    private MethodInfo? CacheDictRemove(Type dictType)
+    {
+        var method = dictType.GetMethod("Remove",
+            BindingFlags.Public | BindingFlags.Instance,
+            null, new[] { typeof(object) }, null);
+        _dictRemoveCache = method;
+        _dictRemoveCacheType = dictType;
+        return method;
     }
 
     /// <summary>

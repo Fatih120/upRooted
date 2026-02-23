@@ -31,7 +31,19 @@ try {
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path $ScriptDir -Parent
-$HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
+# Auto-detect TFM: the csproj targets net9.0 for cross-runtime compat,
+# but stale builds from net10.0 may exist. Pick whichever has a DLL.
+$HookBinDir = $null
+foreach ($tfm in @("net9.0", "net10.0")) {
+    $candidate = Join-Path $RepoRoot "hook\bin\Release\$tfm"
+    if (Test-Path (Join-Path $candidate "UprootedHook.dll")) {
+        $HookBinDir = $candidate
+        break
+    }
+}
+if (-not $HookBinDir) {
+    $HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net9.0"
+}
 $ToolsDir   = Join-Path $RepoRoot "tools"
 $UprootedDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
 $RootExe = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"

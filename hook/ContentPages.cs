@@ -37,14 +37,15 @@ internal static class ContentPages
     internal static string TextMuted = DefaultTextMuted;
     internal static string TextDim = DefaultTextDim;
     internal static string AccentGreen = DefaultAccentGreen;
+    internal static string AccentText = DefaultAccentGreen; // Link color — readable as text on bg
 
     /// <summary>
     /// Returns "#000000" or "#FFFFFF" for readable text on the given background.
-    /// Root only uses vibrant blue accents; custom themes can have any color including white.
+    /// Threshold 0.38 catches borderline light accents (Loki gold ≈ 0.43) as black text.
     /// </summary>
     private static string ContrastText(string bg)
     {
-        try { return ColorUtils.Luminance(bg) > 0.45 ? "#000000" : "#FFFFFF"; }
+        try { return ColorUtils.Luminance(bg) > 0.38 ? "#000000" : "#FFFFFF"; }
         catch { return "#FFFFFF"; }
     }
 
@@ -134,6 +135,7 @@ internal static class ContentPages
         if (live != null && live.Count > 0)
         {
             AccentGreen = live.GetValueOrDefault("BrandPrimary", DefaultAccentGreen);
+            AccentText = live.GetValueOrDefault("Link", AccentGreen);
             CardBg = live.GetValueOrDefault("BackgroundSecondary", DefaultCardBg);
             CardBorder = live.GetValueOrDefault("Border", DefaultCardBorder);
 
@@ -149,6 +151,7 @@ internal static class ContentPages
             var bg = themeEngine.GetBgPrimary();
             var accent = themeEngine.GetAccentColor();
             AccentGreen = accent;
+            AccentText = accent; // fallback; Link not available in palette path
 
             var palette = themeEngine.GetPalette();
             if (palette != null &&
@@ -182,6 +185,7 @@ internal static class ContentPages
             TextMuted = DefaultTextMuted;
             TextDim = DefaultTextDim;
             AccentGreen = DefaultAccentGreen;
+            AccentText = DefaultAccentGreen;
         }
 
         // Keep any live embed cards in sync with the updated palette
@@ -464,8 +468,8 @@ internal static class ContentPages
             var statusTitle = CreateSectionHeader(r, "STATUS", font);
             r.AddChild(cardContent, statusTitle);
 
-            AddStatusField(r, cardContent, "Hook", "Loaded", AccentGreen, true, font);
-            AddStatusField(r, cardContent, "Settings Injection", "Active", AccentGreen, false, font);
+            AddStatusField(r, cardContent, "Hook", "Loaded", AccentText, true, font);
+            AddStatusField(r, cardContent, "Settings Injection", "Active", AccentText, false, font);
             EnsureStaticInit();
             var enabledCount = 0;
             if (KnownPlugins != null)
@@ -481,12 +485,12 @@ internal static class ContentPages
                 }
             }
             var pluginStatus = enabledCount > 0 ? $"{enabledCount} active" : "0 loaded";
-            var pluginColor = enabledCount > 0 ? AccentGreen : TextDim;
+            var pluginColor = enabledCount > 0 ? AccentText : TextDim;
             AddStatusField(r, cardContent, "Plugins", pluginStatus, pluginColor, false, font);
             var activeTheme = themeEngine?.ActiveThemeName;
             var hasTheme = activeTheme != null && activeTheme != "default-dark";
             var themeStatus = hasTheme ? "Active (" + activeTheme + ")" : "Not active";
-            var themeColor = hasTheme ? AccentGreen : TextDim;
+            var themeColor = hasTheme ? AccentText : TextDim;
             AddStatusField(r, cardContent, "ThemeEngine", themeStatus, themeColor, false, font);
 
             r.SetBorderChild(statusCard, cardContent);
@@ -540,7 +544,7 @@ internal static class ContentPages
             // Status text (dynamic)
             var updater = AutoUpdater.Instance;
             var (statusText, statusColor) = updater?.GetStatus()
-                ?? ($"Up to date (v{settings.Version})", AccentGreen);
+                ?? ($"Up to date (v{settings.Version})", AccentText);
 
             object? statusValueText = null;
             var updateStatusRow = r.CreateStackPanel(vertical: false, spacing: 0);
@@ -2383,8 +2387,8 @@ internal static class ContentPages
                     ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Dark purple space"),
                     ("Loki",     "loki",                   "#0F1210", "#D4A847", "Gold and green"),
                     ("Marine",   "marine",                 "#253059", "#6FC7ED", "Ocean blue depths"),
-                    ("Oreo",     "oreo",                   "#111111", "#C1C3FF", "Monochrome lavender"),
-                    ("Sakura",   "sakura",                 "#FFCEFA", "#94D9FF", "Land of Harmony"),
+                    ("Oreo",     "oreo",                   "#0B0B0B", "#C1C3FF", "Monochrome lavender"),
+                    ("Sakura",   "sakura",                 "#FFCEFA", "#84C2FF", "Land of Harmony"),
                     ("Ember",    "ember",                  "#1A0F0A", "#FF6B2B", "Warm charcoal glow"),
                 };
 

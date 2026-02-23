@@ -212,7 +212,7 @@ internal class AutoUpdater
             return ("Checking for updates...", ContentPages.TextMuted);
 
         if (_updateApplied)
-            return ($"Updated to v{_latestVersion}{channelTag} \u2014 restart Root to apply", ContentPages.AccentGreen);
+            return ($"Updated to v{_latestVersion}{channelTag} \u2014 restart Root to apply", ContentPages.AccentText);
 
         if (_lastError != null)
             return ($"Check failed: {_lastError}", "#E04040");
@@ -224,10 +224,10 @@ internal class AutoUpdater
             if (cmp > 0)
                 return ($"Update available: v{_latestVersion}{channelTag}", "#C0A820");
             if (cmp < 0)
-                return ($"Ahead of latest release (v{currentVersion} > v{_latestVersion}){channelTag}", ContentPages.AccentGreen);
+                return ($"Ahead of latest release (v{currentVersion} > v{_latestVersion}){channelTag}", ContentPages.AccentText);
         }
 
-        return ($"Up to date (v{currentVersion}){channelTag}", ContentPages.AccentGreen);
+        return ($"Up to date (v{currentVersion}){channelTag}", ContentPages.AccentText);
     }
 
     internal bool IsChecking => _checking != 0;
