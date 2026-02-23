@@ -962,8 +962,8 @@ build_artifacts() {
     mkdir -p "$INSTALL_DIR"
 
     cp "$script_dir/libuprooted_profiler.so" "$INSTALL_DIR/"
-    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.dll" "$INSTALL_DIR/"
-    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.deps.json" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net9.0/UprootedHook.dll" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net9.0/UprootedHook.deps.json" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted-preload.js" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted.css" "$INSTALL_DIR/"
 

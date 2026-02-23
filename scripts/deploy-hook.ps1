@@ -31,7 +31,7 @@ try {
 
 $ScriptDir  = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot   = Split-Path $ScriptDir -Parent
-$HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
+$HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net9.0"
 $ToolsDir   = Join-Path $RepoRoot "tools"
 $UprootedDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
 $RootExe = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"

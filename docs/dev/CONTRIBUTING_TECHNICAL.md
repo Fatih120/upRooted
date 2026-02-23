@@ -73,8 +73,8 @@ dotnet --version   # Should report 10.x.x
 dotnet build hook/UprootedHook.csproj -c Release
 
 # Output appears at:
-#   hook/bin/Release/net10.0/UprootedHook.dll
-#   hook/bin/Release/net10.0/UprootedHook.deps.json
+#   hook/bin/Release/net9.0/UprootedHook.dll
+#   hook/bin/Release/net9.0/UprootedHook.deps.json
 ```
 
 Use `-c Debug` during development for debug symbols. Always use `-c Release`
@@ -218,8 +218,8 @@ dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 Verify that these files exist:
-- `hook/bin/Release/net10.0/UprootedHook.dll`
-- `hook/bin/Release/net10.0/UprootedHook.deps.json`
+- `hook/bin/Release/net9.0/UprootedHook.dll`
+- `hook/bin/Release/net9.0/UprootedHook.deps.json`
 
 ### C# Tests
 

@@ -121,9 +121,9 @@ Compile (MSBuild)
   ▼
 ObfuscateAssembly (AfterTargets="Build")
   │  Runs: dotnet run --project tools/confuse/ -- <crproj> <baseDir> <outputDir>
-  │  Input:  bin/Release/net10.0/UprootedHook.dll
-  │  Output: bin/Release/net10.0/confused/UprootedHook.dll
-  │  Then:   Copy confused/UprootedHook.dll → bin/Release/net10.0/UprootedHook.dll
+  │  Input:  bin/Release/net9.0/UprootedHook.dll
+  │  Output: bin/Release/net9.0/confused/UprootedHook.dll
+  │  Then:   Copy confused/UprootedHook.dll → bin/Release/net9.0/UprootedHook.dll
   │
   ▼
 VerifyObfuscation (AfterTargets="ObfuscateAssembly")
@@ -132,7 +132,7 @@ VerifyObfuscation (AfterTargets="ObfuscateAssembly")
      Fails the build on violation
 ```
 
-The final `UprootedHook.dll` in `bin/Release/net10.0/` is the obfuscated version. The deploy script (`scripts/deploy-hook.ps1`) picks it up from there — no changes needed to the deploy flow.
+The final `UprootedHook.dll` in `bin/Release/net9.0/` is the obfuscated version. The deploy script (`scripts/deploy-hook.ps1`) picks it up from there — no changes needed to the deploy flow.
 
 ---
 

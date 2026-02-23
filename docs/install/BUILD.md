@@ -47,8 +47,9 @@ pnpm install
 
 ### .NET 10 SDK
 
-The C# hook targets `net10.0` (preview). Install the .NET 10 SDK from the
-official dotnet site or via `actions/setup-dotnet` in CI.
+The C# hook targets `net9.0`. Install the .NET 10 SDK (which includes the
+net9.0 targeting pack) from the official dotnet site or via
+`actions/setup-dotnet` in CI.
 
 ```bash
 dotnet --version   # Should report 10.x.x
@@ -160,7 +161,7 @@ dotnet build hook/UprootedHook.csproj -c Release
 ```xml
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -173,7 +174,7 @@ Avalonia entirely through runtime reflection (see `AvaloniaReflection.cs`).
 ### Output Location
 
 ```
-hook/bin/Release/net10.0/
+hook/bin/Release/net9.0/
   UprootedHook.dll          # The managed hook assembly
   UprootedHook.deps.json    # Dependency metadata
 ```
@@ -385,7 +386,7 @@ powershell -File scripts/build-installer.ps1
    - Copies all four to the artifacts directory.
 
 4. **Build C# hook** -- runs `dotnet build hook/UprootedHook.csproj -c Release`.
-   - Validates `hook/bin/Release/net10.0/UprootedHook.dll` exists.
+   - Validates `hook/bin/Release/net9.0/UprootedHook.dll` exists.
    - Copies `UprootedHook.dll` and `UprootedHook.deps.json` to artifacts.
 
 5. **Compile native profiler** -- locates MSVC via `vswhere.exe`, calls
@@ -461,7 +462,7 @@ data directory and patches shortcuts and protocol handlers:
 
 **Prerequisites for install-hook.ps1:**
 - `tools/uprooted_profiler.dll` (pre-compiled or built via `build_all.cmd`)
-- `hook/bin/Release/net10.0/UprootedHook.dll` (from `dotnet build`)
+- `hook/bin/Release/net9.0/UprootedHook.dll` (from `dotnet build`)
 - `tools/UprootedLauncher.exe` (from `tools/build_launcher.cmd`)
 
 ### Uninstalling
