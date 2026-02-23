@@ -234,6 +234,14 @@ internal class AutoUpdater
     internal bool HasUpdate => _latestVersion != null && CompareVersions(_latestVersion, UprootedSettings.Load().Version) > 0;
     internal bool UpdateApplied => _updateApplied;
 
+    /// <summary>Dev console: spoof the "update applied" state for UI testing.</summary>
+    internal void SpoofUpdateApplied(bool value)
+    {
+        _updateApplied = value;
+        if (value && _latestVersion == null)
+            _latestVersion = UprootedSettings.Load().Version;
+    }
+
     private static bool ShouldCheck(UprootedSettings settings)
     {
         if (string.IsNullOrEmpty(settings.LastUpdateCheck)) return true;

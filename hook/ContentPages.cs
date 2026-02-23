@@ -487,6 +487,17 @@ internal static class ContentPages
             var pluginStatus = enabledCount > 0 ? $"{enabledCount} active" : "0 loaded";
             var pluginColor = enabledCount > 0 ? AccentText : TextDim;
             AddStatusField(r, cardContent, "Plugins", pluginStatus, pluginColor, false, font);
+
+            // Dev Plugins status (developer channel only)
+            if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+            {
+                var devPluginCount = 0;
+                if (settings.Plugins.TryGetValue("recon-logger", out var rlOn) && rlOn) devPluginCount++;
+                var devPluginStatus = devPluginCount > 0 ? $"{devPluginCount} active" : "0 loaded";
+                var devPluginColor = devPluginCount > 0 ? AccentText : TextDim;
+                AddStatusField(r, cardContent, "Dev Plugins", devPluginStatus, devPluginColor, false, font);
+            }
+
             var activeTheme = themeEngine?.ActiveThemeName;
             var hasTheme = activeTheme != null && activeTheme != "default-dark";
             var themeStatus = hasTheme ? "Active (" + activeTheme + ")" : "Not active";
@@ -590,9 +601,9 @@ internal static class ContentPages
             var hasUpdate = updater?.HasUpdate ?? false;
             var wasUpdated = updater?.UpdateApplied ?? false;
 
-            var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
-            var btnColor = hasUpdate ? "#C0A820" : AccentGreen;
-            var btnText = r.CreateTextBlock(btnLabel, 13, ContrastText(btnColor));
+            var btnLabel = wasUpdated ? "Update Pending" : isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
+            var btnColor = wasUpdated ? TextDim : hasUpdate ? "#C0A820" : AccentGreen;
+            var btnText = r.CreateTextBlock(btnLabel, 13, wasUpdated ? TextMuted : ContrastText(btnColor));
             r.SetFontWeight(btnText, "Bold");
             ApplyFont(r, btnText, font);
             r.SetHorizontalAlignment(btnText, "Center");
@@ -603,11 +614,16 @@ internal static class ContentPages
                 r.SetPadding(btn, 16, 8, 16, 8);
                 r.SetMargin(btn, 0, 14, 0, 0);
                 r.SetHorizontalAlignment(btn, "Left");
-                r.SetCursorHand(btn);
                 SetBorderStroke(r, btn, AdjustForHighlight(btnColor, 18), ThickBorder);
 
-                if (!isChecking && !wasUpdated)
+                if (wasUpdated)
                 {
+                    // Dimmed disabled state — restart banner below provides the action
+                    r.SetOpacity(btn, 0.5);
+                }
+                else if (!isChecking)
+                {
+                    r.SetCursorHand(btn);
                     var btnRef = btn;
                     var btnTextRef = btnText;
                     var statusValueRef = statusValueText;
@@ -617,17 +633,10 @@ internal static class ContentPages
                         var u = AutoUpdater.Instance;
                         if (u == null) return;
 
-                        // After a successful update, button becomes a restart button
-                        if (u.UpdateApplied)
-                        {
-                            RestartRoot();
-                            return;
-                        }
-
                         if (u.IsChecking) return;
 
                         r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Checking...");
-                        r.SetBackground(btnRef, AdjustForHighlight(btnColor, 10));
+                        r.SetBackground(btnRef, AdjustForHighlight(AccentGreen, 10));
 
                         ThreadPool.QueueUserWorkItem(_ =>
                         {
@@ -636,15 +645,27 @@ internal static class ContentPages
                             // Update UI on completion
                             r.RunOnUIThread(() =>
                             {
-                                var (newStatus, newColor) = u.GetStatus();
-                                var newBtnLabel = u.UpdateApplied ? "Restart" : u.HasUpdate ? "Update Now" : "Check for Updates";
-                                var newBtnColor = u.UpdateApplied ? AccentGreen : u.HasUpdate ? "#C0A820" : AccentGreen;
-
-                                r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, newBtnLabel);
-                                r.SetBackground(btnRef, newBtnColor);
+                                if (u.UpdateApplied)
+                                {
+                                    // Transition to disabled "Update Pending" state
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, "Update Pending");
+                                    r.SetBackground(btnRef, TextDim);
+                                    SetBorderStroke(r, btnRef, AdjustForHighlight(TextDim, 18), ThickBorder);
+                                    r.TextBlockType?.GetProperty("Foreground")?.SetValue(btnTextRef, r.CreateBrush(TextMuted));
+                                    r.SetOpacity(btnRef, 0.5);
+                                }
+                                else
+                                {
+                                    var newBtnLabel = u.HasUpdate ? "Update Now" : "Check for Updates";
+                                    var newBtnColor = u.HasUpdate ? "#C0A820" : AccentGreen;
+                                    r.TextBlockType?.GetProperty("Text")?.SetValue(btnTextRef, newBtnLabel);
+                                    r.SetBackground(btnRef, newBtnColor);
+                                    SetBorderStroke(r, btnRef, AdjustForHighlight(newBtnColor, 18), ThickBorder);
+                                }
 
                                 if (statusValueRef != null)
                                 {
+                                    var (newStatus, newColor) = u.GetStatus();
                                     r.TextBlockType?.GetProperty("Text")?.SetValue(statusValueRef, newStatus);
                                     var brush = r.CreateBrush(newColor);
                                     statusValueRef.GetType().GetProperty("Foreground")?.SetValue(statusValueRef, brush);
@@ -672,17 +693,15 @@ internal static class ContentPages
 
                     r.SubscribeEvent(btn, "PointerEntered", () =>
                     {
-                        var c = AutoUpdater.Instance?.UpdateApplied == true ? AccentGreen
-                            : AutoUpdater.Instance?.HasUpdate == true ? "#C0A820"
-                            : AccentGreen;
+                        if (AutoUpdater.Instance?.UpdateApplied == true) return;
+                        var c = AutoUpdater.Instance?.HasUpdate == true ? "#C0A820" : AccentGreen;
                         r.SetBackground(btn, AdjustForHighlight(c, 10));
                         SetBorderStroke(r, btn, AdjustForHighlight(c, 40), ThickBorder);
                     });
                     r.SubscribeEvent(btn, "PointerExited", () =>
                     {
-                        var c = AutoUpdater.Instance?.UpdateApplied == true ? AccentGreen
-                            : AutoUpdater.Instance?.HasUpdate == true ? "#C0A820"
-                            : AccentGreen;
+                        if (AutoUpdater.Instance?.UpdateApplied == true) return;
+                        var c = AutoUpdater.Instance?.HasUpdate == true ? "#C0A820" : AccentGreen;
                         r.SetBackground(btn, c);
                         SetBorderStroke(r, btn, AdjustForHighlight(c, 18), ThickBorder);
                     });
@@ -735,17 +754,18 @@ internal static class ContentPages
                         SetBorderStroke(r, innerBorder, warnBorder, 1);
                     }
 
-                    // Restart button — accent button format: Bold, border, AdjustForHighlight
-                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, ContrastText(AccentGreen));
+                    // Restart button — orange to match Plugins page restart banner
+                    var restartColor = "#D06818";
+                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, "#FFFFFF");
                     r.SetFontWeight(updateRestartBtnText, "Bold");
                     ApplyFont(r, updateRestartBtnText, font);
                     r.SetHorizontalAlignment(updateRestartBtnText, "Center");
                     r.SetVerticalAlignment(updateRestartBtnText, "Center");
-                    var updateRestartBtn = r.CreateBorder(AccentGreen, 6, updateRestartBtnText);
+                    var updateRestartBtn = r.CreateBorder(restartColor, 6, updateRestartBtnText);
                     if (updateRestartBtn != null)
                     {
                         r.SetPadding(updateRestartBtn, 12, 5, 12, 5);
-                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                        SetBorderStroke(r, updateRestartBtn, AdjustForHighlight(restartColor, 18), ThickBorder);
                         r.SetHorizontalAlignment(updateRestartBtn, "Right");
                         r.SetVerticalAlignment(updateRestartBtn, "Center");
                         r.SetMargin(updateRestartBtn, 0, 0, 14, 0);
@@ -754,13 +774,13 @@ internal static class ContentPages
                         var urBtnRef = updateRestartBtn;
                         r.SubscribeEvent(updateRestartBtn, "PointerEntered", () =>
                         {
-                            r.SetBackground(urBtnRef, AdjustForHighlight(AccentGreen, 10));
-                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(AccentGreen, 40), ThickBorder);
+                            r.SetBackground(urBtnRef, AdjustForHighlight(restartColor, 10));
+                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(restartColor, 40), ThickBorder);
                         });
                         r.SubscribeEvent(updateRestartBtn, "PointerExited", () =>
                         {
-                            r.SetBackground(urBtnRef, AccentGreen);
-                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                            r.SetBackground(urBtnRef, restartColor);
+                            SetBorderStroke(r, urBtnRef, AdjustForHighlight(restartColor, 18), ThickBorder);
                         });
                     }
 
@@ -778,6 +798,194 @@ internal static class ContentPages
         }
     afterUpdates:
 
+        // Card 3: Dev Console (developer channel only)
+        if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+        {
+            var devCard = CreateCard(r);
+            if (devCard != null)
+            {
+                r.SetMargin(devCard, 0, 12, 0, 0);
+                var devContent = r.CreateStackPanel(vertical: true, spacing: 0);
+                if (devContent == null) { r.AddChild(page, devCard); goto afterDevConsole; }
+                r.SetMargin(devContent, 20, 16, 20, 16);
+
+                var devTitle = CreateSectionHeader(r, "DEV CONSOLE", font);
+                if (devTitle != null)
+                {
+                    r.SetMargin(devTitle, 0, 0, 0, 12);
+                    r.AddChild(devContent, devTitle);
+                }
+
+                // Shared inner card styling
+                var innerBg = AdjustForHighlight(CardBg, 4.5);
+                var innerBorderColor = CardBorder;
+                var devBtnBg = AdjustForHighlight(innerBg, 3);
+                const double innerMinHeight = 140.0;
+
+                // Helper: create an inner card with title and vertical button stack
+                object? BuildInnerCard(string title, Action<object> addButtons)
+                {
+                    var card = r.CreateBorder(innerBg, 12);
+                    if (card == null) return null;
+                    SetBorderStroke(r, card, innerBorderColor, ThickBorder);
+                    r.SetTag(card, "dyn-bg:BackgroundElevated,dyn-bb:Border");
+                    r.BindToDynamicResource(card, "Background", "BackgroundElevated");
+                    r.BindToDynamicResource(card, "BorderBrush", "Border");
+                    card.GetType().GetProperty("MinHeight")?.SetValue(card, innerMinHeight);
+
+                    var content = r.CreateStackPanel(vertical: true, spacing: 6);
+                    if (content == null) return card;
+                    r.SetMargin(content, 16, 14, 16, 14);
+
+                    var titleText = CreateBoundText(r, title, 14, TextWhite, "TextPrimary");
+                    r.SetFontWeight(titleText, "SemiBold");
+                    ApplyFont(r, titleText, font);
+                    r.SetMargin(titleText, 0, 0, 0, 4);
+                    r.AddChild(content, titleText);
+
+                    addButtons(content);
+                    r.SetBorderChild(card, content);
+                    return card;
+                }
+
+                // Helper: create a dev console button and add to parent
+                void AddDevButton(object parent, string label, Action onClick)
+                {
+                    var text = CreateBoundText(r, label, 11, TextMuted, "TextSecondary");
+                    ApplyFont(r, text, font);
+                    r.SetFontWeight(text, "Bold");
+                    r.SetHorizontalAlignment(text, "Center");
+                    var border = r.CreateBorder(devBtnBg, 6, text);
+                    if (border == null) return;
+                    r.SetPadding(border, 10, 5, 10, 5);
+                    r.SetCursorHand(border);
+                    SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 4), ThickBorder);
+                    r.SubscribeClickReleased(border, onClick);
+                    r.SubscribeEvent(border, "PointerEntered", () =>
+                    {
+                        r.SetBackground(border, AdjustForHighlight(devBtnBg, 5));
+                        SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 36), ThickBorder);
+                    });
+                    r.SubscribeEvent(border, "PointerExited", () =>
+                    {
+                        r.SetBackground(border, devBtnBg);
+                        SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 4), ThickBorder);
+                    });
+                    r.AddChild(parent, border);
+                }
+
+                // 3-column, 2-row grid for inner cards
+                var devGrid = r.CreateGrid();
+                if (devGrid != null)
+                {
+                    r.AddGridColumn(devGrid, 1.0);
+                    r.AddGridColumn(devGrid, 1.0);
+                    r.AddGridColumn(devGrid, 1.0);
+                    r.AddGridRowAuto(devGrid);
+                    r.AddGridRowAuto(devGrid);
+
+                    // Row 0, Column 0: Spoofs
+                    var spoofCard = BuildInnerCard("Spoofs", spoofContent =>
+                    {
+                        AddDevButton(spoofContent, "Update Popup", () =>
+                        {
+                            ShowUpdateNotification(r, settings.Version);
+                        });
+                        AddDevButton(spoofContent, "Update Installed", () =>
+                        {
+                            AutoUpdater.Instance?.SpoofUpdateApplied(true);
+                            onRefreshCurrentPage?.Invoke();
+                        });
+                        AddDevButton(spoofContent, "Reset Spoofs", () =>
+                        {
+                            AutoUpdater.Instance?.SpoofUpdateApplied(false);
+                            DismissUpdateNotification(r);
+                            onRefreshCurrentPage?.Invoke();
+                        });
+                    });
+                    if (spoofCard != null)
+                    {
+                        r.SetGridColumn(spoofCard, 0);
+                        r.SetGridRow(spoofCard, 0);
+                        r.SetMargin(spoofCard, 0, 0, 6, 6);
+                        r.AddChild(devGrid, spoofCard);
+                    }
+
+                    // Row 0, Column 1: Diagnostics
+                    var diagCard = BuildInnerCard("Diagnostics", diagContent =>
+                    {
+                        AddDevButton(diagContent, "Dump Visual Tree", () =>
+                        {
+                            themeEngine?.DumpVisualTreeStructure();
+                        });
+                        AddDevButton(diagContent, "Dump Theme Colors", () =>
+                        {
+                            themeEngine?.DumpVisualTreeColors();
+                        });
+                        AddDevButton(diagContent, "Dump Resource Keys", () =>
+                        {
+                            themeEngine?.DumpResourceKeys();
+                        });
+                    });
+                    if (diagCard != null)
+                    {
+                        r.SetGridColumn(diagCard, 1);
+                        r.SetGridRow(diagCard, 0);
+                        r.SetMargin(diagCard, 3, 0, 3, 6);
+                        r.AddChild(devGrid, diagCard);
+                    }
+
+                    // Row 0, Column 2: Engines
+                    var engCard = BuildInnerCard("Engines", engContent =>
+                    {
+                        AddDevButton(engContent, "Force Theme Walk", () =>
+                        {
+                            themeEngine?.ScheduleWalkBurst();
+                        });
+                        AddDevButton(engContent, "Revert Theme", () =>
+                        {
+                            themeEngine?.RevertTheme();
+                            onRefreshCurrentPage?.Invoke();
+                        });
+                    });
+                    if (engCard != null)
+                    {
+                        r.SetGridColumn(engCard, 2);
+                        r.SetGridRow(engCard, 0);
+                        r.SetMargin(engCard, 6, 0, 0, 6);
+                        r.AddChild(devGrid, engCard);
+                    }
+
+                    // Row 1, Column 0: Recon Logger
+                    var reconCard = BuildInnerCard("Recon Logger", reconContent =>
+                    {
+                        var reconSettings = UprootedSettings.Load();
+                        bool reconCurrent = reconSettings.Plugins.TryGetValue("recon-logger", out var rv) && rv;
+                        BuildSettingsToggle(r, reconContent, "Record pointer events, bounds, and transforms", "Logs to rootcord_recon.log",
+                            reconCurrent, font, enabled =>
+                            {
+                                ToggleReconLogger(enabled);
+                                var s = UprootedSettings.Load();
+                                s.Plugins["recon-logger"] = enabled;
+                                s.Save();
+                            });
+                    });
+                    if (reconCard != null)
+                    {
+                        r.SetGridColumn(reconCard, 0);
+                        r.SetGridRow(reconCard, 1);
+                        r.SetMargin(reconCard, 0, 0, 6, 0);
+                        r.AddChild(devGrid, reconCard);
+                    }
+
+                    r.AddChild(devContent, devGrid);
+                }
+
+                r.SetBorderChild(devCard, devContent);
+                r.AddChild(page, devCard);
+            }
+        }
+    afterDevConsole:
 
         // Bottom padding
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
@@ -843,9 +1051,6 @@ internal static class ContentPages
                 new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.5.1-dev3",
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
-                new() { Id = "recon-logger", DisplayName = "ReconLogger", Version = "0.5.1-dev3",
-                    Description = "Records pointer events, popup positions, bounds changes, and transform rotations to rootcord_recon.log. Dev tool for diagnosing Rootcord layout bugs.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 4 },
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.5.1-dev3",
                     Description = "Translate your messages before sending. Click the globe button in the compose bar to pick a target language. Powered by DeepL, with auto-translate mode for hands-free use.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
@@ -1109,7 +1314,7 @@ internal static class ContentPages
                 {
                     foreach (var kv in initialPluginStates)
                     {
-                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
+                        if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "translate") continue; // live-toggle plugins
                         bool currentVal = kv.Key == "content-filter"
                             ? settings.NsfwFilterEnabled
                             : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -1663,20 +1868,6 @@ internal static class ContentPages
                             catch (Exception rex) { ev.SetError(rex); }
                         }
 
-                        // Recon Logger: enable/disable live (dev plugin)
-                        if (pluginId == "recon-logger")
-                        {
-                            try
-                            {
-                                ToggleReconLogger(enabled);
-                            }
-                            catch (Exception rex)
-                            {
-                                ev.SetError(rex);
-                                Logger.LogException("ContentPages", "ReconLogger toggle failed", rex);
-                            }
-                        }
-
                         try { settings.Save(); }
                         catch (Exception sx) { ev.SetError(sx); }
 
@@ -1686,7 +1877,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "recon-logger" || kv.Key == "translate") continue; // live-toggle plugins
+                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "translate") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
