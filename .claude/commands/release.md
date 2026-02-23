@@ -28,23 +28,30 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 
 ## Argument Parsing
 
-The user invokes: `/release <channel> <version>` or `/release <platform>`
+The user invokes: `/release <channel(s)> <version>` or `/release <platform>`
 
 ### Full release (channel + version)
 
-Parse `$ARGUMENTS` into two values:
-- **CHANNEL** — first word: `stable`, `canary`, or `dev`
-- **VERSION** — second word: the version number (e.g. `0.6.0`, `0.6.0-canary.1`, `0.6.0-dev.1`)
+Parse `$ARGUMENTS` to extract channels and version:
+- **CHANNELS** — first word(s): one or more of `stable`, `canary`, `dev`
+  - Single: `canary`, `dev`, `stable`
+  - Multi (slash-separated): `canary/dev`, `stable/canary`, `stable/canary/dev`
+  - Aliases: `developer` = `dev`, `all-channels` = `stable/canary/dev`
+- **VERSION** — last word: the version number (e.g. `0.6.0`, `0.5.0-rc`)
+
+Multi-channel releases share **one build** but publish to **multiple target repos**. Phases 1-6 run once (version bump, commit, tag, push). Phase 8 uploads artifacts to each channel's target repo sequentially.
 
 If `$ARGUMENTS` doesn't match a known pattern, stop with:
 ```
-Usage: /release <stable|canary|dev> <version>
+Usage: /release <channel(s)> <version>
        /release <windows|linux|macos|all>
 
-Channels:
-  stable  — public repo, main branch, triggers package manager updates
-  canary  — canary repo, main branch, bleeding edge
-  dev     — private repo, dev branch, invite only
+Channels (can combine with /):
+  stable      — public repo, main branch, triggers package managers
+  canary      — canary repo, main branch, bleeding edge
+  dev         — private repo, dev branch, invite only
+  canary/dev  — both canary and dev in one release
+  stable/canary/dev — all three channels
 
 Platform-only (re-trigger CI for existing tag):
   windows — rebuild and upload Windows artifact only
@@ -54,24 +61,29 @@ Platform-only (re-trigger CI for existing tag):
 
 Examples:
   /release stable 0.6.0
-  /release canary 0.6.0-canary.1
+  /release canary 0.5.0-rc
+  /release canary/dev 0.5.0-rc        (publish to both canary + dev)
   /release dev 0.6.0-dev.1
-  /release windows              (re-trigger for latest tag)
+  /release windows                     (re-trigger for latest tag)
 ```
 
-Derive:
-- **BRANCH** = `dev` if CHANNEL is `dev`, otherwise `main`
-- **IS_PRERELEASE** = `true` if CHANNEL is `canary` or `dev`, `false` for `stable`
-- **TARGET_REPO**:
+For each channel in CHANNELS, derive:
+- **BRANCH**: If ANY channel is `dev`, use `dev` branch. Otherwise `main`.
+  - `canary/dev` → `dev` (dev is the superset — main is behind dev)
+  - `canary` alone → `main`
+  - `stable` alone → `main`
+- **IS_PRERELEASE** = `false` ONLY if the sole channel is `stable`. Any combo with `canary` or `dev` = `true`.
+- **TARGET_REPOS** (list):
   - `stable` → `The-Uprooted-Project/uprooted`
   - `canary` → `The-Uprooted-Project/uprooted-canary`
   - `dev` → `The-Uprooted-Project/uprooted-private`
+- **PUBLISH_PACKAGES** = `true` only if `stable` is in CHANNELS.
 
 ### Platform-only release (re-trigger)
 
 If `$ARGUMENTS` is a single word matching `windows`, `linux`, `macos`, or `all`:
 
-This is a **platform-only re-trigger** — it skips Phases 1–6 (no version bump, no commit, no tag) and goes directly to Phase 8 to re-trigger the CI build for the specified platform(s).
+This is a **platform-only re-trigger** — it skips Phases 1-6 (no version bump, no commit, no tag) and goes directly to Phase 8 to re-trigger the CI build for the specified platform(s).
 
 1. Read the latest tag: `git describe --tags --abbrev=0`
 2. Read `VERSION` file for the version
@@ -88,7 +100,7 @@ This is useful when:
 - You want to rebuild a specific platform after a hotfix
 - Testing CI changes for one platform only
 
-Throughout this document, **CHANNEL**, **VERSION**, **BRANCH**, and **TARGET_REPO** refer to the parsed values from the full release path.
+Throughout this document, **CHANNELS**, **VERSION**, **BRANCH**, and **TARGET_REPOS** refer to the parsed values from the full release path. When the document says "TARGET_REPO", iterate over all repos in TARGET_REPOS.
 
 ---
 

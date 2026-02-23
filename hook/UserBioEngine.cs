@@ -467,8 +467,6 @@ internal class UserBioEngine
             if (container == null) return;
             _r.SetTag(container, BioTag);
             _r.SetMargin(container, 0, 6, 0, 2);
-            _r.SetMaxWidth(container, 240);
-            _r.SetHorizontalAlignment(container, "Center");
 
             // Editable TextBox with current bio
             var bioBox = _r.CreateTextBox("Set your bio...", settings.UserBioText, MaxBioLength);
