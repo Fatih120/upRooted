@@ -244,7 +244,9 @@ internal class NsfwFilter : IDisposable
             var rawKey = EscapeJsonString(_settings.NsfwApiKey).Trim('"');
             var url    = $"https://vision.googleapis.com/v1/images:annotate?key={rawKey}";
 
+            #pragma warning disable SYSLIB0014 // WebRequest is obsolete — reflection-based HttpClient is overkill for this single call
             var req = (HttpWebRequest)WebRequest.Create(url);
+            #pragma warning restore SYSLIB0014
             req.Method      = "POST";
             req.ContentType = "application/json";
             req.Timeout     = 30_000;

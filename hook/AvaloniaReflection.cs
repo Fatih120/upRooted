@@ -48,6 +48,7 @@ internal class AvaloniaReflection
 
     // Value types
     public Type? SolidColorBrushType { get; private set; }
+    public Type? ImmutableSolidColorBrushType { get; private set; }
     public Type? LinearGradientBrushType { get; private set; }
     public Type? ScaleTransformType { get; private set; }
     public Type? GradientStopType { get; private set; }
@@ -259,6 +260,7 @@ internal class AvaloniaReflection
         GeometryType = Find("Avalonia.Media.Geometry");
 
         SolidColorBrushType = Find("Avalonia.Media.SolidColorBrush");
+        ImmutableSolidColorBrushType = Find("Avalonia.Media.Immutable.ImmutableSolidColorBrush");
         LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
         ScaleTransformType = Find("Avalonia.Media.ScaleTransform");
         GradientStopType = Find("Avalonia.Media.GradientStop");
@@ -1122,6 +1124,68 @@ internal class AvaloniaReflection
             return brush;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Creates an ImmutableSolidColorBrush — matches Root's native brush type in ThemeDictionaries.
+    /// Root casts theme dict values directly to ISCB, so using mutable SolidColorBrush causes
+    /// InvalidCastException (crashes A/V settings, VC join, etc.).
+    /// Uses uint constructor (same as Root: new ImmutableSolidColorBrush(0xFF3B6AF8u)) which
+    /// survives trimming. Falls back to Color constructor, then mutable SolidColorBrush.
+    /// </summary>
+    public object? CreateImmutableBrush(string hex)
+    {
+        if (ImmutableSolidColorBrushType == null) return null;
+
+        try
+        {
+            // Primary: uint constructor — Root uses this pattern extensively, guaranteed not trimmed.
+            // Parse hex → uint ARGB ourselves to avoid dependency on Color.Parse.
+            uint argb = ParseHexToArgb(hex);
+            var brush = Activator.CreateInstance(ImmutableSolidColorBrushType, argb);
+            if (brush != null) return brush;
+        }
+        catch
+        {
+            // uint constructor failed — try Color constructor as fallback
+            try
+            {
+                if (_colorParse != null)
+                {
+                    var color = _colorParse.Invoke(null, new object[] { hex });
+                    if (color != null)
+                    {
+                        var brush = Activator.CreateInstance(ImmutableSolidColorBrushType, color);
+                        if (brush != null) return brush;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        Logger.Log("Reflection", $"CreateImmutableBrush({hex}) failed — all constructors trimmed");
+        return null;
+    }
+
+    /// <summary>
+    /// Parse a hex color string (#RGB, #RRGGBB, #AARRGGBB) to a packed uint ARGB value.
+    /// </summary>
+    private static uint ParseHexToArgb(string hex)
+    {
+        if (string.IsNullOrEmpty(hex)) return 0xFF000000;
+        var s = hex.StartsWith("#") ? hex.Substring(1) : hex;
+        return s.Length switch
+        {
+            3 => 0xFF000000
+                | (uint)((GetHexVal(s[0]) * 17) << 16)
+                | (uint)((GetHexVal(s[1]) * 17) << 8)
+                | (uint)(GetHexVal(s[2]) * 17),
+            6 => 0xFF000000 | Convert.ToUInt32(s, 16),
+            8 => Convert.ToUInt32(s, 16),
+            _ => 0xFF000000
+        };
+
+        static int GetHexVal(char c) => c >= 'a' ? c - 'a' + 10 : c >= 'A' ? c - 'A' + 10 : c - '0';
     }
 
     // ===== Property setters =====
