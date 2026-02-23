@@ -225,6 +225,16 @@ static unsigned int g_tokExceptionTR = 0;   /* TypeRef: System.Exception */
 static unsigned int g_tokPathString = 0;    /* UserString: DLL path */
 static unsigned int g_tokTypeString = 0;    /* UserString: type name */
 
+/* Verbose catch handler tokens (best-effort; falls back to silent if any fail) */
+static unsigned int g_tokConsoleTR = 0;
+static unsigned int g_tokConsoleWriteLineStrMR = 0;
+static unsigned int g_tokConsoleWriteLineObjMR = 0;
+static unsigned int g_tokErrHeaderString = 0;
+static unsigned int g_tokErrFooterString = 0;
+static volatile LONG g_verboseCatchReady = 0;
+
+static unsigned int g_injectedMethodToken = 0;
+
 /* Flag: target module tokens are ready */
 static volatile LONG g_targetReady = 0;
 
@@ -610,6 +620,72 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
         if (hr != 0) goto fail;
     }
 
+    /* Step 6b: Create verbose catch handler tokens (best-effort).
+     * If any fail, we fall back to the silent catch handler. */
+    {
+        typedef HRESULT (__stdcall *DefineTypeRefByNameFn)(
+            void* self, unsigned int tkResolutionScope, LPCWSTR szName,
+            unsigned int* ptr);
+        DefineTypeRefByNameFn defTypeRef2 = (DefineTypeRefByNameFn)emitVt[VT_ME_DefineTypeRefByName];
+
+        typedef HRESULT (__stdcall *DefineMemberRefFn)(
+            void* self, unsigned int tkImport, LPCWSTR szName,
+            const BYTE* pvSigBlob, ULONG cbSigBlob,
+            unsigned int* pmr);
+        DefineMemberRefFn defMemberRef2 = (DefineMemberRefFn)emitVt[VT_ME_DefineMemberRef];
+
+        typedef HRESULT (__stdcall *DefineUserStringFn)(
+            void* self, LPCWSTR szString, ULONG cchString,
+            unsigned int* pstk);
+        DefineUserStringFn defStr2 = (DefineUserStringFn)emitVt[VT_ME_DefineUserString];
+
+        PLog("  Step 6b: Creating verbose catch handler tokens...");
+
+        /* TypeRef for System.Console */
+        g_tokConsoleTR = SearchTypeRef(pImport, importVt, L"System.Console", NULL);
+        if (!g_tokConsoleTR) {
+            hr = defTypeRef2(pEmit, runtimeScope, L"System.Console", &g_tokConsoleTR);
+            if (hr != 0) { PLog("  WARN: Console TypeRef failed, using silent catch"); goto skip_verbose; }
+        }
+        PLogFmt("  Console TypeRef=0x%08X", g_tokConsoleTR);
+
+        /* MemberRef: Console.WriteLine(string) — sig: static, 1 param, void, string */
+        {
+            BYTE sig[4] = {0x00, 0x01, 0x01, 0x0E};
+            hr = defMemberRef2(pEmit, g_tokConsoleTR, L"WriteLine", sig, 4, &g_tokConsoleWriteLineStrMR);
+            if (hr != 0) { PLog("  WARN: WriteLine(string) failed, using silent catch"); goto skip_verbose; }
+            PLogFmt("  Console.WriteLine(string) MemberRef=0x%08X", g_tokConsoleWriteLineStrMR);
+        }
+
+        /* MemberRef: Console.WriteLine(object) — sig: static, 1 param, void, object */
+        {
+            BYTE sig[4] = {0x00, 0x01, 0x01, 0x1C};
+            hr = defMemberRef2(pEmit, g_tokConsoleTR, L"WriteLine", sig, 4, &g_tokConsoleWriteLineObjMR);
+            if (hr != 0) { PLog("  WARN: WriteLine(object) failed, using silent catch"); goto skip_verbose; }
+            PLogFmt("  Console.WriteLine(object) MemberRef=0x%08X", g_tokConsoleWriteLineObjMR);
+        }
+
+        /* UserString: error header */
+        {
+            LPCWSTR hdr = L"=== UPROOTED: Hook load failed. Exception: ===";
+            hr = defStr2(pEmit, hdr, (ULONG)wcslen(hdr), &g_tokErrHeaderString);
+            if (hr != 0) { PLog("  WARN: ErrHeader string failed, using silent catch"); goto skip_verbose; }
+            PLogFmt("  ErrHeader UserString=0x%08X", g_tokErrHeaderString);
+        }
+
+        /* UserString: error footer */
+        {
+            LPCWSTR ftr = L"=== Relaunch Root from a terminal to see this output ===";
+            hr = defStr2(pEmit, ftr, (ULONG)wcslen(ftr), &g_tokErrFooterString);
+            if (hr != 0) { PLog("  WARN: ErrFooter string failed, using silent catch"); goto skip_verbose; }
+            PLogFmt("  ErrFooter UserString=0x%08X", g_tokErrFooterString);
+        }
+
+        InterlockedExchange(&g_verboseCatchReady, 1);
+        PLog("  Verbose catch handler tokens ready!");
+    skip_verbose: ;
+    }
+
     g_targetModuleId = moduleId;
     PLog("  ALL tokens created successfully!");
 
@@ -670,6 +746,7 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
                             InterlockedExchange(&g_targetReady, 1);
                             if (DoInjectIL(moduleId, methods[m])) {
                                 injectedMethod = methods[m];
+                                g_injectedMethodToken = methods[m];
                                 InterlockedExchange(&g_injectionCount, 1);
                                 PLog("  *** IL INJECTED FROM ModuleLoadFinished ***");
                                 ClearEventMaskAfterInjection();
@@ -706,6 +783,12 @@ fail:
     g_tokExceptionTR = 0;
     g_tokPathString = 0;
     g_tokTypeString = 0;
+    g_tokConsoleTR = 0;
+    g_tokConsoleWriteLineStrMR = 0;
+    g_tokConsoleWriteLineObjMR = 0;
+    g_tokErrHeaderString = 0;
+    g_tokErrFooterString = 0;
+    InterlockedExchange(&g_verboseCatchReady, 0);
     SafeRelease(pEmit);
     SafeRelease(pImport);
     return FALSE;
@@ -800,29 +883,42 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
      * Uses Assembly.GetType + Activator.CreateInstance instead of
      * Assembly.CreateInstance, which gets trimmed in .NET single-file apps.
      *
+     * Try body (28 bytes):
      *   offset  0: ldstr <pathString>              (5 bytes)  TRY START
      *   offset  5: call Assembly.LoadFrom           (5 bytes)
      *   offset 10: ldstr <typeString>              (5 bytes)
      *   offset 15: callvirt Assembly.GetType        (5 bytes)
      *   offset 20: call Activator.CreateInstance    (5 bytes)
      *   offset 25: pop                             (1 byte)
-     *   offset 26: leave.s +3                      (2 bytes)  -> offset 31
-     *   offset 28: pop                             (1 byte)   CATCH START
-     *   offset 29: leave.s 0                       (2 bytes)  -> offset 31
-     *   offset 31: <original code>
+     *   offset 26: leave.s <catchSize>             (2 bytes)
      *
-     * TryOffset=0, TryLength=28, HandlerOffset=28, HandlerLength=3
+     * Catch handler — VERBOSE (27 bytes, if Console tokens available):
+     *   offset 28: ldstr <errHeader>               (5 bytes)  CATCH START
+     *   offset 33: call Console.WriteLine(string)  (5 bytes)
+     *   offset 38: call Console.WriteLine(object)  (5 bytes)  <- prints full exception
+     *   offset 43: ldstr <hookDllPath>             (5 bytes)
+     *   offset 48: call Console.WriteLine(string)  (5 bytes)
+     *   offset 53: leave.s 0                       (2 bytes)
+     *   offset 55: <original code>
+     *
+     * Catch handler — SILENT fallback (3 bytes):
+     *   offset 28: pop                             (1 byte)   CATCH START
+     *   offset 29: leave.s 0                       (2 bytes)
+     *   offset 31: <original code>
      */
-    #define INJECT_SIZE 31
+    #define TRY_SIZE 28
+    #define CATCH_VERBOSE_SIZE 27
+    #define CATCH_SILENT_SIZE 3
 
-    BYTE injection[INJECT_SIZE];
+    int useVerbose = g_verboseCatchReady;
+    int catchSize = useVerbose ? CATCH_VERBOSE_SIZE : CATCH_SILENT_SIZE;
+    int injectSize = TRY_SIZE + catchSize;
+
+    BYTE injection[128]; /* large enough for verbose case */
     int p = 0;
 
-#if DIAGNOSTIC_NOP_ONLY
-    /* NOP-only mode: just prepend NOPs to verify header construction */
-    PLog("DoInjectIL: *** DIAGNOSTIC NOP MODE ***");
-    for (p = 0; p < INJECT_SIZE; p++) injection[p] = IL_NOP;
-#else
+    /* === TRY BODY (28 bytes) === */
+
     /* ldstr <pathString> */
     injection[p++] = IL_LDSTR;
     *(unsigned int*)(injection + p) = g_tokPathString; p += 4;
@@ -846,33 +942,67 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
     /* pop (discard result) */
     injection[p++] = IL_POP;
 
-    /* leave.s +3 (jump over catch handler to original code) */
+    /* leave.s — jump over catch handler to original code */
     injection[p++] = IL_LEAVE_S;
-    injection[p++] = 3;
+    injection[p++] = (BYTE)catchSize; /* jumps past catch to original code */
 
-    /* CATCH HANDLER: pop exception, leave */
-    injection[p++] = IL_POP;
-    injection[p++] = IL_LEAVE_S;
-    injection[p++] = 0;
-#endif
+    if (p != TRY_SIZE) {
+        PLogFmt("DoInjectIL: BUG! try size %d != expected %d", p, TRY_SIZE);
+        return FALSE;
+    }
 
-    if (p != INJECT_SIZE) {
-        PLogFmt("DoInjectIL: BUG! injection size %d != expected %d", p, INJECT_SIZE);
+    /* === CATCH HANDLER === */
+    if (useVerbose) {
+        PLog("DoInjectIL: Using VERBOSE catch handler (Console.WriteLine)");
+
+        /* ldstr <errHeader> — "=== UPROOTED: Hook load failed ===" */
+        injection[p++] = IL_LDSTR;
+        *(unsigned int*)(injection + p) = g_tokErrHeaderString; p += 4;
+
+        /* call Console.WriteLine(string) — prints header, exception stays on stack */
+        injection[p++] = IL_CALL;
+        *(unsigned int*)(injection + p) = g_tokConsoleWriteLineStrMR; p += 4;
+
+        /* call Console.WriteLine(object) — prints exception.ToString(), consumes it */
+        injection[p++] = IL_CALL;
+        *(unsigned int*)(injection + p) = g_tokConsoleWriteLineObjMR; p += 4;
+
+        /* ldstr <hookDllPath> — print the path we tried to load */
+        injection[p++] = IL_LDSTR;
+        *(unsigned int*)(injection + p) = g_tokPathString; p += 4;
+
+        /* call Console.WriteLine(string) */
+        injection[p++] = IL_CALL;
+        *(unsigned int*)(injection + p) = g_tokConsoleWriteLineStrMR; p += 4;
+
+        /* leave.s 0 */
+        injection[p++] = IL_LEAVE_S;
+        injection[p++] = 0;
+    } else {
+        PLog("DoInjectIL: Using SILENT catch handler (no diagnostic tokens)");
+        /* pop exception, leave */
+        injection[p++] = IL_POP;
+        injection[p++] = IL_LEAVE_S;
+        injection[p++] = 0;
+    }
+
+    if (p != injectSize) {
+        PLogFmt("DoInjectIL: BUG! injection size %d != expected %d", p, injectSize);
         return FALSE;
     }
 
     /* Hex dump of injection for debugging */
     {
-        char hexbuf[256];
+        char hexbuf[512];
         int hpos = 0;
-        for (int i = 0; i < INJECT_SIZE && hpos < 240; i++) {
+        for (int i = 0; i < injectSize && hpos < 500; i++) {
             hpos += sprintf(hexbuf + hpos, "%02X ", injection[i]);
         }
-        PLogFmt("DoInjectIL: IL bytes: %s", hexbuf);
+        PLogFmt("DoInjectIL: IL bytes (%d): %s", injectSize, hexbuf);
     }
 
     /* Step 4: Calculate new body size with EH section */
-    ULONG newCodeSize = INJECT_SIZE + origCodeSize;
+    ULONG newCodeSize = (ULONG)injectSize + origCodeSize;
     USHORT newMaxStack = origMaxStack < 2 ? 2 : origMaxStack;
     ULONG headerSize = 12;
 
@@ -927,31 +1057,30 @@ static BOOL DoInjectIL(UINT_PTR moduleId, unsigned int methodToken) {
             fatFlags, newMaxStack, newCodeSize, origLocalsSig);
 
     /* Step 7: Write IL code */
-    memcpy(newBody + headerSize, injection, INJECT_SIZE);
-    memcpy(newBody + headerSize + INJECT_SIZE, origCode, origCodeSize);
+    memcpy(newBody + headerSize, injection, (size_t)injectSize);
+    memcpy(newBody + headerSize + injectSize, origCode, origCodeSize);
 
     /* Step 8: Write padding (zeros, already memset) */
 
     /* Step 9: Write fat EH section */
     BYTE* ehSection = newBody + codeEnd + ehPadding;
 
-    /* Section header: Kind=0x41 (EHTable|FatFormat), DataSize=28 (4+24) */
     ehSection[0] = CorILMethod_Sect_EHTable | CorILMethod_Sect_FatFormat;  /* 0x41 */
-    ehSection[1] = (BYTE)(ehSectionSize & 0xFF);         /* 28 = 0x1C */
-    ehSection[2] = (BYTE)((ehSectionSize >> 8) & 0xFF);  /* 0x00 */
-    ehSection[3] = (BYTE)((ehSectionSize >> 16) & 0xFF); /* 0x00 */
+    ehSection[1] = (BYTE)(ehSectionSize & 0xFF);
+    ehSection[2] = (BYTE)((ehSectionSize >> 8) & 0xFF);
+    ehSection[3] = (BYTE)((ehSectionSize >> 16) & 0xFF);
 
     /* Fat clause: catch System.Exception around injection code */
     BYTE* clause = ehSection + 4;
-    *(unsigned int*)(clause + 0)  = 0x00000000;  /* Flags: COR_ILEXCEPTION_CLAUSE_NONE (catch) */
-    *(unsigned int*)(clause + 4)  = 0;           /* TryOffset */
-    *(unsigned int*)(clause + 8)  = 28;          /* TryLength */
-    *(unsigned int*)(clause + 12) = 28;          /* HandlerOffset */
-    *(unsigned int*)(clause + 16) = 3;           /* HandlerLength */
-    *(unsigned int*)(clause + 20) = g_tokExceptionTR;  /* ClassToken (TypeRef) */
+    *(unsigned int*)(clause + 0)  = 0x00000000;         /* Flags: COR_ILEXCEPTION_CLAUSE_NONE */
+    *(unsigned int*)(clause + 4)  = 0;                  /* TryOffset */
+    *(unsigned int*)(clause + 8)  = TRY_SIZE;           /* TryLength (28) */
+    *(unsigned int*)(clause + 12) = TRY_SIZE;           /* HandlerOffset (28) */
+    *(unsigned int*)(clause + 16) = (unsigned int)catchSize;  /* HandlerLength */
+    *(unsigned int*)(clause + 20) = g_tokExceptionTR;   /* ClassToken */
 
-    PLogFmt("DoInjectIL: EH clause: try=[0,%u) handler=[%u,%u) catch=0x%08X",
-            28, 28, 31, g_tokExceptionTR);
+    PLogFmt("DoInjectIL: EH clause: try=[0,%d) handler=[%d,%d) catch=0x%08X verbose=%d",
+            TRY_SIZE, TRY_SIZE, TRY_SIZE + catchSize, g_tokExceptionTR, useVerbose);
 
     /* Step 10: Set the new IL body */
     typedef HRESULT (__stdcall *SetILFunctionBodyFn)(
@@ -1019,6 +1148,29 @@ static HRESULT __stdcall Prof_Initialize(UprootedProfiler* self, void* pICorProf
     DWORD mask = COR_PRF_MONITOR_JIT_COMPILATION | COR_PRF_MONITOR_MODULE_LOADS;
     hr = setMask(g_profilerInfo, mask);
     PLogFmt("SetEventMask(0x%08X): hr=0x%08X", mask, hr);
+
+    /* Pre-flight check: does the hook DLL exist? */
+    {
+        char narrowPath[MAX_PATH];
+        WideCharToMultiByte(CP_UTF8, 0, g_hookDllPath, -1, narrowPath, MAX_PATH, NULL, NULL);
+        PLogFmt("Hook DLL path: %s", narrowPath);
+
+        DWORD attrs = GetFileAttributesW(g_hookDllPath);
+        if (attrs != INVALID_FILE_ATTRIBUTES) {
+            WIN32_FILE_ATTRIBUTE_DATA fad;
+            if (GetFileAttributesExW(g_hookDllPath, GetFileExInfoStandard, &fad)) {
+                LARGE_INTEGER sz;
+                sz.HighPart = fad.nFileSizeHigh;
+                sz.LowPart = fad.nFileSizeLow;
+                PLogFmt("Hook DLL found: %lld bytes", sz.QuadPart);
+            } else {
+                PLog("Hook DLL found but size query failed");
+            }
+        } else {
+            PLog("*** WARNING: Hook DLL NOT FOUND or not readable! ***");
+            PLog("Assembly.LoadFrom will fail. Check installation.");
+        }
+    }
 
     PLog("=== Profiler Initialize done ===");
     return 0;
