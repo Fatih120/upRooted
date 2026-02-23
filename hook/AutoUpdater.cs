@@ -15,11 +15,15 @@ namespace Uprooted;
 /// </summary>
 internal class AutoUpdater
 {
-    // Stable channel (public repo)
+    // Stable channel (public repo — tagged releases from main)
     private const string StableApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted/releases/latest";
     private const string StableDownloadBase = "https://github.com/The-Uprooted-Project/uprooted/releases/download";
 
-    // Developer channel (private repo)
+    // Canary channel (public canary repo — bleeding edge builds from main)
+    private const string CanaryApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-canary/releases?per_page=1";
+    private const string CanaryDownloadBase = "https://github.com/The-Uprooted-Project/uprooted-canary/releases/download";
+
+    // Developer channel (private repo — builds from dev branch, invite/password only)
     // Use /releases?per_page=1 instead of /releases/latest — the latter only returns
     // non-prerelease releases, but dev-channel builds are published as pre-releases.
     private const string DevApiUrl = "https://api.github.com/repos/The-Uprooted-Project/uprooted-private/releases?per_page=1";
@@ -250,11 +254,13 @@ internal class AutoUpdater
         try
         {
             var settings = UprootedSettings.Load();
-            var isDev = settings.AutoUpdateChannel == "developer";
-            var apiUrl = isDev ? DevApiUrl : StableApiUrl;
+            var channel = settings.AutoUpdateChannel ?? "stable";
+            var isDev = channel == "developer";
+            var isCanary = channel == "canary";
+            var apiUrl = isDev ? DevApiUrl : isCanary ? CanaryApiUrl : StableApiUrl;
             var authToken = isDev ? DecryptPat() : null;
 
-            ev.Set("channel", settings.AutoUpdateChannel ?? "stable");
+            ev.Set("channel", channel);
             ev.Set("is_manual", _isManualCheck);
 
             // Update last check timestamp immediately (we attempted a check regardless of outcome)
@@ -309,7 +315,7 @@ internal class AutoUpdater
                 settings.Save();
 
                 // Download and apply
-                DownloadAndApply(isDev, ev);
+                DownloadAndApply(isDev, isCanary, ev);
             }
             else if (cmp == 0 && _isManualCheck)
             {
@@ -317,7 +323,7 @@ internal class AutoUpdater
                 // its SHA-256 against the stored hash. A differing hash means a silent hotfix
                 // was published under the same version tag.
                 ev.Set("result", "same_version_hotfix_check");
-                DownloadAndApply(isDev, ev);
+                DownloadAndApply(isDev, isCanary, ev);
             }
             else
             {
@@ -331,7 +337,7 @@ internal class AutoUpdater
         }
     }
 
-    private void DownloadAndApply(bool isDev, WideEvent parentEv)
+    private void DownloadAndApply(bool isDev, bool isCanary, WideEvent parentEv)
     {
         using var ev = WideEvent.Begin("AutoUpdate", "download", parentEv);
         var uprootedDir = PlatformPaths.GetUprootedDir();
@@ -339,11 +345,11 @@ internal class AutoUpdater
 
         // Use channel determined by RunCheck — don't re-read settings (avoids race if user
         // toggles the channel while the check is in progress)
-        var downloadBase = isDev ? DevDownloadBase : StableDownloadBase;
+        var downloadBase = isDev ? DevDownloadBase : isCanary ? CanaryDownloadBase : StableDownloadBase;
         var authToken = isDev ? DecryptPat() : null;
 
         ev.Set("version", _latestVersion);
-        ev.Set("is_dev", isDev);
+        ev.Set("channel", isDev ? "developer" : isCanary ? "canary" : "stable");
 
         try
         {

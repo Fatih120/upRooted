@@ -1,40 +1,104 @@
 name: Release
 
+# Three release channels:
+#   stable  — public repo (The-Uprooted-Project/uprooted), built from main
+#   canary  — canary repo (The-Uprooted-Project/uprooted-canary), built from main
+#   dev     — private repo (The-Uprooted-Project/uprooted-private), built from dev branch
+#
+# Triggered by:
+#   - release published (auto-detects channel from release body/tag)
+#   - manual dispatch with explicit channel + version
+
 on:
   release:
     types: [published]
   workflow_dispatch:
     inputs:
-      tag:
-        description: 'Release tag (e.g. v0.5.0)'
+      channel:
+        description: 'Release channel'
         required: true
+        type: choice
+        options:
+          - canary
+          - dev
+          - stable
+      version:
+        description: 'Version (e.g. 0.5.0, 0.5.1-canary.1)'
+        required: true
+      ref:
+        description: 'Branch to build from (default: main for stable/canary, dev for dev)'
+        required: false
 
 permissions:
   contents: write
 
 jobs:
-  # ── Extract version from release tag ──
+  # ── Resolve channel, version, branch ──
   prepare:
     runs-on: ubuntu-latest
     outputs:
-      version: ${{ steps.ver.outputs.version }}
-      prerelease: ${{ steps.ver.outputs.prerelease }}
-      tag: ${{ steps.ver.outputs.tag }}
+      channel: ${{ steps.resolve.outputs.channel }}
+      version: ${{ steps.resolve.outputs.version }}
+      tag: ${{ steps.resolve.outputs.tag }}
+      ref: ${{ steps.resolve.outputs.ref }}
+      target_repo: ${{ steps.resolve.outputs.target_repo }}
+      is_prerelease: ${{ steps.resolve.outputs.is_prerelease }}
     steps:
-      - name: Resolve version
-        id: ver
+      - name: Resolve release parameters
+        id: resolve
         run: |
           if [ "${{ github.event_name }}" = "release" ]; then
             TAG="${GITHUB_REF_NAME}"
+            VERSION="${TAG#v}"
+            # Detect channel from tag/release metadata
+            BODY="${{ github.event.release.body }}"
+            if echo "$VERSION" | grep -qi "canary"; then
+              CHANNEL="canary"
+            elif [ "${{ github.event.release.prerelease }}" = "true" ]; then
+              CHANNEL="dev"
+            else
+              CHANNEL="stable"
+            fi
+            REF="${{ github.event.release.target_commitish }}"
           else
-            TAG="${{ inputs.tag }}"
+            CHANNEL="${{ inputs.channel }}"
+            VERSION="${{ inputs.version }}"
+            TAG="v${VERSION}"
+            REF="${{ inputs.ref }}"
           fi
-          VERSION="${TAG#v}"
-          PRERELEASE="${{ github.event.release.prerelease || 'false' }}"
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
+
+          # Default branch per channel
+          if [ -z "$REF" ]; then
+            case "$CHANNEL" in
+              dev) REF="dev" ;;
+              *)   REF="main" ;;
+            esac
+          fi
+
+          # Target repo per channel
+          case "$CHANNEL" in
+            stable) TARGET_REPO="The-Uprooted-Project/uprooted" ;;
+            canary) TARGET_REPO="The-Uprooted-Project/uprooted-canary" ;;
+            dev)    TARGET_REPO="The-Uprooted-Project/uprooted-private" ;;
+          esac
+
+          # Stable releases are non-prerelease; canary and dev are prerelease
+          IS_PRERELEASE="true"
+          [ "$CHANNEL" = "stable" ] && IS_PRERELEASE="false"
+
+          echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "prerelease=$PRERELEASE" >> $GITHUB_OUTPUT
-          echo "Release: $TAG (version=$VERSION, prerelease=$PRERELEASE)"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "ref=$REF" >> $GITHUB_OUTPUT
+          echo "target_repo=$TARGET_REPO" >> $GITHUB_OUTPUT
+          echo "is_prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
+
+          echo "Channel: $CHANNEL"
+          echo "Version: $VERSION"
+          echo "Tag: $TAG"
+          echo "Branch: $REF"
+          echo "Target: $TARGET_REPO"
+          echo "Prerelease: $IS_PRERELEASE"
 
   # ── Build all platforms ──
   build:
@@ -43,8 +107,8 @@ jobs:
     with:
       version: ${{ needs.prepare.outputs.version }}
 
-  # ── Upload artifacts to the GitHub release ──
-  upload:
+  # ── Upload artifacts to the triggering release on private repo ──
+  upload-private:
     needs: [prepare, build]
     runs-on: ubuntu-latest
     env:
@@ -60,24 +124,34 @@ jobs:
       - name: List release assets
         run: ls -lah _release/
 
-      - name: Upload all assets to release
+      - name: Upload to private repo release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          # Create release if it doesn't exist (for workflow_dispatch)
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "$TAG" \
+            --notes "Channel: ${{ needs.prepare.outputs.channel }}" \
+            ${{ needs.prepare.outputs.is_prerelease == 'true' && '--prerelease' || '' }} \
+            2>/dev/null || true
+
           for f in _release/*; do
             echo "Uploading: $(basename "$f")"
             gh release upload "$TAG" "$f" --clobber \
               --repo "${{ github.repository }}" || true
           done
 
-  # ── Publish to public repo (non-prerelease only) ──
-  publish-public:
-    needs: [prepare, upload]
-    if: needs.prepare.outputs.prerelease != 'true'
+  # ── Publish to target repo (canary or stable) ──
+  publish-target:
+    needs: [prepare, build, upload-private]
+    if: needs.prepare.outputs.channel != 'dev'
     runs-on: ubuntu-latest
     env:
       VERSION: ${{ needs.prepare.outputs.version }}
       TAG: ${{ needs.prepare.outputs.tag }}
+      TARGET_REPO: ${{ needs.prepare.outputs.target_repo }}
+      CHANNEL: ${{ needs.prepare.outputs.channel }}
     steps:
       - uses: actions/checkout@v4
 
@@ -87,7 +161,7 @@ jobs:
           name: release-artifacts
           path: _release
 
-      - name: Create public release
+      - name: Create release on target repo
         env:
           GH_TOKEN: ${{ secrets.PUBLIC_REPO_TOKEN }}
         run: |
@@ -96,30 +170,34 @@ jobs:
             exit 0
           fi
 
-          # Create release with notes from NEXT-RELEASE.md
-          NOTES_FILE="NEXT-RELEASE.md"
-          if [ ! -f "$NOTES_FILE" ]; then
-            NOTES_FILE=""
+          PRERELEASE_FLAG=""
+          [ "${{ needs.prepare.outputs.is_prerelease }}" = "true" ] && PRERELEASE_FLAG="--prerelease"
+
+          # Use NEXT-RELEASE.md for stable, generic note for canary
+          if [ "$CHANNEL" = "stable" ] && [ -f "NEXT-RELEASE.md" ]; then
+            NOTES_FLAG="--notes-file NEXT-RELEASE.md"
+          else
+            NOTES_FLAG="--notes ${CHANNEL^} release $TAG"
           fi
 
           gh release create "$TAG" \
-            --repo The-Uprooted-Project/uprooted \
+            --repo "$TARGET_REPO" \
             --title "$TAG" \
-            ${NOTES_FILE:+--notes-file "$NOTES_FILE"} \
-            ${NOTES_FILE:---notes "Release $TAG"} \
+            $NOTES_FLAG \
+            $PRERELEASE_FLAG \
             || true
 
           for f in _release/*; do
             gh release upload "$TAG" "$f" \
-              --repo The-Uprooted-Project/uprooted \
+              --repo "$TARGET_REPO" \
               --clobber || true
           done
-          echo "Published to public repo: $TAG"
+          echo "Published to $TARGET_REPO: $TAG"
 
-  # ── Update package managers (non-prerelease only) ──
+  # ── Update package managers (stable channel only) ──
   update-packages:
-    needs: [prepare, upload]
-    if: needs.prepare.outputs.prerelease != 'true'
+    needs: [prepare, publish-target]
+    if: needs.prepare.outputs.channel == 'stable'
     uses: ./.github/workflows/publish-packages.yml
     with:
       version: ${{ needs.prepare.outputs.version }}

@@ -18,40 +18,67 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 
 **This command does NOT call `/ok` or `/nose`** — it inlines and adapts their logic for release context (broader scope, automatic fixes instead of per-file questions).
 
+## Three Release Channels
+
+| Channel | Target Repo | Branch | Pre-release? | Package Managers | Auto-Updater Channel |
+|---------|-------------|--------|--------------|------------------|---------------------|
+| **stable** | `The-Uprooted-Project/uprooted` (public) | `main` | No | Yes (all) | `stable` |
+| **canary** | `The-Uprooted-Project/uprooted-canary` (public) | `main` | Yes | No | `canary` |
+| **dev** | `The-Uprooted-Project/uprooted-private` (private) | `dev` | Yes | No | `developer` |
+
 ## Argument Parsing
 
-The user invokes: `/release <target> <version>`
+The user invokes: `/release <channel> <version>`
 
 Parse `$ARGUMENTS` (the raw argument string) into two values:
-- **TARGET** — first word: `private`, `public`, or `all` (which repos get artifacts)
-- **VERSION** — second word: the version number (e.g. `0.4.2`, `0.5.0-rc`)
+- **CHANNEL** — first word: `stable`, `canary`, or `dev`
+- **VERSION** — second word: the version number (e.g. `0.6.0`, `0.6.0-canary.1`, `0.6.0-dev.1`)
 
-If `$ARGUMENTS` doesn't contain exactly two space-separated values, or TARGET is not one of `private`/`public`/`all`, stop with:
+If `$ARGUMENTS` doesn't contain exactly two space-separated values, or CHANNEL is not one of `stable`/`canary`/`dev`, stop with:
 ```
-Usage: /release <private|public|all> <version>
-Example: /release private 0.4.2
+Usage: /release <stable|canary|dev> <version>
+
+Channels:
+  stable  — public repo, main branch, triggers package manager updates
+  canary  — canary repo, main branch, bleeding edge
+  dev     — private repo, dev branch, invite only
+
+Examples:
+  /release stable 0.6.0
+  /release canary 0.6.0-canary.1
+  /release dev 0.6.0-dev.1
 ```
 
-Set **IS_PRERELEASE** = true if VERSION contains a hyphen (e.g. `0.5.0-rc`), false otherwise.
+Derive:
+- **BRANCH** = `dev` if CHANNEL is `dev`, otherwise `main`
+- **IS_PRERELEASE** = `true` if CHANNEL is `canary` or `dev`, `false` for `stable`
+- **TARGET_REPO**:
+  - `stable` → `The-Uprooted-Project/uprooted`
+  - `canary` → `The-Uprooted-Project/uprooted-canary`
+  - `dev` → `The-Uprooted-Project/uprooted-private`
 
-Throughout this document, **TARGET** and **VERSION** refer to these parsed values.
+Throughout this document, **CHANNEL**, **VERSION**, **BRANCH**, and **TARGET_REPO** refer to these parsed values.
+
+---
 
 ## Phase 1: Pre-flight
 
-1. Run `git pull` to ensure we have the latest.
+1. **Discover git remote name** — run `git remote -v` and find the remote pointing to `uprooted-private.git`. Store as `REMOTE`. Do NOT assume the remote is named `origin` — it may be `private` or something else.
 
-2. **Discover git remote name** — run `git remote -v` and find the remote pointing to `uprooted-private.git`. Store as `REMOTE`. Do NOT assume the remote is named `origin` — it may be `private` or something else.
+2. **Switch to the correct branch** — if BRANCH is `dev` and we're not on `dev`, run `git checkout dev`. If BRANCH is `main` and we're not on `main`, run `git checkout main`.
 
-3. Run `git status` to check for uncommitted changes. If there are uncommitted changes:
+3. Run `git pull $REMOTE $BRANCH` to ensure we have the latest.
+
+4. Run `git status` to check for uncommitted changes. If there are uncommitted changes:
    - Show them to the user.
    - Ask via `AskUserQuestion`: "There are uncommitted changes. How should we handle them?"
      - **Abort** — stop the release, user deals with changes first
      - **Continue anyway** — user confirms changes are expected (e.g., they're part of the release)
    - If abort, stop entirely.
 
-4. Run `git log --oneline -10` to confirm we are on `main` and see recent history.
+5. Run `git log --oneline -10` to confirm branch and see recent history.
 
-5. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const). This is the **previous version** (`PREV`) — needed for find-and-replace in Phase 3 and for changelog compare links. Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
+6. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const). This is the **previous version** (`PREV`). Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
 
 ---
 
@@ -152,7 +179,7 @@ Grep for the previous version string across all source, script, doc, and config 
 
 Run the same file-by-file version bump as `/nose` Phase 2. The file list is defined in `/nose` — refer to that skill for the canonical set. Key files:
 
-**Source code:** `package.json`, `installer/src-tauri/Cargo.toml`, `hook/UprootedSettings.cs`, `hook/StartupHook.cs`, `hook/ContentPages.cs` (all PluginInfo `replace_all`), `hook/SidebarInjector.cs`, `hook/SESSION_STATE.md`, `src/plugins/{themes,sentry-blocker,link-embeds,settings-panel}/index.ts`
+**Source code:** `VERSION`, `package.json`, `installer/src-tauri/Cargo.toml`, `hook/UprootedSettings.cs`, `hook/StartupHook.cs`, `hook/ContentPages.cs` (all PluginInfo `replace_all`), `hook/SidebarInjector.cs`, `hook/SESSION_STATE.md`, `src/plugins/{themes,sentry-blocker,link-embeds,settings-panel}/index.ts`
 
 **Scripts:** `Install-Uprooted.ps1`, `Uninstall-Uprooted.ps1`, `install-uprooted-linux.sh`, `packaging/PKGBUILD`
 
@@ -209,6 +236,7 @@ Tell the user:
 Present a summary to the user via `AskUserQuestion`:
 
 **Show:**
+- Release channel: `CHANNEL` (branch: `BRANCH`, target: `TARGET_REPO`)
 - Documentation sweep results (files updated, issues found and fixed)
 - Version bump results (N files updated from `old` to `new`, any stale refs remaining, any files skipped)
 
@@ -278,7 +306,8 @@ Read `CHANGELOG_PUBLIC.md` and verify:
 
 ### 5c. Version consistency spot-check
 
-Read these 4 files and verify the version matches `VERSION`:
+Read these 5 files and verify the version matches `VERSION`:
+- `VERSION` — entire file content
 - `hook/StartupHook.cs` — `CurrentVersion` const
 - `hook/UprootedSettings.cs` — `Version` property default
 - `package.json` — `"version"` field
@@ -305,6 +334,10 @@ Present a comprehensive summary to the user via `AskUserQuestion`:
 **Show:**
 
 ```
+Channel: CHANNEL
+  Branch: BRANCH -> TARGET_REPO
+  Pre-release: IS_PRERELEASE
+
 Build verification:
   C# hook:       BUILD_RESULT
   C# tests:      TEST_RESULT (N tests passed)
@@ -315,8 +348,6 @@ Release artifact audit:
   CHANGELOG_PUBLIC.md: STATUS
   Version consistency:  STATUS
   Git tag v<version>:  STATUS
-
-Pre-release: yes/no
 
 Files to be committed:
   [git status --short]
@@ -354,13 +385,13 @@ At this point only release-related files should be modified — the user has rev
 ### 6c. Commit
 
 ```bash
-git commit -m "release: v<version>"
+git commit -m "release: v<version> (<channel>)"
 ```
 
 ### 6d. Tag
 
 ```bash
-git tag -a "v<version>" -m "Release v<version>"
+git tag -a "v<version>" -m "Release v<version> (<channel> channel)"
 ```
 
 ### 6e. Push
@@ -368,7 +399,7 @@ git tag -a "v<version>" -m "Release v<version>"
 Use the `REMOTE` discovered in Phase 1 (not hardcoded `origin`):
 
 ```bash
-git push $REMOTE && git push $REMOTE --tags
+git push $REMOTE $BRANCH && git push $REMOTE --tags
 ```
 
 If push fails (e.g., remote has new commits), **stop and report**. Do NOT force-push. The user must resolve manually (`git pull --rebase`, then re-push).
@@ -382,11 +413,12 @@ If push fails (e.g., remote has new commits), **stop and report**. Do NOT force-
 Report to the user:
 
 ```
-Release v<version> shipped.
+Release v<version> (<channel>) shipped.
 
   Commit: <short hash>
   Tag:    v<version>
-  Branch: main -> $REMOTE/main
+  Branch: <BRANCH> -> $REMOTE/<BRANCH>
+  Target: <TARGET_REPO>
 
 Proceeding to trigger and monitor CI builds...
 ```
@@ -395,26 +427,17 @@ Proceeding to trigger and monitor CI builds...
 
 ## Phase 8: Trigger, Monitor, and Verify CI Builds
 
-This phase triggers both GitHub Actions workflows, monitors them to completion, and verifies all release artifacts are present on both repos.
+This phase triggers the unified build workflow, monitors it to completion, and verifies all release artifacts are present on the target repo(s).
 
-### 8a. Determine publish targets from `TARGET`
+### 8a. Channel routing
 
-The `target` argument controls which repos receive release artifacts:
+| CHANNEL | Build from | Artifacts uploaded to | Package managers |
+|---------|-----------|----------------------|------------------|
+| `stable` | `main` | private repo + public repo (`uprooted`) | Yes |
+| `canary` | `main` | private repo + canary repo (`uprooted-canary`) | No |
+| `dev` | `dev` | private repo only | No |
 
-| `TARGET` | `publish_public` | Workflows triggered | Artifact verification |
-|----------------------|------------------|--------------------|-----------------------|
-| `private` | `false` | Both (Windows + Linux) | Private repo only |
-| `public` | `true` | Both (Windows + Linux) | Public repo only |
-| `all` | `true` | Both (Windows + Linux) | Both repos |
-
-If TARGET is not one of `private`, `public`, or `all`, this should have been caught during argument parsing. If somehow it wasn't, stop with the usage message.
-
-Log the resolved target:
-```
-Release target: <TARGET value> → publish_public=<true/false>
-```
-
-### 8b. Detect or trigger workflows
+### 8b. Detect or trigger workflow
 
 First, check if push-triggered builds are already running for the release tag:
 
@@ -422,103 +445,84 @@ First, check if push-triggered builds are already running for the release tag:
 gh run list --limit=4 --json databaseId,name,status,headBranch,event
 ```
 
-If runs matching the tag branch (`v<version>`) are already in progress or completed, use those run IDs directly — do NOT re-trigger.
+If runs matching the build workflow are already in progress, use those run IDs directly — do NOT re-trigger.
 
-If no matching runs exist, trigger both workflows manually via `gh workflow run`:
-
-```bash
-# Windows installer
-gh workflow run "Build Installer" \
-  -f version=<version> \
-  -f prerelease=<true if IS_PRERELEASE> \
-  -f publish_public=<true/false per 8a>
-
-# Linux installer
-gh workflow run "Build Linux Installer" \
-  -f version=<version> \
-  -f prerelease=<true if IS_PRERELEASE> \
-  -f publish_public=<true/false per 8a>
-```
-
-After triggering, wait 5 seconds for GitHub to register the runs, then find the run IDs:
+If no matching runs exist, trigger the unified build workflow via `gh workflow run`:
 
 ```bash
-gh run list --workflow=build-installer.yml --limit=1 --json databaseId,status
-gh run list --workflow=build-linux.yml --limit=1 --json databaseId,status
+gh workflow run "Build" -f version=<version>
 ```
 
-**Note:** Push-triggered builds skip the publish steps (they only upload CI artifacts). If the user needs release assets on GitHub, `workflow_dispatch` must be used.
+Wait 5 seconds, then find the run ID:
 
-### 8c. Monitor builds
-
-Poll both workflow runs every 30 seconds until both complete. Use `gh run view <id> --json status,conclusion` for each.
-
-Display a progress update to the user each poll cycle:
-```
-Monitoring CI builds...
-  Windows: <status> (<elapsed>)
-  Linux:   <status> (<elapsed>)
+```bash
+gh run list --workflow=build.yml --limit=1 --json databaseId,status
 ```
 
-If either run fails:
+### 8c. Monitor build
+
+Poll the workflow run every 30 seconds until complete. Use `gh run view <id> --json status,conclusion`.
+
+Display a progress update each poll cycle:
+```
+Monitoring CI build...
+  Build: <status> (<elapsed>)
+```
+
+If the run fails:
 1. Show the failure immediately.
 2. Run `gh run view <id> --log-failed` to fetch the failed step log.
 3. Show the relevant error output to the user.
 4. Ask via `AskUserQuestion`:
-   - **Retry** — re-trigger the failed workflow
+   - **Retry** — re-trigger the workflow
    - **Continue anyway** — proceed to artifact verification (partial release)
    - **Abort** — stop (release commit/tag already pushed; artifacts are incomplete)
 
-Timeout: if either build hasn't completed after 20 minutes, warn the user and ask whether to keep waiting or proceed.
+Timeout: if the build hasn't completed after 30 minutes, warn the user and ask whether to keep waiting or proceed.
 
-### 8d. Verify artifacts on private repo (if target is `private` or `all`)
+### 8d. Trigger release workflow
 
-Skip this step if `TARGET` is `public`.
-
-Once both builds succeed, verify all expected release assets exist on the private repo:
+Once the build succeeds, the release.yml workflow should have been triggered by the release event. If not (e.g., for `workflow_dispatch`), trigger it:
 
 ```bash
-gh release view "v<version>" --json assets --jq '.assets[].name'
+gh workflow run "Release" -f channel=<CHANNEL> -f version=<VERSION>
 ```
 
-**Expected assets (private repo):**
+Monitor this workflow the same way.
+
+### 8e. Verify artifacts on target repo
+
+Once builds succeed, verify all expected release assets exist on the target repo:
+
+```bash
+gh release view "v<version>" --repo <TARGET_REPO> --json assets --jq '.assets[].name'
+```
+
+**Expected assets:**
 
 | # | Asset | Source |
 |---|-------|--------|
-| 1 | `Uprooted-<version>-Setup.exe` | Windows workflow |
-| 2 | `auto-update.uprpkg` | Last workflow to upload (clobbers) |
-| 3 | `Uprooted-<version>-linux-amd64` | Linux workflow |
-| 4 | `uprooted-linux-artifacts.tar.gz` | Linux workflow |
-| 5 | `install-uprooted-linux.sh` | Linux workflow |
+| 1 | `Uprooted-<version>-windows-amd64.exe` | Build matrix |
+| 2 | `Uprooted-<version>-linux-amd64` | Build matrix |
+| 3 | `Uprooted-<version>-linux-arm64` | Build matrix |
+| 4 | `Uprooted-<version>-macos-amd64` | Build matrix |
+| 5 | `Uprooted-<version>-macos-arm64` | Build matrix |
+| 6 | `uprooted_<version>_amd64.deb` | Package job |
+| 7 | `uprooted_<version>_arm64.deb` | Package job |
+| 8 | `Uprooted-<version>-x86_64.AppImage` | Package job |
+| 9 | `auto-update.uprpkg` | Package job |
+| 10 | `uprooted-linux-artifacts.tar.gz` | Package job |
+| 11 | `install-uprooted-linux.sh` | Package job |
+| 12 | `checksums.txt` | Package job |
 
-Check each asset:
-- Exists in the release asset list
-- Has a non-zero size (parse from `--json assets --jq '.assets[] | "\(.name) \(.size)"'`)
+Check each asset exists with non-zero size.
 
-Report any missing or zero-size assets.
-
-### 8e. Verify artifacts on public repo (if target is `public` or `all`)
-
-Skip this step if `TARGET` is `private`.
-
-```bash
-gh release view "v<version>" --repo The-Uprooted-Project/uprooted --json assets --jq '.assets[].name'
-```
-
-Verify the same 5 assets exist on the public repo with non-zero sizes.
+Also verify on the private repo if CHANNEL is not `dev` (since artifacts are always uploaded to private first).
 
 ### 8f. Verify release metadata
 
-For repos matching `TARGET`:
-- `private` or `all` → check private repo
-- `public` or `all` → check public repo
-
 ```bash
-# Private (if target is private or all)
-gh release view "v<version>" --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
-
-# Public (if target is public or all)
-gh release view "v<version>" --repo The-Uprooted-Project/uprooted --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
+gh release view "v<version>" --repo <TARGET_REPO> --json tagName,isDraft,isPrerelease
 ```
 
 Verify:
@@ -528,37 +532,30 @@ Verify:
 
 ### 8g. Final report
 
-Present a comprehensive verification report. Only include repo sections matching `TARGET`:
+Present a comprehensive verification report:
 
 ```
-CI Build & Artifact Verification — v<version> (target: TARGET)
+CI Build & Artifact Verification — v<version> (<channel>)
 
-Workflows:
-  Windows (Build Installer):     ✓ passed (<duration>)
-  Linux (Build Linux Installer): ✓ passed (<duration>)
+Build workflow:    ✓ passed (<duration>)
+Release workflow:  ✓ passed (<duration>)
 
-Private repo (The-Uprooted-Project/uprooted-private):    [if target is private or all]
+Target: <TARGET_REPO>
   Release: v<version> | prerelease: <yes/no>
   Assets:
-    ✓ Uprooted-<version>-Setup.exe       (<size>)
-    ✓ auto-update.uprpkg                  (<size>)
-    ✓ Uprooted-<version>-linux-amd64      (<size>)
-    ✓ uprooted-linux-artifacts.tar.gz     (<size>)
-    ✓ install-uprooted-linux.sh           (<size>)
+    ✓ Uprooted-<version>-windows-amd64.exe    (<size>)
+    ✓ Uprooted-<version>-linux-amd64           (<size>)
+    ✓ auto-update.uprpkg                        (<size>)
+    ✓ checksums.txt                             (<size>)
+    ... (all assets)
 
-Public repo (The-Uprooted-Project/uprooted):                     [if target is public or all]
-  Release: v<version> | prerelease: <yes/no>
-  Assets:
-    ✓ Uprooted-<version>-Setup.exe       (<size>)
-    ✓ auto-update.uprpkg                  (<size>)
-    ✓ Uprooted-<version>-linux-amd64      (<size>)
-    ✓ uprooted-linux-artifacts.tar.gz     (<size>)
-    ✓ install-uprooted-linux.sh           (<size>)
+Package managers: <triggered/skipped>
+  (stable only: Chocolatey, winget, Scoop, Homebrew, AUR, Cloudsmith)
 
-Release v<version> is complete. All artifacts verified.
+Release v<version> (<channel>) is complete.
 ```
 
-Use `✓` for present assets and `✗ MISSING` for absent ones. If any assets are missing, flag the report as incomplete and suggest the user check the workflow logs.
+Use `✓` for present assets and `✗ MISSING` for absent ones. If any assets are missing, flag the report as incomplete.
 
 ---
 

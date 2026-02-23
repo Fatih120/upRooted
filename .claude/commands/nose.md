@@ -10,7 +10,7 @@ allowed-tools:
   - AskUserQuestion
 args:
   - name: version
-    description: Target version number (e.g. 0.5.0, 0.5.1-rc)
+    description: Target version number (e.g. 0.5.0, 0.5.1-rc, 0.5.1-canary.1)
     required: true
 ---
 
@@ -38,6 +38,7 @@ For each file below, read it first, then replace `PREV` with `VER` in the specif
 
 | File | What to update |
 |------|---------------|
+| `VERSION` | Entire file content (single line) |
 | `package.json` | `"version"` field |
 | `installer/src-tauri/Cargo.toml` | `version =` in `[package]` |
 | `hook/UprootedSettings.cs` | `Version` property default string |
