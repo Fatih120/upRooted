@@ -727,6 +727,23 @@ internal class ThemeEngine
         _walkedCardBg = DefaultCardBg;
         _walkedBorder = DefaultCardBorder;
         _walkedAccent = DefaultAccentGreen;
+
+        // Notify plugins (Rootcord, LinkEmbeds) that theme reverted to native.
+        // Read Root's live colors first so ContentPages statics are correct before
+        // plugins refresh their cached fields.
+        var revertColors = ReadLiveRootColors();
+        if (revertColors != null && revertColors.Count > 0)
+        {
+            ContentPages.UpdateLiveColors(
+                revertColors.GetValueOrDefault("BrandPrimary", DefaultAccentGreen),
+                revertColors.GetValueOrDefault("BackgroundPrimary", DefaultDarkBg),
+                null);
+        }
+        else
+        {
+            // Live read failed — notify with defaults so plugins at least refresh
+            ContentPages.UpdateLiveColors(DefaultAccentGreen, DefaultDarkBg, null);
+        }
     }
 
     /// <summary>
@@ -1604,6 +1621,17 @@ internal class ThemeEngine
             // Always notify sidebar — it needs to re-inject with correct colors
             // regardless of whether an Uprooted theme is active
             _onVariantChanged?.Invoke();
+
+            // Notify plugins (Rootcord, LinkEmbeds) of the variant change so they
+            // refresh cached colors from Root's new native palette.
+            var variantColors = ReadLiveRootColors();
+            if (variantColors != null && variantColors.Count > 0)
+            {
+                ContentPages.UpdateLiveColors(
+                    variantColors.GetValueOrDefault("BrandPrimary", DefaultAccentGreen),
+                    variantColors.GetValueOrDefault("BackgroundPrimary", DefaultDarkBg),
+                    null);
+            }
         });
         Logger.Log("Theme", "Subscribed to ActualThemeVariantChanged");
     }
