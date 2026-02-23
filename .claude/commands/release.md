@@ -28,22 +28,25 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 
 ## Argument Parsing
 
-The user invokes: `/release <channel(s)> <version>` or `/release <platform>`
+The user invokes: `/release <channel(s)> [local|remote] <version>` or `/release <platform>`
 
 ### Full release (channel + version)
 
-Parse `$ARGUMENTS` to extract channels and version:
-- **CHANNELS** — first word(s): one or more of `stable`, `canary`, `dev`
+Parse `$ARGUMENTS` to extract channels, build mode, and version:
+- **CHANNELS** — one or more of `stable`, `canary`, `dev`
   - Single: `canary`, `dev`, `stable`
   - Multi (slash-separated): `canary/dev`, `stable/canary`, `stable/canary/dev`
   - Aliases: `developer` = `dev`, `all-channels` = `stable/canary/dev`
+- **BUILD_MODE** — optional: `local` or `remote` (default: `remote`)
+  - `local` — build artifacts on the current machine using `scripts/build-local.sh`, then upload to target repos. Use when CI minutes are exhausted or for quick iteration.
+  - `remote` — trigger GitHub Actions `build.yml` workflow and monitor it. The standard CI/CD path.
 - **VERSION** — last word: the version number (e.g. `0.6.0`, `0.5.0-rc`)
 
-Multi-channel releases share **one build** but publish to **multiple target repos**. Phases 1-6 run once (version bump, commit, tag, push). Phase 8 uploads artifacts to each channel's target repo sequentially.
+Multi-channel releases share **one build** but publish to **multiple target repos**. Phases 1-6 run once (version bump, commit, tag, push). Phase 8 builds (locally or remotely) then uploads artifacts to each channel's target repo sequentially.
 
 If `$ARGUMENTS` doesn't match a known pattern, stop with:
 ```
-Usage: /release <channel(s)> <version>
+Usage: /release <channel(s)> [local|remote] <version>
        /release <windows|linux|macos|all>
 
 Channels (can combine with /):
@@ -53,6 +56,10 @@ Channels (can combine with /):
   canary/dev  — both canary and dev in one release
   stable/canary/dev — all three channels
 
+Build mode (optional, default: remote):
+  local   — build on this machine via scripts/build-local.sh
+  remote  — trigger GitHub Actions CI and monitor
+
 Platform-only (re-trigger CI for existing tag):
   windows — rebuild and upload Windows artifact only
   linux   — rebuild and upload Linux artifacts only
@@ -61,8 +68,9 @@ Platform-only (re-trigger CI for existing tag):
 
 Examples:
   /release stable 0.6.0
-  /release canary 0.5.0-rc
+  /release canary local 0.5.0-rc      (build locally, upload to canary)
   /release canary/dev 0.5.0-rc        (publish to both canary + dev)
+  /release canary/dev local 0.5.0-rc  (build locally, upload to both)
   /release dev 0.6.0-dev.1
   /release windows                     (re-trigger for latest tag)
 ```
@@ -468,9 +476,9 @@ Proceeding to trigger and monitor CI builds...
 
 ---
 
-## Phase 8: Trigger, Monitor, and Verify CI Builds
+## Phase 8: Build, Upload, and Verify
 
-This phase triggers the unified build workflow, monitors it to completion, and verifies all release artifacts are present on the target repo(s).
+This phase builds artifacts (locally or via CI), uploads to each target repo, and verifies.
 
 ### 8a. Channel routing
 
@@ -480,7 +488,29 @@ This phase triggers the unified build workflow, monitors it to completion, and v
 | `canary` | `main` | private repo + canary repo (`uprooted-canary`) | No |
 | `dev` | `dev` | private repo only | No |
 
-### 8b. Detect or trigger workflow
+### 8b. Build artifacts
+
+**If BUILD_MODE is `local`:**
+
+Run the local build script:
+```bash
+bash scripts/build-local.sh <VERSION> [--skip-ts]
+```
+This builds the Windows installer, .uprpkg, linux artifacts tarball, checksums, and copies the bash installer to `_release_artifacts/`. On Linux it also builds .deb and AppImage.
+
+If `cl.exe` is not in PATH (common in Git Bash), use PowerShell to activate MSVC:
+```powershell
+powershell.exe -Command "& { Import-Module '...DevShell.dll'; Enter-VsDevShell ...; cl.exe /LD /O2 ... }"
+```
+
+After build, upload artifacts to each TARGET_REPO:
+```bash
+for f in _release_artifacts/*; do
+  gh release upload "v<VERSION>" "$f" --repo <TARGET_REPO> --clobber
+done
+```
+
+**If BUILD_MODE is `remote` (default):**
 
 First, check if push-triggered builds are already running for the release tag:
 
