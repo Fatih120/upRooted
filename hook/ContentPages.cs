@@ -1275,7 +1275,7 @@ internal static class ContentPages
         object?[] noResultsMsg = { null };
         object?[] showMoreObj = { null };
         bool[] showAll = { false };
-        const int InitialCardLimit = 4; // 2 rows shown by default
+        const int InitialCardLimit = 6; // 3 rows shown by default
 
         // Rebuild grid closure: detaches cards, filters, and lays out 2-column rows
         rebuildGrid = () =>
