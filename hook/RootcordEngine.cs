@@ -69,6 +69,9 @@ internal class RootcordEngine
 
     // User bar (Discord-style bottom-left bar, overlaps channel list via ZIndex)
     private object? _userBar;
+    private object? _userBarNameText;         // Username TextBlock (for theme refresh)
+    private object? _userBarAvBorder;         // Avatar background Border (for theme refresh)
+    private object? _userBarContentGrid;      // Content Grid (for walking action buttons)
 
     // User bar — PanePlacement guard state
     private string? _originalPanePlacement;  // for Revert of PanePlacement
@@ -247,11 +250,40 @@ internal class RootcordEngine
             }
         }
 
-        // User bar: background + border brush
+        // User bar: background + border brush + inner controls
         if (_userBar != null)
         {
             _r.SetBackground(_userBar, _cardBg);
             _r.SetBorderBrush(_userBar, _border);
+
+            if (_userBarAvBorder != null)
+                _r.SetBackground(_userBarAvBorder, _bg);
+            if (_userBarNameText != null)
+                _r.SetForeground(_userBarNameText, _text);
+            if (_userBarStatusText != null)
+                _r.SetForeground(_userBarStatusText, _muted);
+
+            // Walk action buttons in the content grid (Col 4 StackPanel → Border children)
+            if (_userBarContentGrid != null)
+            {
+                var gridChildren = _r.GetVisualChildren(_userBarContentGrid);
+                foreach (var gc in gridChildren)
+                {
+                    if (gc == null) continue;
+                    // The tray host is a StackPanel in Col 4
+                    if (_r.GetGridColumn(gc) == 4)
+                    {
+                        foreach (var btnBorder in _r.GetVisualChildren(gc))
+                        {
+                            if (btnBorder == null || !_r.IsBorder(btnBorder)) continue;
+                            var iconChild = _r.GetBorderChild(btnBorder);
+                            if (iconChild != null && _r.IsTextBlock(iconChild))
+                                _r.SetForeground(iconChild, _muted);
+                        }
+                        break;
+                    }
+                }
+            }
         }
 
         // Channels header: background + text colors
@@ -2866,6 +2898,7 @@ internal class RootcordEngine
                 _r.SetGridColumn(avatarGrid, 0);
 
                 var avBorder = _r.CreateBorder(_bg, 16);
+                _userBarAvBorder = avBorder;
                 if (avBorder != null)
                 {
                     _r.SetWidth(avBorder, 32);
@@ -2937,6 +2970,7 @@ internal class RootcordEngine
                     }
                     catch { }
 
+                    _userBarNameText = nameText;
                     _r.AddChild(textPanel, nameText);
                 }
 
@@ -2978,6 +3012,7 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, trayHost);
             }
 
+            _userBarContentGrid = contentGrid;
             _r.SetBorderChild(_userBar, contentGrid);
 
             _r.AddChild(_homeViewGrid, _userBar);
@@ -3141,6 +3176,9 @@ internal class RootcordEngine
             Logger.Log(Tag, "User bar removed");
         }
         _userBar = null;
+        _userBarNameText = null;
+        _userBarAvBorder = null;
+        _userBarContentGrid = null;
         _userBarStatusText = null;
         _userBarStatusDot = null;
         _lastStatusLabel = "";
