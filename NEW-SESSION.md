@@ -4,7 +4,7 @@
 
 ## 1. Identity
 
-**Uprooted** v0.5.1-dev4 — client mod framework for Root Communications desktop (v0.9.93+).
+**Uprooted** v0.5.1-dev5 — client mod framework for Root Communications desktop (v0.9.93+).
 Private repo (`The-Uprooted-Project/uprooted-private`). Contributors: `watchthelight` + `agomusio`.
 
 ## 2. Architecture
@@ -46,12 +46,12 @@ Given your task, read **only** these docs (in order). Don't load everything.
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr |
-| `StartupHook.cs` | 633 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | 662 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 447 | Phase 0: self-healing HTML patches |
-| `AvaloniaReflection.cs` | 3320 | Reflection cache for ~80 Avalonia types |
+| `AvaloniaReflection.cs` | 3446 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
-| `SidebarInjector.cs` | 2053 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 5120 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |
+| `SidebarInjector.cs` | 2049 | Settings page monitor + sidebar injection |
+| `ContentPages.cs` | 5193 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |
 | `ThemeEngine.cs` | 3031 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |
@@ -66,15 +66,15 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
 | `AutoUpdater.cs` | 1084 | Encrypted .uprpkg auto-updater |
 | `DesktopNotification.cs` | 86 | OS-level toast notifications |
-| `ProfileBadgeInjector.cs` | 1218 | "Uprooted Dev" profile badge |
+| `ProfileBadgeInjector.cs` | 1288 | "Uprooted Dev" profile badge |
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |
-| `NsfwFilter.cs` | 482 | Avalonia-native NSFW filter |
-| `RootcordEngine.cs` | 4945 | Discord-style vertical sidebar (experimental) |
+| `NsfwFilter.cs` | 484 | Avalonia-native NSFW filter |
+| `RootcordEngine.cs` | 4983 | Discord-style vertical sidebar (experimental) |
 | `TranslateEngine.cs` | 1156 | DeepL-powered message translation |
 | `TranslateConfigPopup.cs` | 555 | Translate config UI |
 | `UprootedPresenceBeacon.cs` | 500 | Uprooted user detection via gRPC |
 | `WhoReactedEngine.cs` | 577 | Who Reacted: shows reaction authors on messages |
-| `UserBioEngine.cs` | 859 | User Bio: injects bio text + own-profile editor into profile popups |
+| `UserBioEngine.cs` | 1208 | User Bio: injects bio text + own-profile editor into profile popups |
 | `ReconLogger.cs` | 788 | Visual tree + style diagnostic dumper |
 | `LogConsole.cs` | ~301 | Dev-only live log terminal via named pipe |
 | `Logger.cs` | ~170 | Thread-safe file logging + wide event emission |
@@ -135,4 +135,4 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 ---
 
-*Quick-start reference for Uprooted v0.5.1-dev4. Last updated 2026-02-23.*
+*Quick-start reference for Uprooted v0.5.1-dev5. Last updated 2026-02-23.*

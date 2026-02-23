@@ -40,9 +40,9 @@ uprooted-private/
 ├── hook/                              # C# .NET hook (CLR profiler injection) — 37 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
-│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3320 lines)
+│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3446 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
-│   ├── ContentPages.cs                # Settings page builders (4909 lines)
+│   ├── ContentPages.cs                # Settings page builders (5193 lines)
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (in-place switching, bind-once walker, WeakRef live preview, custom ping color)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB/OKLCH color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
@@ -60,7 +60,7 @@ uprooted-private/
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
-│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1218 lines)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1288 lines)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)

@@ -159,6 +159,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Bash installer --channel flag** (2026-02-23) — `--channel canary|dev|stable` to download from different release channels. Dev channel requires GITHUB_TOKEN.
+  - File: `install-uprooted-linux.sh`
 - [x] **Verbose CLR profiler catch handler** (2026-02-23) — Both Windows and Linux profilers now inject verbose catch handler that prints full exception to console when hook loading fails. Pre-flight check logs DLL existence/size.
   - Files: `tools/uprooted_profiler.c`, `tools/uprooted_profiler_linux.c`
 - [x] **Twemoji rendering in user bios** (2026-02-23) — Emoji in bio text rendered as Twemoji images.

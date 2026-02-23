@@ -6,6 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.1-dev5] - 2026-02-23
+
+### Added
+
+- **Bash installer `--channel` flag** — `--channel canary` or `--channel dev` to download pre-built artifacts from canary or dev release channels instead of the public stable repo. Dev channel requires `GITHUB_TOKEN` for private repo auth. Canary/dev use `?per_page=1` API endpoint (prereleases invisible to `/releases/latest`).
+  - File: `install-uprooted-linux.sh`
+
+### Fixed
+
+- **ProfileBadgeInjector: Twemoji support + bio rendering** — Profile badge popups now render emoji in user bios as Twemoji images. Additional enhancements to badge injector.
+  - File: `hook/ProfileBadgeInjector.cs`
+- **UserBioEngine enhancements** — Additional user bio rendering improvements.
+  - File: `hook/UserBioEngine.cs`
+- **ThemeEngine filter/sort in rebuildGrid** — Grid rebuild now uses `ActiveThemeName` for filter/sort, preventing stale theme selection.
+  - File: `hook/ContentPages.cs`
+- **Dev Console ReconLogger card format** — Fixed ReconLogger card layout in Dev Console, ThemeEngine enabled state, experimental toggle dot indicator.
+  - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
+- **Hot-path log spam suppressed** — ProfileBadgeInjector and SidebarInjector poll ticks no longer flood the log file.
+  - Files: `hook/ProfileBadgeInjector.cs`, `hook/SidebarInjector.cs`
+
+---
+
 ## [0.5.1-dev4] - 2026-02-23
 
 ### Added
@@ -589,6 +611,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev5]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev4...v0.5.1-dev5
 [0.5.1-dev4]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev3...v0.5.1-dev4
 [0.5.1-dev3]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev2...v0.5.1-dev3
 [0.5.1-dev2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev1...v0.5.1-dev2
