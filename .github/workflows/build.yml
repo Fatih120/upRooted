@@ -7,11 +7,25 @@ on:
         description: 'Version (blank = read from VERSION file)'
         required: false
         default: ''
+      platform:
+        description: 'Platform filter (blank = all)'
+        required: false
+        default: ''
+        type: choice
+        options:
+          - ''
+          - windows
+          - linux
+          - macos
   workflow_call:
     inputs:
       version:
         type: string
         required: false
+      platform:
+        type: string
+        required: false
+        default: ''
     outputs:
       version:
         description: 'Resolved version string'
@@ -117,6 +131,7 @@ jobs:
       matrix:
         include:
           - runner: windows-latest
+            platform: windows
             suffix: windows-amd64
             profiler_name: uprooted_profiler.dll
             profiler_cmd: >-
@@ -130,6 +145,7 @@ jobs:
             setup_msvc: true
 
           - runner: ubuntu-latest
+            platform: linux
             suffix: linux-amd64
             profiler_name: libuprooted_profiler.so
             profiler_cmd: >-
@@ -140,6 +156,7 @@ jobs:
             setup_msvc: false
 
           - runner: ubuntu-24.04-arm
+            platform: linux
             suffix: linux-arm64
             profiler_name: libuprooted_profiler.so
             profiler_cmd: >-
@@ -150,6 +167,7 @@ jobs:
             setup_msvc: false
 
           - runner: macos-13
+            platform: macos
             suffix: macos-amd64
             profiler_name: libuprooted_profiler.dylib
             profiler_cmd: >-
@@ -160,6 +178,7 @@ jobs:
             setup_msvc: false
 
           - runner: macos-latest
+            platform: macos
             suffix: macos-arm64
             profiler_name: libuprooted_profiler.dylib
             profiler_cmd: >-
@@ -170,6 +189,7 @@ jobs:
             setup_msvc: false
 
     runs-on: ${{ matrix.runner }}
+    if: inputs.platform == '' || inputs.platform == matrix.platform
     env:
       VERSION: ${{ needs.resolve.outputs.version }}
     steps:

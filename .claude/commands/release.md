@@ -28,25 +28,35 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 
 ## Argument Parsing
 
-The user invokes: `/release <channel> <version>`
+The user invokes: `/release <channel> <version>` or `/release <platform>`
 
-Parse `$ARGUMENTS` (the raw argument string) into two values:
+### Full release (channel + version)
+
+Parse `$ARGUMENTS` into two values:
 - **CHANNEL** — first word: `stable`, `canary`, or `dev`
 - **VERSION** — second word: the version number (e.g. `0.6.0`, `0.6.0-canary.1`, `0.6.0-dev.1`)
 
-If `$ARGUMENTS` doesn't contain exactly two space-separated values, or CHANNEL is not one of `stable`/`canary`/`dev`, stop with:
+If `$ARGUMENTS` doesn't match a known pattern, stop with:
 ```
 Usage: /release <stable|canary|dev> <version>
+       /release <windows|linux|macos|all>
 
 Channels:
   stable  — public repo, main branch, triggers package manager updates
   canary  — canary repo, main branch, bleeding edge
   dev     — private repo, dev branch, invite only
 
+Platform-only (re-trigger CI for existing tag):
+  windows — rebuild and upload Windows artifact only
+  linux   — rebuild and upload Linux artifacts only
+  macos   — rebuild and upload macOS artifacts only
+  all     — rebuild all platforms
+
 Examples:
   /release stable 0.6.0
   /release canary 0.6.0-canary.1
   /release dev 0.6.0-dev.1
+  /release windows              (re-trigger for latest tag)
 ```
 
 Derive:
@@ -57,7 +67,28 @@ Derive:
   - `canary` → `The-Uprooted-Project/uprooted-canary`
   - `dev` → `The-Uprooted-Project/uprooted-private`
 
-Throughout this document, **CHANNEL**, **VERSION**, **BRANCH**, and **TARGET_REPO** refer to these parsed values.
+### Platform-only release (re-trigger)
+
+If `$ARGUMENTS` is a single word matching `windows`, `linux`, `macos`, or `all`:
+
+This is a **platform-only re-trigger** — it skips Phases 1–6 (no version bump, no commit, no tag) and goes directly to Phase 8 to re-trigger the CI build for the specified platform(s).
+
+1. Read the latest tag: `git describe --tags --abbrev=0`
+2. Read `VERSION` file for the version
+3. Determine which matrix entries to build:
+   - `windows` → only `windows-latest` runner
+   - `linux` → only `ubuntu-latest` + `ubuntu-24.04-arm` runners
+   - `macos` → only `macos-13` + `macos-latest` runners
+   - `all` → all 5 runners
+4. Trigger the build workflow via `gh workflow run "Build" -f version=<version>`
+5. Monitor and verify artifacts (Phase 8c-8g, filtered to the requested platform)
+
+This is useful when:
+- A single platform build failed and needs re-triggering
+- You want to rebuild a specific platform after a hotfix
+- Testing CI changes for one platform only
+
+Throughout this document, **CHANNEL**, **VERSION**, **BRANCH**, and **TARGET_REPO** refer to the parsed values from the full release path.
 
 ---
 
