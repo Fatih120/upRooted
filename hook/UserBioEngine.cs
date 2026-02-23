@@ -31,6 +31,10 @@ internal class UserBioEngine
     private readonly Dictionary<string, (string? bio, DateTime expiry)> _cache = new();
     private readonly object _cacheLock = new();
 
+    // Twemoji bitmap cache: hex codepoint key -> Avalonia Bitmap (null = download failed)
+    private static readonly Dictionary<string, object?> _emojiCache = new();
+    private static readonly object _emojiCacheLock = new();
+
     private UprootedPresenceBeacon? _beacon;
 
     /// <summary>
@@ -331,7 +335,8 @@ internal class UserBioEngine
     }
 
     /// <summary>
-    /// Try to render bio text with basic markdown (bold/italic) using TextBlock Inlines.
+    /// Try to render bio text with basic markdown (bold/italic) and emoji images using TextBlock Inlines.
+    /// Emoji characters are replaced with Twemoji PNG images via InlineUIContainer.
     /// Returns false if Inline types can't be resolved (fallback to plain text).
     /// </summary>
     private bool TryInjectFormattedBio(object verticalPanel, int insertIndex, string bioText)
@@ -340,7 +345,8 @@ internal class UserBioEngine
         bool hasFormatting = false;
         foreach (var seg in segments)
             if (seg.bold || seg.italic) { hasFormatting = true; break; }
-        if (!hasFormatting) return false;
+        bool hasEmoji = ContainsEmoji(bioText);
+        if (!hasFormatting && !hasEmoji) return false;
 
         try
         {
@@ -353,6 +359,14 @@ internal class UserBioEngine
             var runType = asm.GetType("Avalonia.Controls.Documents.Run");
             if (runType == null) return false;
 
+            // Resolve InlineUIContainer for emoji image rendering
+            var containerType = hasEmoji
+                ? asm.GetType("Avalonia.Controls.Documents.InlineUIContainer")
+                : null;
+
+            // If only emoji (no formatting) but InlineUIContainer unavailable, fall back to plain TextBlock
+            if (!hasFormatting && containerType == null) return false;
+
             var inlinesProp = textBlock.GetType().GetProperty("Inlines");
             var inlines = inlinesProp?.GetValue(textBlock);
             if (inlines == null) return false;
@@ -364,36 +378,79 @@ internal class UserBioEngine
             {
                 if (string.IsNullOrEmpty(text)) continue;
 
-                var run = Activator.CreateInstance(runType);
-                if (run == null) continue;
-                run.GetType().GetProperty("Text")?.SetValue(run, text);
+                // Split each markdown segment into text + emoji sub-segments
+                var parts = hasEmoji ? SplitEmoji(text) : new List<(string, int[]?)> { (text, null) };
 
-                if (bold && _r.FontWeightType != null)
+                foreach (var (partText, codepoints) in parts)
                 {
-                    try
+                    if (codepoints != null)
                     {
-                        var boldWeight = Activator.CreateInstance(_r.FontWeightType, 700);
-                        run.GetType().GetProperty("FontWeight")?.SetValue(run, boldWeight);
-                    }
-                    catch { }
-                }
-
-                if (italic)
-                {
-                    try
-                    {
-                        var fontStyleType = asm.GetType("Avalonia.Media.FontStyle");
-                        if (fontStyleType != null)
+                        // Emoji segment → InlineUIContainer with Twemoji Image
+                        object? bitmap = containerType != null ? GetOrDownloadEmojiBitmap(codepoints) : null;
+                        if (bitmap != null)
                         {
-                            var italicVal = Enum.Parse(fontStyleType, "Italic");
-                            run.GetType().GetProperty("FontStyle")?.SetValue(run, italicVal);
+                            var img = _r.CreateImage("Uniform");
+                            if (img != null)
+                            {
+                                _r.SetImageSource(img, bitmap);
+                                _r.SetWidth(img, 14);
+                                _r.SetHeight(img, 14);
+                                var container = Activator.CreateInstance(containerType!);
+                                if (container != null)
+                                {
+                                    container.GetType().GetProperty("Child")?.SetValue(container, img);
+                                    try { addMethod.Invoke(inlines, new[] { container }); continue; }
+                                    catch { }
+                                }
+                            }
                         }
-                    }
-                    catch { }
-                }
 
-                try { addMethod.Invoke(inlines, new[] { run }); }
-                catch { return false; }
+                        // Fallback: render emoji as text Run (system font rendering)
+                        var emojiSb = new StringBuilder();
+                        foreach (var cp in codepoints) emojiSb.Append(char.ConvertFromUtf32(cp));
+                        var fallbackRun = Activator.CreateInstance(runType);
+                        if (fallbackRun != null)
+                        {
+                            fallbackRun.GetType().GetProperty("Text")?.SetValue(fallbackRun, emojiSb.ToString());
+                            try { addMethod.Invoke(inlines, new[] { fallbackRun }); } catch { }
+                        }
+                        continue;
+                    }
+
+                    if (string.IsNullOrEmpty(partText)) continue;
+
+                    // Text segment → Run with optional bold/italic formatting
+                    var run = Activator.CreateInstance(runType);
+                    if (run == null) continue;
+                    run.GetType().GetProperty("Text")?.SetValue(run, partText);
+
+                    if (bold && _r.FontWeightType != null)
+                    {
+                        try
+                        {
+                            var boldWeight = Activator.CreateInstance(_r.FontWeightType, 700);
+                            run.GetType().GetProperty("FontWeight")?.SetValue(run, boldWeight);
+                        }
+                        catch { }
+                    }
+
+                    if (italic)
+                    {
+                        try
+                        {
+                            var fontStyleType = asm.GetType("Avalonia.Media.FontStyle");
+                            if (fontStyleType != null)
+                            {
+                                var italicVal = Enum.Parse(fontStyleType, "Italic");
+                                run.GetType().GetProperty("FontStyle")?.SetValue(run, italicVal);
+                            }
+                        }
+                        catch { }
+                    }
+
+                    try { addMethod.Invoke(inlines, new[] { run }); }
+                    catch { return false; }
+                }
             }
 
             _r.SetTextWrapping(textBlock, "Wrap");
@@ -593,6 +650,270 @@ internal class UserBioEngine
         catch (Exception ex)
         {
             Logger.Log(Tag, $"InjectOwnBioSection error: {ex.Message}");
+        }
+    }
+
+    // ===== Emoji rendering (Twemoji) =====
+
+    /// <summary>
+    /// Quick scan: does the text contain any emoji that should be rendered as Twemoji images?
+    /// Checks for supplementary-plane emoji and common BMP emoji ranges.
+    /// </summary>
+    private static bool ContainsEmoji(string text)
+    {
+        for (int i = 0; i < text.Length; i++)
+        {
+            if (char.IsHighSurrogate(text[i]) && i + 1 < text.Length && char.IsLowSurrogate(text[i + 1]))
+            {
+                int cp = char.ConvertToUtf32(text[i], text[i + 1]);
+                if (cp >= 0x1F000 && cp <= 0x1FAFF) return true;
+            }
+            char c = text[i];
+            if (c >= '\u2600' && c <= '\u27BF') return true;
+            if (c >= '\u2300' && c <= '\u23FF') return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Split text into alternating plain-text and emoji segments.
+    /// Returns list of (text, codepoints) where codepoints != null means emoji.
+    /// </summary>
+    private static List<(string text, int[]? codepoints)> SplitEmoji(string input)
+    {
+        var result = new List<(string text, int[]? codepoints)>();
+        var textBuf = new StringBuilder();
+        int i = 0;
+
+        while (i < input.Length)
+        {
+            int saved = i;
+            var cps = TryReadEmojiSequence(input, ref i);
+            if (cps != null)
+            {
+                if (textBuf.Length > 0) { result.Add((textBuf.ToString(), null)); textBuf.Clear(); }
+                result.Add(("", cps));
+            }
+            else
+            {
+                // Regular character (or surrogate pair that isn't emoji)
+                if (char.IsHighSurrogate(input[i]) && i + 1 < input.Length && char.IsLowSurrogate(input[i + 1]))
+                { textBuf.Append(input[i]); textBuf.Append(input[i + 1]); i += 2; }
+                else
+                { textBuf.Append(input[i]); i++; }
+            }
+        }
+
+        if (textBuf.Length > 0) result.Add((textBuf.ToString(), null));
+        return result;
+    }
+
+    /// <summary>
+    /// Try to consume an emoji sequence starting at position i.
+    /// Handles regional indicator pairs, keycap sequences, ZWJ sequences, skin tone modifiers.
+    /// Advances i past the sequence on success, leaves unchanged on failure.
+    /// </summary>
+    private static int[]? TryReadEmojiSequence(string s, ref int i)
+    {
+        int pos = i;
+        int cp = ReadCp(s, pos, out int len);
+
+        // Regional indicator pair (flags): two consecutive U+1F1E6..U+1F1FF
+        if (cp >= 0x1F1E6 && cp <= 0x1F1FF)
+        {
+            if (pos + len < s.Length)
+            {
+                int next = ReadCp(s, pos + len, out int len2);
+                if (next >= 0x1F1E6 && next <= 0x1F1FF)
+                {
+                    i = pos + len + len2;
+                    return new[] { cp, next };
+                }
+            }
+            return null; // lone regional indicator — not a valid flag
+        }
+
+        // Keycap sequence: [0-9#*] + FE0F? + 20E3
+        if ((cp >= '0' && cp <= '9') || cp == '#' || cp == '*')
+        {
+            int p = pos + len;
+            if (p < s.Length)
+            {
+                int n1 = ReadCp(s, p, out int l1);
+                if (n1 == 0xFE0F && p + l1 < s.Length)
+                {
+                    int n2 = ReadCp(s, p + l1, out int l2);
+                    if (n2 == 0x20E3) { i = p + l1 + l2; return new[] { cp, 0xFE0F, 0x20E3 }; }
+                }
+                if (n1 == 0x20E3) { i = p + l1; return new[] { cp, 0x20E3 }; }
+            }
+            return null; // plain digit/hash/asterisk
+        }
+
+        // Must be an emoji-starting codepoint
+        if (!IsEmojiStart(cp)) return null;
+
+        var cps = new List<int> { cp };
+        pos += len;
+
+        // Consume trailing modifiers, VS16, skin tones, ZWJ sequences
+        while (pos < s.Length)
+        {
+            int next = ReadCp(s, pos, out int nLen);
+
+            // VS16 (emoji presentation selector)
+            if (next == 0xFE0F) { cps.Add(next); pos += nLen; continue; }
+
+            // Skin tone modifier (U+1F3FB..U+1F3FF)
+            if (next >= 0x1F3FB && next <= 0x1F3FF) { cps.Add(next); pos += nLen; continue; }
+
+            // ZWJ sequence: U+200D followed by another emoji
+            if (next == 0x200D && pos + nLen < s.Length)
+            {
+                int after = ReadCp(s, pos + nLen, out int aLen);
+                if (IsEmojiStart(after))
+                {
+                    cps.Add(0x200D);
+                    cps.Add(after);
+                    pos += nLen + aLen;
+                    continue;
+                }
+            }
+
+            break;
+        }
+
+        i = pos;
+        return cps.ToArray();
+    }
+
+    /// <summary>
+    /// Is this codepoint a valid start of an emoji sequence?
+    /// Covers supplementary-plane emoji blocks and common BMP pictographic ranges.
+    /// </summary>
+    private static bool IsEmojiStart(int cp)
+    {
+        if (cp >= 0x1F000 && cp <= 0x1FAFF) return true;  // Supplementary plane emoji
+        if (cp >= 0x2600 && cp <= 0x27BF) return true;    // Misc symbols + dingbats
+        if (cp >= 0x2300 && cp <= 0x23FF) return true;    // Misc technical
+        if (cp >= 0x2B05 && cp <= 0x2B55) return true;    // Arrows & shapes
+        if (cp >= 0x25A0 && cp <= 0x25FF) return true;    // Geometric shapes
+        if (cp == 0x00A9 || cp == 0x00AE || cp == 0x2122) return true; // ©, ®, ™
+        return false;
+    }
+
+    /// <summary>
+    /// Read a single Unicode codepoint from a UTF-16 string, handling surrogate pairs.
+    /// </summary>
+    private static int ReadCp(string s, int index, out int charCount)
+    {
+        if (char.IsHighSurrogate(s[index]) && index + 1 < s.Length && char.IsLowSurrogate(s[index + 1]))
+        { charCount = 2; return char.ConvertToUtf32(s[index], s[index + 1]); }
+        charCount = 1;
+        return s[index];
+    }
+
+    /// <summary>
+    /// Build Twemoji CDN URL for a sequence of codepoints.
+    /// Strips VS16 (U+FE0F), joins remaining codepoints as lowercase hex with dashes.
+    /// </summary>
+    private static string TwemojiUrl(int[] codepoints)
+    {
+        var sb = new StringBuilder();
+        for (int j = 0; j < codepoints.Length; j++)
+        {
+            if (codepoints[j] == 0xFE0F) continue;
+            if (sb.Length > 0) sb.Append('-');
+            sb.Append(codepoints[j].ToString("x"));
+        }
+        return $"https://cdn.jsdelivr.net/gh/twitter/twemoji@14.0.2/assets/72x72/{sb}.png";
+    }
+
+    /// <summary>
+    /// Get or download a Twemoji bitmap for the given codepoints.
+    /// Returns cached Avalonia Bitmap, or downloads from CDN on first access. Null on failure.
+    /// </summary>
+    private object? GetOrDownloadEmojiBitmap(int[] codepoints)
+    {
+        var keySb = new StringBuilder();
+        for (int j = 0; j < codepoints.Length; j++)
+        {
+            if (codepoints[j] == 0xFE0F) continue;
+            if (keySb.Length > 0) keySb.Append('-');
+            keySb.Append(codepoints[j].ToString("x"));
+        }
+        var key = keySb.ToString();
+
+        lock (_emojiCacheLock)
+        {
+            if (_emojiCache.TryGetValue(key, out var cached))
+                return cached;
+        }
+
+        // Download from Twemoji CDN
+        object? bitmap = null;
+        try
+        {
+            var url = TwemojiUrl(codepoints);
+            var bytes = DownloadEmojiBytes(url);
+            if (bytes != null && bytes.Length > 0)
+            {
+                using var ms = new MemoryStream(bytes);
+                bitmap = _r.CreateBitmapFromStream(ms);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"Emoji download failed for {key}: {ex.Message}");
+        }
+
+        lock (_emojiCacheLock) { _emojiCache[key] = bitmap; }
+        return bitmap;
+    }
+
+    /// <summary>
+    /// Download emoji PNG bytes from Twemoji CDN via reflection-based HTTP.
+    /// </summary>
+    private static byte[]? DownloadEmojiBytes(string url)
+    {
+        try
+        {
+            AutoUpdater.EnsureHttpResolved();
+            if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
+                || AutoUpdater.s_httpRequestMessageType == null)
+                return null;
+
+            var httpAsm = AutoUpdater.s_httpRequestMessageType.Assembly;
+            var httpMethodGet = httpAsm.GetType("System.Net.Http.HttpMethod")
+                ?.GetProperty("Get", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (httpMethodGet == null) return null;
+
+            var request = Activator.CreateInstance(AutoUpdater.s_httpRequestMessageType, httpMethodGet, new Uri(url));
+            if (request == null) return null;
+
+            var sendParams = AutoUpdater.s_sendAsync.GetParameters();
+            object?[] args = sendParams.Length == 1
+                ? new[] { request }
+                : new object?[] { request, CancellationToken.None };
+
+            var task = AutoUpdater.s_sendAsync.Invoke(AutoUpdater.s_httpClient, args);
+            var response = task?.GetType().GetProperty("Result")?.GetValue(task);
+            if (response == null) return null;
+
+            var statusCodeProp = response.GetType().GetProperty("StatusCode");
+            var code = statusCodeProp != null ? Convert.ToInt32(statusCodeProp.GetValue(response)) : -1;
+            if (code < 200 || code >= 300) return null;
+
+            var content = response.GetType().GetProperty("Content")?.GetValue(response);
+            if (content == null) return null;
+
+            var readTask = content.GetType().GetMethod("ReadAsByteArrayAsync",
+                BindingFlags.Public | BindingFlags.Instance, null, Type.EmptyTypes, null)?.Invoke(content, null);
+            return readTask?.GetType().GetProperty("Result")?.GetValue(readTask) as byte[];
+        }
+        catch
+        {
+            return null;
         }
     }
 
