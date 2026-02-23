@@ -4131,13 +4131,23 @@ internal static class ContentPages
 
     /// <summary>
     /// Build the update channel row: Stable/Canary toggle pill with labeled sides.
-    /// Developer channel remains accessible via clicking the description text (password prompt).
-    /// If currently on Developer, toggle shows right position (treated as canary-like).
+    /// Developer channel: toggling 6 times within 3 seconds triggers password prompt.
+    /// On successful dev auth, the toggle is replaced with a "Developer" badge.
+    /// If already on Developer channel at load time, shows the badge directly.
     /// </summary>
     private static void BuildChannelRow(AvaloniaReflection r, object container,
         UprootedSettings settings, object? font, Action? onRefreshCurrentPage = null)
     {
         const string CanaryColor = "#E89B3E"; // Warm amber
+        const int DevTapCount = 6;
+        const int DevTapWindowMs = 3000;
+
+        // If already on developer channel, show the dev badge directly
+        if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+        {
+            BuildDevChannelBadgeRow(r, container, font, onRefreshCurrentPage);
+            return;
+        }
 
         var row = r.CreatePanel();
         if (row == null) return;
@@ -4165,8 +4175,7 @@ internal static class ContentPages
         }
 
         // Right side: Stable [toggle] Canary
-        var isRight = !settings.AutoUpdateChannel.Equals("stable", StringComparison.OrdinalIgnoreCase);
-        // canary or developer → right position
+        var isRight = settings.AutoUpdateChannel.Equals("canary", StringComparison.OrdinalIgnoreCase);
 
         var rightStack = r.CreateStackPanel(vertical: false, spacing: 8);
         if (rightStack == null) return;
@@ -4213,6 +4222,14 @@ internal static class ContentPages
                 var stableLabelRef = stableLabel;
                 var canaryLabelRef = canaryLabel;
 
+                // Dev easter egg: track rapid toggles
+                int[] tapCount = { 0 };
+                long[] firstTapTicks = { 0 };
+                bool[] promptVisible = { false };
+                var containerRef = container;
+                var rowRef = row;
+                var rightStackRef = rightStack;
+
                 r.SubscribeEvent(pill, "PointerPressed", () =>
                 {
                     var basis = state[0] ? CanaryColor : AccentGreen;
@@ -4223,6 +4240,47 @@ internal static class ContentPages
                 r.SubscribeClickReleased(pill, () =>
                 {
                     r.SetRenderScale(pillRef, 1.0);
+
+                    // Track rapid taps for dev channel unlock
+                    long now = DateTime.UtcNow.Ticks;
+                    if (tapCount[0] == 0 || (now - firstTapTicks[0]) > DevTapWindowMs * TimeSpan.TicksPerMillisecond)
+                    {
+                        tapCount[0] = 1;
+                        firstTapTicks[0] = now;
+                    }
+                    else
+                    {
+                        tapCount[0]++;
+                    }
+
+                    // 6th tap within window → show password prompt
+                    if (tapCount[0] >= DevTapCount)
+                    {
+                        tapCount[0] = 0;
+                        if (!promptVisible[0] && canaryLabelRef != null)
+                        {
+                            promptVisible[0] = true;
+                            Logger.Log("AutoUpdate", "Dev channel easter egg triggered (6 rapid toggles)");
+                            ShowChannelPasswordPrompt(r, containerRef, rowRef, pillRef, canaryLabelRef, font,
+                                onClose: () => { promptVisible[0] = false; },
+                                onChannelChanged: () =>
+                                {
+                                    // Replace the entire toggle row with the dev badge
+                                    try
+                                    {
+                                        var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
+                                        children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { rowRef });
+                                    }
+                                    catch { }
+                                    BuildDevChannelBadgeRow(r, containerRef, font, onRefreshCurrentPage);
+                                    ApplyChannelRuntimeState(r, UprootedSettings.Load());
+                                    onRefreshCurrentPage?.Invoke();
+                                });
+                        }
+                        return; // Don't toggle on the 6th tap
+                    }
+
+                    // Normal toggle: Stable ↔ Canary
                     state[0] = !state[0];
                     var newChannel = state[0] ? "canary" : "stable";
                     var rest = state[0] ? CanaryColor : AccentGreen;
@@ -4242,12 +4300,6 @@ internal static class ContentPages
 
                     // Save channel
                     var s = UprootedSettings.Load();
-                    // If switching from developer, disable dev-only plugins
-                    if (newChannel == "stable" && s.AutoUpdateChannel == "developer")
-                    {
-                        if (s.Plugins.TryGetValue("recon-logger", out var reconEnabled) && reconEnabled)
-                            s.Plugins["recon-logger"] = false;
-                    }
                     s.AutoUpdateChannel = newChannel;
                     s.Save();
 
@@ -4277,43 +4329,98 @@ internal static class ContentPages
         r.AddChild(rightStack, canaryLabel);
 
         r.AddChild(row, rightStack);
+        r.AddChild(container, row);
+    }
 
-        // Developer channel access: clicking the description text shows password prompt.
-        // Subtle — normal users won't discover it, devs know to click.
+    /// <summary>
+    /// Build the Developer channel badge row — shown when already on developer channel,
+    /// or after successful password entry from the 6-tap easter egg.
+    /// Clicking the badge switches back to Stable.
+    /// </summary>
+    private static void BuildDevChannelBadgeRow(AvaloniaReflection r, object container,
+        object? font, Action? onRefreshCurrentPage = null)
+    {
+        var row = r.CreatePanel();
+        if (row == null) return;
+        r.SetMargin(row, 0, 14, 0, 0);
+
+        // Left side: label + description
+        var leftStack = r.CreateStackPanel(vertical: true, spacing: 2);
         if (leftStack != null)
         {
+            r.SetHorizontalAlignment(leftStack, "Left");
+            r.SetVerticalAlignment(leftStack, "Center");
+            r.SetMargin(leftStack, 0, 0, 140, 0);
+
+            var nameText = CreateBoundText(r, "Update channel", 13, TextWhite, "TextPrimary");
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.AddChild(leftStack, nameText);
+
+            var descText = CreateBoundText(r, "Developer: pre-release builds from the private repo. Click badge to switch back.", 12, TextMuted, "TextSecondary");
+            ApplyFont(r, descText, font);
+            r.SetTextWrapping(descText, "Wrap");
+            r.AddChild(leftStack, descText);
+
+            r.AddChild(row, leftStack);
+        }
+
+        // Right side: Developer badge
+        var badgeText = r.CreateTextBlock("Developer", 12, DevChannelBlue);
+        r.SetFontWeight(badgeText, "Bold");
+        ApplyFont(r, badgeText, font);
+        r.SetHorizontalAlignment(badgeText, "Center");
+
+        var badge = r.CreateBorder(DevChannelBlack, 8, badgeText);
+        if (badge != null)
+        {
+            r.SetPadding(badge, 12, 5, 12, 5);
+            r.SetHorizontalAlignment(badge, "Right");
+            r.SetVerticalAlignment(badge, "Center");
+            r.SetCursorHand(badge);
+            r.SetTag(badge, "uprooted-no-recolor");
+            SetBorderStroke(r, badge, DevChannelBlue, ThickBorder);
+
+            var badgeRef = badge;
             var containerRef = container;
-            bool[] promptVisible = { false };
             var rowRef = row;
 
-            r.SetCursorHand(leftStack);
-            r.SubscribeClickReleased(leftStack, () =>
+            // Click to switch back to Stable
+            r.SubscribeClickReleased(badge, () =>
             {
-                if (promptVisible[0]) return;
-                if (pill == null || canaryLabel == null) return;
-                promptVisible[0] = true;
-                ShowChannelPasswordPrompt(r, containerRef, rowRef, pill, canaryLabel, font,
-                    onClose: () => { promptVisible[0] = false; },
-                    onChannelChanged: () =>
-                    {
-                        // Developer channel activated — update toggle to right position
-                        state[0] = true;
-                        if (pill != null)
-                        {
-                            r.SetBackground(pill, DevChannelBlack);
-                            var dot2 = pill; // dot is inside pill as child
-                        }
-                        r.SetFontWeightNumeric(stableLabel, 400);
-                        r.SetForeground(stableLabel, TextDim);
-                        if (canaryLabel != null)
-                        {
-                            r.SetFontWeightNumeric(canaryLabel, 600);
-                            r.SetForeground(canaryLabel, TextWhite);
-                        }
-                        ApplyChannelRuntimeState(r, UprootedSettings.Load());
-                        onRefreshCurrentPage?.Invoke();
-                    });
+                Logger.Log("AutoUpdate", "Switched to Stable channel (from Developer badge)");
+                var s = UprootedSettings.Load();
+                s.AutoUpdateChannel = "stable";
+                if (s.Plugins.TryGetValue("recon-logger", out var reconEnabled) && reconEnabled)
+                    s.Plugins["recon-logger"] = false;
+                s.Save();
+                ApplyChannelRuntimeState(r, s);
+
+                // Replace badge row with the Stable/Canary toggle
+                try
+                {
+                    var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
+                    var idx = children?.GetType().GetMethod("IndexOf")?.Invoke(children, new[] { rowRef });
+                    children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { rowRef });
+                }
+                catch { }
+                BuildChannelRow(r, containerRef, UprootedSettings.Load(), font, onRefreshCurrentPage);
+                onRefreshCurrentPage?.Invoke();
             });
+
+            // Hover effects
+            r.SubscribeEvent(badge, "PointerEntered", () =>
+            {
+                r.SetBackground(badge, AdjustForHighlight(DevChannelBlack, 8));
+                SetBorderStroke(r, badge, AdjustForHighlight(DevChannelBlue, 24), ThickBorder);
+            });
+            r.SubscribeEvent(badge, "PointerExited", () =>
+            {
+                r.SetBackground(badge, DevChannelBlack);
+                SetBorderStroke(r, badge, DevChannelBlue, ThickBorder);
+            });
+
+            r.AddChild(row, badge);
         }
 
         r.AddChild(container, row);
