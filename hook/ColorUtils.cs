@@ -4,11 +4,11 @@ namespace Uprooted;
 
 /// <summary>
 /// Static color manipulation utilities for the custom theme engine.
-/// All methods work with "#RRGGBB" hex strings (6-digit, with hash prefix).
+/// All methods work with "#RRGGBB" or "#AARRGGBB" hex strings (with hash prefix).
 /// </summary>
 internal static class ColorUtils
 {
-    private static readonly Regex HexPattern = new(@"^#[0-9A-Fa-f]{6}$");
+    private static readonly Regex HexPattern = new(@"^#([0-9A-Fa-f]{6}|[0-9A-Fa-f]{8})$");
 
     public static bool IsValidHex(string? hex)
         => hex != null && HexPattern.IsMatch(hex);

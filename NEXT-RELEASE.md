@@ -41,23 +41,19 @@ Several significant fixes and improvements to the Discord-style vertical server 
 
 ---
 
-## Updated: Custom Theme System
+## Updated: Theme Engine
 
-The entire custom theme system was reworked:
+The custom theme system is now a full Theme Engine. Renamed across the UI — sidebar tab, page header, plugin card, and About status field all say Theme Engine.
 
-**Keystroke apply.** The "Apply Custom" button is gone. Themes now apply live on every keystroke via `UpdateCustomThemeLive`. You see your changes as you type.
+**8 presets.** Four new presets join the original four: Marine (deep ocean blue), Oreo (monochrome lavender), Sakura (the first light preset — cherry blossom pink), and Ember (warm charcoal with burning orange). The preset grid is now two rows of four.
 
-**Full lightness range.** The OKLCH lightness clamp now spans 0.05 to 0.93 instead of clamping to dark values. Light custom backgrounds work correctly now.
+**Light theme support.** Custom themes and presets with light backgrounds now fully adapt: borders darken instead of lighten, text goes dark, highlights use black-alpha overlays, Info/Warning switch to readable amber/orange, mentions and shadows adjust, and SVGs swap to the dark-icon set automatically.
 
-**Smooth derivation.** The color derivation algorithm no longer snaps to dark or light mode at the 50% threshold. It uses a continuous direction-aware curve that produces natural intermediate tones.
+**Accent-aware text contrast.** Buttons with accent-colored backgrounds (version badge, Check for Updates, channel badge, etc.) now pick black or white text based on accent luminance. Toggle switch thumbs do the same. Handles extreme accents like white or pastel that Root's native blue-only design never needed to consider.
 
-**Custom text color.** A new text color input lets you pin the text color manually. Leave it empty to keep the automatic behavior (derived from background lightness).
+**Loki reworked.** Gold is now the primary accent (buttons, badges, mentions). Green moves to secondary brand tones. The "Gold and green" identity is fully realized.
 
-**Tag-based visual tree walker.** Injected controls are tagged with `dyn-fg:`, `dyn-bg:`, and `dyn-bb:` attributes. A 100ms interval walker recolors all tagged controls from the live palette. Root's native text controls are converted to DynamicResource bindings on first encounter (bind-once pattern) and then auto-update from ThemeDictionary changes.
-
-**No-recolor island.** The custom theme card is now immune to the walker. The ping color toggle off-state uses a hardcoded color so the thumb does not blend into the card background.
-
-**Light theme variant switching.** Custom themes with light backgrounds now trigger `SetRequestedThemeVariant(Light)` so SVGs resolve to the correct folder. A guard prevents the variant change handler from reverting the theme during the switch.
+**Keystroke apply.** Themes apply live on every keystroke. Full OKLCH lightness range, smooth direction-aware derivation, custom text color input, tag-based visual tree walker, no-recolor island for the custom theme card, and variant switching for light backgrounds.
 
 ---
 

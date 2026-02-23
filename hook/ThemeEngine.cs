@@ -191,8 +191,9 @@ internal class ThemeEngine
             else if (!string.IsNullOrWhiteSpace(_activeThemeName) &&
                      PresetThemes.TryGetValue(_activeThemeName, out var preset))
             {
-                // Uprooted presets are currently dark-family themes; pin to dark SVG set.
-                startupSvgMode = "dark";
+                // Auto-detect SVG set from preset's BackgroundPrimary luminance
+                // (supports both dark-family and light-family presets like Sakura).
+                startupSvgMode = "auto";
                 rootKeys = preset.RootKeys;
             }
             else
@@ -672,18 +673,24 @@ internal class ThemeEngine
         // Phase 5: Force Root's native theme refresh by toggling the variant (only for
         // explicit revert-to-native flows). Internal theme re-apply paths skip this to
         // avoid one-frame variant races that can desync SVG set selection.
+        // Use a same-family variant for the toggle (PureDark↔Dark, not Dark↔Light)
+        // so SVG paths stay in the same folder throughout — crossing the Dark/Light
+        // boundary causes a transient SVG desync.
         if (forceNativeRefresh)
         {
             var requestedBefore = _r.GetRequestedThemeVariant();
             var current = _r.GetActiveThemeVariant();
-            var opposite = _r.GetThemeVariantByName(
-                current?.ToString() == "Light" ? "Dark" : "Light");
-            if (current != null && opposite != null)
+            var currentName = current?.ToString() ?? "Dark";
+            // Same-family: Dark↔PureDark, Light→Dark (no same-family option for Light)
+            var pulseName = currentName == "Light" ? "Dark"
+                : currentName == "PureDark" ? "Dark" : "PureDark";
+            var pulseVariant = _r.GetThemeVariantByName(pulseName);
+            if (current != null && pulseVariant != null)
             {
                 _switchingVariantForTheme = true;
                 try
                 {
-                    _r.SetRequestedThemeVariant(opposite);
+                    _r.SetRequestedThemeVariant(pulseVariant);
                     // Preserve true requested intent, including null/default ("System").
                     _r.SetRequestedThemeVariant(requestedBefore);
                 }
@@ -729,16 +736,19 @@ internal class ThemeEngine
         _walkTimer?.Dispose();
         _walkTimer = null;
 
-        // 2. Remove stale ThemeDictionary keys (in old theme but not new).
-        //    SVG keys (ending "SVG") are managed by SwapSvgPathsIfNeeded — skip them.
-        //    Keys present in both themes are overwritten in-place by OverrideThemeDictKeys.
-        var staleColorKeys = _overriddenThemeDictKeys
-            .Where(k => !k.EndsWith("SVG") && !newRootKeys.ContainsKey(k))
-            .ToList();
-        foreach (var key in staleColorKeys)
+        // 2. Remove ALL overridden keys (color + SVG) from the current variant dict.
+        //    When the new theme requires a different variant (e.g., Dark→Light),
+        //    keys left in the old dict would never be cleaned —
+        //    RemoveThemeDictOverrides only targets _activeVariantDict, which moves
+        //    to the new variant. Removing all keys here prevents both palette and
+        //    SVG path leaks across variant boundaries. No visible flash: the
+        //    variant switch, OverrideThemeDictKeys, and SwapSvgPathsIfNeeded all
+        //    happen in the same synchronous UI-thread frame.
+        var allKeys = _overriddenThemeDictKeys.ToList();
+        foreach (var key in allKeys)
             RemoveThemeDictKey(key);
-        if (staleColorKeys.Count > 0)
-            Logger.Log("Theme", "PrepareForNewTheme: removed " + staleColorKeys.Count + " stale color keys");
+        if (allKeys.Count > 0)
+            Logger.Log("Theme", "PrepareForNewTheme: removed " + allKeys.Count + " keys from current variant");
 
         // 3. Clear Style originals tracking — Phase 2 will re-save for the new theme.
         //    Do NOT restore to Root defaults (that causes the flash we're avoiding).
@@ -916,10 +926,10 @@ internal class ThemeEngine
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
         OverrideThemeDictKeys(rootKeys);
-        // Preset themes are currently dark-family; always reconcile to dark SVG set.
-        // Fast-path exits immediately when sentinels already match, so regular preset
-        // switches do not pay full scan cost unless a correction is actually needed.
-        string svgMode = themeName == "custom" ? _customSvgMode : "dark";
+        // SVG set must match theme brightness. Custom themes use their configured mode;
+        // presets use "auto" which checks BackgroundPrimary luminance (supports both
+        // dark-family and light-family presets like Sakura).
+        string svgMode = themeName == "custom" ? _customSvgMode : "auto";
         var svgSwapped = SwapSvgPathsIfNeeded(rootKeys, svgMode);
         ev.Set("svg_swapped", svgSwapped);
         // Pulse only when we actually touched SVG paths; avoid unnecessary variant
@@ -1464,16 +1474,20 @@ internal class ThemeEngine
         {
             var requestedBefore = _r.GetRequestedThemeVariant();
             var current = _r.GetActiveThemeVariant();
-            var opposite = _r.GetThemeVariantByName(
-                current?.ToString() == "Light" ? "Dark" : "Light");
-            if (current == null || opposite == null) return;
+            var currentName = current?.ToString() ?? "Dark";
+            // Same-family toggle: Dark↔PureDark keeps SVGs in DarkSvgFolder throughout.
+            // Crossing Dark↔Light causes transient SVG desync.
+            var pulseName = currentName == "Light" ? "Dark"
+                : currentName == "PureDark" ? "Dark" : "PureDark";
+            var pulseVariant = _r.GetThemeVariantByName(pulseName);
+            if (current == null || pulseVariant == null) return;
 
             _switchingVariantForTheme = true;
             try
             {
-                _r.SetRequestedThemeVariant(opposite);
+                _r.SetRequestedThemeVariant(pulseVariant);
                 _r.SetRequestedThemeVariant(requestedBefore);
-                Logger.Log("Theme", $"Vector refresh pulse applied ({source})");
+                Logger.Log("Theme", $"Vector refresh pulse applied ({source}, {currentName}->{pulseName}->{requestedBefore})");
             }
             finally
             {
@@ -1655,19 +1669,20 @@ internal class ThemeEngine
 
         var palette = new Dictionary<string, string>();
 
+        // dir: -1.0 at bL=0.05 (dark), 0.0 at bL=0.50 (mid), +1.0 at bL=0.93 (light)
+        double dir = (bL - 0.05) / (0.93 - 0.05) * 2.0 - 1.0; // linear -1..+1
+
         // --- Brand colors ---
         palette["BrandPrimary"]   = accentHex;
         palette["BrandSecondary"] = ColorUtils.OklchToHex(
-            Math.Clamp(aL + 0.15, 0, 1), aC * 0.7, (aH + 140) % 360);
+            Math.Clamp(aL - 0.15 * dir, 0.05, 0.95), aC * 0.7, (aH + 140) % 360);
         palette["BrandTertiary"]  = ColorUtils.OklchToHex(
-            Math.Clamp(aL + 0.08, 0, 1), aC * 0.5, (aH + 210) % 360);
+            Math.Clamp(aL - 0.08 * dir, 0.05, 0.95), aC * 0.5, (aH + 210) % 360);
 
         // --- Background hierarchy (smooth direction-aware L steps) ---
         // Smoothly interpolate step direction: at bL=0.5 steps are 0 (no offset).
         // Dark bg: secondary lighter, tertiary/input darker.
         // Light bg: secondary darker, tertiary/input lighter.
-        // dir: -1.0 at bL=0.05, 0.0 at bL=0.50, +1.0 at bL=0.93
-        double dir = (bL - 0.05) / (0.93 - 0.05) * 2.0 - 1.0; // linear -1..+1
         double step1 = 0.02 * (1.0 - dir);   // Secondary: +0.04 dark, 0 mid, -0.04 light
         double step2 = -0.015 * (1.0 - dir);  // Tertiary: -0.03 dark, 0 mid, +0.03 light
         double step3 = -0.01 * (1.0 - dir);   // Input: -0.02 dark, 0 mid, +0.02 light
@@ -1719,9 +1734,9 @@ internal class ThemeEngine
         palette["TextWhite"] = "#F2F2F2";
 
         // --- UI elements (smooth direction-aware) ---
-        // Border: lighter than bg on dark, darker on light. Smooth via dir.
+        // Border: lighter than bg on dark, darker on light. Symmetric via -dir.
         palette["Border"] = ColorUtils.OklchToHex(
-            Math.Clamp(bL + 0.08 * (1.0 - dir), 0.05, 0.95),
+            Math.Clamp(bL - 0.12 * dir, 0.05, 0.95),
             bC * 0.4, ((aH + bH) / 2) % 360);
 
         // Highlights: smooth blend from white-alpha (dark bg) to black-alpha (light bg).
@@ -1739,39 +1754,51 @@ internal class ThemeEngine
         palette["HighlightStrong"] = whiteWeight >= 0.5
             ? $"#{hsA:X2}FFFFFF" : $"#{hsA:X2}000000";
 
-        // --- Semantic (kept from Root) ---
-        palette["Info"]    = "#5BC0DE";
-        palette["Warning"] = "#F0AD4E";
+        // --- Semantic (direction-aware: Root uses amber/orange on light) ---
+        if (bL >= 0.5)
+        {
+            palette["Info"]    = "#B86B12";  // amber — distinct from warning
+            palette["Warning"] = "#C05000";  // deeper orange
+        }
+        else
+        {
+            palette["Info"]    = "#5BC0DE";
+            palette["Warning"] = "#F0AD4E";
+        }
         palette["Error"]   = "#F03F36";
 
         // --- Derived (smooth direction-aware) ---
         palette["Muted"] = ColorUtils.OklchToHex(
-            Math.Clamp(bL + 0.18 * (1.0 - dir), 0.05, 0.95), 0.015, bH);
+            Math.Clamp(bL - 0.18 * dir, 0.05, 0.95), 0.015, bH);
+        double linkChroma = aC * (0.55 + 0.25 * blackWeight);
         palette["Link"]  = ColorUtils.OklchToHex(
-            Math.Clamp(aL + 0.12, 0, 1), aC * 0.55, ((aH - 15) + 360) % 360);
+            Math.Clamp(aL - 0.12 * dir, 0.15, 0.90), linkChroma, ((aH - 15) + 360) % 360);
 
         // --- Mentions ---
         palette["SelfMention"]           = ColorUtils.WithAlpha(accentHex, 0x66);
         palette["SelfMentionBackground"] = ColorUtils.WithAlpha(accentHex, 0x26);
         palette["SelfMentionBorder"]     = ColorUtils.WithAlpha(accentHex, 0x4D);
         palette["OtherMention"]           = ColorUtils.WithAlpha(palette["Link"], 0x66);
-        palette["OtherMentionBackground"] = ColorUtils.WithAlpha(palette["Link"], 0x26);
-        palette["OtherMentionBorder"]     = ColorUtils.WithAlpha(palette["Link"], 0x4D);
-        palette["RoleMention"]            = "#669B59B6";
-        palette["RoleMentionBackground"]  = "#269B59B6";
-        palette["RoleMentionBorder"]      = "#4D9B59B6";
-        palette["RoleMentionText"]        = "#9B59B6";
-        palette["ChannelMention"]           = ColorUtils.WithAlpha(palette["Warning"], 0x66);
-        palette["ChannelMentionBackground"] = ColorUtils.WithAlpha(palette["Warning"], 0x26);
-        palette["ChannelMentionBorder"]     = ColorUtils.WithAlpha(palette["Warning"], 0x4D);
-        palette["ChannelMentionText"]       = palette["Warning"];
+        palette["OtherMentionBackground"] = ColorUtils.WithAlpha(palette["Link"], 0x1A);
+        palette["OtherMentionBorder"]     = ColorUtils.WithAlpha(palette["Link"], 0x33);
+        string roleBase = ColorUtils.Mix("#B388FF", "#7C4DFF", blackWeight);
+        palette["RoleMention"]            = ColorUtils.WithAlpha(roleBase, 0x66);
+        palette["RoleMentionBackground"]  = ColorUtils.WithAlpha(roleBase, 0x1A);
+        palette["RoleMentionBorder"]      = ColorUtils.WithAlpha(roleBase, 0x33);
+        palette["RoleMentionText"]        = roleBase;
+        string channelBase = ColorUtils.Mix("#E88F3D", "#D07000", blackWeight);
+        palette["ChannelMention"]           = ColorUtils.WithAlpha(channelBase, 0x66);
+        palette["ChannelMentionBackground"] = ColorUtils.WithAlpha(channelBase, 0x1A);
+        palette["ChannelMentionBorder"]     = ColorUtils.WithAlpha(channelBase, 0x33);
+        palette["ChannelMentionText"]       = channelBase;
 
         // --- ScrollShadow (bg-colored gradient) ---
         palette["ScrollShadow"] = palette["BackgroundPrimary"];
 
-        // --- Drop shadow (smooth: heavier on dark, lighter on light) ---
-        int shadowAlpha = (int)(0x80 * whiteWeight + 0x30 * blackWeight);
-        palette["DropShadow"] = $"#{Math.Clamp(shadowAlpha, 0x20, 0x80):X2}000000";
+        // --- Drop shadow (smooth: heavier on dark, lighter on light; gray base on light) ---
+        int shadowAlpha = (int)(0x80 * whiteWeight + 0x50 * blackWeight);
+        int shadowGray = (int)(107 * blackWeight);  // 0 at dark bg, 107 at light bg
+        palette["DropShadow"] = $"#{Math.Clamp(shadowAlpha, 0x20, 0x80):X2}{shadowGray:X2}{shadowGray:X2}{shadowGray:X2}";
 
         return palette;
     }
@@ -2552,10 +2579,10 @@ internal class ThemeEngine
         ["loki"] = new PresetThemeData(
             RootKeys: new Dictionary<string, string>
             {
-                // Brand — Moss/Trestle palette
-                ["BrandPrimary"]   = "#2A5A40",
-                ["BrandSecondary"] = "#508A62",
-                ["BrandTertiary"]  = "#6AA07A",
+                // Brand — Gold primary, green secondary
+                ["BrandPrimary"]   = "#D4A847",
+                ["BrandSecondary"] = "#2A5A40",
+                ["BrandTertiary"]  = "#508A62",
 
                 // Backgrounds
                 ["BackgroundPrimary"]   = "#0F1210",
@@ -2589,9 +2616,9 @@ internal class ThemeEngine
                 ["Link"]  = "#D4A847",   // Gold accent for Loki
 
                 // Mentions
-                ["SelfMention"]             = "#662A5A40",
-                ["SelfMentionBackground"]   = "#262A5A40",
-                ["SelfMentionBorder"]       = "#4D2A5A40",
+                ["SelfMention"]             = "#66D4A847",
+                ["SelfMentionBackground"]   = "#26D4A847",
+                ["SelfMentionBorder"]       = "#4DD4A847",
                 ["OtherMention"]            = "#66D4A847",
                 ["OtherMentionBackground"]  = "#26D4A847",
                 ["OtherMentionBorder"]      = "#4DD4A847",
@@ -2610,12 +2637,268 @@ internal class ThemeEngine
             },
             SimpleThemeKeys: new Dictionary<string, string>
             {
-                ["ThemeAccentColor"]  = "#2A5A40",
-                ["ThemeAccentBrush"]  = "#2A5A40",
+                ["ThemeAccentColor"]  = "#D4A847",
+                ["ThemeAccentBrush"]  = "#D4A847",
                 ["ThemeControlHighlightLowColor"] = "#151A15",
                 ["ThemeControlHighlightLowBrush"] = "#151A15",
                 ["HighlightForegroundColor"] = "#D4A847",
                 ["HighlightForegroundBrush"] = "#D4A847",
+                ["ErrorColor"] = "#F03F36",
+                ["ErrorBrush"] = "#F03F36",
+            }
+        ),
+
+        ["marine"] = new PresetThemeData(
+            RootKeys: new Dictionary<string, string>
+            {
+                ["BrandPrimary"]   = "#6FC7ED",
+                ["BrandSecondary"] = "#4AA0C8",
+                ["BrandTertiary"]  = "#3888B0",
+
+                ["BackgroundPrimary"]   = "#253059",
+                ["BackgroundSecondary"] = "#2D3A68",
+                ["BackgroundTertiary"]  = "#1E284E",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#2D3A68"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#2D3A68"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#2D3A68", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#2D3A68"),
+                ["Input"]               = "#212C52",
+
+                ["TextPrimary"]   = "#E4EAF8",
+                ["TextSecondary"] = "#A3E4EAF8",
+                ["TextTertiary"]  = "#66E4EAF8",
+                ["TextWhite"]     = "#F2F2F2",
+
+                ["Border"]          = "#3A4A72",
+                ["HighlightLight"]  = "#0AFFFFFF",
+                ["HighlightNormal"] = "#19FFFFFF",
+                ["HighlightStrong"] = "#30FFFFFF",
+
+                ["Info"]    = "#5BC0DE",
+                ["Warning"] = "#F0AD4E",
+                ["Error"]   = "#F03F36",
+
+                ["Muted"] = "#2E3860",
+                ["Link"]  = "#80C8E8",
+
+                ["SelfMention"]             = "#666FC7ED",
+                ["SelfMentionBackground"]   = "#266FC7ED",
+                ["SelfMentionBorder"]       = "#4D6FC7ED",
+                ["OtherMention"]            = "#6680C8E8",
+                ["OtherMentionBackground"]  = "#1A80C8E8",
+                ["OtherMentionBorder"]      = "#3380C8E8",
+                ["RoleMention"]             = "#66B388FF",
+                ["RoleMentionBackground"]   = "#1AB388FF",
+                ["RoleMentionBorder"]       = "#33B388FF",
+                ["RoleMentionText"]         = "#B388FF",
+                ["ChannelMention"]            = "#66E88F3D",
+                ["ChannelMentionBackground"]  = "#1AE88F3D",
+                ["ChannelMentionBorder"]      = "#33E88F3D",
+                ["ChannelMentionText"]        = "#E88F3D",
+
+                ["ScrollShadow"] = "#253059",
+                ["DropShadow"]   = "#80000000",
+            },
+            SimpleThemeKeys: new Dictionary<string, string>
+            {
+                ["ThemeAccentColor"]  = "#6FC7ED",
+                ["ThemeAccentBrush"]  = "#6FC7ED",
+                ["ThemeControlHighlightLowColor"] = "#2D3A68",
+                ["ThemeControlHighlightLowBrush"] = "#2D3A68",
+                ["HighlightForegroundColor"] = "#6FC7ED",
+                ["HighlightForegroundBrush"] = "#6FC7ED",
+                ["ErrorColor"] = "#F03F36",
+                ["ErrorBrush"] = "#F03F36",
+            }
+        ),
+
+        ["oreo"] = new PresetThemeData(
+            RootKeys: new Dictionary<string, string>
+            {
+                ["BrandPrimary"]   = "#C1C3FF",
+                ["BrandSecondary"] = "#9A9CD8",
+                ["BrandTertiary"]  = "#8082B8",
+
+                ["BackgroundPrimary"]   = "#111111",
+                ["BackgroundSecondary"] = "#191919",
+                ["BackgroundTertiary"]  = "#0C0C0C",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#191919"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#191919"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#191919", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#191919"),
+                ["Input"]               = "#0E0E0E",
+
+                ["TextPrimary"]   = "#F2F2F2",
+                ["TextSecondary"] = "#A3F2F2F2",
+                ["TextTertiary"]  = "#66F2F2F2",
+                ["TextWhite"]     = "#F2F2F2",
+
+                ["Border"]          = "#2C2C2C",
+                ["HighlightLight"]  = "#0AFFFFFF",
+                ["HighlightNormal"] = "#19FFFFFF",
+                ["HighlightStrong"] = "#30FFFFFF",
+
+                ["Info"]    = "#5BC0DE",
+                ["Warning"] = "#F0AD4E",
+                ["Error"]   = "#F03F36",
+
+                ["Muted"] = "#252525",
+                ["Link"]  = "#A8AAEE",
+
+                ["SelfMention"]             = "#66C1C3FF",
+                ["SelfMentionBackground"]   = "#26C1C3FF",
+                ["SelfMentionBorder"]       = "#4DC1C3FF",
+                ["OtherMention"]            = "#66A8AAEE",
+                ["OtherMentionBackground"]  = "#1AA8AAEE",
+                ["OtherMentionBorder"]      = "#33A8AAEE",
+                ["RoleMention"]             = "#66B388FF",
+                ["RoleMentionBackground"]   = "#1AB388FF",
+                ["RoleMentionBorder"]       = "#33B388FF",
+                ["RoleMentionText"]         = "#B388FF",
+                ["ChannelMention"]            = "#66E88F3D",
+                ["ChannelMentionBackground"]  = "#1AE88F3D",
+                ["ChannelMentionBorder"]      = "#33E88F3D",
+                ["ChannelMentionText"]        = "#E88F3D",
+
+                ["ScrollShadow"] = "#111111",
+                ["DropShadow"]   = "#80000000",
+            },
+            SimpleThemeKeys: new Dictionary<string, string>
+            {
+                ["ThemeAccentColor"]  = "#C1C3FF",
+                ["ThemeAccentBrush"]  = "#C1C3FF",
+                ["ThemeControlHighlightLowColor"] = "#191919",
+                ["ThemeControlHighlightLowBrush"] = "#191919",
+                ["HighlightForegroundColor"] = "#C1C3FF",
+                ["HighlightForegroundBrush"] = "#C1C3FF",
+                ["ErrorColor"] = "#F03F36",
+                ["ErrorBrush"] = "#F03F36",
+            }
+        ),
+
+        ["sakura"] = new PresetThemeData(
+            RootKeys: new Dictionary<string, string>
+            {
+                ["BrandPrimary"]   = "#94D9FF",
+                ["BrandSecondary"] = "#6BB0D8",
+                ["BrandTertiary"]  = "#5898B8",
+
+                ["BackgroundPrimary"]   = "#FFCEFA",
+                ["BackgroundSecondary"] = "#F4C0EE",
+                ["BackgroundTertiary"]  = "#FFD6FC",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#F4C0EE"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#F4C0EE"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#F4C0EE", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#F4C0EE"),
+                ["Input"]               = "#FFD2F8",
+
+                ["TextPrimary"]   = "#2A1028",
+                ["TextSecondary"] = "#5A3858",
+                ["TextTertiary"]  = "#886088",
+                ["TextWhite"]     = "#F2F2F2",
+
+                ["Border"]          = "#D4A0D0",
+                ["HighlightLight"]  = "#0A000000",
+                ["HighlightNormal"] = "#19000000",
+                ["HighlightStrong"] = "#30000000",
+
+                ["Info"]    = "#B86B12",
+                ["Warning"] = "#C05000",
+                ["Error"]   = "#F03F36",
+
+                ["Muted"] = "#E0A0DA",
+                ["Link"]  = "#4088C0",
+
+                ["SelfMention"]             = "#6694D9FF",
+                ["SelfMentionBackground"]   = "#2694D9FF",
+                ["SelfMentionBorder"]       = "#4D94D9FF",
+                ["OtherMention"]            = "#664088C0",
+                ["OtherMentionBackground"]  = "#1A4088C0",
+                ["OtherMentionBorder"]      = "#334088C0",
+                ["RoleMention"]             = "#667C4DFF",
+                ["RoleMentionBackground"]   = "#1A7C4DFF",
+                ["RoleMentionBorder"]       = "#337C4DFF",
+                ["RoleMentionText"]         = "#7C4DFF",
+                ["ChannelMention"]            = "#66D07000",
+                ["ChannelMentionBackground"]  = "#1AD07000",
+                ["ChannelMentionBorder"]      = "#33D07000",
+                ["ChannelMentionText"]        = "#D07000",
+
+                ["ScrollShadow"] = "#FFCEFA",
+                ["DropShadow"]   = "#506B6B6B",
+            },
+            SimpleThemeKeys: new Dictionary<string, string>
+            {
+                ["ThemeAccentColor"]  = "#94D9FF",
+                ["ThemeAccentBrush"]  = "#94D9FF",
+                ["ThemeControlHighlightLowColor"] = "#F4C0EE",
+                ["ThemeControlHighlightLowBrush"] = "#F4C0EE",
+                ["HighlightForegroundColor"] = "#94D9FF",
+                ["HighlightForegroundBrush"] = "#94D9FF",
+                ["ErrorColor"] = "#F03F36",
+                ["ErrorBrush"] = "#F03F36",
+            }
+        ),
+
+        ["ember"] = new PresetThemeData(
+            RootKeys: new Dictionary<string, string>
+            {
+                ["BrandPrimary"]   = "#FF6B2B",
+                ["BrandSecondary"] = "#FF9A60",
+                ["BrandTertiary"]  = "#FFB888",
+
+                ["BackgroundPrimary"]   = "#1A0F0A",
+                ["BackgroundSecondary"] = "#231610",
+                ["BackgroundTertiary"]  = "#140B07",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#231610"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#231610"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#231610", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#231610"),
+                ["Input"]               = "#180E0A",
+
+                ["TextPrimary"]   = "#F4ECE4",
+                ["TextSecondary"] = "#A3F4ECE4",
+                ["TextTertiary"]  = "#66F4ECE4",
+                ["TextWhite"]     = "#F2F2F2",
+
+                ["Border"]          = "#3A2818",
+                ["HighlightLight"]  = "#0AFFFFFF",
+                ["HighlightNormal"] = "#19FFFFFF",
+                ["HighlightStrong"] = "#30FFFFFF",
+
+                ["Info"]    = "#5BC0DE",
+                ["Warning"] = "#F0AD4E",
+                ["Error"]   = "#F03F36",
+
+                ["Muted"] = "#2A1C14",
+                ["Link"]  = "#FF8850",
+
+                ["SelfMention"]             = "#66FF6B2B",
+                ["SelfMentionBackground"]   = "#26FF6B2B",
+                ["SelfMentionBorder"]       = "#4DFF6B2B",
+                ["OtherMention"]            = "#66FF8850",
+                ["OtherMentionBackground"]  = "#1AFF8850",
+                ["OtherMentionBorder"]      = "#33FF8850",
+                ["RoleMention"]             = "#66B388FF",
+                ["RoleMentionBackground"]   = "#1AB388FF",
+                ["RoleMentionBorder"]       = "#33B388FF",
+                ["RoleMentionText"]         = "#B388FF",
+                ["ChannelMention"]            = "#66E88F3D",
+                ["ChannelMentionBackground"]  = "#1AE88F3D",
+                ["ChannelMentionBorder"]      = "#33E88F3D",
+                ["ChannelMentionText"]        = "#E88F3D",
+
+                ["ScrollShadow"] = "#1A0F0A",
+                ["DropShadow"]   = "#80000000",
+            },
+            SimpleThemeKeys: new Dictionary<string, string>
+            {
+                ["ThemeAccentColor"]  = "#FF6B2B",
+                ["ThemeAccentBrush"]  = "#FF6B2B",
+                ["ThemeControlHighlightLowColor"] = "#231610",
+                ["ThemeControlHighlightLowBrush"] = "#231610",
+                ["HighlightForegroundColor"] = "#FF6B2B",
+                ["HighlightForegroundBrush"] = "#FF6B2B",
                 ["ErrorColor"] = "#F03F36",
                 ["ErrorBrush"] = "#F03F36",
             }

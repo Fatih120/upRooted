@@ -39,6 +39,16 @@ internal static class ContentPages
     internal static string AccentGreen = DefaultAccentGreen;
 
     /// <summary>
+    /// Returns "#000000" or "#FFFFFF" for readable text on the given background.
+    /// Root only uses vibrant blue accents; custom themes can have any color including white.
+    /// </summary>
+    private static string ContrastText(string bg)
+    {
+        try { return ColorUtils.Luminance(bg) > 0.45 ? "#000000" : "#FFFFFF"; }
+        catch { return "#FFFFFF"; }
+    }
+
+    /// <summary>
     /// Luminance-aware highlight: lightens on dark backgrounds, darkens on light backgrounds.
     /// Replaces Lighten(CardBg, N) which fails on Light theme (lightening white = white).
     /// </summary>
@@ -146,7 +156,7 @@ internal static class ContentPages
                 palette.TryGetValue("TextFillColorPrimary", out var palText))
             {
                 CardBg = palBg;
-                CardBorder = ColorUtils.WithAlpha(palText, 0x19);
+                CardBorder = ColorUtils.WithAlpha(palText, 0x33);
                 var (tr, tg, tb) = ColorUtils.ParseHex(palText);
                 TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
                 TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
@@ -157,7 +167,7 @@ internal static class ContentPages
                 var textBase = ColorUtils.DeriveTextColor(bg);
                 var (tr, tg, tb) = ColorUtils.ParseHex(textBase);
                 CardBg = ColorUtils.Lighten(bg, 6);
-                CardBorder = ColorUtils.WithAlpha(textBase, 0x19);
+                CardBorder = ColorUtils.WithAlpha(textBase, 0x33);
                 TextWhite = $"#FF{tr:X2}{tg:X2}{tb:X2}";
                 TextMuted = $"#A3{tr:X2}{tg:X2}{tb:X2}";
                 TextDim = $"#66{tr:X2}{tg:X2}{tb:X2}";
@@ -412,7 +422,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(title, "Center");
             r.AddChild(titleRow, title);
 
-            var versionText = r.CreateTextBlock($"v{settings.Version}", 13, "#FFFFFF");
+            var versionText = r.CreateTextBlock($"v{settings.Version}", 13, ContrastText(AccentGreen));
             r.SetFontWeight(versionText, "SemiBold");
             ApplyFont(r, versionText, font);
             r.SetHorizontalAlignment(versionText, "Center");
@@ -464,6 +474,8 @@ internal static class ContentPages
                 {
                     bool isEnabled = plugin.Id == "content-filter"
                         ? settings.NsfwFilterEnabled
+                        : plugin.Id == "themes"
+                        ? (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
                         : (settings.Plugins.TryGetValue(plugin.Id, out var en) ? en : plugin.DefaultEnabled);
                     if (isEnabled) enabledCount++;
                 }
@@ -475,7 +487,7 @@ internal static class ContentPages
             var hasTheme = activeTheme != null && activeTheme != "default-dark";
             var themeStatus = hasTheme ? "Active (" + activeTheme + ")" : "Not active";
             var themeColor = hasTheme ? AccentGreen : TextDim;
-            AddStatusField(r, cardContent, "Theme Override", themeStatus, themeColor, false, font);
+            AddStatusField(r, cardContent, "ThemeEngine", themeStatus, themeColor, false, font);
 
             r.SetBorderChild(statusCard, cardContent);
             r.AddChild(page, statusCard);
@@ -575,12 +587,12 @@ internal static class ContentPages
             var wasUpdated = updater?.UpdateApplied ?? false;
 
             var btnLabel = isChecking ? "Checking..." : hasUpdate ? "Update Now" : "Check for Updates";
-            var btnText = r.CreateTextBlock(btnLabel, 13, "#FFFFFF");
+            var btnColor = hasUpdate ? "#C0A820" : AccentGreen;
+            var btnText = r.CreateTextBlock(btnLabel, 13, ContrastText(btnColor));
             r.SetFontWeight(btnText, "Bold");
             ApplyFont(r, btnText, font);
             r.SetHorizontalAlignment(btnText, "Center");
 
-            var btnColor = hasUpdate ? "#C0A820" : AccentGreen;
             var btn = r.CreateBorder(btnColor, 8, btnText);
             if (btn != null)
             {
@@ -720,7 +732,7 @@ internal static class ContentPages
                     }
 
                     // Restart button — accent button format: Bold, border, AdjustForHighlight
-                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, "#FFFFFF");
+                    var updateRestartBtnText = r.CreateTextBlock("Restart", 12, ContrastText(AccentGreen));
                     r.SetFontWeight(updateRestartBtnText, "Bold");
                     ApplyFont(r, updateRestartBtnText, font);
                     r.SetHorizontalAlignment(updateRestartBtnText, "Center");
@@ -806,8 +818,8 @@ internal static class ContentPages
                 new() { Id = "sentry-blocker", DisplayName = "SentryBlocker", Version = "0.5.0-rc",
                     Description = "Stops Root from sending your data to Sentry's external error tracking servers, including your IP address, session replays, and login tokens.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
-                new() { Id = "themes", DisplayName = "Themes", Version = "0.5.0-rc",
-                    Description = "Customize Root's look with preset color themes or build your own. Four presets to choose from, plus a custom theme builder with accent and background color pickers. Changes apply instantly, no restart needed.",
+                new() { Id = "themes", DisplayName = "ThemeEngine", Version = "0.5.0-rc",
+                    Description = "Full theme engine with 8 presets (dark and light) and a custom theme builder. Pick accent, background, and text colors with live preview. Adapts SVGs, borders, text contrast, and mention colors automatically.",
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.5.0-rc",
                     Description = "Rich link previews right in chat. YouTube videos show a thumbnail with a play button that opens in your browser, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
@@ -975,7 +987,8 @@ internal static class ContentPages
                     settings.ShowExperimentalPlugins = isOn;
                     settings.Save();
                     rebuildGrid?.Invoke();
-                }, offColor: AdjustForHighlight(CardBg, isLightUi ? 14 : 8));
+                }, offColor: AdjustForHighlight(CardBg, isLightUi ? 14 : 8),
+                   onColor: warnBorderOn);
                 if (expPill != null)
                 {
                     r.SetHorizontalAlignment(expPill, "Right");
@@ -1526,7 +1539,7 @@ internal static class ContentPages
                         r.SubscribeEvent(gearBtn, "PointerEntered", () =>
                             r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8)));
                         r.SubscribeEvent(gearBtn, "PointerExited", () =>
-                            r.BindToDynamicResource(gearBtnRef, "Background", "BackgroundButtonOnSecondary"));
+                            r.SetBackground(gearBtnRef, gearBtnBg));
 
                         r.AddChild(rightIcons, gearBtn);
                     }
@@ -1564,7 +1577,7 @@ internal static class ContentPages
                         r.SubscribeEvent(infoBtn, "PointerEntered", () =>
                             r.SetBackground(infoBtnRef, AdjustForHighlight(infoBtnBg, 8)));
                         r.SubscribeEvent(infoBtn, "PointerExited", () =>
-                            r.BindToDynamicResource(infoBtnRef, "Background", "BackgroundButtonOnSecondary"));
+                            r.SetBackground(infoBtnRef, infoBtnBg));
 
                         r.AddChild(rightIcons, infoBtn);
                     }
@@ -1969,7 +1982,7 @@ internal static class ContentPages
             r.SetTag(okBtn, "uprooted-no-recolor");
             r.SetHorizontalAlignment(okBtn, "Right");
 
-            var okText = r.CreateTextBlock("Got it", LightboxScale.Button, "#FFFFFF");
+            var okText = r.CreateTextBlock("Got it", LightboxScale.Button, ContrastText(AccentGreen));
             if (okText != null)
             {
                 r.SetFontWeightNumeric(okText, 600);
@@ -2066,8 +2079,9 @@ internal static class ContentPages
         bool state = initialState;
         bool isHover = false;
 
+        var accentColor = onColor ?? AccentGreen;
         var dimColor = offColor ?? AdjustForHighlight(CardBg, 18);
-        var pillColor = state ? AccentGreen : dimColor;
+        var pillColor = state ? accentColor : dimColor;
 
         // Outer pill
         var pill = r.CreateBorder(pillColor, 12);
@@ -2078,8 +2092,10 @@ internal static class ContentPages
         r.SetTag(pill, "uprooted-toggle-pill");
 
         // Thumb (circle inside) — 16x16 in 24-high pill ensures even centering gaps
-        // at both 100% and 150% DPI: (24-16)*scale is always even
-        var thumb = r.CreateBorder("#FFFFFFFF", 8);
+        // at both 100% and 150% DPI: (24-16)*scale is always even.
+        // Thumb color contrasts with the current pill background.
+        var thumbColor = ContrastText(pillColor);
+        var thumb = r.CreateBorder(thumbColor, 8);
         if (thumb != null)
         {
             r.SetWidth(thumb, 16);
@@ -2089,9 +2105,6 @@ internal static class ContentPages
             r.SetMargin(thumb, 4, 0, 4, 0);
         }
         r.SetBorderChild(pill, thumb);
-
-        // Capture the current accent for closures
-        var accentColor = onColor ?? AccentGreen;
 
         r.SubscribeEvent(pill, "PointerPressed", () =>
         {
@@ -2112,7 +2125,10 @@ internal static class ContentPages
             var hover = state ? AdjustForHighlight(accentColor, 10) : AdjustForHighlight(dimColor, 8);
             r.SetBackground(pill, isHover ? hover : rest);
             if (thumb != null)
+            {
                 r.SetHorizontalAlignment(thumb, state ? "Right" : "Left");
+                r.SetBackground(thumb, ContrastText(state ? accentColor : dimColor));
+            }
 
             onToggled?.Invoke(state);
         });
@@ -2365,15 +2381,21 @@ internal static class ContentPages
                     ($"Native ({nativeStateLabel})",  "default-dark", nativeBg, nativeAccent, "Root's app theme"),
                     ("Crimson",  "crimson",           "#1A0A0A", "#C42B1C", "Deep red accent"),
                     ("Cosmic Smoothie", "cosmic-smoothie", "#0A041E", "#7328BA", "Dark purple space"),
-                    ("Loki",     "loki",                   "#0F1210", "#2A5A40", "Gold and green"),
+                    ("Loki",     "loki",                   "#0F1210", "#D4A847", "Gold and green"),
+                    ("Marine",   "marine",                 "#253059", "#6FC7ED", "Ocean blue depths"),
+                    ("Oreo",     "oreo",                   "#111111", "#C1C3FF", "Monochrome lavender"),
+                    ("Sakura",   "sakura",                 "#FFCEFA", "#94D9FF", "Land of Harmony"),
+                    ("Ember",    "ember",                  "#1A0F0A", "#FF6B2B", "Warm charcoal glow"),
                 };
 
-                // 4-column equal-width grid so cards stretch to fill container
+                // 4-column, 2-row grid so cards stretch to fill container
                 var presetsGrid = r.CreateGrid();
                 if (presetsGrid != null)
                 {
-                    for (int i = 0; i < allPresets.Length; i++)
+                    for (int i = 0; i < 4; i++)
                         r.AddGridColumn(presetsGrid, 1.0);
+                    r.AddGridRowAuto(presetsGrid);
+                    r.AddGridRowAuto(presetsGrid);
 
                     for (int i = 0; i < allPresets.Length; i++)
                     {
@@ -2386,9 +2408,11 @@ internal static class ContentPages
                             settingsAction);
                         if (card != null)
                         {
-                            r.SetGridColumn(card, i);
-                            if (i < allPresets.Length - 1)
-                                r.SetMargin(card, 0, 0, 8, 0); // spacing between cards
+                            r.SetGridColumn(card, i % 4);
+                            r.SetGridRow(card, i / 4);
+                            int rightMargin = (i % 4 < 3) ? 8 : 0;
+                            int bottomMargin = (i / 4 == 0) ? 8 : 0;
+                            r.SetMargin(card, 0, 0, rightMargin, bottomMargin);
                             r.AddChild(presetsGrid, card);
                         }
                     }
@@ -2743,7 +2767,7 @@ internal static class ContentPages
                 r.AddChild(pingHeaderPanel, pingTextStack);
             }
 
-            var pingToggle = BuildToggleSwitch(r, pingActive, font, offColor: "#2A2A44", onToggled: enabled =>
+            var pingToggle = BuildToggleSwitch(r, pingActive, font, offColor: "#2A2A44", onColor: islandSelectedBorder, onToggled: enabled =>
             {
                 try
                 {
@@ -3203,8 +3227,7 @@ internal static class ContentPages
                     r.SubscribeEvent(gearBtn, "PointerExited", () =>
                     {
                         gearHovered = false;
-                        // Re-bind to DynamicResource so live preview continues to update
-                        r.BindToDynamicResource(gearBtnRef, "Background", "BackgroundButtonOnElevated");
+                        r.SetBackground(gearBtnRef, gearBtnBg);
                         // Re-apply card hover if pointer moved back to card body
                         if (!isActive)
                         {
@@ -3571,7 +3594,7 @@ internal static class ContentPages
                 r.BindToDynamicResource(saveBtn, "Background", "BrandPrimary");
                 r.SetCursorHand(saveBtn);
                 SetBorderStroke(r, saveBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
-                var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, "#FFFFFF");
+                var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, ContrastText(AccentGreen));
                 r.SetFontWeightNumeric(saveBtnText, 500);
                 ApplyFont(r, saveBtnText, font);
                 r.SetPadding(saveBtn, 16, 6, 16, 6);
@@ -4056,7 +4079,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(pill, "Center");
             r.SetCursorHand(pill);
 
-            var dot = r.CreateBorder("#FFFFFF", 9);
+            var dot = r.CreateBorder(ContrastText(toggleBg), 9);
             if (dot != null)
             {
                 r.SetWidth(dot, 20);
@@ -4083,6 +4106,7 @@ internal static class ContentPages
                     var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
                     r.SetBackground(pillRef, hovered[0] ? hover : rest);
                     r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
+                    r.SetBackground(dotRef, ContrastText(rest));
                     onChanged(state[0]);
                 });
                 r.SubscribeEvent(pill, "PointerEntered", () =>
@@ -4142,7 +4166,7 @@ internal static class ContentPages
         var isDev = settings.AutoUpdateChannel == "developer";
         var badgeColor = isDev ? DevChannelBlack : AccentGreen;
         var badgeLabel = isDev ? "Developer" : "Stable";
-        var badgeTextColor = isDev ? DevChannelBlue : "#FFFFFF";
+        var badgeTextColor = isDev ? DevChannelBlue : ContrastText(AccentGreen);
         var badgeText = r.CreateTextBlock(badgeLabel, 12, badgeTextColor);
         r.SetFontWeight(badgeText, "Bold");
         ApplyFont(r, badgeText, font);
@@ -4178,7 +4202,7 @@ internal static class ContentPages
                     ApplyChannelRuntimeState(r, s);
                     promptVisible = false;
                     r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
-                    r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeTextRef, r.CreateBrush("#FFFFFF"));
+                    r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeTextRef, r.CreateBrush(ContrastText(AccentGreen)));
                     r.SetBackground(badgeRef, AccentGreen);
                     SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
                     onRefreshCurrentPage?.Invoke();
@@ -4302,7 +4326,7 @@ internal static class ContentPages
         r.AddChild(promptRow, passBox);
 
         // Submit button
-        var submitText = r.CreateTextBlock("Go", 13, "#FFFFFF");
+        var submitText = r.CreateTextBlock("Go", 13, ContrastText(AccentGreen));
         r.SetFontWeight(submitText, "Bold");
         ApplyFont(r, submitText, font);
         r.SetHorizontalAlignment(submitText, "Center");

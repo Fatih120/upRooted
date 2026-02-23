@@ -10,6 +10,41 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 
+- **4 new preset themes** — Marine (ocean blue), Oreo (monochrome lavender), Sakura (light pink — first light preset), Ember (warm charcoal orange). Preset grid now 2×4 layout.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **Accent-aware text contrast** — `ContrastText()` helper returns black or white text based on background luminance. Applied to version badge, Check for Updates, Restart, Save API Key, Go, Got it buttons, channel badge, and toggle switch thumbs.
+  - File: `hook/ContentPages.cs`
+
+### Changed
+
+- **Themes → Theme Engine rebrand** — Plugin DisplayName, sidebar tab, header title, and About status field all renamed. Plugin description updated to reflect 8 presets and full engine capabilities.
+  - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
+- **ThemeEngine plugin enabled logic** — Now reflects whether a theme override is actually active (`ActiveThemeName != null && != "default-dark"`) instead of a settings toggle. Shows disabled on native themes.
+  - File: `hook/ContentPages.cs`
+- **Loki preset reworked** — BrandPrimary changed from green to gold (`#D4A847`). Green moved to BrandSecondary/Tertiary. ThemeAccentColor/Brush now gold. Buttons, version badge, and SelfMention all use gold.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **Preset SVG mode auto-detect** — Changed from hardcoded `"dark"` to `"auto"` for both runtime and startup reconciliation. `ThemeNeedsDarkSvgs` checks BackgroundPrimary luminance, supporting light presets like Sakura.
+  - File: `hook/ThemeEngine.cs`
+- **Same-family variant pulse** — `ForceVectorRefreshPulse` and RevertTheme Phase 5 now toggle Dark↔PureDark instead of Dark↔Light, preventing transient SVG desync (light icons flashing on dark backgrounds).
+  - File: `hook/ThemeEngine.cs`
+- **Toggle switch hardcoded on-colors** — Experimental plugins toggle uses warning border color; ping color toggle uses island selected border. Both match their enclosing card palettes instead of theme accent.
+  - File: `hook/ContentPages.cs`
+
+### Fixed
+
+- **Custom light theme palette adaptation** — Border and Muted formulas used `+ offset * (1-dir)` which collapsed to zero offset on light backgrounds, making borders invisible. Changed to `- offset * dir` for symmetric lightening (dark bg) / darkening (light bg). Also adapted: BrandSecondary/Tertiary, Link chroma, Info/Warning threshold, RoleMention/ChannelMention interpolation, OtherMention alpha, DropShadow gray base.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **`IsValidHex` rejected 8-digit hex** — Regex `^#[0-9A-Fa-f]{6}$` rejected `#AARRGGBB` format from `ReadLiveRootColors()`. On native Light startup, `ThemeNeedsDarkSvgs` defaulted to dark SVGs (light icons on light bg). Fixed regex to accept both 6 and 8 digit hex.
+  - File: `hook/ColorUtils.cs`
+- **Sidebar ghost highlights during live preview** — `BindToDynamicResource` on nav highlight created permanent subscriptions never disposed on deselection. Resource changes during color picker drag caused all previously-selected tabs to highlight. Fix: only bind the Themes tab (the only one needing live refresh).
+  - File: `hook/SidebarInjector.cs`
+- **Crimson preset desync on native theme switch** — `PrepareForNewTheme` only removed stale keys (in old but not new theme). Overlapping palette keys leaked across variant boundaries when switching between themes requiring different variants. Fix: remove ALL keys from current variant dict before transition.
+  - File: `hook/ThemeEngine.cs`
+- **Version info text lightening on theme revert** — Root's native "Root Version" and "System Info" TextBlocks lightened to TextPrimary after custom→dark revert because walker's bind-once replaced their original foreground. Fix: bind them to TextTertiary during injection so they have a stable base binding.
+  - File: `hook/SidebarInjector.cs`
+- **CardBorder fallback too faint** — `WithAlpha(textBase, 0x19)` (10% opacity) in `ApplyThemedColors` fallback was nearly invisible. Bumped to `0x33` (20%).
+  - File: `hook/ContentPages.cs`
+
 - **Translate plugin** — DeepL-powered message translation. A globe button is injected into Root's compose bar; click it to pick a target language and Uprooted rewrites your draft in place before sending. Config popup with language picker and API key. Auto-translate mode available.
   - Files: `hook/TranslateEngine.cs` (new), `hook/TranslateConfigPopup.cs` (new)
 - **Presence Beacon + community badges** — Background presence beacon registers with the Uprooted API 10s after startup. Role-based badges on profile popups: Dev badge for developers, Alpha badge for testers. Session role cache for instant badge injection. Event-driven detection via `OverlayLayer.Children.CollectionChanged` with 500ms fallback poll.

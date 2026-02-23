@@ -692,7 +692,7 @@ internal class SidebarInjector
             _r.AddChild(container, sectionHeader);
 
         // 2. Nav items: Uprooted, Plugins, Themes
-        foreach (var (label, page) in new[] { ("About", "uprooted"), ("Plugins", "plugins"), ("Themes", "themes") })
+        foreach (var (label, page) in new[] { ("About", "uprooted"), ("Plugins", "plugins"), ("Theme Engine", "themes") })
         {
             var item = BuildNavItem(label, page, nativeFontFamily, nativeNavForeground, nativeNavFontWeight);
             if (item != null)
@@ -1488,21 +1488,29 @@ internal class SidebarInjector
                 return;
             }
 
-            // Read foreground from Root's existing "Root Version" TextBlock for pixel-perfect match.
+            // Read foreground from Root's existing "Root Version" TextBlock for pixel-perfect match,
+            // and bind Root's native TextBlocks to TextTertiary so they survive theme revert.
+            // Without this, the walker's bind-once path replaces Root's original foreground;
+            // on revert ClearValue leaves no fallback and they inherit bright TextPrimary.
             string versionFg = ContentPages.TextDim;
             foreach (var child in _r.GetVisualChildren(versionStackPanel))
             {
                 if (!_r.IsTextBlock(child)) continue;
-                var fg = _r.GetForeground(child);
-                if (fg != null)
+                if (versionFg == ContentPages.TextDim)
                 {
-                    var colorProp = fg.GetType().GetProperty("Color");
-                    if (colorProp != null)
+                    var fg = _r.GetForeground(child);
+                    if (fg != null)
                     {
-                        var color = colorProp.GetValue(fg);
-                        if (color != null) { versionFg = color.ToString()!; break; }
+                        var colorProp = fg.GetType().GetProperty("Color");
+                        if (colorProp != null)
+                        {
+                            var color = colorProp.GetValue(fg);
+                            if (color != null) versionFg = color.ToString()!;
+                        }
                     }
                 }
+                _r.SetTag(child, "dyn-fg:TextTertiary");
+                _r.BindToDynamicResource(child, "Foreground", "TextTertiary");
             }
 
             var versionText = _r.CreateTextBlock($"Uprooted {_settings.Version}", 10, versionFg);
@@ -1700,6 +1708,7 @@ internal class SidebarInjector
     {
         if (_headerTitleText == null) return;
         var displayName = pageName == "uprooted" ? "About"
+            : pageName == "themes" ? "Theme Engine"
             : char.ToUpper(pageName[0]) + pageName[1..];
         try { _headerTitleText.GetType().GetProperty("Text")?.SetValue(_headerTitleText, displayName); }
         catch { }
@@ -1839,10 +1848,12 @@ internal class SidebarInjector
             bool isSelected = itemPage == _activePage;
             if (isSelected)
             {
-                // Bind to DynamicResource so highlight auto-updates during live preview
-                // when HighlightNormal changes (e.g. bg brightness crosses dark/light threshold)
                 _r.SetBackground(node, selectionBg);
-                _r.BindToDynamicResource(node, "Background", "HighlightNormal");
+                // Only bind the Themes tab — it's the only one that needs live refresh
+                // during color picker drag. Binding other tabs would cause ghost highlights
+                // when HighlightNormal changes (stale bindings are never disposed).
+                if (itemPage == "themes")
+                    _r.BindToDynamicResource(node, "Background", "HighlightNormal");
             }
             else
             {
