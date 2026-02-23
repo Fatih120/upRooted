@@ -30,16 +30,6 @@ on:
       version:
         description: 'Resolved version string'
         value: ${{ jobs.resolve.outputs.version }}
-  push:
-    paths:
-      - "hook/**"
-      - "src/**"
-      - "installer/**"
-      - "tools/confuse/**"
-      - "tools/verify-obfuscation/**"
-      - "tools/uprooted_profiler*.c"
-      - "tools/uprooted_profiler.def"
-      - ".github/workflows/build.yml"
 
 permissions:
   contents: write
