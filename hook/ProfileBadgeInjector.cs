@@ -95,6 +95,7 @@ internal class ProfileBadgeInjector
     private readonly UprootedPresenceBeacon? _beacon;
     private readonly UserBioEngine? _bioEngine;
     private Timer? _fallbackTimer;
+    private readonly TailSampler _sampler = new(heartbeatTicks: 150, slowThresholdMs: 50);
     private int _scanning; // Interlocked reentrancy guard
     private bool _firstDumpDone; // Only dump full tree once per session
 
@@ -268,9 +269,8 @@ internal class ProfileBadgeInjector
             {
                 try
                 {
-                    Logger.Log("ProfileBadge", ">>> ScanTopLevels START");
+                    using var ev = WideEvent.BeginSampled("ProfileBadge", "fallback_tick", _sampler);
                     ScanTopLevels();
-                    Logger.Log("ProfileBadge", "<<< ScanTopLevels END");
                 }
                 catch (Exception ex) { Logger.Log("ProfileBadge", $"Fallback scan error: {ex.Message}"); }
                 finally { Interlocked.Exchange(ref _scanning, 0); }
