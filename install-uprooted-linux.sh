@@ -23,7 +23,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.5.1-dev1"
+VERSION="0.5.1-dev2"
 AUTO_DEPS=false
 ROOT_EXEC=""        # actual binary/AppRun to exec (may differ from ROOT_PATH)
 SQUASHFS_ROOT=""    # set when using an extracted AppImage
@@ -962,8 +962,8 @@ build_artifacts() {
     mkdir -p "$INSTALL_DIR"
 
     cp "$script_dir/libuprooted_profiler.so" "$INSTALL_DIR/"
-    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.dll" "$INSTALL_DIR/"
-    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.deps.json" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net9.0/UprootedHook.dll" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net9.0/UprootedHook.deps.json" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted-preload.js" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted.css" "$INSTALL_DIR/"
 

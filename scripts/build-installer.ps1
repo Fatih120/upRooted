@@ -74,8 +74,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$hookDll = Join-Path $HookProjectDir "bin\Release\net10.0\UprootedHook.dll"
-$hookDeps = Join-Path $HookProjectDir "bin\Release\net10.0\UprootedHook.deps.json"
+$hookDll = Join-Path $HookProjectDir "bin\Release\net9.0\UprootedHook.dll"
+$hookDeps = Join-Path $HookProjectDir "bin\Release\net9.0\UprootedHook.deps.json"
 
 if (-not (Test-Path $hookDll)) { Write-Err "UprootedHook.dll not found at $hookDll"; exit 1 }
 
@@ -85,7 +85,7 @@ if (Test-Path $hookDeps) {
 }
 
 # Stage DotNetBrowser JS scripts (injected into Chromium by the hook)
-$hookBinDir = Join-Path $HookProjectDir "bin\Release\net10.0"
+$hookBinDir = Join-Path $HookProjectDir "bin\Release\net9.0"
 foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
     $srcJs = Join-Path $hookBinDir $jsFile
     if (Test-Path $srcJs) {

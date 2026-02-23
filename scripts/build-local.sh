@@ -67,7 +67,7 @@ echo ""
 echo "[2/7] C# Hook: building..."
 dotnet build hook/UprootedHook.csproj -c Release 2>&1 | tail -3
 
-HOOK_OUT="hook/bin/Release/net10.0"
+HOOK_OUT="hook/bin/Release/net9.0"
 for f in UprootedHook.dll UprootedHook.deps.json nsfw-filter.js link-embeds.js; do
     [ -f "$HOOK_OUT/$f" ] || { echo "  ERROR: Missing $f"; exit 1; }
     echo "  $f  ($(wc -c < "$HOOK_OUT/$f") bytes)"

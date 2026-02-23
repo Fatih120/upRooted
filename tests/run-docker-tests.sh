@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run unit tests in an isolated Docker container (Linux/net10.0).
+# Run unit tests in an isolated Docker container (Linux/net9.0).
 # Outputs pass/fail to stdout and extracts coverage XML to tests/coverage/.
 set -euo pipefail
 

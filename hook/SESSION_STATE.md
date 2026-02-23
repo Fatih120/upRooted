@@ -1,6 +1,6 @@
 # Uprooted Hook - Session State (2026-02-23)
 
-## Release: v0.5.1-dev1
+## Release: v0.5.1-dev2
 
 ## Current State Summary
 
@@ -68,7 +68,7 @@ Infra: `tests/Dockerfile.unittest`, `tests/run-docker-tests.sh`, `tests/docker-i
 # Use deploy-hook.ps1 or manually:
 Stop-Process -Name Root,chromium -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 5
-Copy-Item -Force 'hook\bin\Release\net10.0\UprootedHook.dll' "$env:LOCALAPPDATA\Root\uprooted\UprootedHook.dll"
+Copy-Item -Force 'hook\bin\Release\net9.0\UprootedHook.dll' "$env:LOCALAPPDATA\Root\uprooted\UprootedHook.dll"
 # Then launch Root manually
 ```
 
