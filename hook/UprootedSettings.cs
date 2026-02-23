@@ -3,7 +3,7 @@ namespace Uprooted;
 internal class UprootedSettings
 {
     public bool Enabled { get; set; } = true;
-    public string Version { get; set; } = "0.5.0-rc";
+    public string Version { get; set; } = "0.5.0";
     public string ActiveTheme { get; set; } = "default-dark";
     public Dictionary<string, bool> Plugins { get; set; } = new(StringComparer.OrdinalIgnoreCase);
     public string CustomCss { get; set; } = "";
@@ -35,7 +35,7 @@ internal class UprootedSettings
     public bool AutoUpdateNotify { get; set; } = true;
     public string AutoUpdateChannel { get; set; } = "stable";
     public string LastUpdateCheck { get; set; } = "";
-    public string PendingUpdateVersion { get; set; } = "";
+    public string PendingUpdateVersion { get; set; } = "0.5.0";
     // SHA-256 of the last applied .uprpkg — used to detect same-version hotfixes
     public string LastPackageHash { get; set; } = "";
 

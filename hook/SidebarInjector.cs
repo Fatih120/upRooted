@@ -64,7 +64,7 @@ internal class SidebarInjector
     private object? _nativeFontFamily;                   // CircularXX TT font from native controls
 
     // Version box injection (grey box at bottom of sidebar)
-    private object? _versionTextBlock;                   // "Uprooted 0.5.0-rc" TextBlock in version box
+    private object? _versionTextBlock;                   // "Uprooted 0.5.0" TextBlock in version box
     private object? _versionContainer;                   // StackPanel containing version texts
     private object? _versionButton;                      // Button wrapping version box (Command cleared for intercept)
     private object? _versionButtonOriginalCommand;       // Saved Command for restore on cleanup
@@ -1461,7 +1461,7 @@ internal class SidebarInjector
     // ===== Version box injection =====
 
     /// <summary>
-    /// Inject "Uprooted 0.5.0-rc" into the grey version info box at the bottom of the sidebar.
+    /// Inject "Uprooted 0.5.0" into the grey version info box at the bottom of the sidebar.
     /// The box lives in SidebarGrid Row=1 and contains "Root Version: X.Y.Z" and "System Info: ...".
     /// </summary>
     private void InjectVersionText()
