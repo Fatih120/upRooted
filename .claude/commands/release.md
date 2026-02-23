@@ -116,20 +116,29 @@ Throughout this document, **CHANNELS**, **VERSION**, **BRANCH**, and **TARGET_RE
 
 1. **Discover git remote name** — run `git remote -v` and find the remote pointing to `uprooted-private.git`. Store as `REMOTE`. Do NOT assume the remote is named `origin` — it may be `private` or something else.
 
-2. **Switch to the correct branch** — if BRANCH is `dev` and we're not on `dev`, run `git checkout dev`. If BRANCH is `main` and we're not on `main`, run `git checkout main`.
+2. **Commit any uncommitted changes to dev first.** Run `git status` on whatever branch we're on. If there are uncommitted changes:
+   - Switch to `dev` if not already there: `git checkout dev`
+   - Stage and commit: `git add -A && git commit -m "chore: pre-release cleanup"`
+   - Push: `git push $REMOTE dev`
+   - This ensures dev is always the "working branch" and nothing is lost.
 
-3. Run `git pull $REMOTE $BRANCH` to ensure we have the latest.
+3. **Branch flow based on channels:**
 
-4. Run `git status` to check for uncommitted changes. If there are uncommitted changes:
-   - Show them to the user.
-   - Ask via `AskUserQuestion`: "There are uncommitted changes. How should we handle them?"
-     - **Abort** — stop the release, user deals with changes first
-     - **Continue anyway** — user confirms changes are expected (e.g., they're part of the release)
-   - If abort, stop entirely.
+   **If `canary` or `stable` is in CHANNELS (releasing FROM dev TO main):**
+   - Switch to dev: `git checkout dev && git pull $REMOTE dev`
+   - Switch to main: `git checkout main && git pull $REMOTE main`
+   - Merge dev into main: `git merge dev --no-edit`
+   - Push main: `git push $REMOTE main`
+   - Stay on main for the rest of the release (version bump, tag, build all happen on main)
+   - **After Phase 6 (tag + push):** switch back to dev and merge main into dev so dev stays ahead: `git checkout dev && git merge main --no-edit && git push $REMOTE dev`
 
-5. Run `git log --oneline -10` to confirm branch and see recent history.
+   **If ONLY `dev` is in CHANNELS (dev-only release):**
+   - Switch to dev: `git checkout dev && git pull $REMOTE dev`
+   - Stay on dev for the entire release.
 
-6. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const). This is the **previous version** (`PREV`). Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
+4. Run `git log --oneline -10` to confirm branch and see recent history.
+
+5. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const). This is the **previous version** (`PREV`). Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
 
 ---
 
@@ -450,12 +459,29 @@ git tag -a "v<version>" -m "Release v<version> (<channel> channel)"
 Use the `REMOTE` discovered in Phase 1 (not hardcoded `origin`):
 
 ```bash
-git push $REMOTE $BRANCH && git push $REMOTE --tags
+git push $REMOTE main && git push $REMOTE --tags
 ```
 
 If push fails (e.g., remote has new commits), **stop and report**. Do NOT force-push. The user must resolve manually (`git pull --rebase`, then re-push).
 
 **Note:** Per CLAUDE.md, never add `Co-Authored-By` trailers. The commit is authored by whoever `git config user.name`/`user.email` returns.
+
+### 6f. Sync dev branch (canary/stable releases only)
+
+If `canary` or `stable` is in CHANNELS, the release was committed on `main`. Now sync dev so it stays ahead:
+
+```bash
+git checkout dev
+git merge main --no-edit
+git push $REMOTE dev
+```
+
+This ensures:
+- `main` has the release tag and release commit
+- `dev` is at least even with main (and will diverge as new work is committed)
+- Future `/release canary` will merge dev→main again, bringing new work forward
+
+After this step, we remain on `dev` (the working branch).
 
 ---
 
@@ -468,10 +494,13 @@ Release v<version> (<channel>) shipped.
 
   Commit: <short hash>
   Tag:    v<version>
-  Branch: <BRANCH> -> $REMOTE/<BRANCH>
-  Target: <TARGET_REPO>
+  Released on: main
+  Dev synced:  dev merged main, pushed
 
-Proceeding to trigger and monitor CI builds...
+  Targets:
+    <list TARGET_REPOS>
+
+Proceeding to build and upload artifacts...
 ```
 
 ---
