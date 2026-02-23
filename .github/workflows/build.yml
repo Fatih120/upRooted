@@ -8,12 +8,12 @@ on:
         required: false
         default: ''
       platform:
-        description: 'Platform filter (blank = all)'
+        description: 'Platform filter (all = every platform)'
         required: false
-        default: ''
+        default: 'all'
         type: choice
         options:
-          - ''
+          - all
           - windows
           - linux
           - macos
@@ -25,7 +25,7 @@ on:
       platform:
         type: string
         required: false
-        default: ''
+        default: 'all'
     outputs:
       version:
         description: 'Resolved version string'
