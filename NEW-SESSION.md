@@ -135,4 +135,4 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 ---
 
-*Quick-start reference for Uprooted v0.5.0-rc. Last updated 2026-02-22.*
+*Quick-start reference for Uprooted v0.5.0-rc. Last updated 2026-02-23.*
