@@ -252,6 +252,45 @@ internal static class ContentPages
     }
 
     /// <summary>
+    /// Tag an icon subtree so both Foreground-based and Fill/Stroke-based vector icons
+    /// live-refresh with text color changes.
+    /// </summary>
+    private static void BindIconTreeToTextResource(AvaloniaReflection r, object? root, string resourceKey)
+    {
+        if (root == null) return;
+
+        void Visit(object node)
+        {
+            var tags = new List<string>();
+            var t = node.GetType();
+
+            if (t.GetProperty("Foreground") != null)
+            {
+                tags.Add($"dyn-fg:{resourceKey}");
+                r.BindToDynamicResource(node, "Foreground", resourceKey);
+            }
+            if (t.GetProperty("Fill") != null)
+            {
+                tags.Add($"dyn-fill:{resourceKey}");
+                r.BindToDynamicResource(node, "Fill", resourceKey);
+            }
+            if (t.GetProperty("Stroke") != null)
+            {
+                tags.Add($"dyn-st:{resourceKey}");
+                r.BindToDynamicResource(node, "Stroke", resourceKey);
+            }
+
+            if (tags.Count > 0)
+                r.SetTag(node, string.Join(",", tags));
+
+            foreach (var child in r.GetVisualChildren(node))
+                Visit(child);
+        }
+
+        Visit(root);
+    }
+
+    /// <summary>
     /// Create a Border tagged for automatic recoloring by the theme walker.
     /// Tag format: "dyn-bg:ResourceKey" — walker reads palette[ResourceKey] and sets Background.
     /// </summary>
@@ -1469,6 +1508,7 @@ internal static class ContentPages
                         var gearIcon = r.CreatePathIcon(GearIconPath, 14, TextMuted);
                         if (gearIcon != null)
                         {
+                            BindIconTreeToTextResource(r, gearIcon, "TextSecondary");
                             r.SetHorizontalAlignment(gearIcon, "Center");
                             r.SetVerticalAlignment(gearIcon, "Center");
                             r.SetBorderChild(gearBtn, gearIcon);
@@ -1503,6 +1543,7 @@ internal static class ContentPages
                         var infoIcon = r.CreatePathIcon(InfoIconPath, 14, TextMuted);
                         if (infoIcon != null)
                         {
+                            BindIconTreeToTextResource(r, infoIcon, "TextSecondary");
                             r.SetHorizontalAlignment(infoIcon, "Center");
                             r.SetVerticalAlignment(infoIcon, "Center");
                             r.SetBorderChild(infoBtn, infoIcon);
@@ -2137,28 +2178,33 @@ internal static class ContentPages
 		                }
 	                string RefreshBorder() => AdjustForHighlight(RefreshBaseBg(), 4);
 	                bool refreshHover = false;
-	                bool refreshPressed = false;
+	                System.Threading.Timer? refreshStyleTimer = null;
 	                void ApplyRefreshRest()
 	                {
 	                    r.SetBackground(refreshBtn, RefreshBaseBg());
-	                    r.SetOpacity(refreshBtn, 1.0);
 	                    SetBorderStroke(r, refreshBtn, RefreshBorder(), ThickBorder);
 	                }
 	                void ApplyRefreshHover()
 	                {
 	                    var baseBg = RefreshBaseBg();
 	                    r.SetBackground(refreshBtn, AdjustForHighlight(baseBg, 5));
-	                    r.SetOpacity(refreshBtn, 0.7);
-	                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(baseBg, 36), ThickBorder);
-	                }
-	                void ApplyRefreshPressed()
-	                {
-	                    var baseBg = RefreshBaseBg();
-	                    r.SetBackground(refreshBtn, AdjustForHighlight(baseBg, 5));
-	                    r.SetOpacity(refreshBtn, 0.5);
 	                    SetBorderStroke(r, refreshBtn, AdjustForHighlight(baseBg, 36), ThickBorder);
 	                }
 	                ApplyRefreshRest();
+	                // Keep border/background in sync during live custom-theme edits.
+	                // Without this, border color can lag until pointer re-entry.
+	                refreshStyleTimer = new System.Threading.Timer(_ =>
+	                {
+	                    r.RunOnUIThread(() =>
+	                    {
+	                        try
+	                        {
+	                            if (refreshHover) ApplyRefreshHover();
+	                            else ApplyRefreshRest();
+	                        }
+	                        catch { }
+	                    });
+	                }, null, 150, 150);
 
 	                r.SubscribeClickReleased(refreshBtn, () =>
 	                {
@@ -2167,6 +2213,15 @@ internal static class ContentPages
                         var active = settings.ActiveTheme;
                         if (string.IsNullOrWhiteSpace(active))
                             active = "default-dark";
+
+                        if (themeEngine != null)
+                        {
+                            var requested = themeEngine.GetCurrentRootRequestedVariant();
+                            var actual = themeEngine.GetCurrentRootVariant();
+                            var nativeRequested = themeEngine.GetNativeRootRequestedVariant();
+                            var nativeActual = themeEngine.GetNativeRootVariant();
+                            Logger.Log("Theme", $"Refresh click state: activeTheme={active}, requested={requested}, actual={actual}, nativeRequested={nativeRequested}, nativeActual={nativeActual}");
+                        }
 
                         if (themeEngine != null)
                         {
@@ -2201,39 +2256,24 @@ internal static class ContentPages
 	                    }
 	                    finally
 	                    {
-	                        // Ensure quick press+mouseleave cannot leave stale hover border.
-	                        if (refreshPressed) ApplyRefreshPressed();
-	                        else if (refreshHover) ApplyRefreshHover();
+	                        if (refreshHover) ApplyRefreshHover();
 	                        else ApplyRefreshRest();
 	                    }
 	                });
 	                r.SubscribeEvent(refreshBtn, "PointerEntered", () =>
 	                {
 	                    refreshHover = true;
-	                    if (!refreshPressed) ApplyRefreshHover();
+	                    ApplyRefreshHover();
 	                });
 	                r.SubscribeEvent(refreshBtn, "PointerExited", () =>
 	                {
 	                    refreshHover = false;
-	                    refreshPressed = false;
 	                    ApplyRefreshRest();
 	                });
-	                r.SubscribeEvent(refreshBtn, "PointerPressed", () =>
+	                r.SubscribeEvent(refreshBtn, "DetachedFromVisualTree", () =>
 	                {
-	                    refreshPressed = true;
-	                    ApplyRefreshPressed();
-	                });
-	                r.SubscribeEvent(refreshBtn, "PointerReleased", () =>
-	                {
-	                    refreshPressed = false;
-	                    if (refreshHover) ApplyRefreshHover();
-	                    else ApplyRefreshRest();
-	                });
-	                r.SubscribeEvent(refreshBtn, "PointerCaptureLost", () =>
-	                {
-	                    refreshHover = false;
-	                    refreshPressed = false;
-	                    ApplyRefreshRest();
+	                    try { refreshStyleTimer?.Dispose(); } catch { }
+	                    refreshStyleTimer = null;
 	                });
 
 	                r.AddChild(titleRow, refreshBtn);
@@ -3020,6 +3060,8 @@ internal static class ContentPages
                 if (ring != null)
                 {
                     SetBorderStroke(r, ring, TextWhite, ThinBorder);
+                    r.SetTag(ring, "dyn-bb:TextPrimary");
+                    r.BindToDynamicResource(ring, "BorderBrush", "TextPrimary");
                     r.AddChild(radioGrid, ring);
                 }
 
@@ -3030,7 +3072,15 @@ internal static class ContentPages
                     r.SetHeight(dot, 10);
                     r.SetHorizontalAlignment(dot, "Center");
                     r.SetVerticalAlignment(dot, "Center");
-                    r.SetTag(dot, "uprooted-radio-dot");
+                    if (isActive)
+                    {
+                        r.SetTag(dot, "dyn-bg:TextPrimary");
+                        r.BindToDynamicResource(dot, "Background", "TextPrimary");
+                    }
+                    else
+                    {
+                        r.SetTag(dot, "uprooted-radio-dot");
+                    }
                     r.AddChild(radioGrid, dot);
                 }
                 radioOuter = radioGrid;
@@ -3071,6 +3121,7 @@ internal static class ContentPages
         // Content host allows selected-state inner highlight + optional gear button.
         bool gearClicked = false;
         bool gearHovered = false;
+        bool suppressCardActivate = false;
         var contentHost = r.CreatePanel();
         if (contentHost != null)
         {
@@ -3108,6 +3159,7 @@ internal static class ContentPages
                     var gearIcon = r.CreatePathIcon(GearIconPath, 16, TextMuted);
                     if (gearIcon != null)
                     {
+                        BindIconTreeToTextResource(r, gearIcon, "TextSecondary");
                         r.SetHorizontalAlignment(gearIcon, "Center");
                         r.SetVerticalAlignment(gearIcon, "Center");
                         r.SetBorderChild(gearBtn, gearIcon);
@@ -3116,11 +3168,13 @@ internal static class ContentPages
                     var gearBtnRef = gearBtn;
                     r.SubscribeClickReleased(gearBtn, () =>
                     {
+                        suppressCardActivate = true;
                         gearClicked = true;
                         onSettings();
                     });
                     r.SubscribeEvent(gearBtn, "PointerPressed", () =>
                     {
+                        suppressCardActivate = true;
                         suppressNextCardPress = true;
                         ResetThemeCardPress();
                     });
@@ -3165,6 +3219,12 @@ internal static class ContentPages
         {
             try
             {
+                if (suppressCardActivate)
+                {
+                    suppressCardActivate = false;
+                    gearClicked = false;
+                    return;
+                }
                 if (gearClicked) { gearClicked = false; return; }
                 Logger.Log("Theme", "Theme card clicked: " + themeId);
                 if (themeEngine == null) return;

@@ -106,14 +106,14 @@ jobs:
           cp dist/uprooted.css installer/src-tauri/artifacts/
 
       - name: Build UprootedHook.dll
-        run: dotnet build hook/UprootedHook.csproj -c Release -o hook/_out
+        run: dotnet build hook/UprootedHook.csproj -c Release
 
       - name: Stage Hook DLL + deps + JS scripts
         run: |
-          cp hook/_out/UprootedHook.dll installer/src-tauri/artifacts/
-          cp hook/_out/UprootedHook.deps.json installer/src-tauri/artifacts/
+          cp hook/bin/Release/net10.0/UprootedHook.dll installer/src-tauri/artifacts/
+          cp hook/bin/Release/net10.0/UprootedHook.deps.json installer/src-tauri/artifacts/
           for js in nsfw-filter.js link-embeds.js; do
-            src="hook/_out/$js"
+            src="hook/bin/Release/net10.0/$js"
             if [ -f "$src" ]; then
               cp "$src" installer/src-tauri/artifacts/
               echo "  Staged $js"

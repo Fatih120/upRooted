@@ -1,0 +1,175 @@
+info: Program[0]
+      Starting application
+info: RootApp.Client.Domain.Helpers.ApplicationConfiguration.RootApplicationDirectories[0]
+      Using profile "default".
+info: RootApp.Client.Domain.Helpers.Images.Caching.FileCacheImplementation[654777071]
+      Using cache in "/home/redacted/.local/share/Root Communications/Root/profile/default/Cache"
+info: RootApp.Utility.RootAppService[1246790230]
+      Initializing RootAppService Root/0.9.93 (Production)...
+info: RootApp.Utility.RootAppService[364646695]
+      Runtime version 10.0.3
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[1676143469]
+      Checkpoint worker starting
+info: RootApp.Utility.RootAppService[773475469]
+      Built from 70e6c52f939f11919c057acc42d59714b031e266 on HEAD
+crit: RootApp.Utility.RootAppService[2104313715]
+      ***** String normalization is broken. (InvariantGlobalization switch: True) THIS CAN HAVE SECURITY IMPLICATIONS! *****
+info: RootApp.Utility.RootAppService[644309983]
+      RootApp: e0cc5cd on 2026-02-20T03:24:05.0000000+00:00 branch "main" (e0cc5cdc20a5f879f634048f519a7c9d130af11e)
+info: RootApp.Utility.RootAppService[456225608]
+      RootApp GitHub: Deployment True Ref "0.9.93" SHA 70e6c52f939f11919c057acc42d59714b031e266 Workflow "Publish Linux x64 & Arm64"/85 Run 22243217572/1
+info: RootApp.Utility.RootAppService[644309983]
+      RootApp: 73d215c on 2026-02-20T18:27:14.0000000+00:00 branch "main" (73d215c50a759ab057cf70e9a0e76547d9922806)
+info: RootApp.Utility.RootAppService[456225608]
+      RootApp GitHub: Deployment True Ref "0.9.93" SHA 70e6c52f939f11919c057acc42d59714b031e266 Workflow "Publish Linux x64 & Arm64"/85 Run 22243217572/1
+info: RootApp.Utility.RootAppService[644309983]
+      RootApp.Client: 0.9.93-0-g70e6c52f9 on 2026-02-20T22:08:36.0000000+00:00 branch "HEAD" (70e6c52f939f11919c057acc42d59714b031e266)
+info: RootApp.Utility.RootAppService[456225608]
+      RootApp.Client GitHub: Deployment True Ref "0.9.93" SHA 70e6c52f939f11919c057acc42d59714b031e266 Workflow "Publish Linux x64 & Arm64"/85 Run 22243217572/1
+info: RootApp.Client.Avalonia.DI.HostedServicesRunner[0]
+      Starting hosted services
+info: Microsoft.Hosting.Lifetime[0]
+      Application started. Press Ctrl+C to shut down.
+info: Microsoft.Hosting.Lifetime[0]
+      Hosting environment: Production
+info: Microsoft.Hosting.Lifetime[0]
+      Content root path: /tmp/.mount_Root.At5riON/usr/bin
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      ********* Primary Recovery Information ********
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      ******** HybridLog Checkpoint Info for cc6d1c77-02b8-4db6-b912-4d68a21220dd ********
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Version: 77
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Next Version: 78
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Is Snapshot?: False
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Flushed LogicalAddress: 0
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      SnapshotStart Flushed LogicalAddress: 0
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Start Logical Address: 30536
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Final Logical Address: 30536
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Snapshot Final Logical Address: 0
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Head Address: 20976
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Begin Address: 20976
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Delta Tail Address: -1
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Manual Locking Active: False
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Num sessions recovered: 0
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Recovered sessions: 
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      No index checkpoint found, recovering from beginning of log
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Recovery requires disk segments in range [0--0]
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Available segment range on device: [0---1]
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      ******* Recovered HybridLog Stats *******
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Head Address: 20976
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Safe Head Address: 20976
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      ReadOnly Address: 30536
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Safe ReadOnly Address: 30536
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[0]
+      Tail Address: 30536
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[835177689]
+      Taking checkpoint
+info: RootApp.Client.Avalonia.DI.HostedServicesRunner[0]
+      Hosted services waiting for stop request.
+info: RootApp.Browser.BrowserPool[0]
+      Browser pool: starting initial pre-warm
+info: RootApp.WebApi.Client.Shared.Implementations.ApiConnectionFactory[94390414]
+      Using API URL https://api.rootapp.com/
+info: RootApp.Client.Avalonia.App[0]
+      Initializing application
+info: RootApp.Client.Avalonia.App[0]
+      Starting Root/0.9.93 (Default/Production)
+info: RootApp.Client.Avalonia.App[0]
+      HEAD 70e6c52f939f11919c057acc42d59714b031e266
+info: RootApp.Client.Avalonia.App[0]
+      Services have started
+fail: RootApp.Client.Avalonia.App[0]
+      UI Thread Unhandled Exception
+      System.InvalidCastException: Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.
+         at RootApp.Browser.BrowserAppearanceHelper.<>c__DisplayClass0_0.<SetBrowserBackgroundColor>b__0()
+         at Avalonia.Threading.DispatcherOperation.InvokeCore()
+fail: Program[0]
+      Application failed
+      System.InvalidCastException: Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.
+         at RootApp.Browser.BrowserAppearanceHelper.<>c__DisplayClass0_0.<SetBrowserBackgroundColor>b__0()
+         at Avalonia.Threading.DispatcherOperation.InvokeCore()
+         at Avalonia.Threading.DispatcherOperation.Execute()
+         at Avalonia.Threading.Dispatcher.ExecuteJob(DispatcherOperation)
+         at Avalonia.Threading.Dispatcher.ExecuteJobsCore(Boolean)
+         at Avalonia.Threading.Dispatcher.OnOSTimer()
+         at Avalonia.X11.X11PlatformThreading.RunLoop(CancellationToken)
+         at Avalonia.Threading.DispatcherFrame.Run(IControlledDispatcherImpl)
+         at Avalonia.Threading.Dispatcher.PushFrame(DispatcherFrame)
+         at Avalonia.Threading.Dispatcher.MainLoop(CancellationToken)
+         at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.StartCore(String[])
+         at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.Start(String[])
+         at Avalonia.ClassicDesktopStyleApplicationLifetimeExtensions.StartWithClassicDesktopLifetime(AppBuilder, String[], Action`1 )
+         at Program.<>c__DisplayClass0_0.<<Main>$>b__1(AppCompositionRoot compositionRoot)
+         at RootApp.Client.Avalonia.RootLauncher.Run[T](String[], Func`2, Action`1)
+info: RootApp.Client.Avalonia.DI.HostedServicesRunner[0]
+      Stopping hosted services
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[335707914]
+      Checkpoint worker stopped
+info: RootApp.Utility.RootAppService[1770782293]
+      CPU Time: 00:00:06.5291230 User Time: 00:00:05.9664220 Privileged Time: 00:00:00.5633320
+info: RootApp.Utility.RootAppService[1248607761]
+      Started: 02/22/2026 18:25:02 Uptime: 00:00:06.1015667
+*** Unobserved task exception: System.AggregateException: A Task's exception(s) were not observed either by Waiting on the Task or accessing its Exception property. As a result, the unobserved exception was rethrown by the finalizer thread. (Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.)
+ ---> System.InvalidCastException: Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.
+   at RootApp.Browser.BrowserAppearanceHelper.<>c__DisplayClass0_0.<SetBrowserBackgroundColor>b__0()
+   at Avalonia.Threading.DispatcherOperation.InvokeCore()
+   at Avalonia.Threading.DispatcherOperation.Execute()
+   at Avalonia.Threading.Dispatcher.ExecuteJob(DispatcherOperation)
+   at Avalonia.Threading.Dispatcher.ExecuteJobsCore(Boolean)
+   at Avalonia.Threading.Dispatcher.OnOSTimer()
+   at Avalonia.X11.X11PlatformThreading.RunLoop(CancellationToken)
+   at Avalonia.Threading.DispatcherFrame.Run(IControlledDispatcherImpl)
+   at Avalonia.Threading.Dispatcher.PushFrame(DispatcherFrame)
+   at Avalonia.Threading.Dispatcher.MainLoop(CancellationToken)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.StartCore(String[])
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.Start(String[])
+   at Avalonia.ClassicDesktopStyleApplicationLifetimeExtensions.StartWithClassicDesktopLifetime(AppBuilder, String[], Action`1 )
+   at Program.<>c__DisplayClass0_0.<<Main>$>b__1(AppCompositionRoot compositionRoot)
+   at RootApp.Client.Avalonia.RootLauncher.Run[T](String[], Func`2, Action`1)
+   --- End of inner exception stack trace ---
+*** Unobserved task exception: System.AggregateException: A Task's exception(s) were not observed either by Waiting on the Task or accessing its Exception property. As a result, the unobserved exception was rethrown by the finalizer thread. (Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.)
+ ---> System.InvalidCastException: Unable to cast object of type 'Avalonia.Media.SolidColorBrush' to type 'Avalonia.Media.Immutable.ImmutableSolidColorBrush'.
+   at RootApp.Browser.BrowserAppearanceHelper.<>c__DisplayClass0_0.<SetBrowserBackgroundColor>b__0()
+   at Avalonia.Threading.DispatcherOperation.InvokeCore()
+   at Avalonia.Threading.DispatcherOperation.Execute()
+   at Avalonia.Threading.Dispatcher.ExecuteJob(DispatcherOperation)
+   at Avalonia.Threading.Dispatcher.ExecuteJobsCore(Boolean)
+   at Avalonia.Threading.Dispatcher.OnOSTimer()
+   at Avalonia.X11.X11PlatformThreading.RunLoop(CancellationToken)
+   at Avalonia.Threading.DispatcherFrame.Run(IControlledDispatcherImpl)
+   at Avalonia.Threading.Dispatcher.PushFrame(DispatcherFrame)
+   at Avalonia.Threading.Dispatcher.MainLoop(CancellationToken)
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.StartCore(String[])
+   at Avalonia.Controls.ApplicationLifetimes.ClassicDesktopStyleApplicationLifetime.Start(String[])
+   at Avalonia.ClassicDesktopStyleApplicationLifetimeExtensions.StartWithClassicDesktopLifetime(AppBuilder, String[], Action`1 )
+   at Program.<>c__DisplayClass0_0.<<Main>$>b__1(AppCompositionRoot compositionRoot)
+   at RootApp.Client.Avalonia.RootLauncher.Run[T](String[], Func`2, Action`1)
+   --- End of inner exception stack trace ---
+info: RootApp.Client.Domain.Helpers.Images.Caching.FasterProtobufStore[264430329]
+      Stop True: begin 30536 tail 40096 head 30536
+warn: Program[0]
+      Hosted services did not stop in time
+info: Program[0]
+      Application done.

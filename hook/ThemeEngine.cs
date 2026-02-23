@@ -136,6 +136,71 @@ internal class ThemeEngine
     }
 
     /// <summary>
+    /// Startup-only reconciliation pass for vector assets.
+    /// Ensures the active variant dictionary uses the SVG folder that matches
+    /// the currently active theme/background luminance.
+    /// </summary>
+    public void ReconcileStartupVectorAssets()
+    {
+        using var ev = WideEvent.Begin("Theme", "startup_svg_reconcile");
+        try
+        {
+            EnsureVariantDictResolved();
+            if (_activeVariantDict == null)
+            {
+                ev.Set("result", "no_variant_dict");
+                return;
+            }
+
+            Dictionary<string, string>? rootKeys = null;
+
+            string startupSvgMode = "auto";
+
+            if (_activeThemeName == "custom" &&
+                !string.IsNullOrWhiteSpace(_customAccent) &&
+                !string.IsNullOrWhiteSpace(_customBg) &&
+                ColorUtils.IsValidHex(_customAccent) &&
+                ColorUtils.IsValidHex(_customBg))
+            {
+                rootKeys = GenerateV2Palette(_customAccent, _customBg, null);
+            }
+            else if (!string.IsNullOrWhiteSpace(_activeThemeName) &&
+                     PresetThemes.TryGetValue(_activeThemeName, out var preset))
+            {
+                // Uprooted presets are currently dark-family themes; pin to dark SVG set.
+                startupSvgMode = "dark";
+                rootKeys = preset.RootKeys;
+            }
+            else
+            {
+                rootKeys = ReadLiveRootColors();
+            }
+
+            // Fallback: if we couldn't read colors, infer by active variant family.
+            if (rootKeys == null || rootKeys.Count == 0)
+            {
+                bool variantIsDark = (_r.GetActiveThemeVariant()?.ToString() ?? "Dark") != "Light";
+                rootKeys = new Dictionary<string, string>
+                {
+                    ["BackgroundPrimary"] = variantIsDark ? "#FF0D1521" : "#FFF4F4F4"
+                };
+            }
+
+            int swapped = SwapSvgPathsIfNeeded(rootKeys, startupSvgMode);
+            ev.Set("swapped", swapped);
+            if (swapped > 0)
+                ForceVectorRefreshPulse("startup_reconcile");
+
+            ev.Set("result", "ok");
+        }
+        catch (Exception ex)
+        {
+            ev.SetError(ex);
+            ev.Set("result", "error");
+        }
+    }
+
+    /// <summary>
     /// Read the current resolved values for Root's theme keys from ThemeDictionaries.
     /// If an Uprooted theme is active, returns our overridden values.
     /// If no Uprooted theme, returns Root's native values.
@@ -763,7 +828,10 @@ internal class ThemeEngine
         ev.Set("simple_keys", simpleThemeKeys.Count);
 
         // Revert any existing theme first
-        RevertTheme(forceNativeRefresh: false);
+        // Internal theme-to-theme transitions must not restore the original native
+        // snapshot variant (e.g. stale Light), otherwise dark->dark preset switches
+        // can bounce through Light and feel laggy.
+        RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
 
         // Subscribe to variant changes (once)
         SubscribeToVariantChanges();
@@ -776,7 +844,16 @@ internal class ThemeEngine
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
         OverrideThemeDictKeys(rootKeys);
-        SwapSvgPathsIfNeeded(rootKeys, themeName == "custom" ? _customSvgMode : "auto");
+        // Preset themes are currently dark-family; always reconcile to dark SVG set.
+        // Fast-path exits immediately when sentinels already match, so regular preset
+        // switches do not pay full scan cost unless a correction is actually needed.
+        string svgMode = themeName == "custom" ? _customSvgMode : "dark";
+        var svgSwapped = SwapSvgPathsIfNeeded(rootKeys, svgMode);
+        ev.Set("svg_swapped", svgSwapped);
+        // Pulse only when we actually touched SVG paths; avoid unnecessary variant
+        // churn on regular theme switches.
+        if (svgSwapped > 0)
+            ForceVectorRefreshPulse("apply_internal");
 
         // Phase 2: Override Styles[0].Resources with SimpleTheme keys
         var styleRes = _r.GetStyleResources(0);
@@ -980,6 +1057,25 @@ internal class ThemeEngine
                         return;
                     }
                     catch { }
+                }
+
+                // Root may expose dark-family resources under "Dark" even when requested
+                // variant is "PureDark". Prefer that mapping here instead of falling back
+                // to stale Actual=Light during immediate theme apply transitions.
+                if (requestedName.Equals("PureDark", StringComparison.OrdinalIgnoreCase))
+                {
+                    var darkKey = _r.FindVariantByName(_themeDicts, "Dark");
+                    if (darkKey != null)
+                    {
+                        _activeVariantKey = darkKey;
+                        try
+                        {
+                            _activeVariantDict = _themeDicts[darkKey];
+                            Logger.Log("Theme", "ThemeDictionaries resolved by dark-family fallback: PureDark -> Dark");
+                            return;
+                        }
+                        catch { }
+                    }
                 }
             }
         }
@@ -1193,22 +1289,42 @@ internal class ThemeEngine
     /// differs from what the active Root variant provides.
     /// E.g., Uprooted dark theme on Light variant → swap Light SVGs to Dark SVGs.
     /// </summary>
-    private void SwapSvgPathsIfNeeded(Dictionary<string, string> rootKeys, string svgMode = "auto")
+    private int SwapSvgPathsIfNeeded(Dictionary<string, string> rootKeys, string svgMode = "auto")
     {
-        if (_activeVariantDict == null) return;
+        if (_activeVariantDict == null) return 0;
 
-        // Determine what SVG set Root is currently providing vs what our theme needs
-        var currentFolder = GetCurrentVariantSvgFolder();
+        // Determine what SVG set our theme needs. We intentionally do NOT infer the
+        // current folder from variant name here, because Requested/Actual can lag and
+        // Root can momentarily serve opposite-folder paths during Light->dark transitions.
         bool needsDark;
         if (svgMode == "light") needsDark = false;
         else if (svgMode == "dark") needsDark = true;
         else needsDark = ThemeNeedsDarkSvgs(rootKeys);  // auto
         var neededFolder = needsDark ? DarkSvgFolder : LightSvgFolder;
+        var sourceFolder = needsDark ? LightSvgFolder : DarkSvgFolder;
 
-        // If current variant already uses the right SVG set, nothing to do
-        if (currentFolder == neededFolder) return;
+        // Fast path: only skip when ALL observed sentinels are already in target folder
+        // and NONE are in source folder. Avoid early-return on a single matching sentinel,
+        // which can leave mixed-folder SVG state behind during startup/theme churn.
+        bool sawSentinel = false;
+        bool sawSourceFolder = false;
+        bool sawNonTarget = false;
+        foreach (var sentinel in new[] { "AddReactionSVG", "SettingsSVG", "UserSVG", "SearchSVG" })
+        {
+            var resolved = _r.GetResolvedResource(_activeVariantDict, sentinel);
+            var path = resolved?.ToString();
+            if (string.IsNullOrWhiteSpace(path)) continue;
+            sawSentinel = true;
+            if (path.Contains(sourceFolder)) sawSourceFolder = true;
+            if (!path.Contains(neededFolder)) sawNonTarget = true;
+        }
+        if (sawSentinel && !sawSourceFolder && !sawNonTarget)
+        {
+            Logger.Log("Theme", "SVG swap fast-path hit (sentinels already in target folder)");
+            return 0;
+        }
 
-        Logger.Log("Theme", $"SVG swap: {currentFolder} → {neededFolder} (variant={_activeVariantKey}, needsDark={needsDark})");
+        Logger.Log("Theme", $"SVG swap: source={sourceFolder} target={neededFolder} (variant={_activeVariantKey}, needsDark={needsDark})");
 
         // SVG paths are direct entries on the variant dict (not in MergedDictionaries).
         // Root adds them via IDictionary.Add, not AddDeferred.
@@ -1217,17 +1333,42 @@ internal class ThemeEngine
 
         // Collect SVG entries first to avoid modifying dict during enumeration
         var svgEntries = new List<(string key, string path)>();
+        var seenKeys = new HashSet<string>(StringComparer.Ordinal);
         _r.EnumerateResources(_activeVariantDict, (key, value) =>
         {
             if (!key.EndsWith("SVG")) return;
             var path = value?.ToString();
-            if (path != null && path.Contains(currentFolder))
+            if (path != null && path.Contains(sourceFolder))
+            {
                 svgEntries.Add((key, path));
+                seenKeys.Add(key);
+            }
         });
+
+        // Root stores most theme SVG keys in merged dictionaries (Themes*.axaml).
+        // Scan those too and stage overrides into the active variant dict.
+        var merged = _r.GetMergedDictionaries(_activeVariantDict);
+        if (merged != null)
+        {
+            foreach (var dict in merged)
+            {
+                _r.EnumerateResources(dict, (key, value) =>
+                {
+                    if (!key.EndsWith("SVG")) return;
+                    if (seenKeys.Contains(key)) return;
+                    var path = value?.ToString();
+                    if (path != null && path.Contains(sourceFolder))
+                    {
+                        svgEntries.Add((key, path));
+                        seenKeys.Add(key);
+                    }
+                });
+            }
+        }
 
         foreach (var (key, path) in svgEntries)
         {
-            var newPath = path.Replace(currentFolder, neededFolder);
+            var newPath = path.Replace(sourceFolder, neededFolder);
             try
             {
                 _r.AddResource(_activeVariantDict, key, newPath);
@@ -1238,6 +1379,39 @@ internal class ThemeEngine
         }
 
         Logger.Log("Theme", $"SVG swap: {swapped} paths overridden");
+        return swapped;
+    }
+
+    /// <summary>
+    /// Force Avalonia to re-resolve DynamicResource-backed vector assets immediately.
+    /// This mirrors the known-good variant pulse used in revert flows.
+    /// </summary>
+    private void ForceVectorRefreshPulse(string source)
+    {
+        try
+        {
+            var requestedBefore = _r.GetRequestedThemeVariant();
+            var current = _r.GetActiveThemeVariant();
+            var opposite = _r.GetThemeVariantByName(
+                current?.ToString() == "Light" ? "Dark" : "Light");
+            if (current == null || opposite == null) return;
+
+            _switchingVariantForTheme = true;
+            try
+            {
+                _r.SetRequestedThemeVariant(opposite);
+                _r.SetRequestedThemeVariant(requestedBefore);
+                Logger.Log("Theme", $"Vector refresh pulse applied ({source})");
+            }
+            finally
+            {
+                _switchingVariantForTheme = false;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Theme", $"Vector refresh pulse error ({source}): {ex.Message}");
+        }
     }
 
 

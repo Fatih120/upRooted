@@ -946,7 +946,7 @@ build_artifacts() {
 
     # Build Hook DLL
     log "Building UprootedHook.dll..."
-    if ! dotnet build "$script_dir/hook" -c Release -o "$script_dir/hook/_out"; then
+    if ! dotnet build "$script_dir/hook/UprootedHook.csproj" -c Release; then
         error "Hook DLL build failed."
         return 1
     fi
@@ -962,8 +962,8 @@ build_artifacts() {
     mkdir -p "$INSTALL_DIR"
 
     cp "$script_dir/libuprooted_profiler.so" "$INSTALL_DIR/"
-    cp "$script_dir/hook/_out/UprootedHook.dll" "$INSTALL_DIR/"
-    cp "$script_dir/hook/_out/UprootedHook.deps.json" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.dll" "$INSTALL_DIR/"
+    cp "$script_dir/hook/bin/Release/net10.0/UprootedHook.deps.json" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted-preload.js" "$INSTALL_DIR/"
     cp "$script_dir/dist/uprooted.css" "$INSTALL_DIR/"
 

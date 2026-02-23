@@ -76,7 +76,7 @@ if ($missing.Count -gt 0) {
     Write-Host "Build all artifacts first:" -ForegroundColor Yellow
     Write-Host "  cd $ToolsDir" -ForegroundColor Yellow
     Write-Host "  build_launcher.cmd" -ForegroundColor Yellow
-    Write-Host "  cd $RepoRoot\hook && dotnet build -c Release" -ForegroundColor Yellow
+    Write-Host "  dotnet build $RepoRoot\hook\UprootedHook.csproj -c Release" -ForegroundColor Yellow
     exit 1
 }
 Write-OK "All artifacts found"

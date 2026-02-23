@@ -1,0 +1,109 @@
+
+
+
+[18:25:02.964] [Entry] === ModuleInitializer triggered ===
+[18:25:03.059] [Settings] Loaded settings from /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-settings.ini: ActiveTheme=cosmic-smoothie
+[18:25:03.059] [Startup] ========================================
+[18:25:03.059] [Startup] === Uprooted Hook v0.4.2 Loaded ===
+[18:25:03.059] [Startup] ========================================
+[18:25:03.059] [Startup] Process: /tmp/.mount_Root.At5riON/usr/bin/Root
+[18:25:03.060] [Startup] PID: 226310
+[18:25:03.061] [Startup] .NET: 10.0.3
+[18:25:03.061] [Startup] Log file: /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-hook.log
+[18:25:03.061] [Startup] Phase 0: Verifying HTML patches...
+[18:25:03.109] [Startup] Phase 0 non-fatal error: Method not found: 'System.String[] System.IO.Directory.GetDirectories(System.String)'.
+[18:25:03.110] [Startup] Phase 1: Waiting for Avalonia assemblies...
+[18:25:03.115] [Startup] Phase 1 OK: Avalonia assemblies loaded
+[18:25:03.185] [Reflection] Scanned Avalonia assemblies, found 2219 types
+[18:25:03.189] [Reflection]   DesktopLifetime: OK
+[18:25:03.189] [Reflection]   VisualExtensions: OK
+[18:25:03.189] [Reflection]   ToggleSwitch: OK
+[18:25:03.189] [Reflection]   Ellipse: Avalonia.Controls.Shapes.Ellipse
+[18:25:03.189] [Reflection]   Visual: Avalonia.Visual
+[18:25:03.189] [Reflection]   Image: OK
+[18:25:03.190] [Reflection]   Bitmap: OK
+[18:25:03.190] [Reflection]   Stretch: OK
+[18:25:03.190] [Reflection]   OverlayLayer: OK
+[18:25:03.190] [Reflection]   Canvas: OK
+[18:25:03.212] [Reflection]   Dispatcher.Post: Post(2)
+[18:25:03.220] [Reflection]   TranslatePoint: walking all Avalonia types...
+[18:25:03.237] [Reflection]   TranslatePoint found: Avalonia.VisualExtensions.TranslatePoint(3 params, static=True)
+[18:25:03.249] [Reflection]   ResourceDictionary: OK
+[18:25:03.249] [Reflection]   IResourceDictionary: OK
+[18:25:03.250] [Reflection]   App.Resources: OK
+[18:25:03.250] [Reflection]   OverlayLayer.GetOverlayLayer: OK
+[18:25:03.250] [Reflection]   Canvas.SetLeft: OK
+[18:25:03.250] [Reflection]   Layoutable.Bounds: OK
+[18:25:03.250] [Reflection]   TranslatePoint: OK (static, VisualExtensions.TranslatePoint(3 params))
+[18:25:03.250] [Reflection] Resolved: True (App=True, Dispatcher=True, Control=True, Panel=True, TextBlock=True)
+[18:25:03.250] [Startup] Phase 2: Waiting for Application.Current...
+[18:25:05.757] [Startup] Phase 2 OK: Application.Current is set
+[18:25:05.757] [Startup] Phase 3: Waiting for MainWindow...
+[18:25:06.258] [Startup] Phase 3 OK: MainWindow = RootApp.Client.Avalonia.UI.Main.MainWindow
+[18:25:06.258] [Startup] Phase 3.5: Initializing theme engine
+[18:25:06.258] [Theme] ThemeEngine v2 initialized (resource-first + OKLCH)
+[18:25:06.259] [Startup] Phase 4: Starting settings page monitor
+[18:25:06.260] [Injector] Starting settings page monitor (direct injection mode)
+[18:25:06.275] [Startup] ========================================
+[18:25:06.275] [Startup] === Uprooted Hook Ready ===
+[18:25:06.275] [Startup] ========================================
+[18:25:06.276] [Startup] Phase 4.5c: Message logger disabled, skipping
+[18:25:06.295] [Startup] Phase 4.5g: NSFW filter disabled or no API key, skipping
+[18:25:06.296] [Startup] Phase 4.5h: Rootcord disabled, dormant instance created
+[18:25:06.401] [Startup] Applying saved theme: cosmic-smoothie
+[18:25:06.404] [Theme] Applying theme: cosmic-smoothie (36 root keys, 8 simple keys)
+[18:25:06.411] [Reflection] Set RequestedThemeVariant -> Light
+[18:25:06.412] [Reflection] Set RequestedThemeVariant -> Dark
+[18:25:06.412] [Theme] Variant toggled to force DynamicResource re-resolution
+[18:25:06.417] [Theme] ReadLiveRootColors: 20 keys read (variant=Dark)
+[18:25:06.484] [Theme] Theme reverted — DynamicResource bindings auto-propagate
+[18:25:06.485] [Theme] Subscribed to ActualThemeVariantChanged
+[18:25:06.487] [Theme] Variant Dark matches theme brightness (dark=True), no switch
+[18:25:06.489] [Theme] Active variant: Dark
+[18:25:06.489] [Theme] ThemeDictionaries[Dark] resolved directly
+[18:25:06.511] [Reflection] LinearGradientBrush: start=True end=True method=ctor
+[18:25:06.513] [Theme] ThemeDictionaries: 1 semantic keys preserved
+[18:25:06.513] [Theme] ThemeDictionaries: 35 keys overridden
+[18:25:06.515] [Theme] Styles[0]: 8 overrides applied
+[18:25:06.579] [Theme] Theme applied: cosmic-smoothie (35 ThemeDict + 8 Style)
+[18:25:08.161] [Startup] Phase 5: Waiting for DotNetBrowser assemblies...
+[18:25:08.161] [Startup] Phase 5: DotNetBrowser assemblies loaded
+[18:25:08.195] [DotNetBrowser] Scanned DotNetBrowser assemblies, found 2657 types
+[18:25:08.424] [DotNetBrowser]   BrowserView: MISSING
+[18:25:08.424] [DotNetBrowser]   IBrowser: DotNetBrowser.Browser.IBrowser
+[18:25:08.424] [DotNetBrowser]   IFrame: DotNetBrowser.Frames.IFrame
+[18:25:08.425] [DotNetBrowser]   IBrowser.MainFrame returns: DotNetBrowser.Frames.IFrame
+[18:25:08.427] [DotNetBrowser]   IFrame method: Execute(EditorCommand command) -> Boolean
+[18:25:08.427] [DotNetBrowser]   IFrame method: ExecuteJavaScript<1 generic>(String javaScript, Boolean userGesture) -> Task`1
+[18:25:08.427] [DotNetBrowser]   IFrame method: ExecuteJavaScript(String javaScript, Boolean userGesture) -> Task`1
+[18:25:08.428] [DotNetBrowser]   BrowserView.Browser: MISSING
+[18:25:08.428] [DotNetBrowser]   IBrowser.MainFrame: OK
+[18:25:08.428] [DotNetBrowser]   ExecuteJavaScript: OK (IFrame.ExecuteJavaScript)
+[18:25:08.428] [DotNetBrowser] Resolved: True (BrowserView=False, IBrowser=True, IFrame=True, ExecJS=True)
+[18:25:12.160] [Startup] Phase 4.5d: Starting auto-updater...
+[18:25:12.161] [AutoUpdate] Auto-check disabled, skipping periodic timer
+[18:25:12.161] [Startup] Phase 4.5d OK: Auto-updater initialized
+[18:25:13.160] [Startup] Phase 4.5e: Starting profile badge injector (dev channel)...
+[18:25:13.160] [ProfileBadge] Starting profile popup monitor (overlay events + 500ms fallback poll)
+[18:25:13.160] [Startup] Phase 4.5e OK: Profile badge injector active
+[18:25:16.276] [Startup] Phase 4.5: Running browser discovery scan...
+[18:25:20.160] [Startup] Phase 4.5f: Starting silent typing engine...
+[18:25:20.161] [SilentTyping] Silent typing blocker active (DiagnosticListener)
+[18:25:20.161] [Startup] Phase 4.5f OK: Silent typing engine started
+[18:25:20.276] [Startup] Phase 4.5a: Starting ClearURLs engine...
+[18:25:20.277] [ClearUrls] Starting ClearURLs engine (KeyDown intercept on AvaloniaEdit.TextEditor)
+[18:25:20.286] [ClearUrls] Resolved OK: TextArea=True, AddHandler=True
+[18:25:20.286] [ClearUrls] Discovery timer started (2000ms interval)
+[18:25:20.286] [Startup] Phase 4.5a OK: ClearURLs active
+[18:25:20.286] [Settings] Loaded settings from /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-settings.ini: ActiveTheme=cosmic-smoothie
+[18:25:21.277] [Startup] Phase 4.5b: Starting native link embed engine...
+[18:25:21.277] [LinkEmbed] Starting native link embed engine
+[18:25:21.280] [LinkEmbed] HttpClient available methods: DeleteAsync(2), GetAsync(1), GetAsync(2), GetAsync(3), GetStreamAsync(1), GetStreamAsync(2), GetStringAsync(1), GetStringAsync(2), PostAsync(3), Send(1), Send(2), Send(3), SendAsync(1), SendAsync(2), SendAsync(3), get_DefaultRequestHeaders(0), get_DefaultRequestVersion(0), get_DefaultVersionPolicy(0), get_MaxResponseContentBufferSize(0), get_Timeout(0), set_BaseAddress(1), set_DefaultRequestVersion(1), set_DefaultVersionPolicy(1), set_MaxResponseContentBufferSize(1), set_Timeout(1)
+[18:25:21.280] [LinkEmbed] HTTP resolved: client=True, GetStringAsync=True, GetByteArrayAsync=False, GetAsync=True, SendAsync=True, HttpRequestMessage=True, HttpMethod.Get=True
+[18:25:21.280] [LinkEmbed] Scan timer started (500ms interval)
+[18:25:21.280] [Startup] Phase 4.5b OK: Native link embeds active
+[18:25:23.428] [Startup] Phase 5: IBrowser not found (attempt 1/6), retrying in 5s...
+[18:25:31.782] [Settings] Loaded settings from /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-settings.ini: ActiveTheme=cosmic-smoothie
+[18:25:42.281] [Settings] Loaded settings from /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-settings.ini: ActiveTheme=cosmic-smoothie
+[18:25:43.429] [Startup] Phase 5: IBrowser not found (attempt 2/6), retrying in 5s...
+[18:25:52.781] [Settings] Loaded settings from /home/redacted/.local/share/Root Communications/Root/profile/default/uprooted-settings.ini: ActiveTheme=cosmic-smoothie

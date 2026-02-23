@@ -846,6 +846,7 @@ internal class SidebarInjector
                 if (!_r.IsTextBlock(node)) continue;
 
                 string? key = null;
+                bool isStatusLabel = false;
                 var text = _r.GetText(node)?.Trim();
                 var fs = _r.GetFontSize(node);
 
@@ -854,6 +855,7 @@ internal class SidebarInjector
                 if (!string.IsNullOrEmpty(text) && IsProfileStatusLabel(text))
                 {
                     key = "TextSecondary";
+                    isStatusLabel = true;
                 }
                 else if (fs is 14.0)
                 {
@@ -882,6 +884,12 @@ internal class SidebarInjector
 
                 if (needsTagUpdate || forceRebind)
                     _r.BindToDynamicResource(node, "Foreground", key);
+
+                // Profile status text ("Online", etc.) uses converter-driven brushes that
+                // can drift during live preview. Force DynamicResource path every pass so it
+                // follows the same update mechanism as other sidebar text.
+                if (isStatusLabel)
+                    _r.BindToDynamicResource(node, "Foreground", "TextSecondary");
 
                 if (key == "TextTertiary") headerCount++;
                 else if (key == "TextSecondary") statusCount++;
@@ -1020,7 +1028,6 @@ internal class SidebarInjector
         _r.SetHeight(outerPanel, 40); // Match native ListBoxItem height exactly
         _r.SetBackground(outerPanel, "#00000000"); // Transparent BG required for hit-testing (pointer events)
         object? highlight = null;
-        var hoverBgColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
 
         // Inner panel with vertical spacing matching native ListBoxItem
         var innerPanel = _r.CreatePanel();
@@ -1074,6 +1081,7 @@ internal class SidebarInjector
             {
                 if (_activePage != pageName && highlight != null)
                 {
+                    var hoverBgColor = _themeEngine.ReadLiveRootColor("HighlightLight") ?? "#0Dffffff";
                     _r.SetBackground(highlight, hoverBgColor);
                 }
             });

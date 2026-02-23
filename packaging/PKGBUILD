@@ -19,7 +19,7 @@ build() {
     pnpm build
 
     # Build Hook DLL
-    dotnet build hook -c Release -o hook/_out
+    dotnet build hook/UprootedHook.csproj -c Release
 
     # Build profiler shared library
     gcc -shared -fPIC -O2 -o libuprooted_profiler.so tools/uprooted_profiler_linux.c
@@ -32,8 +32,8 @@ package() {
     install -Dm755 libuprooted_profiler.so "$pkgdir/usr/lib/uprooted/libuprooted_profiler.so"
 
     # Install hook DLL and deps
-    install -Dm644 hook/_out/UprootedHook.dll "$pkgdir/usr/lib/uprooted/UprootedHook.dll"
-    install -Dm644 hook/_out/UprootedHook.deps.json "$pkgdir/usr/lib/uprooted/UprootedHook.deps.json"
+    install -Dm644 hook/bin/Release/net10.0/UprootedHook.dll "$pkgdir/usr/lib/uprooted/UprootedHook.dll"
+    install -Dm644 hook/bin/Release/net10.0/UprootedHook.deps.json "$pkgdir/usr/lib/uprooted/UprootedHook.deps.json"
 
     # Install JS + CSS
     install -Dm644 dist/uprooted-preload.js "$pkgdir/usr/lib/uprooted/uprooted-preload.js"

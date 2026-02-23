@@ -194,11 +194,11 @@ and prevent reverse engineering:
 - **Release** (`-c Release`): Optimized, stripped. Always use Release for
   the installer pipeline and distribution.
 
-In CI, the `-o hook/_out` flag is used to place output in a flat directory
-for easier staging:
+In CI, build the explicit hook project so the Release obfuscation pipeline
+runs consistently:
 
 ```bash
-dotnet build hook -c Release -o hook/_out
+dotnet build hook/UprootedHook.csproj -c Release
 ```
 
 ---
@@ -570,7 +570,7 @@ shortcuts.
 2. `pnpm build` (TypeScript)
 3. Stage `uprooted-preload.js`, `uprooted.css`, `nsfw-filter.js`, and
    `link-embeds.js` to artifacts dir
-4. `dotnet build hook -c Release -o hook/_out`
+4. `dotnet build hook/UprootedHook.csproj -c Release`
 5. Stage `UprootedHook.dll` + `UprootedHook.deps.json`
 6. `cl.exe /LD /O2 /GS- ... /DEBUG:NONE /OPT:REF /OPT:ICF` (profiler DLL)
 7. Verify all 7 artifacts present and non-empty

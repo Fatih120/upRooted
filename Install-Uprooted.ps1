@@ -23,6 +23,7 @@ $ErrorActionPreference = "Stop"
 
 $RootExePath = Join-Path $env:LOCALAPPDATA "Root\current\Root.exe"
 $HookProjectDir = Join-Path $PSScriptRoot "hook"
+$HookProjectFile = Join-Path $HookProjectDir "UprootedHook.csproj"
 $ToolsDir = Join-Path $PSScriptRoot "tools"
 $InstallDir = Join-Path $env:LOCALAPPDATA "Root\uprooted"
 $DllName = "UprootedHook.dll"
@@ -155,12 +156,12 @@ if ($Method -eq "StartupHooks") {
 # Step 4: Build the hook DLL
 Write-Step "Building UprootedHook.dll..."
 
-if (-not (Test-Path $HookProjectDir)) {
-    Write-Err "Hook project not found at: $HookProjectDir"
+if (-not (Test-Path $HookProjectFile)) {
+    Write-Err "Hook project not found at: $HookProjectFile"
     exit 1
 }
 
-$buildResult = & dotnet build $HookProjectDir -c Release 2>&1
+$buildResult = & dotnet build $HookProjectFile -c Release 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Err "Build failed:"
     $buildResult | ForEach-Object { Write-Host "  $_" }

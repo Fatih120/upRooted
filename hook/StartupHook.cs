@@ -201,6 +201,7 @@ internal class StartupHook
                     }
 
                     themeEngine.EnsureVariantChangeSubscribed();
+                    themeEngine.ReconcileStartupVectorAssets();
 
                     if (!string.IsNullOrEmpty(savedSettings.CustomPingColor) && ColorUtils.IsValidHex(savedSettings.CustomPingColor))
                     {

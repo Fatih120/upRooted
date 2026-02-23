@@ -15,6 +15,7 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Split-Path $PSScriptRoot -Parent
 $ArtifactsDir = Join-Path $RepoRoot "installer\src-tauri\artifacts"
 $HookProjectDir = Join-Path $RepoRoot "hook"
+$HookProjectFile = Join-Path $HookProjectDir "UprootedHook.csproj"
 $ToolsDir = Join-Path $RepoRoot "tools"
 $InstallerDir = Join-Path $RepoRoot "installer"
 
@@ -66,7 +67,7 @@ try {
 
 # Step 2: Build C# hook DLL
 Write-Step "Building UprootedHook.dll (dotnet build)..."
-$buildResult = & dotnet build $HookProjectDir -c Release 2>&1
+$buildResult = & dotnet build $HookProjectFile -c Release 2>&1
 if ($LASTEXITCODE -ne 0) {
     Write-Err "dotnet build failed:"
     $buildResult | ForEach-Object { Write-Host "  $_" }
