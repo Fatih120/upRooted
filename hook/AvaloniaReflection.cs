@@ -995,7 +995,7 @@ internal class AvaloniaReflection
         EnsureBindingPriorityResolved();
 
         // Ensure the 3-param SetValue method is cached
-        if (_setValueWithPriority == null && _bindingPriorityStyle != null)
+        if (_setValueWithPriority == null && _bindingPriorityLocal != null)
         {
             var methods = control.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
                 .Where(m => m.Name == "SetValue" && !m.IsGenericMethod && m.GetParameters().Length == 3);
@@ -1011,13 +1011,13 @@ internal class AvaloniaReflection
             }
         }
 
-        if (_setValueWithPriority != null && _bindingPriorityStyle != null)
+        if (_setValueWithPriority != null && _bindingPriorityLocal != null)
         {
-            _setValueWithPriority.Invoke(control, new[] { avProp, value, _bindingPriorityStyle });
+            _setValueWithPriority.Invoke(control, new[] { avProp, value, _bindingPriorityLocal });
         }
         else
         {
-            Logger.Log("Reflection", $"SetAvaloniaProperty FAILED: method={_setValueWithPriority != null} priority={_bindingPriorityStyle != null} field={avaloniaPropertyField.Name}");
+            Logger.Log("Reflection", $"SetAvaloniaProperty FAILED: method={_setValueWithPriority != null} priority={_bindingPriorityLocal != null} field={avaloniaPropertyField.Name}");
         }
     }
 
@@ -1031,7 +1031,7 @@ internal class AvaloniaReflection
             var bpType = asm.GetType("Avalonia.Data.BindingPriority");
             if (bpType != null)
             {
-                _bindingPriorityStyle = Enum.ToObject(bpType, 0); // LocalValue = 0
+                _bindingPriorityLocal = Enum.ToObject(bpType, 0); // LocalValue = 0
                 break;
             }
         }
@@ -1738,22 +1738,22 @@ internal class AvaloniaReflection
     // ===== SetValue with BindingPriority =====
 
     private System.Reflection.MethodInfo? _setValueWithPriority;
-    private object? _bindingPriorityStyle;
+    private object? _bindingPriorityLocal;
     private bool _priorityResolved;
 
     /// <summary>
-    /// Set an Avalonia property value at Style priority (lower than LocalValue).
-    /// This allows hover/pressed style triggers to override our value,
-    /// then revert back to our themed value when the trigger deactivates.
+    /// Set an Avalonia property value at LocalValue priority (BindingPriority = 0).
+    /// Note: despite the original name "SetValueStylePriority", the enum value 0
+    /// maps to BindingPriority.LocalValue, not Style. Renamed for accuracy.
     /// propertyFieldName is the static field name (e.g. "BackgroundProperty").
     /// Returns true if successful, false if fallback to CLR SetValue is needed.
     /// </summary>
-    public bool SetValueStylePriority(object control, string propertyFieldName, object? value)
+    public bool SetValueLocalPriority(object control, string propertyFieldName, object? value)
     {
         try
         {
             EnsureBindingPriorityResolved();
-            if (_bindingPriorityStyle == null) return false;
+            if (_bindingPriorityLocal == null) return false;
 
             // Find the static AvaloniaProperty field
             var field = control.GetType().GetField(propertyFieldName,
@@ -1782,7 +1782,7 @@ internal class AvaloniaReflection
 
             if (_setValueWithPriority != null)
             {
-                _setValueWithPriority.Invoke(control, new[] { avaloniaProperty, value, _bindingPriorityStyle });
+                _setValueWithPriority.Invoke(control, new[] { avaloniaProperty, value, _bindingPriorityLocal });
                 return true;
             }
 

@@ -41,6 +41,10 @@ internal class ThemeEngine
     // GetProperty("Foreground") for them on every subsequent node (reflection is slow).
     private readonly HashSet<Type> _noForegroundTypes = new();
 
+    // WeakReference list of dyn-tagged controls discovered by the walker.
+    // During live preview, iterate this list directly instead of full tree walks.
+    private readonly List<WeakReference<object>> _dynTaggedControls = new();
+
     // Cached MethodInfo for Application.TryGetResource(object, ThemeVariant?, out object?)
     private System.Reflection.MethodInfo? _tryGetResourceMethod;
 
@@ -67,6 +71,26 @@ internal class ThemeEngine
     private const string DefaultCardBg = "#FF0F1923";
     private const string DefaultCardBorder = "#19F2F2F2";
     private const string DefaultAccentGreen = "#FF3B6AF8";
+
+    // Reverse lookup: Root's known text ARGB values → palette key name.
+    // Used by the bind-once walker to convert untagged controls to DynamicResource bindings.
+    private static readonly Dictionary<string, string> ColorToPaletteKey = new(StringComparer.OrdinalIgnoreCase)
+    {
+        // Dark/PureDark text
+        ["#FFF2F2F2"] = "TextPrimary",
+        ["#A3F2F2F2"] = "TextSecondary",
+        ["#66F2F2F2"] = "TextTertiary",
+        ["#FFE8E8E8"] = "TextPrimary",
+        ["#FFEAEAEA"] = "TextPrimary",
+        ["#FFE0E0E0"] = "TextPrimary",
+        // Light text
+        ["#FF131313"] = "TextPrimary",
+        ["#FF282828"] = "TextSecondary",
+        ["#FF5E5E5E"] = "TextTertiary",
+        ["#FF1A1A1A"] = "TextPrimary",
+        ["#FF333333"] = "TextSecondary",
+        ["#FF000000"] = "TextPrimary",
+    };
 
     // Cached reference to the variant dict we're overriding
     private IDictionary? _themeDicts;
@@ -522,10 +546,13 @@ internal class ThemeEngine
         // Update Styles[0].Resources
         OverrideSimpleThemeKeys(simpleKeys);
 
-        // Walk injected controls to recolor with new palette values.
-        // BuildTreeColorMap reads ContentPages statics (current on-screen colors)
-        // and maps them to the new palette. Walk BEFORE updating statics.
-        // Throttled: walk every 100ms max (vs 16ms dict updates).
+        // Fast path: update only known dyn-tagged controls (O(~16) vs O(500+) tree walk).
+        // ThemeDictionary updates handle DynamicResource-bound controls instantly.
+        // Full tree walk still fires on non-live paths (ScheduleWalkBurst, delayed walk).
+        int dynUpdated = UpdateDynTaggedControlsFromPalette(_customPalette);
+        ev.Set("dyn_updated", dynUpdated);
+
+        // Full tree walk throttled to 100ms — discovers new controls + populates WeakRef list
         long walkNow = Environment.TickCount64;
         bool walked = false;
         if (walkNow - _lastLiveWalkTick >= 100)
@@ -600,6 +627,7 @@ internal class ThemeEngine
             catch { }
         }
         _walkerRecolored.Clear();
+        _dynTaggedControls.Clear();
         ev.Set("walker_cleared", walkerCleared);
 
         // Phase 3: Restore default DWM title bar
@@ -687,6 +715,39 @@ internal class ThemeEngine
         _walkedCardBg = DefaultCardBg;
         _walkedBorder = DefaultCardBorder;
         _walkedAccent = DefaultAccentGreen;
+    }
+
+    /// <summary>
+    /// Lightweight prep for theme-to-theme transitions (no flash of Root defaults).
+    /// Only removes stale ThemeDictionary COLOR keys not present in the new theme.
+    /// SVG keys are managed by SwapSvgPathsIfNeeded. Style originals are cleared
+    /// (not restored) so Phase 2 can re-save fresh originals for the new theme.
+    /// </summary>
+    private void PrepareForNewTheme(Dictionary<string, string> newRootKeys)
+    {
+        // 1. Dispose walk timer — new theme schedules its own
+        _walkTimer?.Dispose();
+        _walkTimer = null;
+
+        // 2. Remove stale ThemeDictionary keys (in old theme but not new).
+        //    SVG keys (ending "SVG") are managed by SwapSvgPathsIfNeeded — skip them.
+        //    Keys present in both themes are overwritten in-place by OverrideThemeDictKeys.
+        var staleColorKeys = _overriddenThemeDictKeys
+            .Where(k => !k.EndsWith("SVG") && !newRootKeys.ContainsKey(k))
+            .ToList();
+        foreach (var key in staleColorKeys)
+            RemoveThemeDictKey(key);
+        if (staleColorKeys.Count > 0)
+            Logger.Log("Theme", "PrepareForNewTheme: removed " + staleColorKeys.Count + " stale color keys");
+
+        // 3. Clear Style originals tracking — Phase 2 will re-save for the new theme.
+        //    Do NOT restore to Root defaults (that causes the flash we're avoiding).
+        _savedStyleOriginals.Clear();
+        _addedStyleKeys.Clear();
+
+        // 4. Reset active theme name so ApplyThemeInternal sets it fresh
+        _activeThemeName = null;
+        _customPalette = null;
     }
 
     /// <summary>Set a custom ping/reply highlight color.</summary>
@@ -790,6 +851,16 @@ internal class ThemeEngine
         return DefaultDarkBg;
     }
 
+    /// <summary>
+    /// Register a dyn-tagged control for fast live-preview updates.
+    /// Call this when creating controls with dyn-* tags outside of the walker,
+    /// so UpdateDynTaggedControlsFromPalette can update them at 16ms intervals.
+    /// </summary>
+    public void RegisterDynTaggedControl(object control)
+    {
+        _dynTaggedControls.Add(new WeakReference<object>(control));
+    }
+
     /// <summary>Run a visual tree walk immediately (for SidebarInjector).</summary>
     public void WalkVisualTreeNow()
     {
@@ -827,11 +898,12 @@ internal class ThemeEngine
         ev.Set("root_keys", rootKeys.Count);
         ev.Set("simple_keys", simpleThemeKeys.Count);
 
-        // Revert any existing theme first
-        // Internal theme-to-theme transitions must not restore the original native
-        // snapshot variant (e.g. stale Light), otherwise dark->dark preset switches
-        // can bounce through Light and feel laggy.
-        RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
+        // Theme-to-theme transition: lightweight in-place prep (no flash of Root defaults).
+        // Only full RevertTheme for first-time apply (no active theme yet).
+        if (_activeThemeName != null)
+            PrepareForNewTheme(rootKeys);
+        else
+            RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
 
         // Subscribe to variant changes (once)
         SubscribeToVariantChanges();
@@ -1603,6 +1675,8 @@ internal class ThemeEngine
         palette["BackgroundSecondary"] = ColorUtils.OklchToHex(Math.Clamp(bL + step1, 0.05, 0.95), bC, bH);
         palette["BackgroundTertiary"]  = ColorUtils.OklchToHex(Math.Clamp(bL + step2, 0.05, 0.95), bC, bH);
         palette["BackgroundElevated"]  = DeriveElevatedSurface(palette["BackgroundSecondary"]);
+        palette["BackgroundButtonOnElevated"] = DeriveHighlightSurface(palette["BackgroundElevated"], 12);
+        palette["BackgroundButtonOnSecondary"] = DeriveHighlightSurface(palette["BackgroundSecondary"], 12);
         palette["BackgroundButtonSurface"] = DeriveButtonSurface(palette["BackgroundSecondary"]);
         palette["Input"]               = ColorUtils.OklchToHex(Math.Clamp(bL + step3, 0.05, 0.95), bC * 0.8, bH);
 
@@ -1745,6 +1819,18 @@ internal class ThemeEngine
         }
     }
 
+    /// <summary>Direction-aware highlight: lighten on dark bg, darken on light bg.</summary>
+    private static string DeriveHighlightSurface(string baseHex, double percent)
+    {
+        try
+        {
+            return ColorUtils.Luminance(baseHex) > 0.5
+                ? ColorUtils.Darken(baseHex, percent)
+                : ColorUtils.Lighten(baseHex, percent);
+        }
+        catch { return baseHex; }
+    }
+
     /// <summary>
     /// Subtle button surface used by secondary actions (e.g. Open Logs/Refresh).
     /// Mirrors ContentPages: AdjustForHighlight(bg, 2).
@@ -1817,6 +1903,59 @@ internal class ThemeEngine
         if (total > 0) UpdateWalkedColors(palette);
 
         return total;
+    }
+
+    /// <summary>
+    /// Fast O(n) update of dyn-tagged controls from palette values.
+    /// Used during live preview instead of a full visual tree walk.
+    /// Iterates the WeakReference list (~16 controls) vs traversing ~500+ tree nodes.
+    /// </summary>
+    private int UpdateDynTaggedControlsFromPalette(Dictionary<string, string> palette)
+    {
+        int updated = 0;
+        for (int i = _dynTaggedControls.Count - 1; i >= 0; i--)
+        {
+            if (!_dynTaggedControls[i].TryGetTarget(out var visual))
+            {
+                _dynTaggedControls.RemoveAt(i); // GC'd control
+                continue;
+            }
+            var tag = _r.GetTag(visual);
+            if (tag == null || !tag.StartsWith("dyn-")) continue;
+
+            foreach (var part in tag.Split(','))
+            {
+                var trimmed = part.Trim();
+                if (!trimmed.StartsWith("dyn-")) continue;
+                var colonIdx = trimmed.IndexOf(':', 4);
+                if (colonIdx < 0) continue;
+
+                var mode = trimmed[4..colonIdx];
+                var key = trimmed[(colonIdx + 1)..];
+
+                if (!palette.TryGetValue(key, out var hex)) continue;
+                var newBrush = _r.CreateBrush(hex);
+                if (newBrush == null) continue;
+
+                var propName = mode switch
+                {
+                    "fg" => "Foreground",
+                    "bg" => "Background",
+                    "bb" => "BorderBrush",
+                    "fill" => "Fill",
+                    "st" => "Stroke",
+                    _ => null
+                };
+                if (propName == null) continue;
+                var prop = visual.GetType().GetProperty(propName);
+                if (prop != null)
+                {
+                    prop.SetValue(visual, newBrush);
+                    updated++;
+                }
+            }
+        }
+        return updated;
     }
 
     /// <summary>
@@ -1983,13 +2122,18 @@ internal class ThemeEngine
                         }
                     }
                 }
+                // Track for fast live-preview updates (avoids full tree walk)
+                _dynTaggedControls.Add(new WeakReference<object>(visual));
             }
-            // Untagged controls: color-map matching for TEXT colors only.
-            // Uses SetValueStylePriority so DynamicResource can reassert on revert.
-            // This recolors Root's native text (settings tabs, profile labels, etc.)
+            // Untagged controls only: bind-once pattern for TEXT colors.
+            // Instead of destructive prop.SetValue (which breaks DynamicResource bindings),
+            // bind the control to a DynamicResource key and tag it for future walks.
+            // Once tagged, subsequent walks use the efficient dyn-tagged handler above.
+            // Skip controls already dyn-tagged — they're fully handled above and rewriting
+            // their tag would destroy multi-part tags like "dyn-bg:X,dyn-bb:Y".
             // _noForegroundTypes caches types where GetProperty("Foreground")==null to
             // avoid repeated reflection calls for the many non-text nodes in the tree.
-            foreach (var propName in new[] { "Foreground" })
+            else foreach (var propName in new[] { "Foreground" })
             {
                 var vtype = visual.GetType();
                 if (_noForegroundTypes.Contains(vtype)) continue;
@@ -2002,13 +2146,41 @@ internal class ThemeEngine
                     var colorStr = GetBrushColorString(brush);
                     if (colorStr == null) continue;
 
-                    if (colorMap.TryGetValue(colorStr, out var replacement))
+                    // Look up which palette key this color maps to
+                    if (ColorToPaletteKey.TryGetValue(colorStr, out var paletteKey))
                     {
+                        // Bind to DynamicResource so ThemeDictionary changes auto-propagate
+                        var dynTag = "dyn-fg:" + paletteKey;
+                        if (_r.BindToDynamicResource(visual, propName, paletteKey))
+                        {
+                            _r.SetTag(visual, dynTag);
+                            _walkerRecolored.Add((visual, propName + "Property"));
+                            _dynTaggedControls.Add(new WeakReference<object>(visual));
+                            count++;
+                        }
+                        else
+                        {
+                            // Fallback: direct set if BindToDynamicResource fails
+                            if (colorMap.TryGetValue(colorStr, out var replacement))
+                            {
+                                var newBrush = _r.CreateBrush(replacement);
+                                if (newBrush != null)
+                                {
+                                    prop.SetValue(visual, newBrush);
+                                    _walkerRecolored.Add((visual, propName + "Property"));
+                                    count++;
+                                }
+                            }
+                        }
+                    }
+                    else if (colorMap.TryGetValue(colorStr, out var replacement))
+                    {
+                        // Color not in static palette map (e.g. walked colors, ContentPages statics)
+                        // — fall back to direct set
                         var newBrush = _r.CreateBrush(replacement);
                         if (newBrush != null)
                         {
                             prop.SetValue(visual, newBrush);
-                            // Track for ClearValue on revert
                             _walkerRecolored.Add((visual, propName + "Property"));
                             count++;
                         }
@@ -2246,6 +2418,8 @@ internal class ThemeEngine
                 ["BackgroundSecondary"] = "#2C1818",
                 ["BackgroundTertiary"]  = "#1A0E0E",
                 ["BackgroundElevated"]  = DeriveElevatedSurface("#2C1818"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#2C1818"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#2C1818", 12),
                 ["BackgroundButtonSurface"] = DeriveButtonSurface("#2C1818"),
                 ["Input"]               = "#1E1010",
 
@@ -2316,6 +2490,8 @@ internal class ThemeEngine
                 ["BackgroundSecondary"] = "#100822",
                 ["BackgroundTertiary"]  = "#060216",
                 ["BackgroundElevated"]  = DeriveElevatedSurface("#100822"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#100822"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#100822", 12),
                 ["BackgroundButtonSurface"] = DeriveButtonSurface("#100822"),
                 ["Input"]               = "#080318",
 
@@ -2386,6 +2562,8 @@ internal class ThemeEngine
                 ["BackgroundSecondary"] = "#151A15",
                 ["BackgroundTertiary"]  = "#0A0D0A",
                 ["BackgroundElevated"]  = DeriveElevatedSurface("#151A15"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#151A15"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#151A15", 12),
                 ["BackgroundButtonSurface"] = DeriveButtonSurface("#151A15"),
                 ["Input"]               = "#0C0F0C",
 

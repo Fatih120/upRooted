@@ -879,6 +879,7 @@ internal class SidebarInjector
                 if (needsTagUpdate)
                 {
                     _r.SetTag(node, desiredTag);
+                    _themeEngine.RegisterDynTaggedControl(node);
                     updatedCount++;
                 }
 
@@ -1058,6 +1059,8 @@ internal class SidebarInjector
                 else
                     _r.SetForeground(textBlock, "#fff2f2f2");
                 _r.SetTag(textBlock, "dyn-fg:TextPrimary");
+                _r.BindToDynamicResource(textBlock, "Foreground", "TextPrimary");
+                _themeEngine.RegisterDynTaggedControl(textBlock);
 
                 if (nativeFontWeight != null)
                     _r.TextBlockType?.GetProperty("FontWeight")?.SetValue(textBlock, nativeFontWeight);
@@ -1824,7 +1827,7 @@ internal class SidebarInjector
     {
         if (_navContainer == null) return;
 
-        // Use Root's highlight resources — adapts to Dark/Light themes
+        // Fallback color for non-bound controls
         var selectionBg = _themeEngine.ReadLiveRootColor("HighlightNormal") ?? "#19ffffff";
 
         foreach (var node in _walker.DescendantsDepthFirst(_navContainer))
@@ -1834,7 +1837,17 @@ internal class SidebarInjector
 
             var itemPage = tag["uprooted-highlight-".Length..];
             bool isSelected = itemPage == _activePage;
-            _r.SetBackground(node, isSelected ? selectionBg : null);
+            if (isSelected)
+            {
+                // Bind to DynamicResource so highlight auto-updates during live preview
+                // when HighlightNormal changes (e.g. bg brightness crosses dark/light threshold)
+                _r.SetBackground(node, selectionBg);
+                _r.BindToDynamicResource(node, "Background", "HighlightNormal");
+            }
+            else
+            {
+                _r.SetBackground(node, (string?)null);
+            }
         }
     }
 

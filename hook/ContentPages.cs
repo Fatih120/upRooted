@@ -1501,6 +1501,8 @@ internal static class ContentPages
                     var gearBtn = r.CreateBorder(gearBtnBg, 11);
                     if (gearBtn != null)
                     {
+                        r.SetTag(gearBtn, "dyn-bg:BackgroundButtonOnSecondary");
+                        r.BindToDynamicResource(gearBtn, "Background", "BackgroundButtonOnSecondary");
                         r.SetWidth(gearBtn, 22);
                         r.SetHeight(gearBtn, 22);
                         r.SetCursorHand(gearBtn);
@@ -1524,7 +1526,7 @@ internal static class ContentPages
                         r.SubscribeEvent(gearBtn, "PointerEntered", () =>
                             r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8)));
                         r.SubscribeEvent(gearBtn, "PointerExited", () =>
-                            r.SetBackground(gearBtnRef, gearBtnBg));
+                            r.BindToDynamicResource(gearBtnRef, "Background", "BackgroundButtonOnSecondary"));
 
                         r.AddChild(rightIcons, gearBtn);
                     }
@@ -1536,6 +1538,8 @@ internal static class ContentPages
                     var infoBtn = r.CreateBorder(infoBtnBg, 11);
                     if (infoBtn != null)
                     {
+                        r.SetTag(infoBtn, "dyn-bg:BackgroundButtonOnSecondary");
+                        r.BindToDynamicResource(infoBtn, "Background", "BackgroundButtonOnSecondary");
                         r.SetWidth(infoBtn, 22);
                         r.SetHeight(infoBtn, 22);
                         r.SetCursorHand(infoBtn);
@@ -1560,7 +1564,7 @@ internal static class ContentPages
                         r.SubscribeEvent(infoBtn, "PointerEntered", () =>
                             r.SetBackground(infoBtnRef, AdjustForHighlight(infoBtnBg, 8)));
                         r.SubscribeEvent(infoBtn, "PointerExited", () =>
-                            r.SetBackground(infoBtnRef, infoBtnBg));
+                            r.BindToDynamicResource(infoBtnRef, "Background", "BackgroundButtonOnSecondary"));
 
                         r.AddChild(rightIcons, infoBtn);
                     }
@@ -2288,6 +2292,7 @@ internal static class ContentPages
         if (presetsContainer != null)
         {
             SetBorderStroke(r, presetsContainer, GetCardOutlineColor(), ThinBorder);
+            r.BindToDynamicResource(presetsContainer, "BorderBrush", "Border");
             r.SetTag(presetsContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
             r.SetMargin(presetsContainer, 0, FirstCardTopMargin, 0, 0);
 
@@ -2402,6 +2407,7 @@ internal static class ContentPages
         if (customContainer != null)
         {
             SetBorderStroke(r, customContainer, GetCardOutlineColor(), ThinBorder);
+            r.BindToDynamicResource(customContainer, "BorderBrush", "Border");
             r.SetTag(customContainer, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
             r.SetMargin(customContainer, 0, 16, 0, 0);
 
@@ -2994,6 +3000,8 @@ internal static class ContentPages
             ? "dyn-bg:BackgroundElevated"
             : "dyn-bg:BackgroundElevated,dyn-bb:Border");
         r.BindToDynamicResource(card, "Background", "BackgroundElevated");
+        if (!isActive)
+            r.BindToDynamicResource(card, "BorderBrush", "Border");
         SetBorderStroke(r, card, borderColor, ThickBorder);
         // Custom press feedback so nested controls (gear) can suppress card shrink.
         r.SetCursorHand(card, enablePressFeedback: false);
@@ -3149,6 +3157,8 @@ internal static class ContentPages
                 var gearBtn = r.CreateBorder(gearBtnBg, 11);
                 if (gearBtn != null)
                 {
+                    r.SetTag(gearBtn, "dyn-bg:BackgroundButtonOnElevated");
+                    r.BindToDynamicResource(gearBtn, "Background", "BackgroundButtonOnElevated");
                     r.SetWidth(gearBtn, 24);
                     r.SetHeight(gearBtn, 24);
                     r.SetHorizontalAlignment(gearBtn, "Right");
@@ -3193,8 +3203,8 @@ internal static class ContentPages
                     r.SubscribeEvent(gearBtn, "PointerExited", () =>
                     {
                         gearHovered = false;
-                        var baseBg = GetGearBtnBg();
-                        r.SetBackground(gearBtnRef, baseBg);
+                        // Re-bind to DynamicResource so live preview continues to update
+                        r.BindToDynamicResource(gearBtnRef, "Background", "BackgroundButtonOnElevated");
                         // Re-apply card hover if pointer moved back to card body
                         if (!isActive)
                         {
@@ -4565,6 +4575,7 @@ internal static class ContentPages
 
         // Visible resting border — uses Root's Border resource for divider-matching color
         SetBorderStroke(r, card, GetCardOutlineColor(), ThinBorder);
+        r.BindToDynamicResource(card, "BorderBrush", "Border");
 
         // Combine bg + border tags for live walker recoloring
         r.SetTag(card, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
