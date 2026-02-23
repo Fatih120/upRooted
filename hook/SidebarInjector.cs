@@ -186,9 +186,7 @@ internal class SidebarInjector
                 ev.Set("injected", _injected);
                 try
                 {
-                    Logger.Log("Injector", ">>> poll_tick START");
                     CheckAndInject(ev);
-                    Logger.Log("Injector", "<<< poll_tick END");
                 }
                 catch (Exception ex)
                 {
