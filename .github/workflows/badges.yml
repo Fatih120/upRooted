@@ -28,44 +28,53 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          VERSION=$(cat VERSION | tr -d '[:space:]')
+          # Helper: safely extract a single-line numeric value
+          num() { echo "$1" | tr -d '[:space:]' | grep -o '[0-9]*' | head -1; }
+
+          VERSION=$(tr -d '[:space:]' < VERSION)
 
           # Download counts from public repo
-          DOWNLOADS=$(gh api repos/The-Uprooted-Project/uprooted/releases \
-            --jq '[.[].assets[].download_count] | add // 0' 2>/dev/null || echo "0")
+          RAW_DL=$(gh api repos/The-Uprooted-Project/uprooted/releases --jq '[.[].assets[].download_count] | add // 0' 2>/dev/null || true)
+          DOWNLOADS=$(num "${RAW_DL:-0}")
+          : "${DOWNLOADS:=0}"
 
-          # Plugin count (unique Id = "..." in ContentPages.cs)
-          PLUGINS=$(grep -c 'Id = "' hook/ContentPages.cs 2>/dev/null || echo "0")
+          # Plugin count
+          PLUGINS=$(grep -c 'Id = "' hook/ContentPages.cs 2>/dev/null || echo 0)
+          PLUGINS=$(num "$PLUGINS")
 
           # Theme preset count
-          THEMES=$(grep -c 'PresetName' hook/ThemeEngine.cs 2>/dev/null || echo "0")
+          THEMES=$(grep -c 'PresetName' hook/ThemeEngine.cs 2>/dev/null || echo 0)
+          THEMES=$(num "$THEMES")
 
           # Test count
-          TESTS=$(grep -rc '\[Fact\]\|\[Theory\]' tests/ 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+          TESTS=$(grep -rEc '\[(Fact|Theory)\]' tests/ 2>/dev/null || echo 0)
+          TESTS=$(num "$TESTS")
 
-          # Line counts
-          CS_LOC=$(find hook -name '*.cs' -exec cat {} + 2>/dev/null | wc -l)
-          TS_LOC=$(find src -name '*.ts' -exec cat {} + 2>/dev/null | wc -l)
-          RS_LOC=$(find installer/src-tauri/src -name '*.rs' -exec cat {} + 2>/dev/null | wc -l)
+          # Line counts (trim whitespace from wc -l)
+          CS_LOC=$(find hook -name '*.cs' -exec cat {} + 2>/dev/null | wc -l | tr -d '[:space:]')
+          TS_LOC=$(find src -name '*.ts' -exec cat {} + 2>/dev/null | wc -l | tr -d '[:space:]')
+          RS_LOC=$(find installer/src-tauri/src -name '*.rs' -exec cat {} + 2>/dev/null | wc -l | tr -d '[:space:]')
 
           # File counts
-          CS_FILES=$(find hook -name '*.cs' 2>/dev/null | wc -l)
-          TS_FILES=$(find src -name '*.ts' 2>/dev/null | wc -l)
+          CS_FILES=$(find hook -name '*.cs' 2>/dev/null | wc -l | tr -d '[:space:]')
+          TS_FILES=$(find src -name '*.ts' 2>/dev/null | wc -l | tr -d '[:space:]')
 
           # Release count
-          RELEASES=$(gh api repos/The-Uprooted-Project/uprooted/releases --jq 'length' 2>/dev/null || echo "0")
+          RAW_REL=$(gh api repos/The-Uprooted-Project/uprooted/releases --jq 'length' 2>/dev/null || true)
+          RELEASES=$(num "${RAW_REL:-0}")
+          : "${RELEASES:=0}"
 
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "downloads=$DOWNLOADS" >> $GITHUB_OUTPUT
-          echo "plugins=$PLUGINS" >> $GITHUB_OUTPUT
-          echo "themes=$THEMES" >> $GITHUB_OUTPUT
-          echo "tests=$TESTS" >> $GITHUB_OUTPUT
-          echo "cs_loc=$CS_LOC" >> $GITHUB_OUTPUT
-          echo "ts_loc=$TS_LOC" >> $GITHUB_OUTPUT
-          echo "rs_loc=$RS_LOC" >> $GITHUB_OUTPUT
-          echo "cs_files=$CS_FILES" >> $GITHUB_OUTPUT
-          echo "ts_files=$TS_FILES" >> $GITHUB_OUTPUT
-          echo "releases=$RELEASES" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "downloads=${DOWNLOADS}" >> "$GITHUB_OUTPUT"
+          echo "plugins=${PLUGINS}" >> "$GITHUB_OUTPUT"
+          echo "themes=${THEMES}" >> "$GITHUB_OUTPUT"
+          echo "tests=${TESTS}" >> "$GITHUB_OUTPUT"
+          echo "cs_loc=${CS_LOC}" >> "$GITHUB_OUTPUT"
+          echo "ts_loc=${TS_LOC}" >> "$GITHUB_OUTPUT"
+          echo "rs_loc=${RS_LOC}" >> "$GITHUB_OUTPUT"
+          echo "cs_files=${CS_FILES}" >> "$GITHUB_OUTPUT"
+          echo "ts_files=${TS_FILES}" >> "$GITHUB_OUTPUT"
+          echo "releases=${RELEASES}" >> "$GITHUB_OUTPUT"
 
       - name: Generate badge JSON files
         run: |
