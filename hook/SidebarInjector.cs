@@ -77,6 +77,8 @@ internal class SidebarInjector
     private bool _hasAutoNavigated;                        // Only auto-nav to About once per settings open
     private long _selectionSuppressedUntilMs;               // Suppress Root ListBox auto-select until this tick
     private long _lastMenuRetargetMs;                      // Throttle native menu retarget while settings open
+    private long _lastMenuForcedRebindMs;                  // Periodic forced rebind for nodes that keep recreating bindings
+    private long _lastMenuRetargetLogMs;                   // Throttle noisy retarget logs
 
     // Wide event tail sampler for poll tick (150 ticks × 200ms = 30s heartbeat when fast poll,
     // or 150 ticks × 1000ms = 150s when slow poll after injection)
@@ -331,7 +333,7 @@ internal class SidebarInjector
             if (_navContainer != null && nowMs - _lastMenuRetargetMs >= 300)
             {
                 _lastMenuRetargetMs = nowMs;
-                RetargetNativeMenuText(_navContainer, _listBox);
+                RetargetNativeMenuText(_navContainer, _listBox, _sidebarGrid);
             }
             return;
         }
@@ -629,6 +631,7 @@ internal class SidebarInjector
         _lastLayoutCheckMs = 0;                            // Allow instant LayoutUpdated detection on next settings open
         _selectionSuppressedUntilMs = 0;
         _lastMenuRetargetMs = 0;
+        _lastMenuForcedRebindMs = 0;
         Interlocked.Exchange(ref _injecting, 0);           // Clear stale timer lock from previous cycle
         // Restore fast poll interval so settings-page detection is responsive after close.
         _timer?.Change(PollIntervalMs, PollIntervalMs);
@@ -820,19 +823,26 @@ internal class SidebarInjector
     /// </summary>
     private void RetargetNativeMenuText(SettingsLayout layout)
     {
-        RetargetNativeMenuText(layout.NavContainer, layout.ListBox);
+        RetargetNativeMenuText(layout.NavContainer, layout.ListBox, layout.SidebarGrid);
     }
 
-    private void RetargetNativeMenuText(object navContainer, object? listBox)
+    private void RetargetNativeMenuText(object navContainer, object? listBox, object? sidebarRoot)
     {
+        var nowMs = Environment.TickCount64;
+        bool forceRebind = nowMs - _lastMenuForcedRebindMs >= 4000;
+        if (forceRebind) _lastMenuForcedRebindMs = nowMs;
+
         int headerCount = 0;
         int itemCount = 0;
         int statusCount = 0;
+        int updatedCount = 0;
+        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
 
         void ScanRoot(object root)
         {
             foreach (var node in _walker.DescendantsDepthFirst(root))
             {
+                if (!visited.Add(node)) continue;
                 if (!_r.IsTextBlock(node)) continue;
 
                 string? key = null;
@@ -861,8 +871,18 @@ internal class SidebarInjector
                 }
 
                 if (key == null) continue;
-                _r.SetTag(node, $"dyn-fg:{key}");
-                _r.BindToDynamicResource(node, "Foreground", key);
+                var desiredTag = $"dyn-fg:{key}";
+                var existingTag = _r.GetTag(node);
+                bool needsTagUpdate = !string.Equals(existingTag, desiredTag, StringComparison.Ordinal);
+                if (needsTagUpdate)
+                {
+                    _r.SetTag(node, desiredTag);
+                    updatedCount++;
+                }
+
+                if (needsTagUpdate || forceRebind)
+                    _r.BindToDynamicResource(node, "Foreground", key);
+
                 if (key == "TextTertiary") headerCount++;
                 else if (key == "TextSecondary") statusCount++;
                 else itemCount++;
@@ -871,9 +891,20 @@ internal class SidebarInjector
 
         if (listBox != null) ScanRoot(listBox);
         ScanRoot(navContainer);
+        if (sidebarRoot != null) ScanRoot(sidebarRoot);
 
-        if (headerCount > 0 || itemCount > 0 || statusCount > 0)
-            Logger.Log("Injector", $"Retargeted native menu text: headers={headerCount}, items={itemCount}, status={statusCount}");
+        if (updatedCount > 0)
+        {
+            // This path can run every few hundred milliseconds while settings is open.
+            // Keep logs high-signal: always log forced rebind passes, otherwise cap to
+            // one informational line every 15s.
+            bool shouldLog = forceRebind || nowMs - _lastMenuRetargetLogMs >= 15000;
+            if (shouldLog)
+            {
+                _lastMenuRetargetLogMs = nowMs;
+                Logger.Log("Injector", $"Retargeted native menu text: headers={headerCount}, items={itemCount}, status={statusCount}, updated={updatedCount}, force={forceRebind}");
+            }
+        }
     }
 
     private static bool IsSettingsSectionHeader(string? text)
@@ -1153,6 +1184,15 @@ internal class SidebarInjector
             // Build new page (pass ThemeEngine and rebuild callback for theme switching)
             Action rebuildCurrentPage = () =>
             {
+                // Ignore stale callbacks from a page that is no longer active.
+                // Theme/custom controls use delayed timers; without this guard, a delayed
+                // callback from Themes can force navigation away from About.
+                if (_activePage != pageName)
+                {
+                    Logger.Log("Injector", $"Ignoring stale rebuild callback for '{pageName}' (active='{_activePage ?? "null"}')");
+                    return;
+                }
+
                 // Remove current content and rebuild the same page
                 if (_activeContentPage != null && _contentPanel != null)
                 {

@@ -75,6 +75,7 @@ internal class ThemeEngine
 
     // Whether we've subscribed to variant changes
     private bool _variantChangeSubscribed;
+    private object? _requestedVariantChangedHandler;
 
     // Guard: true while we're programmatically switching the variant for theme application.
     // Prevents the variant change handler from reverting our theme or re-injecting sidebar.
@@ -451,6 +452,7 @@ internal class ThemeEngine
 
         // Update ThemeDictionaries
         OverrideThemeDictKeys(rootKeys);
+        SwapSvgPathsIfNeeded(rootKeys, svgMode);
 
         // Update Styles[0].Resources
         OverrideSimpleThemeKeys(simpleKeys);
@@ -483,7 +485,7 @@ internal class ThemeEngine
     }
 
     /// <summary>Remove all theme overrides and restore Root defaults.</summary>
-    public void RevertTheme()
+    public void RevertTheme(bool forceNativeRefresh = true, bool restoreOriginalVariant = true)
     {
         using var ev = WideEvent.Begin("Theme", "revert");
 
@@ -542,8 +544,10 @@ internal class ThemeEngine
         _customPalette = null;
         _customSvgMode = "auto";
 
-        // Phase 4: Restore original requested variant if we switched it
-        if (_hasOriginalVariantKey)
+        // Phase 4: Optionally restore original requested variant snapshot.
+        // For user-initiated native theme changes while an Uprooted theme is active,
+        // callers pass restoreOriginalVariant=false so we preserve their new choice.
+        if (restoreOriginalVariant && _hasOriginalVariantKey)
         {
             ev.Set("restore_variant", _originalVariantKey?.ToString() ?? "<null/default>");
             _switchingVariantForTheme = true;
@@ -561,10 +565,21 @@ internal class ThemeEngine
             _activeVariantDict = null;
             _activeVariantKey = null;
         }
+        else
+        {
+            // Even when we don't restore, clear stale snapshot state so future
+            // native variant labels and restore logic use current Root state.
+            _originalVariantKey = null;
+            _hasOriginalVariantKey = false;
+            _originalActualVariantName = null;
+            _activeVariantDict = null;
+            _activeVariantKey = null;
+        }
 
-        // Phase 5: Force Root's native theme refresh by toggling the variant.
-        // This makes Avalonia re-resolve ALL DynamicResource bindings across the entire tree.
-        // Our ClearValue'd controls pick up Root's native colors via inheritance/resolution.
+        // Phase 5: Force Root's native theme refresh by toggling the variant (only for
+        // explicit revert-to-native flows). Internal theme re-apply paths skip this to
+        // avoid one-frame variant races that can desync SVG set selection.
+        if (forceNativeRefresh)
         {
             var requestedBefore = _r.GetRequestedThemeVariant();
             var current = _r.GetActiveThemeVariant();
@@ -585,18 +600,19 @@ internal class ThemeEngine
                 }
                 ev.Set("variant_toggled", true);
             }
+        }
 
-            // Restore our injected controls (tagged dyn-*) from Root's now-correct live colors.
-            // These don't have DynamicResource bindings, so the variant toggle alone won't fix them.
-            var liveColors = ReadLiveRootColors();
-            if (liveColors != null)
-            {
-                int restored = 0;
-                var topLevels = _r.GetAllTopLevels();
-                foreach (var tl in topLevels)
-                    restored += RestoreTaggedControls(tl, liveColors, 0);
-                ev.Set("tagged_restored", restored);
-            }
+        // Restore our injected controls (tagged dyn-*) from Root's now-correct live colors.
+        // These don't have DynamicResource bindings, so variant/resource changes alone may
+        // not fix them until reopened.
+        var liveColors = ReadLiveRootColors();
+        if (liveColors != null)
+        {
+            int restored = 0;
+            var topLevels = _r.GetAllTopLevels();
+            foreach (var tl in topLevels)
+                restored += RestoreTaggedControls(tl, liveColors, 0);
+            ev.Set("tagged_restored", restored);
         }
 
         // Reset walked colors to defaults for next theme application
@@ -747,7 +763,7 @@ internal class ThemeEngine
         ev.Set("simple_keys", simpleThemeKeys.Count);
 
         // Revert any existing theme first
-        RevertTheme();
+        RevertTheme(forceNativeRefresh: false);
 
         // Subscribe to variant changes (once)
         SubscribeToVariantChanges();
@@ -760,6 +776,7 @@ internal class ThemeEngine
         // Phase 1: Override ThemeDictionaries[activeVariant] with Root's 32 keys
         EnsureVariantDictResolved();
         OverrideThemeDictKeys(rootKeys);
+        SwapSvgPathsIfNeeded(rootKeys, themeName == "custom" ? _customSvgMode : "auto");
 
         // Phase 2: Override Styles[0].Resources with SimpleTheme keys
         var styleRes = _r.GetStyleResources(0);
@@ -848,8 +865,11 @@ internal class ThemeEngine
     /// </summary>
     private void SwitchVariantIfNeeded(Dictionary<string, string> rootKeys, WideEvent? ev = null)
     {
-        // Determine what variant the theme needs based on background luminance
-        bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys); // luminance <= 0.3 → dark SVGs → Dark variant
+        // Determine what variant the theme needs based on background luminance.
+        // For dark themes coming from native Light, prefer PureDark instead of Dark so
+        // a later native "Root Dark" click is a real transition (PureDark -> Dark),
+        // not a no-op (Dark -> Dark).
+        bool themeIsDark = ThemeNeedsDarkSvgs(rootKeys); // luminance <= 0.3 → dark SVGs
         string targetVariant = themeIsDark ? "Dark" : "Light";
 
         var currentVariant = _r.GetActiveThemeVariant();
@@ -869,6 +889,13 @@ internal class ThemeEngine
             return;
         }
 
+        // If Root was Light before we applied a dark theme, force PureDark.
+        // This keeps dark-family resources while preserving a meaningful Root Dark switch.
+        var requestedBefore = _r.GetRequestedThemeVariant();
+        var requestedBeforeName = requestedBefore?.ToString();
+        if (themeIsDark && string.Equals(requestedBeforeName, "Light", StringComparison.OrdinalIgnoreCase))
+            targetVariant = "PureDark";
+
         // Need to switch. Get the target ThemeVariant object.
         var targetKey = _r.GetThemeVariantByName(targetVariant);
         if (targetKey == null)
@@ -882,7 +909,7 @@ internal class ThemeEngine
         }
 
         ev?.Set("variant_switch", currentName + "_to_" + targetVariant);
-        _originalVariantKey = _r.GetRequestedThemeVariant();
+        _originalVariantKey = requestedBefore;
         _hasOriginalVariantKey = true;
         _originalActualVariantName = currentName;
 
@@ -922,7 +949,42 @@ internal class ThemeEngine
             return;
         }
 
-        // Get the active variant
+        // Prefer RequestedThemeVariant first. During immediate re-apply flows,
+        // ActualThemeVariant can lag by a frame while Requested already reflects intent.
+        var requestedVariant = _r.GetRequestedThemeVariant();
+        if (requestedVariant != null)
+        {
+            try
+            {
+                if (_themeDicts.Contains(requestedVariant))
+                {
+                    _activeVariantKey = requestedVariant;
+                    _activeVariantDict = _themeDicts[requestedVariant];
+                    Logger.Log("Theme", "ThemeDictionaries resolved from RequestedThemeVariant: " + requestedVariant);
+                    return;
+                }
+            }
+            catch { }
+
+            var requestedName = requestedVariant.ToString();
+            if (!string.IsNullOrWhiteSpace(requestedName))
+            {
+                var reqKey = _r.FindVariantByName(_themeDicts, requestedName);
+                if (reqKey != null)
+                {
+                    _activeVariantKey = reqKey;
+                    try
+                    {
+                        _activeVariantDict = _themeDicts[reqKey];
+                        Logger.Log("Theme", "ThemeDictionaries resolved by requested name: " + requestedName);
+                        return;
+                    }
+                    catch { }
+                }
+            }
+        }
+
+        // Fallback: get the active variant
         _activeVariantKey = _r.GetActiveThemeVariant();
         if (_activeVariantKey == null)
         {
@@ -944,7 +1006,7 @@ internal class ThemeEngine
         }
         catch { }
 
-        // Fallback: find variant by string name
+        // Fallback: find active variant by string name
         var variantName = _activeVariantKey.ToString();
         if (variantName != null)
         {
@@ -1212,6 +1274,28 @@ internal class ThemeEngine
         if (_variantChangeSubscribed) return;
         _variantChangeSubscribed = true;
 
+        var app = _r.GetAppCurrent();
+        if (app != null && _requestedVariantChangedHandler == null)
+        {
+            _requestedVariantChangedHandler = _r.SubscribePropertyChanged(app, propName =>
+            {
+                if (_switchingVariantForTheme) return;
+                if (!string.Equals(propName, "RequestedThemeVariant", StringComparison.Ordinal)) return;
+
+                // Key edge-case: while a dark Uprooted theme is active, Root can switch
+                // RequestedThemeVariant (e.g. Light->Dark) without changing ActualThemeVariant.
+                // We must still auto-revert to native selection.
+                if (_activeThemeName != null)
+                {
+                    var requested = GetCurrentRootRequestedVariant();
+                    var actual = GetCurrentRootVariant();
+                    Logger.Log("Theme", $"RequestedThemeVariant changed while Uprooted theme '{_activeThemeName}' active (requested={requested}, actual={actual}) — auto-reverting");
+                    RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
+                    _onVariantChanged?.Invoke();
+                }
+            });
+        }
+
         _r.SubscribeActualThemeVariantChanged(() =>
         {
             // Skip if WE triggered the variant change (for SVG/theme purposes)
@@ -1229,7 +1313,7 @@ internal class ThemeEngine
                 // User switched Root's native variant while Uprooted theme was active.
                 // Auto-revert: the user chose a Root theme, so respect that choice.
                 Logger.Log("Theme", $"Root variant changed while Uprooted theme '{_activeThemeName}' active — auto-reverting");
-                RevertTheme();
+                RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
             }
 
             // Always notify sidebar — it needs to re-inject with correct colors
@@ -1649,7 +1733,15 @@ internal class ThemeEngine
                 if (ci < 0) continue;
                 var mode = t[4..ci];
                 var key = t[(ci + 1)..];
-                var pn = mode switch { "fg" => "Foreground", "bg" => "Background", "bb" => "BorderBrush", _ => null };
+                var pn = mode switch
+                {
+                    "fg" => "Foreground",
+                    "bg" => "Background",
+                    "bb" => "BorderBrush",
+                    "fill" => "Fill",
+                    "st" => "Stroke",
+                    _ => null
+                };
                 if (pn == null) continue;
                 if (!liveColors.TryGetValue(key, out var hex)) continue;
                 var brush = _r.CreateBrush(hex);
@@ -1701,6 +1793,8 @@ internal class ThemeEngine
                             "fg" => "Foreground",
                             "bg" => "Background",
                             "bb" => "BorderBrush",
+                            "fill" => "Fill",
+                            "st" => "Stroke",
                             _ => null
                         };
                         if (propName != null)

@@ -88,6 +88,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Theme switching semantics (tab open vs. theme change)** — Opening Root/Uprooted settings tabs no longer changes the active theme state. Theme state now changes only when the user performs an actual theme selection action.
+  - File: `hook/SidebarInjector.cs`
+- **Light → Root Dark while custom theme active** — Fixed the no-op transition path by forcing `PureDark` (instead of `Dark`) when applying a dark Uprooted theme from native Light, so later native `Root Dark` selection becomes a real `PureDark -> Dark` transition.
+  - File: `hook/ThemeEngine.cs`
+- **Native menu retarget log spam** — Throttled repeated `Retargeted native menu text` logs while settings is open; forced rebind passes still log immediately.
+  - File: `hook/SidebarInjector.cs`
 - **Dev mode teardown latency on channel switch** — Switching from Developer to Stable now immediately disables/refreshes dev-only runtime behavior (ReconLogger, Live Console, dev badge indicators, and related UI state) without requiring tab navigation or restart.
   - Files: `hook/ContentPages.cs`, `hook/LogConsole.cs`, `hook/ProfileBadgeInjector.cs`
 - **High-DPI border inflation on some laptops** — Thin borders now target fixed physical width (1px) to prevent inflation on high-scale displays. Thick borders were retuned to native-like emphasis weight to match Root settings visuals more closely.
