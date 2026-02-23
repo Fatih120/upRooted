@@ -47,10 +47,29 @@ if (project.Count == 0)
     return 1;
 }
 
-// Add probe path for .NET runtime references
+// Add probe path for .NET runtime references (running runtime)
 var runtimeDir = System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory();
 if (!string.IsNullOrEmpty(runtimeDir))
     project.ProbePaths.Add(runtimeDir);
+
+// Add probe paths for all NuGet-cached .NET targeting packs.
+// When the hook targets a different TFM (e.g. net9.0) than the confuse tool (net10.0),
+// ConfuserEx/dnlib needs the matching reference assemblies to resolve System.Runtime etc.
+var nugetPackages = Environment.GetEnvironmentVariable("NUGET_PACKAGES")
+    ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".nuget", "packages");
+var refPackRoot = Path.Combine(nugetPackages, "microsoft.netcore.app.ref");
+if (Directory.Exists(refPackRoot))
+{
+    foreach (var versionDir in Directory.GetDirectories(refPackRoot))
+    {
+        var refDir = Path.Combine(versionDir, "ref");
+        if (Directory.Exists(refDir))
+        {
+            foreach (var tfmDir in Directory.GetDirectories(refDir))
+                project.ProbePaths.Add(tfmDir);
+        }
+    }
+}
 
 var logger = new ConsoleLogger();
 var parameters = new ConfuserParameters

@@ -10,6 +10,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Hook fails to load on Linux AppImage (TypeLoadException)** — Hook DLL targeted `net10.0` but Root's AppImage bundles .NET 9. `Assembly.LoadFrom` threw `TypeLoadException: Could not load type 'System.AssemblyLoadEventHandler' from assembly 'System.Runtime, Version=10.0.0.0'`, silently swallowed by the profiler's injected try/catch. Downgraded to `net9.0` (loads on both .NET 9 and .NET 10). Fixed ConfuserEx tool to probe NuGet targeting pack reference assemblies for cross-TFM obfuscation.
+  - Files: `hook/UprootedHook.csproj`, `tools/confuse/Program.cs`
 - **Experimental plugins cause hang on boot after update** — Users who enabled experimental plugins before updating could get stuck in an unrecoverable hang on startup, requiring manual settings file deletion to recover. Version migration now blanket-disables ALL experimental plugins (rootcord, who-reacted, message-logger, content-filter, translate, user-bio, recon-logger) and sets `ShowExperimentalPlugins=false` on every version upgrade. Users re-enable manually from Settings > Plugins.
   - File: `hook/StartupHook.cs`
 - **Rootcord doesn't update on theme revert or variant change** — `ThemeEngine.RevertTheme()` never called `ContentPages.UpdateLiveColors`, so Rootcord and LinkEmbeds kept stale cached colors when switching to the Native theme or when Root auto-reverted on variant change. Added `ReadLiveRootColors` → `UpdateLiveColors` at end of `RevertTheme()` and in `ActualThemeVariantChanged` handler.

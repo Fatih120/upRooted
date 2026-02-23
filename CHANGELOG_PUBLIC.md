@@ -47,6 +47,7 @@ This is a big one. Since the last release we shipped new plugins, reworked the e
 - Fixed MessageLogger traversal and injection bugs on Avalonia 11.3
 - Fixed command injection vulnerability in DesktopNotification
 - Fixed HTML patcher CRLF preservation and XSS escape
+- **Linux AppImage: hook fails to load** — The hook DLL targeted .NET 10 but Root's AppImage bundles .NET 9, causing a silent `TypeLoadException`. Downgraded to net9.0 which works on both runtimes.
 
 ### Infrastructure
 
