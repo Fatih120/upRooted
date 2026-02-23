@@ -46,35 +46,37 @@ Given your task, read **only** these docs (in order). Don't load everything.
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr |
-| `StartupHook.cs` | 684 | Multi-phase startup orchestrator (Phase 0-5) |
+| `StartupHook.cs` | 637 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 443 | Phase 0: self-healing HTML patches |
-| `AvaloniaReflection.cs` | 2920 | Reflection cache for ~80 Avalonia types |
-| `VisualTreeWalker.cs` | 572 | DFS visual tree traversal |
-| `SidebarInjector.cs` | 1900 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 4009 | Settings page builders (Uprooted, Plugins, Themes) |
-| `ThemeEngine.cs` | 2035 | Resource-first theme engine v2, OKLCH palette |
+| `AvaloniaReflection.cs` | 3320 | Reflection cache for ~80 Avalonia types |
+| `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
+| `SidebarInjector.cs` | 2034 | Settings page monitor + sidebar injection |
+| `ContentPages.cs` | 4718 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ThemeEngine.cs` | 2624 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |
-| `UprootedSettings.cs` | 253 | INI-based settings + 10s TTL cache |
-| `DotNetBrowserReflection.cs` | 1933 | DotNetBrowser type cache, IBrowser discovery |
+| `UprootedSettings.cs` | 268 | INI-based settings + 10s TTL cache |
+| `DotNetBrowserReflection.cs` | 1926 | DotNetBrowser type cache, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner |
-| `ClearUrlsEngine.cs` | 477 | Strip tracking params from URLs on send |
-| `LinkEmbedEngine.cs` | 2490 | Avalonia-native link embeds (OG/oEmbed/video) |
+| `ClearUrlsEngine.cs` | 486 | Strip tracking params from URLs on send |
+| `LinkEmbedEngine.cs` | 2493 | Avalonia-native link embeds (OG/oEmbed/video) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder (SkiaSharp) |
-| `MessageLogger.cs` | 2326 | Edit/delete detection + visual indicators |
+| `MessageLogger.cs` | 1707 | Edit/delete detection + visual indicators |
 | `MessageStore.cs` | 278 | Flat-file message persistence |
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
-| `AutoUpdater.cs` | 1043 | Encrypted .uprpkg auto-updater |
-| `DesktopNotification.cs` | 55 | OS-level toast notifications |
-| `ProfileBadgeInjector.cs` | 1130 | "Uprooted Dev" profile badge |
+| `AutoUpdater.cs` | 1039 | Encrypted .uprpkg auto-updater |
+| `DesktopNotification.cs` | 86 | OS-level toast notifications |
+| `ProfileBadgeInjector.cs` | 1208 | "Uprooted Dev" profile badge |
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |
 | `NsfwFilter.cs` | 482 | Avalonia-native NSFW filter |
-| `RootcordEngine.cs` | 3377 | Discord-style vertical sidebar (experimental) |
-| `TranslateEngine.cs` | 1145 | DeepL-powered message translation |
-| `TranslateConfigPopup.cs` | 511 | Translate config UI |
-| `UprootedPresenceBeacon.cs` | 470 | Uprooted user detection via gRPC |
-| `ReconLogger.cs` | 786 | Visual tree + style diagnostic dumper |
-| `LogConsole.cs` | ~200 | Dev-only live log terminal via named pipe |
+| `RootcordEngine.cs` | 4945 | Discord-style vertical sidebar (experimental) |
+| `TranslateEngine.cs` | 1156 | DeepL-powered message translation |
+| `TranslateConfigPopup.cs` | 555 | Translate config UI |
+| `UprootedPresenceBeacon.cs` | 500 | Uprooted user detection via gRPC |
+| `WhoReactedEngine.cs` | 575 | Who Reacted: shows reaction authors on messages |
+| `UserBioEngine.cs` | 559 | User Bio: injects bio text into profile popups |
+| `ReconLogger.cs` | 788 | Visual tree + style diagnostic dumper |
+| `LogConsole.cs` | ~301 | Dev-only live log terminal via named pipe |
 | `Logger.cs` | ~170 | Thread-safe file logging + wide event emission |
 | `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks |
 | `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value, dur_ms) |

@@ -25,16 +25,19 @@ For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 8. [Custom Theme Generation](#custom-theme-generation)
 9. [Custom Ping Color Override](#custom-ping-color-override)
 10. [Revert Mechanics](#revert-mechanics)
-11. [CSS Variable Bridge](#css-variable-bridge)
-12. [Error Handling](#error-handling)
-13. [Key Data Structures](#key-data-structures)
-14. [Performance Considerations](#performance-considerations)
+11. [In-Place Theme Switching (PrepareForNewTheme)](#in-place-theme-switching-preparefornewtheme)
+12. [Bind-Once Walker (Untagged → DynamicResource)](#bind-once-walker-untagged--dynamicresource)
+13. [WeakRef Live Preview (O(n) Fast Path)](#weakref-live-preview-on-fast-path)
+14. [CSS Variable Bridge](#css-variable-bridge)
+15. [Error Handling](#error-handling)
+16. [Key Data Structures](#key-data-structures)
+17. [Performance Considerations](#performance-considerations)
 
 ---
 
 ## Overview
 
-**File:** `hook/ThemeEngine.cs` (~2510 lines)
+**File:** `hook/ThemeEngine.cs` (~2624 lines)
 
 The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at
@@ -919,7 +922,7 @@ function PurgeKnownColors(visual, depth, knownColors):
                     restore = _rootOriginals[colorStr]
                 else if _reverseColorMap has colorStr:
                     restore = _reverseColorMap[colorStr]
-                SetValueStylePriority(visual, propName, restore)
+                SetValueLocalPriority(visual, propName, restore)
         else:
             // Track as orphan for diagnostics
     recurse into children
@@ -950,6 +953,176 @@ After the immediate revert, follow-up walks are scheduled at +500ms, +1500ms, an
 +3000ms. These catch controls that were created after the initial revert (e.g., lazy-
 loaded views or async content). Each follow-up uses the saved reverse map and stops
 if a new theme has been applied in the interim.
+
+---
+
+## In-Place Theme Switching (PrepareForNewTheme)
+
+### Problem: Flash of Root Defaults
+
+Prior to this optimization, `ApplyThemeInternal` called `RevertTheme()` before every theme apply. This removed ALL ThemeDictionary overrides (DynamicResource bindings fell back to Root defaults = visible color flash), then re-added all overrides (second full resolution pass). The result was a brief but noticeable flash of Root's default colors during every theme-to-theme switch.
+
+### Solution: Diff-Based Key Removal
+
+`PrepareForNewTheme(Dictionary<string, string> newRootKeys)` replaces `RevertTheme()` for **theme-to-theme transitions** (when `_activeThemeName != null`). It does a lightweight diff:
+
+```csharp
+private void PrepareForNewTheme(Dictionary<string, string> newRootKeys)
+{
+    // 1. Dispose walk timer
+    _walkTimer?.Dispose();
+    _walkTimer = null;
+
+    // 2. Remove stale ThemeDictionary keys (in old theme but not new).
+    //    Only diff COLOR keys — SVG keys (ending "SVG") are managed by SwapSvgPathsIfNeeded.
+    var staleColorKeys = _overriddenThemeDictKeys
+        .Where(k => !k.EndsWith("SVG") && !newRootKeys.ContainsKey(k))
+        .ToList();
+    foreach (var key in staleColorKeys)
+        RemoveThemeDictKey(key);
+
+    // 3. Clear saved Style originals (will be re-populated by Phase 2).
+    _savedStyleOriginals.Clear();
+    _addedStyleKeys.Clear();
+
+    // 4. Reset state for fresh apply — DO NOT: ClearValue on walker-recolored controls,
+    //    RestoreTaggedControls, ReadLiveRootColors, toggle variant, update title bar.
+    //    New theme's OverrideThemeDictKeys overwrites in-place.
+    _activeThemeName = null;
+    _customPalette = null;
+}
+```
+
+**Key insight:** Shared keys (present in both old and new themes) stay in the ThemeDictionaries during the transition. When `ApplyThemeInternal` writes the new theme's values, these keys are overwritten in-place. DynamicResource-bound controls see a single value change, never a revert-to-default.
+
+**`RevertTheme()` is unchanged** for the revert-to-native path (clicking Native preset). Full revert with ClearValue, RestoreTaggedControls, variant restore is correct there.
+
+### Decision Logic in ApplyThemeInternal
+
+```csharp
+// Theme-to-theme transition: lightweight in-place prep (no flash of Root defaults).
+// Only full RevertTheme for first-time apply (no active theme yet).
+if (_activeThemeName != null)
+    PrepareForNewTheme(rootKeys);
+else
+    RevertTheme(forceNativeRefresh: false, restoreOriginalVariant: false);
+```
+
+---
+
+## Bind-Once Walker (Untagged → DynamicResource)
+
+### Problem: Destructive prop.SetValue on DynamicResource-Bound Controls
+
+The visual tree walker's untagged-Foreground handler used `prop.SetValue()` on Root's DynamicResource-bound TextBlocks. This overwrote the binding at LocalValue priority. Those controls then stopped responding to ThemeDictionary updates until the next walker pass (100ms throttle). During live preview (dragging color sliders), this created visible desync — native text lagged behind the color picker.
+
+### Solution: Bind-Once Pattern
+
+Instead of destructive `prop.SetValue`, the walker now:
+
+1. Detects untagged controls with foreground colors matching known palette values
+2. Looks up which palette key the color maps to via `ColorToPaletteKey`
+3. Calls `BindToDynamicResource(visual, "Foreground", paletteKey)` to create a live resource binding
+4. Tags the control with `dyn-fg:{paletteKey}` so subsequent walks use the efficient tag-based path
+5. Registers the control in the WeakRef list for live preview updates
+
+```csharp
+// Static lookup: known ARGB text colors → palette key names
+private static readonly Dictionary<string, string> ColorToPaletteKey =
+    new(StringComparer.OrdinalIgnoreCase)
+{
+    ["#FFF2F2F2"] = "TextPrimary",   // Dark theme primary
+    ["#A3F2F2F2"] = "TextSecondary", // Dark theme secondary (alpha)
+    ["#66F2F2F2"] = "TextTertiary",  // Dark theme tertiary (alpha)
+    ["#FF131313"] = "TextPrimary",   // Light theme primary
+    ["#FF282828"] = "TextSecondary", // Light theme secondary
+    ["#FF5E5E5E"] = "TextTertiary",  // Light theme tertiary
+    // ... additional known variants
+};
+```
+
+**The `else` guard is critical:** The bind-once block only runs for controls that are NOT already dyn-tagged. Without this guard, a control with tag `dyn-bg:BackgroundElevated,dyn-bb:Border` would have its tag overwritten to `dyn-fg:TextPrimary`, destroying the bg/bb bindings.
+
+**Fallback:** If `BindToDynamicResource` fails or the color doesn't map to a known palette key, the walker falls back to direct `prop.SetValue` (previous behavior).
+
+### Benefits
+
+- **DynamicResource-bound controls** — binding preserved, auto-updates from ThemeDictionary changes
+- **Hardcoded controls** (lazy popups, programmatic text) — get DynamicResource binding, self-healing
+- **Future controls** Root creates after initial walk — caught on next walk pass, bound once
+
+---
+
+## WeakRef Live Preview (O(n) Fast Path)
+
+### Problem: Full Tree Walk for ~16 Controls
+
+Live custom theme preview (dragging color sliders) triggered a full visual tree walk on every 100ms tick — traversing ~500+ nodes to find and update ~16 dyn-tagged controls. The traversal cost was the same whether 2 or 200 controls needed updating.
+
+### Solution: WeakReference Tracking List
+
+```csharp
+private readonly List<WeakReference<object>> _dynTaggedControls = new();
+```
+
+When the walker processes a dyn-tagged control (either pre-existing or newly tagged by bind-once), it registers it:
+
+```csharp
+_dynTaggedControls.Add(new WeakReference<object>(visual));
+```
+
+During live preview, `UpdateDynTaggedControlsFromPalette` iterates this list directly:
+
+```csharp
+private int UpdateDynTaggedControlsFromPalette(Dictionary<string, string> palette)
+{
+    int updated = 0;
+    for (int i = _dynTaggedControls.Count - 1; i >= 0; i--)
+    {
+        if (!_dynTaggedControls[i].TryGetTarget(out var visual))
+        {
+            _dynTaggedControls.RemoveAt(i); // GC'd control
+            continue;
+        }
+        var tag = _r.GetTag(visual);
+        if (tag == null || !tag.StartsWith("dyn-")) continue;
+        // Parse tag parts: dyn-fg:TextPrimary, dyn-bg:BackgroundSecondary, etc.
+        foreach (var part in tag.Split(','))
+        {
+            // ... look up palette value, create brush, set property
+        }
+    }
+    return updated;
+}
+```
+
+### Live Preview Flow
+
+1. ThemeDictionary updates → DynamicResource-bound controls update instantly (~16ms frame)
+2. `UpdateDynTaggedControlsFromPalette()` → ~16 WeakRef iterations, O(1) per control
+3. 100ms throttled full walk still fires — discovers new dyn-tagged controls, populates WeakRef list
+
+### Public Registration API
+
+External callers (SidebarInjector) can register controls that were dyn-tagged outside the walker:
+
+```csharp
+public void RegisterDynTaggedControl(object control)
+{
+    _dynTaggedControls.Add(new WeakReference<object>(control));
+}
+```
+
+### Computed Palette Keys
+
+Two derived keys enable DynamicResource binding for computed button backgrounds:
+
+| Key | Derivation | Use |
+|-----|-----------|-----|
+| `BackgroundButtonOnElevated` | `DeriveHighlightSurface(Elevated, 12)` | Theme card gear button |
+| `BackgroundButtonOnSecondary` | `DeriveHighlightSurface(Secondary, 12)` | Plugin card gear/info buttons |
+
+`DeriveHighlightSurface` is luminance-aware: lightens on dark backgrounds, darkens on light backgrounds (same logic as `AdjustForHighlight` in ContentPages). These keys are generated in `GenerateV2Palette` and all 3 preset themes, enabling DynamicResource binding for surfaces that were previously computed at build time.
 
 ---
 
@@ -1064,6 +1237,14 @@ would fight with ContentPages over the colors of these elements.
 | `_lastLayoutWalkTick` | `long` | Debounce timestamp for layout interceptor |
 | `_lastLiveUpdateTick` | `long` | Throttle timestamp for live preview |
 | `_liveBrushCache` | `Dictionary<string, object>?` | Per-update brush cache during live preview walks |
+| `_dynTaggedControls` | `List<WeakReference<object>>` | Discovered dyn-tagged controls for O(n) live preview |
+| `_overriddenThemeDictKeys` | `HashSet<string>` | ThemeDictionary keys we've overridden (for PrepareForNewTheme diff) |
+
+### Static Lookup
+
+| Field | Type | Purpose |
+|-------|------|---------|
+| `ColorToPaletteKey` | `Dictionary<string, string>` | Maps known ARGB text colors to palette key names for bind-once targeting |
 
 ### The `_rootOriginals` Map
 
@@ -1099,21 +1280,22 @@ It is pre-populated in the constructor from all static `TreeColorMaps`
 ### Color Map Lifecycle
 
 ```
-ApplyTheme("crimson"):
-    1. _activeColorMap = combinedMap (base + cross-mapped + stale-mapped)
-    2. _reverseColorMap = inverse of combinedMap
-    3. _rootOriginals += crimson's replacement->original entries
+ApplyTheme("crimson") [first apply, no active theme]:
+    1. RevertTheme() — full revert (safe when no active theme)
+    2. _activeColorMap = combinedMap (base + cross-mapped + stale-mapped)
+    3. _reverseColorMap = inverse of combinedMap
+    4. _rootOriginals += crimson's replacement->original entries
 
-ApplyTheme("loki"):
-    1. RevertTheme() clears _activeColorMap, _reverseColorMap
-    2. _rootOriginals still has crimson's entries
-    3. _activeColorMap = combinedMap (loki base + crimson cross-map + stale-map)
-    4. _reverseColorMap = inverse of combinedMap
+ApplyTheme("loki") [switching from crimson]:
+    1. PrepareForNewTheme(lokiKeys) — removes stale crimson-only keys, shared keys stay
+    2. _activeColorMap = combinedMap (loki base + crimson cross-map + stale-map)
+    3. _reverseColorMap = inverse of combinedMap
 
-RevertTheme():
+RevertTheme() [reverting to Native]:
     1. _activeColorMap = null
     2. _reverseColorMap = null (after purge completes)
     3. _rootOriginals persists (never cleared)
+    4. _dynTaggedControls cleared
 ```
 
 ---
@@ -1163,19 +1345,19 @@ This prevents brush objects from accumulating across many rapid updates.
 
 ### Style Priority vs. LocalValue Priority
 
-(`hook/ThemeEngine.cs:1003-1016`)
+> **Note:** The method formerly called `SetValueStylePriority` has been renamed to `SetValueLocalPriority` — the original name was misleading. `Enum.ToObject(bpType, 0)` resolves to `BindingPriority.LocalValue`, NOT Style priority. The field `_bindingPriorityStyle` was also renamed to `_bindingPriorityLocal`.
 
-In normal walks, brushes are set at Avalonia's **Style priority** via
-`_r.SetValueStylePriority()`. This is lower than `LocalValue` priority, which means:
+In the dyn-tagged walker, brushes are set at **LocalValue priority** via `prop.SetValue()` for controls whose DynamicResource binding didn't survive or wasn't established. The bind-once pattern (`BindToDynamicResource`) avoids this by creating live resource bindings that auto-update from ThemeDictionary changes.
 
-- Hover and pressed style triggers (which use `LocalValue`) temporarily override our
-  color, then our color reasserts when the trigger deactivates.
-- This creates natural-feeling hover effects without any custom hover handling.
+### Live Preview Performance: O(n) vs O(N)
 
-In live preview walks, brushes are set at **LocalValue priority** via direct
-`prop.SetValue()`. This is necessary because Root's controls already have `LocalValue`
-brushes; Style priority would not override them. The trade-off is that hover effects
-during live preview are suppressed.
+With the WeakRef tracking list, live preview updates are now O(n) where n is the number of dyn-tagged controls (~16), not O(N) where N is the total visual tree size (~500+). The breakdown:
+
+| Path | Cost | When |
+|------|------|------|
+| ThemeDictionary update | O(1) — DynamicResource propagation | Every live preview tick |
+| `UpdateDynTaggedControlsFromPalette` | O(~16) WeakRef iterations | Every live preview tick |
+| Full tree walk | O(500+) nodes | Non-live: theme apply, sidebar injection, burst walks |
 
 ### Throttle and Debounce Summary
 
@@ -1251,4 +1433,4 @@ Uprooted settings page via the theme engine instance.
 
 **Canonical for:** ThemeEngine algorithm (phases 1–6), resource-first migration plan, 32-key derivation table for custom themes, ping color fix strategy, CSS variable bridge, live preview system, revert mechanics
 **Not canonical for:** Root's 32 key hex values → [ROOT_THEME_SYSTEM_FINDINGS.md](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | Root control types/style classes → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md)
-*Last updated: 2026-02-19*
+*Last updated: 2026-02-22*

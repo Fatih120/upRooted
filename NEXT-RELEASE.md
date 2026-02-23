@@ -53,7 +53,7 @@ The entire custom theme system was reworked:
 
 **Custom text color.** A new text color input lets you pin the text color manually. Leave it empty to keep the automatic behavior (derived from background lightness).
 
-**Tag-based visual tree walker.** Injected controls are tagged with `dyn-fg:`, `dyn-bg:`, and `dyn-bb:` attributes. A 100ms interval walker recolors all tagged controls from the live palette. Root's native controls use a separate Foreground-matching pass.
+**Tag-based visual tree walker.** Injected controls are tagged with `dyn-fg:`, `dyn-bg:`, and `dyn-bb:` attributes. A 100ms interval walker recolors all tagged controls from the live palette. Root's native text controls are converted to DynamicResource bindings on first encounter (bind-once pattern) and then auto-update from ThemeDictionary changes.
 
 **No-recolor island.** The custom theme card is now immune to the walker. The ping color toggle off-state uses a hardcoded color so the thumb does not blend into the card background.
 
@@ -104,6 +104,20 @@ Settings pages now use `CreateOverlayScrollViewer`, which relocates the vertical
 **Back arrow.** Now found by child order in the header Grid rather than by bounds or text matching. Hidden using a collapse pattern (Opacity, MaxWidth, MaxHeight, Width, and Margin all zeroed) instead of toggling `IsVisible`, which avoids conflicting with Root's data binding.
 
 **Auto-nav guard.** A `_hasAutoNavigated` flag ensures the settings page only auto-navigates to the About tab once per open, not on every Root theme variant change.
+
+---
+
+## Updated: Theme Switch Performance and Live Recolor
+
+Three architectural changes eliminate theme switch lag and fix live preview desync:
+
+**In-place theme switching.** Switching between Uprooted themes (Crimson to Cosmic Smoothie, preset to custom, etc.) no longer flashes Root's default colors. The old path called `RevertTheme()` before every apply, removing all overrides and re-adding them (two full resolution passes). The new `PrepareForNewTheme` removes only stale ThemeDictionary keys — keys in the old theme but not the new one — while shared keys stay in place for overwrite. Full `RevertTheme` only runs when reverting to Native (correct there).
+
+**Bind-once walker.** The visual tree walker's untagged-Foreground handler was destructively overwriting DynamicResource bindings on Root's native TextBlocks every 100ms via `prop.SetValue`. Controls then stopped responding to ThemeDictionary updates until the next walk pass. Now the walker detects untagged controls, binds them to the appropriate DynamicResource key (`TextPrimary`, `TextSecondary`, `TextTertiary`) via `BindToDynamicResource`, and tags them with `dyn-fg:` so subsequent walks use the efficient tag-based path. Once bound, controls auto-update from ThemeDictionary changes with zero walker involvement.
+
+**O(n) live preview.** Live custom theme preview (dragging color sliders) previously walked the full visual tree on every 100ms tick — ~500+ nodes to find ~16 dyn-tagged controls. Now a `WeakReference<object>` list tracks discovered dyn-tagged controls. During live preview, `UpdateDynTaggedControlsFromPalette` iterates this list directly — O(~16) iterations instead of O(500+). Full tree walks still run on non-live paths (theme apply, sidebar injection) to discover new controls and populate the list.
+
+**Computed palette keys.** Two new derived keys — `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` — are luminance-aware highlight surfaces for gear/info buttons. These are bound via DynamicResource, so button backgrounds update live during color slider drag without waiting for a walker pass.
 
 ---
 
@@ -159,6 +173,12 @@ The old `[HH:mm:ss.fff] [Category] message` format still works -- existing calls
 - **Custom ping color bleed** - `ApplyPingColorOverride()` was overriding `ThemeAccentColor` and `ThemeAccentBrush` globally, causing buttons and active-state UI to take on the ping color. The visual tree walk already handles the correct controls
 - **ResourceDictionary lookups** - `dict["key"]` only checks direct entries, not merged dictionaries. Switched to `Application.TryGetResource` for full resolution chain
 - **Theme preview swatch hover** - Transparent background on the color preview swatch caused a `PointerExited` event when the mouse crossed over it. Fixed with `IsHitTestVisible = false`
+- **Theme switch flash-of-defaults** - Switching between Uprooted themes (Crimson → Cosmic Smoothie) caused a brief flash of Root's default colors because `RevertTheme()` removed all overrides before re-applying. `PrepareForNewTheme` now does in-place key diffing
+- **Live preview desync on Root native text** - The untagged Foreground walker destructively overwrote DynamicResource bindings via `prop.SetValue`, causing Root's native TextBlocks to stop responding to ThemeDictionary updates. Bind-once pattern preserves bindings
+- **Card borders not updating during live preview** - Card borders had `dyn-bb:Border` walker tags but no DynamicResource binding for BorderBrush. Added `BindToDynamicResource` at all card creation points
+- **Gear icon background stale until Refresh** - Theme card gear button used a computed color with no DynamicResource binding. New `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` palette keys enable binding
+- **Nav highlight not updating on variant change** - Selected nav highlight read `HighlightNormal` once at build time. Now bound to `DynamicResource("HighlightNormal")` for live updates
+- **`SetValueStylePriority` misnamed** - Method used `BindingPriority.LocalValue` (enum value 0), not Style priority. Renamed to `SetValueLocalPriority` to match actual behavior
 - **Version migration never fired** - `UprootedSettings.Load()` had no `case "Version":` in the INI parser switch, so the Version property always returned its hardcoded default. Upgrade detection never worked. The missing case is now added
 
 ---
@@ -168,5 +188,3 @@ The old `[HH:mm:ss.fff] [Category] message` format still works -- existing calls
 - **MessageLogger: card positioning** - `FindMessageGridInContainer` returns null; the container structure may have changed and needs investigation
 - **NSFW filter** - The Avalonia-native visual tree scanner (Phase 4.5g) has not been validated with the Google Vision API in production
 - **SilentTyping** - Both interception layers are deployed but have not been validated with two simultaneous accounts
-- **DynamicResource binding** - `BindToDynamicResource` in AvaloniaReflection does not propagate changes at runtime; the tag-based walker is the real mechanism
-- **Uprooted tab header** - The injected sidebar tab header text does not recolor when a custom theme changes

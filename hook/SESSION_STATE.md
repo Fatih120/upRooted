@@ -4,6 +4,17 @@
 
 ## Shipped This Cycle
 
+### Post-v0.5.0-rc (theme switch performance + live recolor fix — 2026-02-22)
+- **In-place theme switching**: `PrepareForNewTheme` replaces `RevertTheme` for theme-to-theme transitions — removes only stale ThemeDictionary keys (in old theme but not new), shared keys stay for overwrite. Eliminates flash of Root defaults between themes. Full `RevertTheme` still used for revert-to-native path.
+- **Bind-once walker**: Untagged Foreground walker block now uses `BindToDynamicResource` + `dyn-fg:{paletteKey}` tag on first encounter. Static `ColorToPaletteKey` dictionary maps ~12 known ARGB text colors to palette key names. Once tagged, controls auto-update from ThemeDictionary changes with zero walker involvement. `else` guard ensures bind-once only runs for non-dyn-tagged controls (fixed tag overwrite bug).
+- **WeakRef tracking**: `_dynTaggedControls` (`List<WeakReference<object>>`) tracks discovered dyn-tagged controls. `UpdateDynTaggedControlsFromPalette` iterates this list for O(~16) live preview updates instead of O(500+) full tree walks. Populated in WalkAndRecolor, cleared in RevertTheme. `RegisterDynTaggedControl(object)` public API for external callers.
+- **Computed palette keys**: `BackgroundButtonOnElevated` (AdjustForHighlight on Elevated, 12%) and `BackgroundButtonOnSecondary` (AdjustForHighlight on Secondary, 12%) for gear/info button DynamicResource binding. `DeriveHighlightSurface` helper uses luminance-aware direction. Added to GenerateV2Palette and all 3 preset themes.
+- **Card border DynamicResource bindings**: Added `BindToDynamicResource(card, "BorderBrush", "Border")` at all 4 dyn-bb:Border tag locations in ContentPages.
+- **Nav highlight binding**: Selected nav highlight now uses `BindToDynamicResource("HighlightNormal")` instead of static color read.
+- **Online indicator registration**: SidebarInjector calls `ThemeEngine.RegisterDynTaggedControl(node)` when first tagging sidebar text controls.
+- **Gear/info button bindings**: Theme card gear → `dyn-bg:BackgroundButtonOnElevated`, plugin card gear/info → `dyn-bg:BackgroundButtonOnSecondary`. PointerExited handlers re-bind to DynamicResource instead of setting static color.
+- **AvaloniaReflection rename**: `_bindingPriorityStyle` → `_bindingPriorityLocal`, `SetValueStylePriority` → `SetValueLocalPriority`. Documents that `Enum.ToObject(bpType, 0)` is LocalValue, not Style.
+
 ### Post-v0.5.0-rc (custom-theme parity + native settings match — 2026-02-22)
 - **Settings text recolor desync resolved**:
   - Native settings menu retargeting now continuously re-binds deterministic text keys while settings stays open.
@@ -84,7 +95,7 @@
 - **Experimental toggle z-order fix** — Toggle pill now renders on top of banner
 
 ### Known issues / TODOs
-- **DynamicResource binding via reflection silently fails** — `BindToDynamicResource` code present but doesn't propagate changes; tag-based walker is the real mechanism
+- **DynamicResource binding now works** — `BindToDynamicResource` successfully creates live resource bindings. Used by bind-once walker to convert untagged controls to auto-updating DynamicResource bindings. Confirmed working in production.
 - **SVG style UI removed** — Root resolves SVGs at variant-load time; variant switching handles common case
 - **Version copy intercept** — commented out, needs investigation (Root's async `SetTextAsync` races with our clipboard write). See `SidebarInjector.cs` ~line 1155.
 
@@ -393,10 +404,8 @@ Priority order per TASKS.md: bugfixes → visual consistency → performance →
 
 1. **Version copy intercept** — SidebarInjector clipboard handler commented out, needs fix for Root's async `SetTextAsync` race.
 2. **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure investigation needed.
-3. **Uprooted tab header recolor** — Injected sidebar text doesn't update on custom theme changes.
-4. **Root "Online" indicator** — Doesn't live-update with custom text color.
-5. **Structural fallback for settings detection** — Remove "APP SETTINGS" text dependency.
-6. **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, Presence Beacon all deployed but need real-world testing.
+3. **Structural fallback for settings detection** — Remove "APP SETTINGS" text dependency.
+4. **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, Presence Beacon all deployed but need real-world testing.
 
 ## Rootcord Plugin (v0.4.2 — 2026-02-20)
 

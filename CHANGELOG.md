@@ -28,12 +28,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/LogConsole.cs` (new)
 - **Native theme settings button** — Gear button on the "Native" preset card opens Root's native Change Theme page. Uses ViewModel-driven `ListBox.SelectedItem` binding for proper navigation. New `SelectRootTab()` helper enables programmatic Root settings tab navigation by `MenuTitle` match.
 - **Custom theme overhaul** — Auto-apply on keystroke, full OKLCH lightness range (light backgrounds work), smooth direction-aware derivation, custom text color input, tag-based visual tree walker for live recoloring, variant switching for light custom themes
-- **DynamicResource binding attempt** — `BindToDynamicResource` in AvaloniaReflection (silently fails; walker is real mechanism)
+- **DynamicResource binding** — `BindToDynamicResource` in AvaloniaReflection creates live resource bindings via `GetResourceObservable(key)` + `Bind()`. Now used successfully by the bind-once walker to convert untagged controls to auto-updating DynamicResource bindings.
 - **Themes page refresh button** — Added a `Refresh` button to Theme Settings that reapplies the currently active theme (`default-dark`, custom, or preset) and rebuilds the page. Uses standard Uprooted button styling (rounded border, highlight-derived stroke, hover tint, release-activated click).
   - File: `hook/ContentPages.cs`
 
 ### Changed
 
+- **Theme switch performance: in-place switching + bind-once walker + WeakRef live preview** — Eliminated theme switch lag and live preview desync:
+  - `PrepareForNewTheme` replaces `RevertTheme` for theme-to-theme transitions — removes only stale ThemeDictionary keys, shared keys stay for overwrite (no flash of Root defaults).
+  - Bind-once walker: untagged controls get `BindToDynamicResource` + `dyn-fg:` tag on first walk pass. Controls auto-update from ThemeDictionary changes; subsequent walks use efficient tag-based path.
+  - `_dynTaggedControls` (`List<WeakReference<object>>`) tracks discovered dyn-tagged controls. Live preview iterates this list directly — O(~16) instead of O(500+) full tree walk.
+  - `ColorToPaletteKey` static lookup maps known ARGB text colors to palette key names for bind-once targeting.
+  - `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` computed palette keys for gear/info button DynamicResource binding.
+  - Card borders now bound to `DynamicResource("Border")` at all 4 creation points in ContentPages.
+  - Nav highlight bound to `DynamicResource("HighlightNormal")` for live variant-change updates.
+  - `RegisterDynTaggedControl(object)` public API for external callers (SidebarInjector) to register controls in the WeakRef list.
+  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
 - **Light parity pass for settings/theme UI** — fixed live recolor desyncs for native settings labels (including profile `Online` status), aligned sidebar header tint mapping with Root converter behavior, and refined Themes page preset/refresh visuals to match native button/card treatment while preserving live custom-theme updates.
   - Files: `hook/SidebarInjector.cs`, `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
 - **Developer channel UI refresh** — Dev channel visuals are now unified around the Dev blue token and include a higher-contrast channel badge style (dark fill + blue outline/text). Update status suffix now uses ` [Dev]` formatting (for example: `Up to date (v0.4.2) [Dev]`) instead of `(Dev)`.
@@ -88,6 +98,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Theme switch flash-of-defaults** — Switching between Uprooted themes caused a brief flash of Root's default colors because `RevertTheme()` removed all overrides before re-applying. `PrepareForNewTheme` now does in-place key diffing — removes only stale keys, shared keys stay for overwrite.
+  - File: `hook/ThemeEngine.cs`
+- **Live preview desync on Root native text** — The untagged Foreground walker destructively overwrote DynamicResource bindings via `prop.SetValue`, causing Root's native TextBlocks (channels, timestamps, usernames) to stop responding to ThemeDictionary updates until the next 100ms walk pass. Bind-once pattern now preserves DynamicResource bindings.
+  - File: `hook/ThemeEngine.cs`
+- **Bind-once tag overwrite bug** — The bind-once walker block was not guarded by `else`, causing it to run on already-dyn-tagged controls. A control with `dyn-bg:BackgroundElevated,dyn-bb:Border` would have its tag overwritten to `dyn-fg:TextPrimary`, destroying bg/bb bindings.
+  - File: `hook/ThemeEngine.cs`
+- **Card borders not updating during live preview** — Card borders had `dyn-bb:Border` walker tags but no `BindToDynamicResource` for `BorderBrush`. Added at all 4 card creation points.
+  - File: `hook/ContentPages.cs`
+- **Gear icon background stale until Refresh** — Theme/plugin card gear buttons used computed colors with no DynamicResource binding. New `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` palette keys enable live binding.
+  - Files: `hook/ThemeEngine.cs`, `hook/ContentPages.cs`
+- **Nav highlight not updating on variant change** — Selected nav highlight read `HighlightNormal` once at build time. Now bound to `DynamicResource("HighlightNormal")`.
+  - File: `hook/SidebarInjector.cs`
+- **`SetValueStylePriority` misnamed** — Method used `Enum.ToObject(bpType, 0)` which is `BindingPriority.LocalValue`, not Style priority. Renamed to `SetValueLocalPriority`; field `_bindingPriorityStyle` → `_bindingPriorityLocal`.
+  - File: `hook/AvaloniaReflection.cs`
 - **Theme switching semantics (tab open vs. theme change)** — Opening Root/Uprooted settings tabs no longer changes the active theme state. Theme state now changes only when the user performs an actual theme selection action.
   - File: `hook/SidebarInjector.cs`
 - **Light → Root Dark while custom theme active** — Fixed the no-op transition path by forcing `PureDark` (instead of `Dark`) when applying a dark Uprooted theme from native Light, so later native `Root Dark` selection becomes a real `PureDark -> Dark` transition.

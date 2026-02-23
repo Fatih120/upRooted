@@ -105,8 +105,8 @@ object? GetFontFamily(object? control)
 ### Avalonia Property System
 
 ```csharp
-// Set value at Style priority (preserves hover/pressed triggers)
-bool SetValueStylePriority(object control, string propertyFieldName, object? value)
+// Set value at LocalValue priority (renamed from SetValueStylePriority — was misnamed)
+bool SetValueLocalPriority(object control, string propertyFieldName, object? value)
 
 // Clear a property value (reverts to default/inherited)
 bool ClearValue(object? control, string propertyFieldName)

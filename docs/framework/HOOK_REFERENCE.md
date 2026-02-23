@@ -54,30 +54,30 @@ The hook layer consists of 31 source files in the `hook/` directory:
 |------|------:|---------|
 | `Entry.cs` | 37 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 577 | Multi-phase startup orchestrator (Phase 0-5), version migration |
-| `AvaloniaReflection.cs` | ~2383 | Reflection cache for ~80 Avalonia types, ~55 members |
-| `VisualTreeWalker.cs` | 554 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | ~1508 | Event + timer-based sidebar injection and content management |
-| `ContentPages.cs` | ~3602 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | ~1280 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, live preview, custom ping color |
+| `StartupHook.cs` | 637 | Multi-phase startup orchestrator (Phase 0-5), version migration |
+| `AvaloniaReflection.cs` | ~3320 | Reflection cache for ~80 Avalonia types, ~55 members |
+| `VisualTreeWalker.cs` | 573 | DFS visual tree traversal, settings layout discovery |
+| `SidebarInjector.cs` | ~2034 | Event + timer-based sidebar injection and content management |
+| `ContentPages.cs` | ~4718 | Page builders for Uprooted/Plugins/Themes settings |
+| `ThemeEngine.cs` | ~2624 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, in-place switching, bind-once walker, WeakRef live preview, custom ping color |
 | `ColorUtils.cs` | ~414 | HSL/HSV/RGB/OKLCH conversion and manipulation |
 | `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
 | `HtmlPatchVerifier.cs` | 442 | Self-healing HTML patch system with FileSystemWatcher |
 | `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
-| `ClearUrlsEngine.cs` | 467 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
-| `LinkEmbedEngine.cs` | 2409 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `ClearUrlsEngine.cs` | 486 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
+| `LinkEmbedEngine.cs` | 2493 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
-| `MessageLogger.cs` | ~2100 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
+| `MessageLogger.cs` | ~1707 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
 | `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
-| `AutoUpdater.cs` | 909 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
-| `ProfileBadgeInjector.cs` | 535 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
+| `AutoUpdater.cs` | 1039 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
+| `ProfileBadgeInjector.cs` | 1208 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
 | `SilentTypingEngine.cs` | ~90 | Blocks `SetTypingIndicator` gRPC calls via .NET `DiagnosticListener` interception. Subscribes to HTTP diagnostic events, intercepts `HttpRequestOut.Start`, redirects matching requests to `localhost:0`. Phase 4.5f, 12s startup delay. Original DiagnosticListener approach by Kurumi Nanase. |
 | `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
-| `RootcordEngine.cs` | ~2873 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
-| `DesktopNotification.cs` | 56 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
-| `AuditLogEngine.cs` | ~674 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
-| `UprootedSettings.cs` | 210 | INI-based settings persistence |
+| `RootcordEngine.cs` | ~4945 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `DesktopNotification.cs` | 86 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
+| `AuditLogEngine.cs` | ~680 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
+| `UprootedSettings.cs` | 268 | INI-based settings persistence |
 | `Logger.cs` | ~170 | Thread-safe file logging + wide event emission + OnLine callback |
 | `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value fields, dur_ms, parent-child linking, tail sampling) |
 | `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks (error/slow/notable/heartbeat emission rules) |
@@ -1100,7 +1100,7 @@ All creation methods return `object?` (the Avalonia control instance):
   `control.SetValue(AvaloniaProperty, object, BindingPriority.LocalValue)`.
 - **`GetAvaloniaProperty(control, avaloniaPropertyField)`**
   (`AvaloniaReflection.cs:825-843`) -- Reads via `control.GetValue(AvaloniaProperty)`.
-- **`SetValueStylePriority(control, propertyFieldName, value)`**
+- **`SetValueLocalPriority(control, propertyFieldName, value)`**
   (`AvaloniaReflection.cs:1266-1307`) -- Sets a value at Style priority (lower than
   LocalValue), allowing hover/pressed style triggers to temporarily override it.
 - **`ClearValue(control, propertyFieldName)`** (`AvaloniaReflection.cs:1178-1218`) --
@@ -1375,7 +1375,7 @@ because the struct's underlying representation is still an integer.
 **LocalValue** priority (0). This is used for control construction -- creating
 TextBlocks, Borders, etc. -- where the value should be definitive and override styles.
 
-`SetValueStylePriority()` (`AvaloniaReflection.cs:1266-1307`) writes values at
+`SetValueLocalPriority()` (`AvaloniaReflection.cs:1266-1307`) writes values at
 **Style** priority (3). This is critical for the theme engine's visual tree walk. When
 the theme engine recolors a Button's `Background`, it sets the replacement brush at
 Style priority. If the user hovers over that button, Avalonia's `:pointerover`
@@ -1409,7 +1409,7 @@ priority level:
 
 2. **Visual tree color walk** (Phase 4 of `ApplyThemeInternal`): For controls with
    hardcoded brushes (not bound to resources), the walk sets replacement brushes at
-   Style priority via `SetValueStylePriority`. This is high enough to override
+   Style priority via `SetValueLocalPriority`. This is high enough to override
    `Inherited` and `Unset` values, but low enough to let `StyleTrigger` hover effects
    work. The theme engine's values thus "win" over Root's theme defaults (which are
    typically at Style priority or lower) while preserving interactive feedback.
@@ -1417,7 +1417,7 @@ priority level:
    The one exception is controls where Root sets colors at LocalValue priority in
    code-behind. For these, Style-priority writes are invisible. The live preview mode
    handles this by escalating to LocalValue, and the normal walk's `prop.SetValue`
-   fallback (`ThemeEngine.cs:1015`) catches cases where `SetValueStylePriority` cannot
+   fallback (`ThemeEngine.cs:1015`) catches cases where `SetValueLocalPriority` cannot
    override the existing value.
 
 ---
@@ -1802,51 +1802,38 @@ Three sections:
 
 ## Theme Engine
 
-**File:** `hook/ThemeEngine.cs` (~1280 lines)
+**File:** `hook/ThemeEngine.cs` (~2624 lines)
 
 The theme engine is the largest and most complex component. It modifies Root's native
-Avalonia UI colors at runtime through two complementary strategies: resource dictionary
-injection and visual tree color walking.
+Avalonia UI colors at runtime through three complementary strategies: ThemeDictionary
+overrides (Root's 32 keys), Styles[0]/MergedDictionary overrides (FluentTheme/SimpleTheme),
+and a visual tree walker with bind-once DynamicResource conversion.
 
 ### Architecture
 
-Theme application has 6 phases (in `ApplyThemeInternal`, `ThemeEngine.cs:365-586`):
+Theme application proceeds through multiple phases in `ApplyThemeInternal`:
 
-1. **Phase 1: Override Styles[0].Resources** -- SimpleTheme keys
-   (`ThemeAccentColor`, `ThemeAccentBrush`, etc.) in `Application.Styles[0].Resources`
-   are directly overwritten. Original values are saved in `_savedOriginals` for revert.
-   *(Note: These are SimpleTheme keys, not Root's actual theme keys. Root's views bind to
-   32 custom keys (`BrandPrimary`, `TextPrimary`, etc.) in `ThemeDictionaries`.)*
+1. **In-place prep or full revert** -- If a theme is already active, `PrepareForNewTheme`
+   removes only stale ThemeDictionary keys (in old theme but not new). If no theme is
+   active (first apply), `RevertTheme` runs for a clean slate.
 
-2. **Phase 2: Add MergedDictionary** -- FluentTheme keys are injected via a
-   new `ResourceDictionary` added to `Application.Resources.MergedDictionaries`. For
-   every Color key, a corresponding Brush variant is auto-generated.
-   *(Note: Root uses `MediaFluentTheme`, not standard `FluentTheme`. Its controls do not
-   bind to these keys (`SystemAccentColor`, etc.). See
-   [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
-   for the correct target keys.)*
+2. **Phase 1: ThemeDictionaries override** -- Root's 32 color keys (`BrandPrimary`,
+   `TextPrimary`, `BackgroundPrimary`, etc.) are overridden directly in
+   `Application.Resources.ThemeDictionaries[variant]`. DynamicResource-bound controls
+   update instantly with zero tree walking.
 
-3. **Phase 3: Visual Tree Color Maps** -- Builds a mapping of original ARGB colors to
-   replacement colors. Also cross-maps from previous themes and stale colors via
-   `_rootOriginals`.
+3. **Phase 2: Override Styles[0].Resources + MergedDictionary** -- SimpleTheme/FluentTheme
+   keys for the minority of controls that bind to them (e.g., `RootSplitView.PaneBackground`).
 
-4. **Phase 4: Visual Tree Walks** -- Immediate full walk + scheduled 500ms continuous
-   walks + LayoutUpdated interceptor for instant navigation detection.
+4. **Phase 3: Visual tree walk** -- A delayed walk discovers hardcoded-color controls and
+   converts them to DynamicResource bindings via the bind-once pattern. Dyn-tagged controls
+   are updated from the palette and registered in the WeakRef tracking list.
 
-5. **Phase 5: DWM Title Bar** -- Sets the Windows 11 title bar color via
+5. **Phase 4: DWM Title Bar** -- Sets the Windows 11 title bar color via
    `DwmSetWindowAttribute(DWMWA_CAPTION_COLOR)`.
 
-6. **Phase 6: Custom Ping Color Override** -- If the user has set a custom ping/reply
-   highlight color (`_customPingColor`), overrides `HighlightForegroundColor`,
-   `HighlightForegroundBrush`, and `TextSelectionHighlightColor` (with `0x60` alpha)
-   in both `Styles[0].Resources` and the injected `MergedDictionary`. This runs last
-   so the override persists across theme switches.
-   *(Note: Root's actual mention highlight keys are `SelfMentionBackground`,
-   `SelfMentionBorder`, `OtherMentionBackground`, etc. in `ThemeDictionaries`. The
-   current `HighlightForegroundColor` target is a SimpleTheme key that may not affect
-   Root's mention rendering. See
-   [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md)
-   for the correct mention color keys.)*
+6. **Phase 5: Custom Ping Color Override** -- Overrides `SelfMention`, `SelfMentionBackground`,
+   and `SelfMentionBorder` in ThemeDictionaries for custom ping/reply highlight color.
 
 ### Resource Dictionary Injection
 
@@ -1858,17 +1845,20 @@ written to both `Styles[0].Resources` and the injected `MergedDictionary`.
 
 ### Visual Tree Color Walk
 
-The walk uses a two-pass approach (`WalkAndRecolor`, `ThemeEngine.cs:970-1023`):
+`WalkAndRecolor` handles three categories of controls:
 
-**Pass 1 -- Collect** (`CollectColorChanges`, `ThemeEngine.cs:1025-1071`):
-Recursively walks the visual tree, reading `Background`, `Foreground`, `BorderBrush`,
-and `Fill` properties. For each `SolidColorBrush`, extracts the color string and looks
-it up in `_activeColorMap`. Skips subtrees tagged `"uprooted-no-recolor"`. Max depth: 50.
+1. **Dyn-tagged controls** (e.g., `dyn-fg:TextPrimary,dyn-bg:BackgroundSecondary`):
+   Parses the tag, looks up each palette key, sets the property directly. Registers the
+   control in the WeakRef tracking list for O(n) live preview updates.
 
-**Pass 2 -- Apply**: For each pending change, creates a new brush and sets it. In
-normal mode, uses `SetValueStylePriority` (Style priority preserves hover/pressed
-triggers). In live preview mode, uses direct `prop.SetValue` (LocalValue priority to
-force-override existing LocalValues).
+2. **Untagged controls with known foreground colors** (bind-once pattern):
+   Uses `ColorToPaletteKey` to map the control's foreground ARGB to a palette key name.
+   Calls `BindToDynamicResource(visual, "Foreground", paletteKey)` to create a live
+   resource binding, then tags the control with `dyn-fg:{paletteKey}`. Once bound,
+   the control auto-updates from ThemeDictionary changes. Falls back to direct
+   `prop.SetValue` if binding fails.
+
+3. **No-recolor controls** (tagged `uprooted-no-recolor`): Skipped entirely.
 
 ### Walk Scheduling
 
@@ -1938,20 +1928,18 @@ the BG hue; borders use the accent hue for a dual-tone effect.
 
 ### Live Preview
 
-`UpdateCustomThemeLive(accentHex, bgHex)` (`ThemeEngine.cs:170-359`):
+`UpdateCustomThemeLive(accentHex, bgHex)`:
 
-Lightweight update for color picker drag, throttled to 16ms (~60fps). Skips
-`RevertTheme()` and audits. Steps:
+Lightweight update for color picker drag, throttled to 16ms (~60fps). Steps:
 
-1. Update `Styles[0].Resources` in-place.
-2. Replace injected `MergedDictionary` contents.
-3. Build combined color map with cross-mappings from:
-   - Previous `_activeColorMap` replacements.
-   - `_rootOriginals` for stale theme colors.
-   - Uprooted's own UI element colors (`ContentPages` statics).
-   - Raw bg/accent values for page backgrounds.
-4. Immediate tree walk with brush caching (`_liveBrushCache`) to avoid recreating
-   identical brushes for controls sharing the same color.
+1. Update ThemeDictionaries with new palette values — DynamicResource-bound controls
+   update instantly (~16ms frame).
+2. Update `Styles[0].Resources` and `MergedDictionary` contents in-place.
+3. `UpdateDynTaggedControlsFromPalette(palette)` — iterates the WeakRef tracking list
+   (~16 controls) to update dyn-tagged controls that aren't DynamicResource-bound.
+   O(n) instead of O(500+) full tree walk.
+4. 100ms throttled full tree walk still fires as safety net — discovers new controls
+   and populates the WeakRef list.
 5. Update DWM title bar.
 
 ### Revert Mechanism
@@ -1995,6 +1983,7 @@ Converts `#RRGGBB` to COLORREF format (`0x00BBGGRR`).
 - `RevertTheme()` -- Restore original Root colors.
 - `WalkVisualTreeNow()` -- Trigger an immediate walk.
 - `ScheduleWalkBurst()` -- Immediate + follow-up walks.
+- `RegisterDynTaggedControl(object)` -- Register an externally-tagged control in the WeakRef list.
 - `SetCustomPingColor(hex)` -- Set a custom ping/reply highlight color override (persists across theme switches).
 - `ClearCustomPingColor()` -- Clear the override and restore theme defaults.
 - `GetCustomPingColor()` -- Get the current custom ping color (null if not set).

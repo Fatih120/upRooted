@@ -59,9 +59,6 @@ Current focus areas (in order):
 
 ### Alpha/Beta Plugin Hardening
 
-- [ ] **Theme Engine v2 production validation** — ThemeEngine v2 (resource-first, OKLCH) deployed but not tested in production. Verify: all 3 presets, custom theme live preview, theme revert, variant switching, ping color overrides.
-  - Files: `hook/ThemeEngine.cs`
-
 - [ ] **ClearURLs edge case testing** — Validate with unusual URL patterns, international domains, edge cases in compose editor.
   - Files: `hook/ClearUrlsEngine.cs`
 
@@ -162,6 +159,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Theme switch lag eliminated + live recolor fix** (2026-02-22) — In-place theme switching (`PrepareForNewTheme` removes only stale keys instead of full `RevertTheme`), bind-once walker (untagged controls get DynamicResource binding on first walk), WeakRef tracking for O(~16) live preview updates, computed palette keys (`BackgroundButtonOnElevated`/`BackgroundButtonOnSecondary`) for gear icon DynamicResource binding, card borders bound to DynamicResource, nav highlight bound to DynamicResource, `SetValueStylePriority` → `SetValueLocalPriority` rename.
+  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
 - [x] **Custom-theme visual parity pass completed** (2026-02-22) — fixed settings tab text recolor desync (including Root “Online”), corrected sidebar/header text key mapping (TextTertiary for section headers), restored/live-synced preset nested cards with directional elevated surfaces, added selected preset inner highlight wash, and matched Themes `Refresh` button styling/text behavior to About `Open Logs`.
   - Files: `hook/SidebarInjector.cs`, `hook/ThemeEngine.cs`, `hook/ContentPages.cs`, `research/SETTINGS_HEADER_BINDINGS.md`, `research/ROOT_THEME_SYSTEM_FINDINGS.md`, `docs/framework/ROOT_CONTROL_REFERENCE.md`
 - [x] **Version copy intercept race condition fixed** (2026-02-21) — Root's async `SetTextAsync` no longer races with our clipboard write.

@@ -99,7 +99,7 @@ Then invokes `SetValue(AvaloniaProperty, object, BindingPriority)` via the
 
 ```csharp
 var avProp = avaloniaPropertyField.GetValue(null);   // Static field -> AvaloniaProperty
-_setValueWithPriority.Invoke(control, new[] { avProp, value, _bindingPriorityStyle });
+_setValueWithPriority.Invoke(control, new[] { avProp, value, _bindingPriorityLocal });
 ```
 
 ### Pattern 3: Attached Properties via Static Methods
@@ -256,14 +256,14 @@ GetMergedDictionaries(appResources)?.Add(dict);
 Determines which value wins when multiple sources set the same property. From
 highest to lowest: Animation, LocalValue, StyleTrigger, Style, Template.
 
-The ThemeEngine uses Style priority (lower than LocalValue) so hover/pressed
-triggers can temporarily override themed values
-(`hook/AvaloniaReflection.cs:1266-1307`):
+The ThemeEngine uses `SetValueLocalPriority` to set values. Despite its former name (`SetValueStylePriority`), this method actually uses `BindingPriority.LocalValue` (enum value 0), not Style priority — the original naming was incorrect. The field was renamed `_bindingPriorityStyle` → `_bindingPriorityLocal` to match.
 
 ```csharp
 _setValueWithPriority.Invoke(control,
-    new[] { avaloniaProperty, value, _bindingPriorityStyle });
+    new[] { avaloniaProperty, value, _bindingPriorityLocal });
 ```
+
+For controls that need live ThemeDictionary updates, use `BindToDynamicResource` instead of `SetValueLocalPriority` — this creates a live resource binding that auto-updates when ThemeDictionary values change.
 
 `BindingPriority` is resolved once by scanning assemblies for
 `Avalonia.Data.BindingPriority` (`hook/AvaloniaReflection.cs:807-820`).
@@ -763,6 +763,13 @@ SolidColorBrushType.GetProperty("Color")?.SetValue(brush, color);
 | `uprooted-highlight-{page}` | Nav highlight borders                         |
 | `uprooted-content`          | Content pages                                 |
 | `uprooted-no-recolor`       | Excluded from theme engine tree walks         |
+| `dyn-fg:{key}`              | Foreground bound to DynamicResource palette key (e.g. `dyn-fg:TextPrimary`) |
+| `dyn-bg:{key}`              | Background bound to DynamicResource palette key (e.g. `dyn-bg:BackgroundSecondary`) |
+| `dyn-bb:{key}`              | BorderBrush bound to DynamicResource palette key (e.g. `dyn-bb:Border`) |
+| `dyn-fill:{key}`            | Fill bound to DynamicResource palette key |
+| `dyn-st:{key}`              | Stroke bound to DynamicResource palette key |
+
+Multi-part tags are comma-separated: `dyn-bg:BackgroundElevated,dyn-bb:Border`. The walker parses each part independently. The bind-once walker adds `dyn-fg:` tags to untagged controls whose foreground matches a known palette color.
 
 ---
 
@@ -1041,9 +1048,9 @@ You'll see this in ListBox, ListBoxItem, TransparentButton, RootScrollViewer, Me
 
 `AppBuilder.With(new Win32PlatformOptions { OverlayPopups = false })` means context menus, dropdowns, and flyouts open in their own Win32 windows. They are NOT in the main window's OverlayLayer. To find/inject into a popup, use `WindowImpl.s_instances` (see AvaloniaReflection) rather than traversing the main visual tree.
 
-### ThemeEngine Currently Targets Wrong Keys
+### ThemeEngine: DynamicResource Binding via Bind-Once Walker
 
-The existing ThemeEngine overrides FluentTheme/SimpleTheme keys (`SystemAccentColor`, `TextFillColorPrimary`, etc.) which Root's controls do NOT reference. Root's views exclusively bind to Root's own 32 keys (`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) via `DynamicResourceExtension`. This is why some controls remain unthemed after theme application and why toggling a switch mid-theme shows the wrong accent color — the style-level brush still comes from the unmodified root 32 keys. The correct fix is to override Root's 32 keys in `Application.Resources.ThemeDictionaries[variant]`. See [Root Control Reference: Theme System Mechanics](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) and [Root Theme System Findings](../../research/ROOT_THEME_SYSTEM_FINDINGS.md).
+ThemeEngine v2 correctly targets Root's 32 keys in `ThemeDictionaries[variant]`. DynamicResource-bound controls update automatically. For controls with hardcoded foreground colors (not DynamicResource-bound), the bind-once walker converts them to DynamicResource bindings on first walk pass using `BindToDynamicResource`. A `ColorToPaletteKey` static lookup maps known ARGB text colors to palette key names. Once bound, controls auto-update from ThemeDictionary changes with zero further walker involvement. See [Theme Engine Deep Dive: Bind-Once Walker](THEME_ENGINE_DEEP_DIVE.md#bind-once-walker-untagged--dynamicresource).
 
 ### Custom Draw + Skia Lease (Validated)
 
@@ -1062,4 +1069,4 @@ Reference: `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
 
 **Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s*instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
 **Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-\_Avalonia patterns reference for Uprooted v0.4.2. Last updated 2026-02-21.*
+\_Avalonia patterns reference for Uprooted v0.5.0-rc. Last updated 2026-02-22.*
