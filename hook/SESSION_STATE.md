@@ -1,11 +1,14 @@
 # Uprooted Hook - Session State (2026-02-23)
 
-## Release: v0.5.1-dev3
+## Release: v0.5.1-dev4
 
 ## Current State Summary
 
-Dev Console card and auto-update UX fixes are the most recent work.
+Verbose CLR profiler diagnostics and Linux installer fixes are the most recent work.
 
+- **Verbose CLR profiler catch handler** — Both Windows and Linux profilers now inject a 27-byte verbose catch handler into the IL try/catch that loads the hook DLL. On failure, prints full exception + attempted DLL path to console via `Console.WriteLine`. Falls back to 3-byte silent catch if metadata token creation fails. Pre-flight check at profiler init logs DLL existence and file size.
+- **Twemoji emoji rendering** — Emoji in user bio text now rendered as Twemoji images via `UserBioEngine`.
+- **Linux installer fixes** — Stripped UTF-8 BOM from bash installer shebang. Diagnose now checks correct `$PROFILE_DIR` path for hook log.
 - **Experimental plugin safe upgrade** — ALL experimental plugins are now blanket-disabled on every version upgrade via `ExperimentalPlugins` array in `StartupHook.cs`. This prevents startup hangs when unstable plugins survive across versions. The `ShowExperimentalPlugins` flag is also reset. Users re-enable manually from Settings > Plugins.
 - **Theme Engine rebrand** — Renamed from "Themes" to "Theme Engine" across sidebar tab, page header, plugin card, About status field. Plugin enabled logic now reflects actual theme state.
 - **8 preset themes** — Crimson, Cosmic Smoothie, Loki, Marine, Oreo, Sakura (first light preset), Ember. 2×4 grid layout. Loki reworked: gold as BrandPrimary, green as secondary.

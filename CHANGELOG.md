@@ -6,6 +6,24 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.1-dev4] - 2026-02-23
+
+### Added
+
+- **Twemoji emoji rendering in user bios** — Emoji characters in user bio text now rendered as Twemoji images instead of plain Unicode glyphs.
+  - File: `hook/UserBioEngine.cs`
+
+### Fixed
+
+- **CLR profiler silently swallowed hook load failures** — The IL injection catch handler did `pop + leave.s`, discarding all exceptions from `Assembly.LoadFrom`/`GetType`/`CreateInstance`. Both Windows and Linux profilers now inject a verbose 27-byte catch handler that prints the full exception and attempted DLL path to console via `Console.WriteLine`. Falls back to silent 3-byte catch if metadata token creation fails. Pre-flight check logs hook DLL existence and file size at profiler init.
+  - Files: `tools/uprooted_profiler.c`, `tools/uprooted_profiler_linux.c`
+- **Linux installer BOM corrupted shebang** — UTF-8 BOM (`EF BB BF`) at byte 0 of `install-uprooted-linux.sh` prevented bash from recognizing the `#!/bin/bash` shebang, causing `No such file or directory` on line 1.
+  - File: `install-uprooted-linux.sh`
+- **Linux installer diagnose checked wrong path for hook log** — Was checking `$INSTALL_DIR/uprooted-hook.log` instead of `$PROFILE_DIR/uprooted-hook.log`.
+  - File: `install-uprooted-linux.sh`
+
+---
+
 ## [0.5.1-dev3] - 2026-02-23
 
 ### Added
@@ -571,6 +589,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev4]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev3...v0.5.1-dev4
 [0.5.1-dev3]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev2...v0.5.1-dev3
 [0.5.1-dev2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev1...v0.5.1-dev2
 [0.5.1-dev1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.0...v0.5.1-dev1

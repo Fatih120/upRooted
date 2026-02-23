@@ -159,6 +159,12 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Verbose CLR profiler catch handler** (2026-02-23) — Both Windows and Linux profilers now inject verbose catch handler that prints full exception to console when hook loading fails. Pre-flight check logs DLL existence/size.
+  - Files: `tools/uprooted_profiler.c`, `tools/uprooted_profiler_linux.c`
+- [x] **Twemoji rendering in user bios** (2026-02-23) — Emoji in bio text rendered as Twemoji images.
+  - File: `hook/UserBioEngine.cs`
+- [x] **Linux installer BOM + diagnose fix** (2026-02-23) — Stripped UTF-8 BOM from bash installer, fixed diagnose hook log path.
+  - File: `install-uprooted-linux.sh`
 - [x] **Dev Console card + auto-update UX fixes** (2026-02-23) — Dev Console (developer channel only) with Spoofs/Diagnostics/Engines/ReconLogger inner cards. About page restart button orange, "Check for Updates" disabled when update applied. ReconLogger moved from Plugins page to Dev Console. "Dev Plugins" status row on About page.
   - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
 - [x] **Theme switch lag eliminated + live recolor fix** (2026-02-22) — In-place theme switching (`PrepareForNewTheme` removes only stale keys instead of full `RevertTheme`), bind-once walker (untagged controls get DynamicResource binding on first walk), WeakRef tracking for O(~16) live preview updates, computed palette keys (`BackgroundButtonOnElevated`/`BackgroundButtonOnSecondary`) for gear icon DynamicResource binding, card borders bound to DynamicResource, nav highlight bound to DynamicResource, `SetValueStylePriority` → `SetValueLocalPriority` rename.
