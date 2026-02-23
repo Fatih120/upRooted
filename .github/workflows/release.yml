@@ -80,9 +80,9 @@ jobs:
             dev)    TARGET_REPO="The-Uprooted-Project/uprooted-private" ;;
           esac
 
-          # Stable releases are non-prerelease; canary and dev are prerelease
-          IS_PRERELEASE="true"
-          [ "$CHANNEL" = "stable" ] && IS_PRERELEASE="false"
+          # Only dev channel is prerelease; stable and canary are full releases
+          IS_PRERELEASE="false"
+          [ "$CHANNEL" = "dev" ] && IS_PRERELEASE="true"
 
           echo "channel=$CHANNEL" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
