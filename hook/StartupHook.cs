@@ -506,7 +506,7 @@ internal class StartupHook
                             {
                                 loaded = WaitForAssemblyViaEvent(dnbMatch, dnbTimeout);
                             }
-                            catch (TypeLoadException)
+                            catch (Exception)
                             {
                                 Logger.Log("Startup", "Phase 5: AssemblyLoad event unavailable (trimmed host) — polling for DotNetBrowser");
                                 loaded = WaitForAssemblyViaPolling(dnbMatch, dnbTimeout, intervalMs: 500);
@@ -626,7 +626,7 @@ internal class StartupHook
         {
             return WaitForAssemblyViaEvent(match, timeout);
         }
-        catch (TypeLoadException)
+        catch (Exception)
         {
             Logger.Log("Startup", "AssemblyLoad event unavailable (trimmed host) — falling back to polling");
             return WaitForAssemblyViaPolling(match, timeout);
@@ -636,7 +636,7 @@ internal class StartupHook
     /// <summary>
     /// Wait for an assembly matching the predicate using AppDomain.AssemblyLoad event.
     /// Isolated in its own [NoInlining] method so that if AssemblyLoadEventHandler is
-    /// trimmed from the host app's System.Runtime, the TypeLoadException from JIT is
+    /// trimmed from the host app's System.Runtime, the exception from JIT is
     /// catchable by the caller (WaitForAvaloniaAssemblies / Phase 5).
     /// </summary>
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]

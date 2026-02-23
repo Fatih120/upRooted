@@ -419,8 +419,7 @@ internal class HtmlPatchVerifier : IDisposable
         // (Directory.GetDirectories removed by the .NET trimmer) is catchable here.
         // The main WebRtcBundle patch is already found above; this is secondary.
         try { ScanRootAppsHtml(targets); }
-        catch (MissingMethodException) { Logger.Log("HtmlPatch", "Directory.GetDirectories unavailable (trimmed host) — skipping RootApps scan"); }
-        catch (TypeLoadException) { Logger.Log("HtmlPatch", "Directory.GetDirectories unavailable (trimmed host) — skipping RootApps scan"); }
+        catch (Exception) { Logger.Log("HtmlPatch", "Directory.GetDirectories unavailable (trimmed host) — skipping RootApps scan"); }
 
         // Also check DotNetBrowser Host/Bundle context where chat renders
         var hostBundleDir = Path.Combine(_profileDir, "HostBundle");
