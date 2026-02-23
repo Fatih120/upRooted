@@ -4,7 +4,7 @@
 
 ## Current State Summary
 
-The Theme Engine is the most recently active area, with a critical startup safety fix applied this session.
+Dev Console card and auto-update UX fixes are the most recent work.
 
 - **Experimental plugin safe upgrade** — ALL experimental plugins are now blanket-disabled on every version upgrade via `ExperimentalPlugins` array in `StartupHook.cs`. This prevents startup hangs when unstable plugins survive across versions. The `ShowExperimentalPlugins` flag is also reset. Users re-enable manually from Settings > Plugins.
 - **Theme Engine rebrand** — Renamed from "Themes" to "Theme Engine" across sidebar tab, page header, plugin card, About status field. Plugin enabled logic now reflects actual theme state.
@@ -18,6 +18,9 @@ The Theme Engine is the most recently active area, with a critical startup safet
 - **Variant desync fix** — `SwitchVariantIfNeeded` no longer changes `RequestedThemeVariant`. Was causing Root's native theme page to show wrong selection (Dark user sees "Light" when Sakura active). SVG icons handled by `SwapSvgPathsIfNeeded` path rewriting instead.
 - **Light theme hover fix** — Theme card border/dot hover uses card bg luminance for direction (not border's own L). Both darken 70% on light hosts to match Root native Light hover.
 - **Sakura lightness hierarchy** — Background layers reordered: Primary > Secondary > Input > Tertiary. Tightened Primary/Secondary contrast.
+- **Dev Console card** (developer channel only) — New card on About page with 3-column inner card grid: Spoofs (Update Popup, Update Installed, Reset), Diagnostics (Dump Visual Tree/Colors/Resource Keys), Engines (Force Theme Walk, Revert Theme), Recon Logger (own card with toggle). `AutoUpdater.SpoofUpdateApplied()` for UI testing.
+- **Auto-update UX fixes** — About page restart button now orange (#D06818) matching Plugins page. "Check for Updates" button becomes disabled "Update Pending" (dimmed, 50% opacity) when update applied. Hover/click handlers no longer go stale.
+- **ReconLogger moved to Dev Console** — Removed from KnownPlugins array and Plugins page. Toggle now in Dev Console inner card. "Dev Plugins · X active" status row on About identity card.
 
 ### Known Issues / TODOs
 

@@ -51,7 +51,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `AvaloniaReflection.cs` | 3320 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
 | `SidebarInjector.cs` | 2053 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 4929 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ContentPages.cs` | 5120 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |
 | `ThemeEngine.cs` | 3031 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |
@@ -64,7 +64,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `MessageLogger.cs` | 1707 | Edit/delete detection + visual indicators |
 | `MessageStore.cs` | 278 | Flat-file message persistence |
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
-| `AutoUpdater.cs` | 1045 | Encrypted .uprpkg auto-updater |
+| `AutoUpdater.cs` | 1084 | Encrypted .uprpkg auto-updater |
 | `DesktopNotification.cs` | 86 | OS-level toast notifications |
 | `ProfileBadgeInjector.cs` | 1218 | "Uprooted Dev" profile badge |
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |

@@ -159,6 +159,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Dev Console card + auto-update UX fixes** (2026-02-23) — Dev Console (developer channel only) with Spoofs/Diagnostics/Engines/ReconLogger inner cards. About page restart button orange, "Check for Updates" disabled when update applied. ReconLogger moved from Plugins page to Dev Console. "Dev Plugins" status row on About page.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
 - [x] **Theme switch lag eliminated + live recolor fix** (2026-02-22) — In-place theme switching (`PrepareForNewTheme` removes only stale keys instead of full `RevertTheme`), bind-once walker (untagged controls get DynamicResource binding on first walk), WeakRef tracking for O(~16) live preview updates, computed palette keys (`BackgroundButtonOnElevated`/`BackgroundButtonOnSecondary`) for gear icon DynamicResource binding, card borders bound to DynamicResource, nav highlight bound to DynamicResource, `SetValueStylePriority` → `SetValueLocalPriority` rename.
   - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`, `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
 - [x] **Custom-theme visual parity pass completed** (2026-02-22) — fixed settings tab text recolor desync (including Root “Online”), corrected sidebar/header text key mapping (TextTertiary for section headers), restored/live-synced preset nested cards with directional elevated surfaces, added selected preset inner highlight wash, and matched Themes `Refresh` button styling/text behavior to About `Open Logs`.

@@ -10,6 +10,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Added
 
+- **Dev Console card on About page** (developer channel only) — 3-column inner card grid with Spoofs (Update Popup, Update Installed, Reset), Diagnostics (Dump Visual Tree/Colors/Resource Keys), Engines (Force Theme Walk, Revert Theme), and Recon Logger toggle. `AutoUpdater.SpoofUpdateApplied()` for UI testing.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **"Dev Plugins" status row** on About page identity card (developer channel only) — shows count of active dev-only plugins (ReconLogger).
+  - File: `hook/ContentPages.cs`
 - **Multi-target hook for .NET 9 + .NET 10** — Root upgraded to .NET 10, but AppImage still bundles .NET 9. Hook now multi-targets both `net9.0` and `net10.0`. Primary DLL (`UprootedHook.dll`) is net10.0; fallback (`UprootedHook.net9.dll`) is net9.0. AutoUpdater selects the correct TFM based on `Environment.Version.Major` after extracting the 8-file update package. ConfuserEx tool pre-built once before parallel TFM inner builds to avoid race condition on the shared tool output.
   - Files: `hook/UprootedHook.csproj`, `hook/AutoUpdater.cs`, `scripts/pack-update.py`, `installer/src-tauri/src/embedded.rs`, `installer/src-tauri/src/hook.rs`, `.github/workflows/build.yml`, `scripts/build-local.sh`, `scripts/build-installer.ps1`, `scripts/deploy-hook.ps1`, `scripts/install-hook.ps1`, `install-uprooted-linux.sh`, `Install-Uprooted.ps1`
 
@@ -25,11 +29,17 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/ContentPages.cs`
 - **Sakura status text invisible on pink background** — Status indicators now use `Link` palette key instead of `BrandPrimary`.
   - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **"Check for Updates" button stale after update** — Button had no click/hover handlers when `UpdateApplied=true` at page build time. Now shows disabled "Update Pending" state (dimmed, 50% opacity). Dynamic transition also handled when update completes after clicking.
+  - File: `hook/ContentPages.cs`
+- **About page restart button wrong color** — Used green `AccentGreen` instead of orange `#D06818`. Now matches Plugins page restart banner.
+  - File: `hook/ContentPages.cs`
 - **Custom theme borders derived from accent hue** — Border now uses pure background hue with 75% chroma.
   - File: `hook/ThemeEngine.cs`
 
 ### Changed
 
+- **ReconLogger moved from Plugins page to Dev Console** — No longer in KnownPlugins array. Toggle now lives in its own inner card on the About page Dev Console (developer channel only). Settings key `Plugins.recon-logger` still used for persistence and startup auto-enable.
+  - File: `hook/ContentPages.cs`
 - **Sakura lightness hierarchy** — Background layers reordered to match Root Light convention (Primary > Secondary > Input > Tertiary). Tightened Primary/Secondary contrast.
 - **Sakura accent hue shift** — Blue accent shifted from `#94D9FF` (H≈201°) to `#84C2FF` (H≈210° sky blue).
 - **Oreo theme darker** — Background pushed from `#111111` to `#0B0B0B`.
