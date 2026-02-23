@@ -17,6 +17,22 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **Custom themes crash A/V settings and VC join** — Theme dictionary brushes now use `ImmutableSolidColorBrush` (matching Root's native cast target) instead of mutable `SolidColorBrush`. Fixes `InvalidCastException` that crashed audio/video settings and voice chat join with custom themes active.
   - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`
+- **Root native theme page desync** — `SwitchVariantIfNeeded` changed `RequestedThemeVariant` to match theme brightness, causing Root's native theme page to display the wrong selection. Variant is no longer switched; SVG icons handled by `SwapSvgPathsIfNeeded` path rewriting.
+  - File: `hook/ThemeEngine.cs`
+- **Theme card hover wrong on light themes** — Border hover used `AdjustForHighlight` on border color itself (L≈0.45 picked wrong direction → near-white). Now uses card bg luminance for direction; both border and dot darken 70% on light hosts.
+  - File: `hook/ContentPages.cs`
+- **Loki gold buttons hard to read** — `ContrastText` threshold lowered from 0.45 to 0.38.
+  - File: `hook/ContentPages.cs`
+- **Sakura status text invisible on pink background** — Status indicators now use `Link` palette key instead of `BrandPrimary`.
+  - Files: `hook/ContentPages.cs`, `hook/AutoUpdater.cs`
+- **Custom theme borders derived from accent hue** — Border now uses pure background hue with 75% chroma.
+  - File: `hook/ThemeEngine.cs`
+
+### Changed
+
+- **Sakura lightness hierarchy** — Background layers reordered to match Root Light convention (Primary > Secondary > Input > Tertiary). Tightened Primary/Secondary contrast.
+- **Sakura accent hue shift** — Blue accent shifted from `#94D9FF` (H≈201°) to `#84C2FF` (H≈210° sky blue).
+- **Oreo theme darker** — Background pushed from `#111111` to `#0B0B0B`.
 
 ---
 

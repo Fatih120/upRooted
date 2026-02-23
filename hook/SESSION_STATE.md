@@ -14,7 +14,10 @@ The Theme Engine is the most recently active area, with a critical startup safet
 - **Theme state machine fixes** — `PrepareForNewTheme` removes ALL keys (color + SVG) from current variant dict, preventing cross-variant palette/SVG leaks. Same-family variant pulse (Dark↔PureDark) prevents SVG flash. Sidebar highlight binding scoped to Themes tab only.
 - **Version text fix** — Root's native version TextBlocks bound to TextTertiary during injection for stable revert.
 - **ImmutableSolidColorBrush fix** — Root casts ThemeDictionary brushes directly to ISCB. We were writing `SolidColorBrush`, causing `InvalidCastException` that crashed A/V settings and VC join. Fixed by using `CreateImmutableBrush(hex)` with `uint` constructor (Color constructor is trimmed). The `_windowResources` workaround (commit 5826a4c) is reverted — it broke DynamicResource propagation.
-- **Theme switch performance** — Diagnostic timing revealed three bottlenecks: (1) `SwitchVariantIfNeeded` tried PureDark (doesn't exist), bailed without switching, forcing 186-entry SVG rewrite at 296ms — now falls back to Dark. (2) Reflection caching for AddResource/RemoveResource/CreateImmutableBrush etc (~78 uncached lookups per switch). (3) Diff-based live preview for color picker (only writes changed keys). Also: `_svgSetIsDark` tracking skips SVG enumeration, `_writingThemeDicts` guard prevents ActualThemeVariantChanged handler from clearing state during dict writes, same-variant PrepareForNewTheme skips removal.
+- **Theme switch performance** — Reflection caching for AddResource/RemoveResource/CreateImmutableBrush etc (~78 uncached lookups per switch). Diff-based live preview for color picker (only writes changed keys). `_svgSetIsDark` tracking skips SVG enumeration, `_writingThemeDicts` guard prevents ActualThemeVariantChanged handler during dict writes, PrepareForNewTheme always uses fast same-dict overwrite.
+- **Variant desync fix** — `SwitchVariantIfNeeded` no longer changes `RequestedThemeVariant`. Was causing Root's native theme page to show wrong selection (Dark user sees "Light" when Sakura active). SVG icons handled by `SwapSvgPathsIfNeeded` path rewriting instead.
+- **Light theme hover fix** — Theme card border/dot hover uses card bg luminance for direction (not border's own L). Both darken 70% on light hosts to match Root native Light hover.
+- **Sakura lightness hierarchy** — Background layers reordered: Primary > Secondary > Input > Tertiary. Tightened Primary/Secondary contrast.
 
 ### Known Issues / TODOs
 
@@ -22,7 +25,7 @@ The Theme Engine is the most recently active area, with a critical startup safet
 - **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure needs investigation
 - **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, PresenceBeacon all deployed but need real-world testing
 - **AppImage v0.5.0 detection failure** — Linux user reports v0.5.0 fails to detect/patch AppImage while v0.4.2 works. Needs `--diagnose` output from the user to investigate further.
-- **Native theme card desync** — After PureDark→Dark variant fallback fix, the Native theme card in settings gets confused when switching between Native and custom themes. Card state desyncs from actual Root variant. Needs investigation — likely the variant fallback changes how Root reports its current theme.
+- **Native theme card desync** — RESOLVED. Variant is no longer switched; Root's native theme page always shows the user's real preference.
 
 ## Startup Phases
 
