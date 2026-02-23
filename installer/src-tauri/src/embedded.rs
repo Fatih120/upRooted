@@ -8,6 +8,8 @@
 pub const PROFILER: &[u8] = include_bytes!("../artifacts/uprooted_profiler.dll");
 #[cfg(target_os = "linux")]
 pub const PROFILER: &[u8] = include_bytes!("../artifacts/libuprooted_profiler.so");
+#[cfg(target_os = "macos")]
+pub const PROFILER: &[u8] = include_bytes!("../artifacts/libuprooted_profiler.dylib");
 
 pub const HOOK_DLL: &[u8] = include_bytes!("../artifacts/UprootedHook.dll");
 pub const HOOK_DEPS_JSON: &[u8] = include_bytes!("../artifacts/UprootedHook.deps.json");

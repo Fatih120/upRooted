@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Uprooted
+Exec=uprooted
+Icon=uprooted
+Type=Application
+Terminal=true
+Categories=Utility;System;
+Comment=Console TUI installer for the Uprooted client mod framework

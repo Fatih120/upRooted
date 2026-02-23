@@ -1,0 +1,18 @@
+VERIFICATION
+
+To verify the embedded binary:
+
+1. Download the official release from:
+   https://github.com/The-Uprooted-Project/uprooted/releases
+
+2. Download the checksums file:
+   https://github.com/The-Uprooted-Project/uprooted/releases/download/v<VERSION>/checksums.txt
+
+3. Compare the SHA256 hash of the embedded uprooted.exe against the checksums file:
+   Get-FileHash .\tools\uprooted.exe -Algorithm SHA256
+
+4. The hash should match the entry for Uprooted-<VERSION>-windows-amd64.exe in checksums.txt.
+
+Project URL: https://uprooted.sh
+Source Code: https://github.com/The-Uprooted-Project/uprooted
+License: https://github.com/The-Uprooted-Project/uprooted/blob/main/LICENSE

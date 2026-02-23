@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://schemas.chocolatey.org/2010/07">
+  <metadata>
+    <id>uprooted</id>
+    <version>%%VERSION%%</version>
+    <title>Uprooted</title>
+    <authors>The Uprooted Project</authors>
+    <owners>watchthelight</owners>
+    <projectUrl>https://uprooted.sh</projectUrl>
+    <projectSourceUrl>https://github.com/The-Uprooted-Project/uprooted</projectSourceUrl>
+    <bugTrackerUrl>https://github.com/The-Uprooted-Project/uprooted/issues</bugTrackerUrl>
+    <iconUrl>https://uprooted.sh/og.png</iconUrl>
+    <requireLicenseAcceptance>false</requireLicenseAcceptance>
+    <licenseUrl>https://github.com/The-Uprooted-Project/uprooted/blob/main/LICENSE</licenseUrl>
+    <tags>root communications mod framework installer tui</tags>
+    <summary>Console TUI installer for the Uprooted client mod framework</summary>
+    <description>Uprooted is a client mod framework for Root Communications desktop app.
+This package installs the Uprooted console TUI installer, which deploys the
+hook, profiler, and TypeScript injection layer into your Root installation.
+
+Features: custom themes, sentry blocker, plugin system, bridge API, link embeds,
+message logger, silent typing, ClearURLs, auto-updater, and more.</description>
+  </metadata>
+  <files>
+    <file src="tools\**" target="tools" />
+  </files>
+</package>

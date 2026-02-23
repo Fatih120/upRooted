@@ -40,6 +40,7 @@ tests/**/obj/
 # Env
 .env
 .env.*
+!.env.example
 
 # Compiled native binaries
 *.so
@@ -79,6 +80,12 @@ LIVE_TOKEN.txt
 
 # Private dev notes (not for public/team repo)
 docs/msglogger-dev/
+
+# Packaging build output
+packaging/chocolatey/*.nupkg
+packaging/appimage/*.AppImage
+packaging/flatpak/.flatpak-builder/
+packaging/flatpak/repo/
 
 # Legacy build dirs
 Uprooted/

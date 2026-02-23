@@ -1,0 +1,24 @@
+PackageIdentifier: TheUprootedProject.Uprooted
+PackageVersion: "%%VERSION%%"
+PackageLocale: en-US
+Publisher: The Uprooted Project
+PublisherUrl: https://uprooted.sh
+PublisherSupportUrl: https://github.com/The-Uprooted-Project/uprooted/issues
+PackageName: Uprooted
+PackageUrl: https://github.com/The-Uprooted-Project/uprooted
+License: Uprooted License v1.0
+LicenseUrl: https://github.com/The-Uprooted-Project/uprooted/blob/main/LICENSE
+ShortDescription: Console TUI installer for the Uprooted client mod framework.
+Description: |-
+  Uprooted is a client mod framework for Root Communications desktop app.
+  This package installs the Uprooted console TUI installer, which deploys
+  the hook, profiler, and TypeScript injection layer into your Root installation.
+Tags:
+  - uprooted
+  - root
+  - mod
+  - installer
+  - tui
+  - cli
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

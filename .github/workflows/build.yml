@@ -1,0 +1,413 @@
+name: Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (blank = read from VERSION file)'
+        required: false
+        default: ''
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+    outputs:
+      version:
+        description: 'Resolved version string'
+        value: ${{ jobs.resolve.outputs.version }}
+  push:
+    paths:
+      - "hook/**"
+      - "src/**"
+      - "installer/**"
+      - "tools/confuse/**"
+      - "tools/verify-obfuscation/**"
+      - "tools/uprooted_profiler*.c"
+      - "tools/uprooted_profiler.def"
+      - ".github/workflows/build.yml"
+
+permissions:
+  contents: write
+
+# ────────────────────────────────────────────────────────────────
+# Job 1: Resolve version
+# ────────────────────────────────────────────────────────────────
+
+jobs:
+  resolve:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Resolve version
+        id: ver
+        run: |
+          INPUT_VER="${{ inputs.version }}"
+          INPUT_VER="${INPUT_VER// /}"
+          if [ -n "$INPUT_VER" ]; then
+            VERSION="$INPUT_VER"
+          elif [ -f VERSION ]; then
+            VERSION="$(tr -d '[:space:]' < VERSION)"
+          else
+            VERSION=$(node -p "require('./package.json').version")
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Resolved version: $VERSION"
+
+  # ────────────────────────────────────────────────────────────────
+  # Job 2: Build shared artifacts (TS + C# hook)
+  # Runs on Windows because ConfuserEx requires Windows.
+  # The DLL is platform-agnostic (AnyCPU .NET).
+  # ────────────────────────────────────────────────────────────────
+
+  build-shared:
+    needs: resolve
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.103"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - name: Install Node dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TypeScript layer
+        run: pnpm build
+
+      - name: Build UprootedHook.dll (with obfuscation)
+        run: dotnet build hook/UprootedHook.csproj -c Release
+
+      - name: Upload shared artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: shared-artifacts
+          retention-days: 1
+          path: |
+            dist/uprooted-preload.js
+            dist/uprooted.css
+            hook/bin/Release/net10.0/UprootedHook.dll
+            hook/bin/Release/net10.0/UprootedHook.deps.json
+            hook/bin/Release/net10.0/nsfw-filter.js
+            hook/bin/Release/net10.0/link-embeds.js
+
+  # ────────────────────────────────────────────────────────────────
+  # Job 3: Build platform-specific installer (matrix)
+  # Downloads shared artifacts, compiles profiler, builds Rust TUI.
+  # ────────────────────────────────────────────────────────────────
+
+  build-installer:
+    needs: [resolve, build-shared]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            suffix: windows-amd64
+            profiler_name: uprooted_profiler.dll
+            profiler_cmd: >-
+              cl.exe /LD /O2 /GS-
+              /Fe:installer/src-tauri/artifacts/uprooted_profiler.dll
+              tools/uprooted_profiler.c
+              /link ole32.lib kernel32.lib shell32.lib
+              /DEF:tools/uprooted_profiler.def
+              /DEBUG:NONE /OPT:REF /OPT:ICF
+            ext: .exe
+            setup_msvc: true
+
+          - runner: ubuntu-latest
+            suffix: linux-amd64
+            profiler_name: libuprooted_profiler.so
+            profiler_cmd: >-
+              gcc -shared -fPIC -O2 -s -fvisibility=hidden
+              -o installer/src-tauri/artifacts/libuprooted_profiler.so
+              tools/uprooted_profiler_linux.c
+            ext: ''
+            setup_msvc: false
+
+          - runner: ubuntu-24.04-arm
+            suffix: linux-arm64
+            profiler_name: libuprooted_profiler.so
+            profiler_cmd: >-
+              gcc -shared -fPIC -O2 -s -fvisibility=hidden
+              -o installer/src-tauri/artifacts/libuprooted_profiler.so
+              tools/uprooted_profiler_linux.c
+            ext: ''
+            setup_msvc: false
+
+          - runner: macos-13
+            suffix: macos-amd64
+            profiler_name: libuprooted_profiler.dylib
+            profiler_cmd: >-
+              clang -shared -fPIC -O2
+              -o installer/src-tauri/artifacts/libuprooted_profiler.dylib
+              tools/uprooted_profiler_macos.c
+            ext: ''
+            setup_msvc: false
+
+          - runner: macos-latest
+            suffix: macos-arm64
+            profiler_name: libuprooted_profiler.dylib
+            profiler_cmd: >-
+              clang -shared -fPIC -O2
+              -o installer/src-tauri/artifacts/libuprooted_profiler.dylib
+              tools/uprooted_profiler_macos.c
+            ext: ''
+            setup_msvc: false
+
+    runs-on: ${{ matrix.runner }}
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Toolchains
+
+      - name: Setup MSVC
+        if: matrix.setup_msvc
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: installer/src-tauri
+
+      # Download shared artifacts
+
+      - name: Download shared artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-artifacts
+          path: _shared
+
+      # Stage artifacts
+
+      - name: Create artifacts directory
+        shell: bash
+        run: mkdir -p installer/src-tauri/artifacts
+
+      - name: Stage shared artifacts
+        shell: bash
+        run: |
+          cp _shared/dist/uprooted-preload.js installer/src-tauri/artifacts/
+          cp _shared/dist/uprooted.css installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js installer/src-tauri/artifacts/
+
+      # Compile platform-specific profiler
+
+      - name: Compile profiler
+        shell: bash
+        run: ${{ matrix.profiler_cmd }}
+
+      # Verify all artifacts present
+
+      - name: Verify staged artifacts
+        shell: bash
+        run: |
+          for f in "${{ matrix.profiler_name }}" UprootedHook.dll UprootedHook.deps.json \
+                   uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js; do
+            path="installer/src-tauri/artifacts/$f"
+            [ -f "$path" ] || { echo "Missing: $f"; exit 1; }
+            [ -s "$path" ] || { echo "Empty: $f"; exit 1; }
+            echo "  $f ($(wc -c < "$path") bytes)"
+          done
+
+      # Build Rust installer
+
+      - name: Build installer
+        working-directory: installer/src-tauri
+        run: cargo build --release
+
+      - name: Rename binary
+        shell: bash
+        run: |
+          SRC="installer/src-tauri/target/release/uprooted${{ matrix.ext }}"
+          DST="Uprooted-${VERSION}-${{ matrix.suffix }}${{ matrix.ext }}"
+          mv "$SRC" "$DST"
+          [ -z "${{ matrix.ext }}" ] && chmod +x "$DST"
+          echo "Built: $DST ($(wc -c < "$DST") bytes)"
+
+      - name: Upload installer binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-${{ matrix.suffix }}
+          retention-days: 3
+          path: Uprooted-*-${{ matrix.suffix }}*
+
+  # ────────────────────────────────────────────────────────────────
+  # Job 4: Package — checksums, .uprpkg, .deb, AppImage, tarball
+  # ────────────────────────────────────────────────────────────────
+
+  package:
+    needs: [resolve, build-shared, build-installer]
+    runs-on: ubuntu-latest
+    env:
+      VERSION: ${{ needs.resolve.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Download all installer binaries
+
+      - name: Download all installer artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: _artifacts
+          pattern: installer-*
+          merge-multiple: true
+
+      - name: Download shared artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: shared-artifacts
+          path: _shared
+
+      - name: List all artifacts
+        run: find _artifacts _shared -type f | sort
+
+      # Checksums
+
+      - name: Generate checksums
+        run: |
+          cd _artifacts
+          sha256sum Uprooted-* > checksums.txt
+          cat checksums.txt
+
+      # Auto-update package
+
+      - name: Stage artifacts for .uprpkg
+        run: |
+          mkdir -p _uprpkg
+          cp _shared/dist/uprooted-preload.js _uprpkg/
+          cp _shared/dist/uprooted.css _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js _uprpkg/
+
+      - name: Pack auto-update package
+        run: python3 scripts/pack-update.py --input-dir _uprpkg --output _artifacts/auto-update.uprpkg --verify
+
+      # Linux artifacts tarball (for bash installer --prebuilt)
+
+      - name: Package Linux artifacts tarball
+        run: |
+          mkdir -p _tarball
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll _tarball/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json _tarball/
+          cp _shared/dist/uprooted-preload.js _tarball/
+          cp _shared/dist/uprooted.css _tarball/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js _tarball/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js _tarball/
+          tar -czf _artifacts/uprooted-linux-artifacts.tar.gz -C _tarball .
+
+      # Copy bash installer
+
+      - name: Include bash installer
+        run: cp install-uprooted-linux.sh _artifacts/
+
+      # .deb packages via fpm
+
+      - name: Install fpm
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ruby ruby-dev build-essential
+          sudo gem install fpm --no-document
+
+      - name: Build .deb (amd64)
+        run: |
+          mkdir -p _deb_amd64/usr/bin
+          cp _artifacts/Uprooted-${VERSION}-linux-amd64 _deb_amd64/usr/bin/uprooted
+          chmod +x _deb_amd64/usr/bin/uprooted
+          fpm -s dir -t deb -n uprooted -v "${VERSION}" \
+            --description "Client mod framework for Root Communications" \
+            --url "https://uprooted.sh" \
+            --license "Uprooted-1.0" \
+            --architecture amd64 \
+            --maintainer "watchthelight <admin@watchthelight.org>" \
+            -C _deb_amd64 \
+            -p "_artifacts/uprooted_${VERSION}_amd64.deb"
+
+      - name: Build .deb (arm64)
+        run: |
+          if [ -f "_artifacts/Uprooted-${VERSION}-linux-arm64" ]; then
+            mkdir -p _deb_arm64/usr/bin
+            cp _artifacts/Uprooted-${VERSION}-linux-arm64 _deb_arm64/usr/bin/uprooted
+            chmod +x _deb_arm64/usr/bin/uprooted
+            fpm -s dir -t deb -n uprooted -v "${VERSION}" \
+              --description "Client mod framework for Root Communications" \
+              --url "https://uprooted.sh" \
+              --license "Uprooted-1.0" \
+              --architecture arm64 \
+              --maintainer "watchthelight <admin@watchthelight.org>" \
+              -C _deb_arm64 \
+              -p "_artifacts/uprooted_${VERSION}_arm64.deb"
+          else
+            echo "No arm64 binary found, skipping arm64 .deb"
+          fi
+
+      # AppImage (x86_64)
+
+      - name: Build AppImage (x86_64)
+        run: |
+          if [ -f "_artifacts/Uprooted-${VERSION}-linux-amd64" ]; then
+            chmod +x packaging/appimage/build-appimage.sh
+            bash packaging/appimage/build-appimage.sh \
+              "_artifacts/Uprooted-${VERSION}-linux-amd64" \
+              "$VERSION" \
+              x86_64
+            mv "Uprooted-${VERSION}-x86_64.AppImage" _artifacts/ || true
+          fi
+
+      - name: Build AppImage (aarch64)
+        run: |
+          if [ -f "_artifacts/Uprooted-${VERSION}-linux-arm64" ]; then
+            bash packaging/appimage/build-appimage.sh \
+              "_artifacts/Uprooted-${VERSION}-linux-arm64" \
+              "$VERSION" \
+              aarch64
+            mv "Uprooted-${VERSION}-aarch64.AppImage" _artifacts/ || true
+          fi
+
+      # Update checksums with new artifacts
+
+      - name: Update checksums
+        run: |
+          cd _artifacts
+          rm -f checksums.txt
+          sha256sum Uprooted-* uprooted_* auto-update.uprpkg uprooted-linux-artifacts.tar.gz 2>/dev/null > checksums.txt || true
+          cat checksums.txt
+
+      # Upload everything
+
+      - name: Upload all packaged artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          retention-days: 7
+          path: |
+            _artifacts/Uprooted-*
+            _artifacts/uprooted_*
+            _artifacts/auto-update.uprpkg
+            _artifacts/uprooted-linux-artifacts.tar.gz
+            _artifacts/install-uprooted-linux.sh
+            _artifacts/checksums.txt

@@ -32,6 +32,13 @@ pub fn get_profile_dir() -> PathBuf {
         .join(".local/share/Root Communications/Root/profile/default")
 }
 
+#[cfg(target_os = "macos")]
+pub fn get_profile_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home)
+        .join("Library/Application Support/Root Communications/Root/profile/default")
+}
+
 #[cfg(target_os = "windows")]
 pub fn get_root_exe_path() -> PathBuf {
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default();
@@ -165,6 +172,14 @@ pub fn get_root_exe_path() -> PathBuf {
 
     // Default fallback
     PathBuf::from(format!("{}/Applications/Root.AppImage", home))
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_root_exe_path() -> PathBuf {
+    // Root does not currently ship on macOS.
+    // Provide a plausible path for forward compatibility.
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(format!("{}/Applications/Root.app/Contents/MacOS/Root", home))
 }
 
 pub fn find_target_html_files() -> Vec<PathBuf> {

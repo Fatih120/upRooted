@@ -1,0 +1,28 @@
+app-id: sh.uprooted.Uprooted
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: uprooted
+finish-args:
+  # Installer needs to read/write Root installation files
+  - --filesystem=home
+  # Installer queries GitHub API for latest version
+  - --share=network
+modules:
+  - name: uprooted
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 uprooted /app/bin/uprooted
+    sources:
+      - type: file
+        url: https://github.com/The-Uprooted-Project/uprooted/releases/download/v%%VERSION%%/Uprooted-%%VERSION%%-linux-amd64
+        sha256: %%SHA256_AMD64%%
+        dest-filename: uprooted
+        only-arches:
+          - x86_64
+      - type: file
+        url: https://github.com/The-Uprooted-Project/uprooted/releases/download/v%%VERSION%%/Uprooted-%%VERSION%%-linux-arm64
+        sha256: %%SHA256_ARM64%%
+        dest-filename: uprooted
+        only-arches:
+          - aarch64

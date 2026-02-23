@@ -1,0 +1,48 @@
+name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs-site/**'
+      - 'docs/**'
+      - 'mkdocs.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install MkDocs Material
+        run: pip install mkdocs-material
+
+      - name: Build docs
+        run: |
+          if [ -f docs-site/mkdocs.yml ]; then
+            cd docs-site && mkdocs build
+          elif [ -f mkdocs.yml ]; then
+            mkdocs build
+          else
+            echo "No mkdocs.yml found, skipping"
+            exit 0
+          fi
+
+      - name: Deploy to GitHub Pages (public repo)
+        if: ${{ secrets.PUBLIC_REPO_TOKEN != '' }}
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          personal_token: ${{ secrets.PUBLIC_REPO_TOKEN }}
+          external_repository: The-Uprooted-Project/uprooted
+          publish_dir: docs-site/site
+          publish_branch: gh-pages

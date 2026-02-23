@@ -1,0 +1,271 @@
+name: Publish Packages
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: true
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g. 0.5.0)'
+        required: true
+
+env:
+  RELEASE_BASE: https://github.com/The-Uprooted-Project/uprooted/releases/download
+
+jobs:
+  # ── Chocolatey ──
+  chocolatey:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download checksums
+        shell: bash
+        run: |
+          VERSION="${{ inputs.version }}"
+          curl -sLO "${RELEASE_BASE}/v${VERSION}/checksums.txt"
+          cat checksums.txt
+
+      - name: Build and push Chocolatey package
+        shell: pwsh
+        env:
+          CHOCO_API_KEY: ${{ secrets.CHOCO_API_KEY }}
+        run: |
+          if (-not $env:CHOCO_API_KEY) { Write-Host "CHOCO_API_KEY not set, skipping"; exit 0 }
+
+          $version = "${{ inputs.version }}"
+
+          # Get checksum
+          $checksums = Get-Content checksums.txt
+          $line = $checksums | Where-Object { $_ -match "windows-amd64" }
+          $sha256 = ($line -split '\s+')[0]
+
+          # Stamp nuspec
+          (Get-Content packaging/chocolatey/uprooted.nuspec) `
+            -replace '%%VERSION%%', $version | Set-Content packaging/chocolatey/uprooted.nuspec
+
+          # Stamp install script
+          (Get-Content packaging/chocolatey/tools/chocolateyInstall.ps1) `
+            -replace '%%CHECKSUM%%', $sha256 | Set-Content packaging/chocolatey/tools/chocolateyInstall.ps1
+
+          # Pack and push
+          choco pack packaging/chocolatey/uprooted.nuspec
+          choco push "uprooted.$version.nupkg" --source 'https://push.chocolatey.org/' --api-key $env:CHOCO_API_KEY
+
+  # ── winget ──
+  winget:
+    runs-on: windows-latest
+    steps:
+      - name: Update winget manifest
+        env:
+          WINGET_GITHUB_PAT: ${{ secrets.WINGET_GITHUB_PAT }}
+        shell: pwsh
+        run: |
+          if (-not $env:WINGET_GITHUB_PAT) { Write-Host "WINGET_GITHUB_PAT not set, skipping"; exit 0 }
+
+          $version = "${{ inputs.version }}"
+          $url = "${env:RELEASE_BASE}/v${version}/Uprooted-${version}-windows-amd64.exe"
+
+          # Install wingetcreate
+          Invoke-WebRequest -Uri "https://aka.ms/wingetcreate/latest" -OutFile wingetcreate.exe
+
+          # Update and submit
+          .\wingetcreate.exe update TheUprootedProject.Uprooted `
+            --version $version `
+            --urls $url `
+            --submit `
+            --token $env:WINGET_GITHUB_PAT
+
+  # ── Scoop ──
+  scoop:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download checksums
+        run: |
+          VERSION="${{ inputs.version }}"
+          curl -sLO "${RELEASE_BASE}/v${VERSION}/checksums.txt"
+
+      - name: Update Scoop manifest
+        env:
+          SCOOP_GITHUB_TOKEN: ${{ secrets.SCOOP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$SCOOP_GITHUB_TOKEN" ]; then echo "SCOOP_GITHUB_TOKEN not set, skipping"; exit 0; fi
+
+          VERSION="${{ inputs.version }}"
+          SHA256=$(grep "windows-amd64" checksums.txt | awk '{print $1}')
+
+          # Clone bucket repo
+          git clone "https://x-access-token:${SCOOP_GITHUB_TOKEN}@github.com/The-Uprooted-Project/scoop-bucket.git" _scoop
+          cd _scoop
+
+          mkdir -p bucket
+
+          # Generate manifest
+          cat > bucket/uprooted.json << EOF
+          {
+              "version": "${VERSION}",
+              "description": "Client mod framework for Root Communications",
+              "homepage": "https://uprooted.sh",
+              "license": "Uprooted-1.0",
+              "url": "https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/Uprooted-${VERSION}-windows-amd64.exe#/uprooted.exe",
+              "hash": "sha256:${SHA256}",
+              "bin": "uprooted.exe",
+              "checkver": {
+                  "github": "https://github.com/The-Uprooted-Project/uprooted"
+              },
+              "autoupdate": {
+                  "url": "https://github.com/The-Uprooted-Project/uprooted/releases/download/v\$version/Uprooted-\$version-windows-amd64.exe#/uprooted.exe",
+                  "hash": {
+                      "url": "https://github.com/The-Uprooted-Project/uprooted/releases/download/v\$version/checksums.txt",
+                      "regex": "([a-f0-9]{64})\\\\s+Uprooted-[\\\\S]+-windows-amd64"
+                  }
+              }
+          }
+          EOF
+
+          git config user.name "uprooted-bot"
+          git config user.email "bot@uprooted.sh"
+          git add -A
+          git commit -m "uprooted ${VERSION}" || true
+          git push
+
+  # ── Homebrew ──
+  homebrew:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download checksums
+        run: |
+          VERSION="${{ inputs.version }}"
+          curl -sLO "${RELEASE_BASE}/v${VERSION}/checksums.txt"
+
+      - name: Update Homebrew formula
+        env:
+          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$HOMEBREW_TAP_TOKEN" ]; then echo "HOMEBREW_TAP_TOKEN not set, skipping"; exit 0; fi
+
+          VERSION="${{ inputs.version }}"
+          SHA_LINUX_AMD64=$(grep "linux-amd64[^.]" checksums.txt | head -1 | awk '{print $1}')
+          SHA_LINUX_ARM64=$(grep "linux-arm64[^.]" checksums.txt | head -1 | awk '{print $1}')
+          SHA_MACOS_AMD64=$(grep "macos-amd64" checksums.txt | head -1 | awk '{print $1}')
+          SHA_MACOS_ARM64=$(grep "macos-arm64" checksums.txt | head -1 | awk '{print $1}')
+
+          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/The-Uprooted-Project/homebrew-tap.git" _tap
+          cd _tap
+          mkdir -p Formula
+
+          cat > Formula/uprooted.rb << FORMULA
+          class Uprooted < Formula
+            desc "Client mod framework for Root Communications"
+            homepage "https://uprooted.sh"
+            version "${VERSION}"
+            license "Uprooted-1.0"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/Uprooted-${VERSION}-macos-arm64"
+                sha256 "${SHA_MACOS_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/Uprooted-${VERSION}-macos-amd64"
+                sha256 "${SHA_MACOS_AMD64}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/Uprooted-${VERSION}-linux-arm64"
+                sha256 "${SHA_LINUX_ARM64}"
+              end
+              on_intel do
+                url "https://github.com/The-Uprooted-Project/uprooted/releases/download/v${VERSION}/Uprooted-${VERSION}-linux-amd64"
+                sha256 "${SHA_LINUX_AMD64}"
+              end
+            end
+
+            def install
+              bin.install Dir["Uprooted-*"].first => "uprooted"
+            end
+
+            test do
+              assert_match "uprooted", shell_output("#{bin}/uprooted --help")
+            end
+          end
+          FORMULA
+
+          git config user.name "uprooted-bot"
+          git config user.email "bot@uprooted.sh"
+          git add -A
+          git commit -m "uprooted ${VERSION}" || true
+          git push
+
+  # ── AUR ──
+  aur:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download checksums
+        run: |
+          VERSION="${{ inputs.version }}"
+          curl -sLO "${RELEASE_BASE}/v${VERSION}/checksums.txt"
+
+      - name: Prepare PKGBUILD
+        run: |
+          VERSION="${{ inputs.version }}"
+          SHA_AMD64=$(grep "linux-amd64[^.]" checksums.txt | head -1 | awk '{print $1}')
+          SHA_ARM64=$(grep "linux-arm64[^.]" checksums.txt | head -1 | awk '{print $1}')
+
+          sed -i "s/%%VERSION%%/${VERSION}/g" packaging/arch/PKGBUILD
+          sed -i "s/%%SHA256_AMD64%%/${SHA_AMD64}/g" packaging/arch/PKGBUILD
+          sed -i "s/%%SHA256_ARM64%%/${SHA_ARM64}/g" packaging/arch/PKGBUILD
+
+          cat packaging/arch/PKGBUILD
+
+      - name: Publish to AUR
+        uses: KSXGitHub/github-actions-deploy-aur@v3
+        if: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
+        with:
+          pkgname: uprooted-bin
+          pkgbuild: packaging/arch/PKGBUILD
+          commit_username: uprooted-bot
+          commit_email: bot@uprooted.sh
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: "Update to ${{ inputs.version }}"
+
+  # ── Cloudsmith (APT/DEB) ──
+  cloudsmith:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download .deb files
+        run: |
+          VERSION="${{ inputs.version }}"
+          for arch in amd64 arm64; do
+            url="${RELEASE_BASE}/v${VERSION}/uprooted_${VERSION}_${arch}.deb"
+            echo "Downloading: $url"
+            curl -sLO "$url" || echo "No ${arch} .deb found"
+          done
+          ls -la *.deb 2>/dev/null || true
+
+      - name: Push to Cloudsmith
+        env:
+          CLOUDSMITH_API_KEY: ${{ secrets.CLOUDSMITH_API_KEY }}
+        run: |
+          if [ -z "$CLOUDSMITH_API_KEY" ]; then echo "CLOUDSMITH_API_KEY not set, skipping"; exit 0; fi
+
+          pip install --quiet cloudsmith-cli
+
+          for deb in *.deb; do
+            [ -f "$deb" ] || continue
+            for distro in "ubuntu/jammy" "ubuntu/noble" "debian/bookworm"; do
+              echo "Pushing $deb to $distro"
+              cloudsmith push deb "the-uprooted-project/uprooted/$distro" "$deb" || true
+            done
+          done

@@ -1,0 +1,102 @@
+name: Update Badges
+
+on:
+  schedule:
+    - cron: '0 */6 * * *'  # Every 6 hours
+  push:
+    branches: [main]
+    paths:
+      - 'VERSION'
+      - 'hook/**/*.cs'
+      - 'src/**/*.ts'
+      - 'tests/**'
+  workflow_dispatch:
+
+jobs:
+  badges:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET (for test count)
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.103"
+
+      - name: Collect metrics
+        id: metrics
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+
+          # Download counts from public repo
+          DOWNLOADS=$(gh api repos/The-Uprooted-Project/uprooted/releases \
+            --jq '[.[].assets[].download_count] | add // 0' 2>/dev/null || echo "0")
+
+          # Plugin count (unique Id = "..." in ContentPages.cs)
+          PLUGINS=$(grep -c 'Id = "' hook/ContentPages.cs 2>/dev/null || echo "0")
+
+          # Theme preset count
+          THEMES=$(grep -c 'PresetName' hook/ThemeEngine.cs 2>/dev/null || echo "0")
+
+          # Test count
+          TESTS=$(grep -rc '\[Fact\]\|\[Theory\]' tests/ 2>/dev/null | awk -F: '{s+=$2} END {print s+0}')
+
+          # Line counts
+          CS_LOC=$(find hook -name '*.cs' -exec cat {} + 2>/dev/null | wc -l)
+          TS_LOC=$(find src -name '*.ts' -exec cat {} + 2>/dev/null | wc -l)
+          RS_LOC=$(find installer/src-tauri/src -name '*.rs' -exec cat {} + 2>/dev/null | wc -l)
+
+          # File counts
+          CS_FILES=$(find hook -name '*.cs' 2>/dev/null | wc -l)
+          TS_FILES=$(find src -name '*.ts' 2>/dev/null | wc -l)
+
+          # Release count
+          RELEASES=$(gh api repos/The-Uprooted-Project/uprooted/releases --jq 'length' 2>/dev/null || echo "0")
+
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "downloads=$DOWNLOADS" >> $GITHUB_OUTPUT
+          echo "plugins=$PLUGINS" >> $GITHUB_OUTPUT
+          echo "themes=$THEMES" >> $GITHUB_OUTPUT
+          echo "tests=$TESTS" >> $GITHUB_OUTPUT
+          echo "cs_loc=$CS_LOC" >> $GITHUB_OUTPUT
+          echo "ts_loc=$TS_LOC" >> $GITHUB_OUTPUT
+          echo "rs_loc=$RS_LOC" >> $GITHUB_OUTPUT
+          echo "cs_files=$CS_FILES" >> $GITHUB_OUTPUT
+          echo "ts_files=$TS_FILES" >> $GITHUB_OUTPUT
+          echo "releases=$RELEASES" >> $GITHUB_OUTPUT
+
+      - name: Generate badge JSON files
+        run: |
+          mkdir -p _badges
+
+          # Helper function
+          badge() { echo "{\"schemaVersion\":1,\"label\":\"$1\",\"message\":\"$2\",\"color\":\"$3\"}" > "_badges/$4.json"; }
+
+          badge "version" "${{ steps.metrics.outputs.version }}" "2D7D46" "version"
+          badge "downloads" "${{ steps.metrics.outputs.downloads }}" "007ec6" "downloads"
+          badge "plugins" "${{ steps.metrics.outputs.plugins }}" "blueviolet" "plugins"
+          badge "theme presets" "${{ steps.metrics.outputs.themes }}" "ff69b4" "themes"
+          badge "tests" "${{ steps.metrics.outputs.tests }}" "brightgreen" "tests"
+          badge "C# LOC" "${{ steps.metrics.outputs.cs_loc }}" "178600" "cs-loc"
+          badge "TypeScript LOC" "${{ steps.metrics.outputs.ts_loc }}" "3178c6" "ts-loc"
+          badge "Rust LOC" "${{ steps.metrics.outputs.rs_loc }}" "dea584" "rs-loc"
+          badge "C# files" "${{ steps.metrics.outputs.cs_files }}" "178600" "cs-files"
+          badge "TS files" "${{ steps.metrics.outputs.ts_files }}" "3178c6" "ts-files"
+          badge "releases" "${{ steps.metrics.outputs.releases }}" "blue" "releases"
+          badge "platform" "windows | linux" "lightgrey" "platform"
+
+          ls -la _badges/
+
+      - name: Upload badges to Gist
+        if: vars.BADGE_GIST_ID != ''
+        env:
+          GH_TOKEN: ${{ secrets.GIST_TOKEN }}
+        run: |
+          GIST_ID="${{ vars.BADGE_GIST_ID }}"
+          for f in _badges/*.json; do
+            NAME=$(basename "$f")
+            echo "Updating gist: $NAME"
+            gh gist edit "$GIST_ID" -f "$NAME" "$f" || true
+          done

@@ -62,12 +62,21 @@ pub fn get_uprooted_dir() -> PathBuf {
     PathBuf::from(home).join(".local/share/uprooted")
 }
 
+/// Returns `~/Library/Application Support/uprooted/` on macOS.
+#[cfg(target_os = "macos")]
+pub fn get_uprooted_dir() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_default();
+    PathBuf::from(home).join("Library/Application Support/uprooted")
+}
+
 // ==================== Platform-specific: profiler filename ====================
 
 #[cfg(target_os = "windows")]
 const PROFILER_FILENAME: &str = "uprooted_profiler.dll";
 #[cfg(target_os = "linux")]
 const PROFILER_FILENAME: &str = "libuprooted_profiler.so";
+#[cfg(target_os = "macos")]
+const PROFILER_FILENAME: &str = "libuprooted_profiler.dylib";
 
 // ==================== Deploy files ====================
 
@@ -92,8 +101,8 @@ pub fn deploy_files() -> Result<(), String> {
             .map_err(|e| format!("Failed to write {}: {}", path.display(), e))?;
     }
 
-    // On Linux, set the profiler .so as executable
-    #[cfg(target_os = "linux")]
+    // On Unix, set the profiler shared library as executable
+    #[cfg(unix)]
     {
         use std::os::unix::fs::PermissionsExt;
         let profiler_path = dir.join(PROFILER_FILENAME);
@@ -453,6 +462,149 @@ Terminal=false\n",
     Ok(())
 }
 
+/// Check env var status from wrapper script / ~/.zprofile on macOS.
+#[cfg(target_os = "macos")]
+fn check_env_vars() -> (bool, bool, bool, bool) {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir = get_uprooted_dir();
+    let content = fs::read_to_string(dir.join("launch-root.sh"))
+        .or_else(|_| fs::read_to_string(PathBuf::from(&home).join(".zprofile")))
+        .or_else(|_| fs::read_to_string(PathBuf::from(&home).join(".profile")))
+        .unwrap_or_default();
+
+    let enable = content.contains("DOTNET_ENABLE_PROFILING=1")
+        || content.contains("CORECLR_ENABLE_PROFILING=1");
+    let guid = content.contains(PROFILER_GUID);
+    let path = content.contains("DOTNET_PROFILER_PATH=")
+        || content.contains("CORECLR_PROFILER_PATH=");
+    let r2r = content.contains("DOTNET_ReadyToRun=0");
+
+    (enable, guid, path, r2r)
+}
+
+/// Set CLR profiler env vars on macOS via wrapper script + ~/.zprofile.
+#[cfg(target_os = "macos")]
+pub fn set_env_vars() -> Result<(), String> {
+    let dir = get_uprooted_dir();
+    let profiler_path = dir.join(PROFILER_FILENAME);
+    let root_path = crate::detection::get_root_exe_path();
+    let home = std::env::var("HOME").unwrap_or_default();
+
+    // 1. Wrapper script
+    let wrapper = dir.join("launch-root.sh");
+    let script = format!(
+        "#!/bin/bash\n\
+# Uprooted launcher - sets CLR profiler env vars for Root only\n\
+export DOTNET_EnableDiagnostics=1\n\
+export DOTNET_ENABLE_PROFILING=1\n\
+export DOTNET_PROFILER='{guid}'\n\
+export DOTNET_PROFILER_PATH='{path}'\n\
+export DOTNET_ReadyToRun=0\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{guid}'\n\
+export CORECLR_PROFILER_PATH='{path}'\n\
+exec '{root}' \"$@\"\n",
+        guid = PROFILER_GUID,
+        path = profiler_path.display(),
+        root = root_path.display()
+    );
+    fs::write(&wrapper, &script)
+        .map_err(|e| format!("Failed to write wrapper script: {}", e))?;
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&wrapper, std::fs::Permissions::from_mode(0o755));
+    }
+
+    // 2. ~/.zprofile fallback (macOS default shell is zsh)
+    let zprofile = PathBuf::from(&home).join(".zprofile");
+    let content = fs::read_to_string(&zprofile).unwrap_or_default();
+    if !content.contains("DOTNET_ENABLE_PROFILING") {
+        let block = format!(
+            "\n# Uprooted CLR profiler (remove these lines to disable)\n\
+export DOTNET_EnableDiagnostics=1\n\
+export DOTNET_ENABLE_PROFILING=1\n\
+export DOTNET_PROFILER='{guid}'\n\
+export DOTNET_PROFILER_PATH='{path}'\n\
+export DOTNET_ReadyToRun=0\n\
+export CORECLR_ENABLE_PROFILING=1\n\
+export CORECLR_PROFILER='{guid}'\n\
+export CORECLR_PROFILER_PATH='{path}'\n",
+            guid = PROFILER_GUID,
+            path = profiler_path.display()
+        );
+        use std::io::Write;
+        let mut file = fs::OpenOptions::new()
+            .append(true)
+            .create(true)
+            .open(&zprofile)
+            .map_err(|e| format!("Failed to append to ~/.zprofile: {}", e))?;
+        file.write_all(block.as_bytes())
+            .map_err(|e| format!("Failed to write to ~/.zprofile: {}", e))?;
+    }
+
+    Ok(())
+}
+
+/// Remove env var mechanisms on macOS.
+#[cfg(target_os = "macos")]
+pub fn remove_env_vars() -> Result<(), String> {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let dir = get_uprooted_dir();
+
+    // Remove wrapper script
+    let _ = fs::remove_file(dir.join("launch-root.sh"));
+
+    // Clean ~/.zprofile
+    let zprofile = PathBuf::from(&home).join(".zprofile");
+    if let Ok(content) = fs::read_to_string(&zprofile) {
+        if content.contains("DOTNET_ENABLE_PROFILING") || content.contains("CORECLR_ENABLE_PROFILING") {
+            let cleaned: Vec<&str> = content
+                .lines()
+                .collect::<Vec<_>>()
+                .into_iter()
+                .scan(false, |in_block, line| {
+                    if line.contains("# Uprooted CLR profiler") {
+                        *in_block = true;
+                        Some(None)
+                    } else if *in_block && (line.starts_with("export CORECLR_")
+                        || line.starts_with("export DOTNET_")
+                        || line.starts_with('#')
+                        || line.is_empty())
+                    {
+                        if line.is_empty() { *in_block = false; }
+                        Some(None)
+                    } else {
+                        *in_block = false;
+                        Some(Some(line))
+                    }
+                })
+                .flatten()
+                .collect();
+            let _ = fs::write(&zprofile, cleaned.join("\n") + "\n");
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn check_env_vars_active() -> bool {
+    let enable = std::env::var("DOTNET_ENABLE_PROFILING")
+        .or_else(|_| std::env::var("CORECLR_ENABLE_PROFILING"))
+        .map(|v| v == "1")
+        .unwrap_or(false);
+    let guid = std::env::var("DOTNET_PROFILER")
+        .or_else(|_| std::env::var("CORECLR_PROFILER"))
+        .map(|v| v == PROFILER_GUID)
+        .unwrap_or(false);
+    let path = std::env::var("DOTNET_PROFILER_PATH")
+        .or_else(|_| std::env::var("CORECLR_PROFILER_PATH"))
+        .map(|v| !v.is_empty())
+        .unwrap_or(false);
+    enable && guid && path
+}
+
 /// Check env var status from environment.d config (falls back to wrapper script).
 #[cfg(target_os = "linux")]
 fn check_env_vars() -> (bool, bool, bool, bool) {
@@ -566,7 +718,7 @@ pub fn check_root_running() -> bool {
     {
         !find_root_pids().is_empty()
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         std::process::Command::new("pgrep")
             .arg("-x")
@@ -604,7 +756,7 @@ pub fn kill_root_processes() -> u32 {
         }
         killed
     }
-    #[cfg(target_os = "linux")]
+    #[cfg(unix)]
     {
         std::process::Command::new("pkill")
             .arg("-x")
