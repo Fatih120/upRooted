@@ -38,7 +38,7 @@ function Write-Err($msg) { Write-Host "[-] $msg" -ForegroundColor Red }
 
 Write-Host ""
 Write-Host "  +---------------------------------+" -ForegroundColor Green
-Write-Host "  |    Uprooted Installer v0.5.0    |" -ForegroundColor Green
+Write-Host "  |    Uprooted Installer v0.5.1-dev1    |" -ForegroundColor Green
 Write-Host "  +---------------------------------+" -ForegroundColor Green
 Write-Host "  Method: $Method" -ForegroundColor Gray
 Write-Host ""

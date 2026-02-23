@@ -6,6 +6,23 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.1-dev1] - 2026-02-23
+
+### Fixed
+
+- **Rootcord doesn't update on theme revert or variant change** — `ThemeEngine.RevertTheme()` never called `ContentPages.UpdateLiveColors`, so Rootcord and LinkEmbeds kept stale cached colors when switching to the Native theme or when Root auto-reverted on variant change. Added `ReadLiveRootColors` → `UpdateLiveColors` at end of `RevertTheme()` and in `ActualThemeVariantChanged` handler.
+  - File: `hook/ThemeEngine.cs`
+- **Rootcord user bar inner controls don't refresh on theme change** — `RefreshAllUiColors()` only updated the outer border, missing username text, status text, avatar background, and action button icons. Added tracking fields and extended refresh to all user bar children.
+  - File: `hook/RootcordEngine.cs`
+- **Auto-updater DLL vanishes on failed copy** — `CopyFileRobust` renamed the DLL to `.old` then copied the new file, but had no rollback if the copy failed (disk full, antivirus). Now restores the original file on failure.
+  - File: `hook/AutoUpdater.cs`
+- **Plugin page shows 4 cards instead of 6** — Default visible card count increased to 6 (3 rows).
+  - File: `hook/ContentPages.cs`
+- **Dev channel easter egg unreachable** — Tap counter was resetting on each toggle, preventing the 6-rapid-toggle sequence from ever completing.
+  - File: `hook/ContentPages.cs`
+
+---
+
 ## [0.5.0] - 2026-02-23
 
 ### Added
@@ -508,6 +525,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.0...v0.5.1-dev1
 [0.5.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
