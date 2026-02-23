@@ -4,12 +4,17 @@
 
 ## Current State Summary
 
-Bash installer channel support and UI polish are the most recent work.
+Bash installer channel support, installer resilience, and UI polish are the most recent work.
 
 - **Bash installer `--channel` flag** — `--channel canary` or `--channel dev` to download from canary/dev repos instead of stable-only public repo. Dev requires GITHUB_TOKEN. Canary/dev use `?per_page=1` endpoint since prereleases are invisible to `/releases/latest`.
-- **ProfileBadgeInjector + UserBioEngine enhancements** — Twemoji in bios, additional badge rendering improvements.
-- **ThemeEngine fixes** — Grid rebuild uses `ActiveThemeName` for filter/sort. Enabled state and experimental toggle dot fixed.
-- **Log spam suppressed** — ProfileBadgeInjector and SidebarInjector poll ticks no longer flood logs.
+- **Installer non-fatal HTML patching** — HTML patch step is now a warning (not fatal) when Root hasn't been launched yet. Hook's HtmlPatchVerifier self-heals at runtime. Both TUI and plain CLI modes updated.
+- **ProfileBadge/Injector log spam eliminated** — Fallback tick (200ms) and poll tick no longer emit raw START/END logs on every cycle. `ProfileBadgeInjector` now uses `TailSampler` + `WideEvent.BeginSampled`. `SidebarInjector` redundant plain `Logger.Log` lines removed (already had `WideEvent.BeginSampled`).
+- **ReconLogger card redesigned** — Dev Console ReconLogger card rebuilt in plugin card format: bold name left, toggle right, description, "Dev" status badge. Toggle now refreshes the About page so Dev Plugins count updates immediately.
+- **ThemeEngine enabled state fixed** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort all now use `themeEngine.ActiveThemeName` (not `settings.Plugins["themes"]`, which was always `true` from legacy migration). `SidebarInjector` no longer force-sets `Plugins["themes"] = true` for new installs.
+- **Experimental Plugins toggle dot** — `BuildToggleSwitch` gains `onThumbColor` override param. Experimental toggle passes `"#FFFFFF"` to prevent amber pill → black dot from `ContrastText`.
+- **Verbose CLR profiler catch handler** — Both Windows and Linux profilers now inject a 27-byte verbose catch handler into the IL try/catch that loads the hook DLL. On failure, prints full exception + attempted DLL path to console via `Console.WriteLine`. Falls back to 3-byte silent catch if metadata token creation fails. Pre-flight check at profiler init logs DLL existence and file size.
+- **Twemoji emoji rendering** — Emoji in user bio text now rendered as Twemoji images via `UserBioEngine`.
+- **Linux installer fixes** — Stripped UTF-8 BOM from bash installer shebang. Diagnose now checks correct `$PROFILE_DIR` path for hook log.
 - **Experimental plugin safe upgrade** — ALL experimental plugins are now blanket-disabled on every version upgrade via `ExperimentalPlugins` array in `StartupHook.cs`. This prevents startup hangs when unstable plugins survive across versions. The `ShowExperimentalPlugins` flag is also reset. Users re-enable manually from Settings > Plugins.
 - **Theme Engine rebrand** — Renamed from "Themes" to "Theme Engine" across sidebar tab, page header, plugin card, About status field. Plugin enabled logic now reflects actual theme state.
 - **8 preset themes** — Crimson, Cosmic Smoothie, Loki, Marine, Oreo, Sakura (first light preset), Ember. 2×4 grid layout. Loki reworked: gold as BrandPrimary, green as secondary.

@@ -15,15 +15,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
-- **ProfileBadgeInjector: Twemoji support + bio rendering** — Profile badge popups now render emoji in user bios as Twemoji images. Additional enhancements to badge injector.
-  - File: `hook/ProfileBadgeInjector.cs`
-- **UserBioEngine enhancements** — Additional user bio rendering improvements.
-  - File: `hook/UserBioEngine.cs`
-- **ThemeEngine filter/sort in rebuildGrid** — Grid rebuild now uses `ActiveThemeName` for filter/sort, preventing stale theme selection.
+- **Installer: HTML patching no longer fatal** — The Windows/Linux installer treated "No target HTML files found in profile directory" as a fatal error, aborting the entire install even though the C# hook was deployed successfully. HTML files are created by Root on first launch, so fresh installs always hit this. Now shows a yellow warning and continues. The hook's `HtmlPatchVerifier` self-heals patches at runtime.
+  - Files: `installer/src-tauri/src/main.rs`, `installer/src-tauri/src/cli.rs`
+- **ReconLogger Dev Console card now matches plugin card format** — Replaced simple title + `BuildSettingsToggle` layout with full plugin card layout: bold name left, toggle right, description, "Dev" status badge. Toggle now calls `onRefreshCurrentPage` so the Dev Plugins count on the About page updates immediately.
   - File: `hook/ContentPages.cs`
-- **Dev Console ReconLogger card format** — Fixed ReconLogger card layout in Dev Console, ThemeEngine enabled state, experimental toggle dot indicator.
+- **ThemeEngine always counted as enabled when native theme active** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort used `settings.Plugins["themes"]` (always `true` due to legacy migration) instead of `themeEngine.ActiveThemeName`. All three sites now use the live theme engine state, matching the About page count logic. `SidebarInjector` default init no longer force-sets `Plugins["themes"] = true` for new installs.
   - Files: `hook/ContentPages.cs`, `hook/SidebarInjector.cs`
-- **Hot-path log spam suppressed** — ProfileBadgeInjector and SidebarInjector poll ticks no longer flood the log file.
+- **Experimental Plugins toggle thumb black on amber pill** — `ContrastText(amber)` returned black. `BuildToggleSwitch` now accepts an `onThumbColor` override; experimental toggle passes `"#FFFFFF"` to hardcode white.
+  - File: `hook/ContentPages.cs`
+- **ProfileBadge and Injector poll ticks flooding live console** — `ProfileBadgeInjector` 200ms fallback tick emitted raw `Logger.Log` START/END on every cycle with no sampler. Added `TailSampler` + `WideEvent.BeginSampled`. `SidebarInjector` poll tick already used `WideEvent.BeginSampled` but also had redundant plain `Logger.Log` START/END lines bypassing the sampler; removed.
   - Files: `hook/ProfileBadgeInjector.cs`, `hook/SidebarInjector.cs`
 
 ---
