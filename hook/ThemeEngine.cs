@@ -1187,12 +1187,11 @@ internal class ThemeEngine
 
         if (themeIsDark == currentIsDark)
         {
-            // Already on the right variant family — no switch needed
+            // Already on the right variant family — no switch needed.
+            // Preserve any existing native snapshot from a prior theme apply so the
+            // Native card and RevertTheme still know the real pre-theme variant.
             ev?.Set("variant_switch", "not_needed");
             ev?.Set("variant", currentName);
-            _originalVariantKey = null;
-            _hasOriginalVariantKey = false;
-            _originalActualVariantName = null;
             return;
         }
 
@@ -1215,16 +1214,21 @@ internal class ThemeEngine
         {
             ev?.Set("variant_switch", "target_not_found");
             ev?.Set("target_variant", targetVariant);
-            _originalVariantKey = null;
-            _hasOriginalVariantKey = false;
-            _originalActualVariantName = null;
             return;
         }
 
         ev?.Set("variant_switch", currentName + "_to_" + targetVariant);
-        _originalVariantKey = requestedBefore;
-        _hasOriginalVariantKey = true;
-        _originalActualVariantName = currentName;
+
+        // Only capture native snapshot on the FIRST variant switch from native.
+        // Subsequent switches (e.g., light preset → dark preset → light preset)
+        // preserve the original native state for correct RevertTheme restoration
+        // and accurate Native card display.
+        if (!_hasOriginalVariantKey)
+        {
+            _originalVariantKey = requestedBefore;
+            _hasOriginalVariantKey = true;
+            _originalActualVariantName = currentName;
+        }
 
         // Guard so our variant change handler skips this switch
         _switchingVariantForTheme = true;
@@ -1945,9 +1949,10 @@ internal class ThemeEngine
 
         // --- UI elements (smooth direction-aware) ---
         // Border: lighter than bg on dark, darker on light. Symmetric via -dir.
+        // Floor at L=0.10 (~#161616) so borders stay visible on very dark backgrounds.
         palette["Border"] = ColorUtils.OklchToHex(
-            Math.Clamp(bL - 0.12 * dir, 0.05, 0.95),
-            bC * 0.4, ((aH + bH) / 2) % 360);
+            Math.Clamp(bL - 0.16 * dir, 0.10, 0.95),
+            bC * 0.75, bH);
 
         // Highlights: smooth blend from white-alpha (dark bg) to black-alpha (light bg).
         // At mid-range, both blend equally. Uses dir to interpolate alpha channels.
@@ -2929,21 +2934,21 @@ internal class ThemeEngine
                 ["BrandSecondary"] = "#9A9CD8",
                 ["BrandTertiary"]  = "#8082B8",
 
-                ["BackgroundPrimary"]   = "#111111",
-                ["BackgroundSecondary"] = "#191919",
-                ["BackgroundTertiary"]  = "#0C0C0C",
-                ["BackgroundElevated"]  = DeriveElevatedSurface("#191919"),
-                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#191919"), 12),
-                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#191919", 12),
-                ["BackgroundButtonSurface"] = DeriveButtonSurface("#191919"),
-                ["Input"]               = "#0E0E0E",
+                ["BackgroundPrimary"]   = "#0B0B0B",
+                ["BackgroundSecondary"] = "#131313",
+                ["BackgroundTertiary"]  = "#060606",
+                ["BackgroundElevated"]  = DeriveElevatedSurface("#131313"),
+                ["BackgroundButtonOnElevated"] = DeriveHighlightSurface(DeriveElevatedSurface("#131313"), 12),
+                ["BackgroundButtonOnSecondary"] = DeriveHighlightSurface("#131313", 12),
+                ["BackgroundButtonSurface"] = DeriveButtonSurface("#131313"),
+                ["Input"]               = "#080808",
 
                 ["TextPrimary"]   = "#F2F2F2",
                 ["TextSecondary"] = "#A3F2F2F2",
                 ["TextTertiary"]  = "#66F2F2F2",
                 ["TextWhite"]     = "#F2F2F2",
 
-                ["Border"]          = "#2C2C2C",
+                ["Border"]          = "#242424",
                 ["HighlightLight"]  = "#0AFFFFFF",
                 ["HighlightNormal"] = "#19FFFFFF",
                 ["HighlightStrong"] = "#30FFFFFF",
@@ -2952,7 +2957,7 @@ internal class ThemeEngine
                 ["Warning"] = "#F0AD4E",
                 ["Error"]   = "#F03F36",
 
-                ["Muted"] = "#252525",
+                ["Muted"] = "#1E1E1E",
                 ["Link"]  = "#A8AAEE",
 
                 ["SelfMention"]             = "#66C1C3FF",
@@ -2970,15 +2975,15 @@ internal class ThemeEngine
                 ["ChannelMentionBorder"]      = "#33E88F3D",
                 ["ChannelMentionText"]        = "#E88F3D",
 
-                ["ScrollShadow"] = "#111111",
+                ["ScrollShadow"] = "#0B0B0B",
                 ["DropShadow"]   = "#80000000",
             },
             SimpleThemeKeys: new Dictionary<string, string>
             {
                 ["ThemeAccentColor"]  = "#C1C3FF",
                 ["ThemeAccentBrush"]  = "#C1C3FF",
-                ["ThemeControlHighlightLowColor"] = "#191919",
-                ["ThemeControlHighlightLowBrush"] = "#191919",
+                ["ThemeControlHighlightLowColor"] = "#131313",
+                ["ThemeControlHighlightLowBrush"] = "#131313",
                 ["HighlightForegroundColor"] = "#C1C3FF",
                 ["HighlightForegroundBrush"] = "#C1C3FF",
                 ["ErrorColor"] = "#F03F36",
@@ -2989,9 +2994,9 @@ internal class ThemeEngine
         ["sakura"] = new PresetThemeData(
             RootKeys: new Dictionary<string, string>
             {
-                ["BrandPrimary"]   = "#94D9FF",
-                ["BrandSecondary"] = "#6BB0D8",
-                ["BrandTertiary"]  = "#5898B8",
+                ["BrandPrimary"]   = "#84C2FF",
+                ["BrandSecondary"] = "#5EA0D8",
+                ["BrandTertiary"]  = "#4A88B8",
 
                 ["BackgroundPrimary"]   = "#FFCEFA",
                 ["BackgroundSecondary"] = "#F4C0EE",
@@ -3017,14 +3022,14 @@ internal class ThemeEngine
                 ["Error"]   = "#F03F36",
 
                 ["Muted"] = "#E0A0DA",
-                ["Link"]  = "#4088C0",
+                ["Link"]  = "#3878B8",
 
-                ["SelfMention"]             = "#6694D9FF",
-                ["SelfMentionBackground"]   = "#2694D9FF",
-                ["SelfMentionBorder"]       = "#4D94D9FF",
-                ["OtherMention"]            = "#664088C0",
-                ["OtherMentionBackground"]  = "#1A4088C0",
-                ["OtherMentionBorder"]      = "#334088C0",
+                ["SelfMention"]             = "#6684C2FF",
+                ["SelfMentionBackground"]   = "#2684C2FF",
+                ["SelfMentionBorder"]       = "#4D84C2FF",
+                ["OtherMention"]            = "#663878B8",
+                ["OtherMentionBackground"]  = "#1A3878B8",
+                ["OtherMentionBorder"]      = "#333878B8",
                 ["RoleMention"]             = "#667C4DFF",
                 ["RoleMentionBackground"]   = "#1A7C4DFF",
                 ["RoleMentionBorder"]       = "#337C4DFF",
@@ -3039,12 +3044,12 @@ internal class ThemeEngine
             },
             SimpleThemeKeys: new Dictionary<string, string>
             {
-                ["ThemeAccentColor"]  = "#94D9FF",
-                ["ThemeAccentBrush"]  = "#94D9FF",
+                ["ThemeAccentColor"]  = "#84C2FF",
+                ["ThemeAccentBrush"]  = "#84C2FF",
                 ["ThemeControlHighlightLowColor"] = "#F4C0EE",
                 ["ThemeControlHighlightLowBrush"] = "#F4C0EE",
-                ["HighlightForegroundColor"] = "#94D9FF",
-                ["HighlightForegroundBrush"] = "#94D9FF",
+                ["HighlightForegroundColor"] = "#84C2FF",
+                ["HighlightForegroundBrush"] = "#84C2FF",
                 ["ErrorColor"] = "#F03F36",
                 ["ErrorBrush"] = "#F03F36",
             }
