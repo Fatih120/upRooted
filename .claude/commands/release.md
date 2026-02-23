@@ -40,16 +40,18 @@ Throughout this document, **TARGET** and **VERSION** refer to these parsed value
 
 1. Run `git pull` to ensure we have the latest.
 
-2. Run `git status` to check for uncommitted changes. If there are uncommitted changes:
+2. **Discover git remote name** — run `git remote -v` and find the remote pointing to `uprooted-private.git`. Store as `REMOTE`. Do NOT assume the remote is named `origin` — it may be `private` or something else.
+
+3. Run `git status` to check for uncommitted changes. If there are uncommitted changes:
    - Show them to the user.
    - Ask via `AskUserQuestion`: "There are uncommitted changes. How should we handle them?"
      - **Abort** — stop the release, user deals with changes first
      - **Continue anyway** — user confirms changes are expected (e.g., they're part of the release)
    - If abort, stop entirely.
 
-3. Run `git log --oneline -10` to confirm we are on `main` and see recent history.
+4. Run `git log --oneline -10` to confirm we are on `main` and see recent history.
 
-4. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const or startup banner). This is the **previous version** — needed for find-and-replace in Phase 3 and for changelog compare links. Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
+5. Read `hook/StartupHook.cs` and find the current version string (the `CurrentVersion` const). This is the **previous version** (`PREV`) — needed for find-and-replace in Phase 3 and for changelog compare links. Verify `VERSION` is different from it. If they match, warn the user: "Version is already set to X — nothing to bump. Continue anyway?" If the user declines, stop.
 
 ---
 
@@ -74,6 +76,8 @@ Read `CHANGELOG_PUBLIC.md`. Verify:
 - Has the correct date (today).
 - Uses the established format (New, Improvements, Fixes, Linux).
 
+**Sensitivity guard:** `CHANGELOG_PUBLIC.md` and `NEXT-RELEASE.md` have HTML comments forbidding mention of obfuscation, ConfuserEx, or protected names. The doc sweep must respect these — never add obfuscation-related entries to these files.
+
 ### 2c. Next release notes
 
 Read `NEXT-RELEASE.md`. Check:
@@ -92,16 +96,19 @@ Read `hook/SESSION_STATE.md`. Check:
 - Are "Files Modified Recently" and "Next Steps" current?
 - The release header will be updated in Phase 3.
 
-### 2f. New session reference
+### 2f. New session reference + file map
 
-Read `NEW-SESSION.md` sections 1, 4, and 6:
+Read `NEW-SESSION.md` sections 1, 4, and 5:
 - Section 1: version will be updated in Phase 3.
-- Section 4 (File Map): spot-check line counts for any hook `.cs` files that changed recently — run `wc -l` on them and compare.
-- Section 6 (Current State): does it match reality?
+- Section 4 (File Map): run `wc -l hook/*.cs` and compare against the table. Auto-fix line counts that are off by more than 10%. Check for `.cs` files in `hook/` missing from the table — add them.
+- Section 5 (Other Layers): spot-check TypeScript and Installer sections.
 
 ### 2g. Repository structure
 
-Read the `CLAUDE.md` Repository Structure tree. Quick-check: are there `.cs` files listed in the tree that don't exist, or files in `hook/` that are missing from the tree? Run `ls hook/*.cs` to compare.
+Read the `CLAUDE.md` Repository Structure tree. Quick-check:
+- Run `ls hook/*.cs` — are there files in `hook/` missing from the tree? Add them.
+- Are there files listed in the tree that don't exist? Remove them.
+- Are line counts in the tree wildly wrong? Fix them.
 
 ### 2h. Apply fixes
 
@@ -143,75 +150,57 @@ Grep for the previous version string across all source, script, doc, and config 
 
 ### 3c. Update version references
 
-Update all files from the previous version to `VERSION`:
+Run the same file-by-file version bump as `/nose` Phase 2. The file list is defined in `/nose` — refer to that skill for the canonical set. Key files:
 
-#### Source code
-| File | What to update |
-|------|---------------|
-| `hook/UprootedSettings.cs` | `Version` property default |
-| `hook/StartupHook.cs` | `CurrentVersion` const + startup log banner string |
-| `hook/SidebarInjector.cs` | Version comments (3 occurrences) |
-| `hook/ContentPages.cs` | `Version` field in all `PluginInfo` entries (use `replace_all`) |
-| `hook/SESSION_STATE.md` | Release header |
-| `package.json` | `"version"` field |
-| `src/plugins/themes/index.ts` | `version` field |
-| `src/plugins/sentry-blocker/index.ts` | `version` field |
-| `src/plugins/link-embeds/index.ts` | `version` field |
-| `src/plugins/settings-panel/index.ts` | `version` field |
+**Source code:** `package.json`, `installer/src-tauri/Cargo.toml`, `hook/UprootedSettings.cs`, `hook/StartupHook.cs`, `hook/ContentPages.cs` (all PluginInfo `replace_all`), `hook/SidebarInjector.cs`, `hook/SESSION_STATE.md`, `src/plugins/{themes,sentry-blocker,link-embeds,settings-panel}/index.ts`
 
-#### Scripts and installers
-| File | What to update |
-|------|---------------|
-| `Install-Uprooted.ps1` | Banner text |
-| `Uninstall-Uprooted.ps1` | Banner text |
-| `scripts/install-hook.ps1` | Settings default version |
-| `install-uprooted-linux.sh` | Comment header + `VERSION=` variable |
-| `packaging/PKGBUILD` | `pkgver=` |
-| `installer/src-tauri/Cargo.toml` | `version =` in `[package]` section |
+**Scripts:** `Install-Uprooted.ps1`, `Uninstall-Uprooted.ps1`, `install-uprooted-linux.sh`, `packaging/PKGBUILD`
 
-#### Site and README
-| File | What to update |
-|------|---------------|
-| `README.md` | Badge URL version string |
-| `site/src/pages/index.astro` | `<span class="version">` |
+Note: `scripts/install-hook.ps1` reads version from `package.json` dynamically — no edit needed.
 
-#### Documentation
-| File | What to update |
-|------|---------------|
-| `NEW-SESSION.md` | Version line, Versions line, footer |
-| `docs/ROADMAP.md` | Compatibility matrix current version |
-| `docs/install/BUILD.md` | Output filenames, "Where Versions Live" table, version propagation text |
-| `docs/install/INSTALLATION.md` | All installer filenames and log output examples |
-| `docs/plugins/ROOT_ENVIRONMENT.md` | `__UPROOTED_VERSION__` example, compatibility table |
-| `docs/framework/ARCHITECTURE.md` | package.json comment, footer |
-| `docs/framework/INSTALLER.md` | Version field, TUI version display |
-| `docs/framework/HOOK_REFERENCE.md` | UprootedSettings code example, INI example |
+**Site and README:** `README.md`, `site/src/pages/index.astro` (if exists)
 
-**Note:** This file list is a known baseline. The grep in 3b may discover additional files — update those too. Conversely, if any file from this list no longer exists or no longer contains a version reference, skip it silently.
+**Documentation:** `NEW-SESSION.md`, `docs/install/BUILD.md`, `docs/install/INSTALLATION.md`, `docs/plugins/ROOT_ENVIRONMENT.md`, `docs/framework/ARCHITECTURE.md`, `docs/framework/INSTALLER.md`, `docs/framework/HOOK_REFERENCE.md`, `docs/ROADMAP.md`, `CONTRIBUTING.md`
 
-### 3d. Update changelog headers
+**Exclusions:** `pnpm-lock.yaml`, `Cargo.lock`, `node_modules/`, `.git/`, `package-lock.json`, changelog historical entries.
 
-Update `CHANGELOG.md`:
-- If the top section header doesn't show `VERSION`, update it.
-- Ensure the date is today.
-- Add or update the compare link at the bottom:
-  ```
-  [<version>]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v<previous>...v<version>
-  ```
+The grep in 3b may discover additional files — update those too. If any file from this list no longer exists or no longer contains a version reference, skip it silently.
 
-Update `CHANGELOG_PUBLIC.md`:
-- Ensure the top section shows `v{VERSION}` with today's date.
+### 3d. ForceDisableOnUpgrade
 
-### 3e. Verify no stale refs
+Read `hook/StartupHook.cs` and find the `ForceDisableOnUpgrade` dictionary. Check if `VERSION` (or its base version without `-rc` suffix) already has an entry.
 
-Run a verification grep to confirm no references to the old version remain (excluding Cargo.lock, pnpm-lock.yaml, node_modules, `.git/`, and changelog historical entries).
+If no entry exists, grep `hook/ContentPages.cs` for all `PluginInfo` entries with `TestingStatus = 0` (Experimental) or `TestingStatus = 1` (Alpha). Present the list to the user via `AskUserQuestion`:
+- "Should any plugins be force-disabled for users upgrading to VERSION?" with options listing the experimental/alpha plugins.
 
-### 3f. Report
+If the user selects plugins, add a new entry to the `ForceDisableOnUpgrade` dictionary.
+
+### 3e. Plugin metadata review
+
+Grep `hook/ContentPages.cs` for:
+1. `TestingStatus = 5` (Planned) — ask user if these should be promoted since the feature shipped.
+2. Descriptions containing "Planned for a future release" or similar stale text — flag for update.
+3. Any `HasSettings = false` on plugins that now have settings lightboxes — flag for correction.
+
+### 3g. Update changelog headers
+
+Run the same changelog stamping as `/nose` Phase 3:
+- `CHANGELOG.md`: stamp `[Unreleased]` → `[VERSION] - today`, add compare link
+- `CHANGELOG_PUBLIC.md`: update top section date
+- `NEXT-RELEASE.md`: update header metadata
+
+### 3h. Verify no stale refs
+
+Run a verification grep to confirm no references to the old version remain (excluding Cargo.lock, pnpm-lock.yaml, node_modules, `.git/`, `package-lock.json`, and changelog historical entries).
+
+### 3i. Report
 
 Tell the user:
 - How many files were updated
 - Any files that were skipped (and why)
 - Any content rewritten beyond just the version number
+- ForceDisableOnUpgrade changes (if any)
+- Plugin metadata changes (if any)
 
 ---
 
@@ -376,11 +365,15 @@ git tag -a "v<version>" -m "Release v<version>"
 
 ### 6e. Push
 
+Use the `REMOTE` discovered in Phase 1 (not hardcoded `origin`):
+
 ```bash
-git push && git push --tags
+git push $REMOTE && git push $REMOTE --tags
 ```
 
 If push fails (e.g., remote has new commits), **stop and report**. Do NOT force-push. The user must resolve manually (`git pull --rebase`, then re-push).
+
+**Note:** Per CLAUDE.md, never add `Co-Authored-By` trailers. The commit is authored by whoever `git config user.name`/`user.email` returns.
 
 ---
 
@@ -393,7 +386,7 @@ Release v<version> shipped.
 
   Commit: <short hash>
   Tag:    v<version>
-  Branch: main -> origin/main
+  Branch: main -> $REMOTE/main
 
 Proceeding to trigger and monitor CI builds...
 ```
@@ -421,9 +414,17 @@ Log the resolved target:
 Release target: <TARGET value> → publish_public=<true/false>
 ```
 
-### 8b. Trigger both workflows
+### 8b. Detect or trigger workflows
 
-Run both workflows via `gh`, using the `publish_public` value resolved in 8a:
+First, check if push-triggered builds are already running for the release tag:
+
+```bash
+gh run list --limit=4 --json databaseId,name,status,headBranch,event
+```
+
+If runs matching the tag branch (`v<version>`) are already in progress or completed, use those run IDs directly — do NOT re-trigger.
+
+If no matching runs exist, trigger both workflows manually via `gh workflow run`:
 
 ```bash
 # Windows installer
@@ -442,10 +443,11 @@ gh workflow run "Build Linux Installer" \
 After triggering, wait 5 seconds for GitHub to register the runs, then find the run IDs:
 
 ```bash
-# Get the run IDs (most recent run for each workflow)
 gh run list --workflow=build-installer.yml --limit=1 --json databaseId,status
 gh run list --workflow=build-linux.yml --limit=1 --json databaseId,status
 ```
+
+**Note:** Push-triggered builds skip the publish steps (they only upload CI artifacts). If the user needs release assets on GitHub, `workflow_dispatch` must be used.
 
 ### 8c. Monitor builds
 
@@ -500,7 +502,7 @@ Report any missing or zero-size assets.
 Skip this step if `TARGET` is `private`.
 
 ```bash
-gh release view "v<version>" --repo watchthelight/uprooted --json assets --jq '.assets[].name'
+gh release view "v<version>" --repo The-Uprooted-Project/uprooted --json assets --jq '.assets[].name'
 ```
 
 Verify the same 5 assets exist on the public repo with non-zero sizes.
@@ -516,7 +518,7 @@ For repos matching `TARGET`:
 gh release view "v<version>" --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
 
 # Public (if target is public or all)
-gh release view "v<version>" --repo watchthelight/uprooted --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
+gh release view "v<version>" --repo The-Uprooted-Project/uprooted --json tagName,name,isDraft,isPrerelease --jq '{tag: .tagName, title: .name, draft: .isDraft, prerelease: .isPrerelease}'
 ```
 
 Verify:
@@ -544,7 +546,7 @@ Private repo (The-Uprooted-Project/uprooted-private):    [if target is private o
     ✓ uprooted-linux-artifacts.tar.gz     (<size>)
     ✓ install-uprooted-linux.sh           (<size>)
 
-Public repo (watchthelight/uprooted):                     [if target is public or all]
+Public repo (The-Uprooted-Project/uprooted):                     [if target is public or all]
   Release: v<version> | prerelease: <yes/no>
   Assets:
     ✓ Uprooted-<version>-Setup.exe       (<size>)
