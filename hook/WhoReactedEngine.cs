@@ -80,7 +80,7 @@ internal sealed class WhoReactedEngine : IDisposable
     internal void Initialize()
     {
         using var ev = WideEvent.Begin(Tag, "initialize");
-        _scanTimer = new Timer(OnScanTick, null, 0, ScanIntervalMs);
+        _scanTimer = new Timer(OnScanTick, null, 3000, ScanIntervalMs);
         ev.Set("scan_interval_ms", ScanIntervalMs);
     }
 
@@ -134,29 +134,31 @@ internal sealed class WhoReactedEngine : IDisposable
                     try
                     {
                         LoadPendingAvatars(pending, ev);
+
+                        // Phase 3: Inject on UI thread
+                        _r.RunOnUIThread(() =>
+                        {
+                            try
+                            {
+                                InjectPendingAvatars(pending, ev);
+                            }
+                            catch (Exception ex)
+                            {
+                                ev.SetError(ex);
+                            }
+                            finally
+                            {
+                                ev.Dispose();
+                                Interlocked.Exchange(ref _scanning, 0);
+                            }
+                        });
                     }
                     catch (Exception ex)
                     {
                         ev.Set("load_error", ex.Message);
+                        ev.Dispose();
+                        Interlocked.Exchange(ref _scanning, 0);
                     }
-
-                    // Phase 3: Inject on UI thread
-                    _r.RunOnUIThread(() =>
-                    {
-                        try
-                        {
-                            InjectPendingAvatars(pending, ev);
-                        }
-                        catch (Exception ex)
-                        {
-                            ev.SetError(ex);
-                        }
-                        finally
-                        {
-                            ev.Dispose();
-                            Interlocked.Exchange(ref _scanning, 0);
-                        }
-                    });
                 });
             });
         }

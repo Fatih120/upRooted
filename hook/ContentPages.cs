@@ -4130,13 +4130,15 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Build the update channel row: shows current channel with a clickable switch.
-    /// Switching to "Developer" prompts for a password inline.
-    /// Switching back to "Stable" is immediate (no password needed).
+    /// Build the update channel row: Stable/Canary toggle pill with labeled sides.
+    /// Developer channel remains accessible via clicking the description text (password prompt).
+    /// If currently on Developer, toggle shows right position (treated as canary-like).
     /// </summary>
     private static void BuildChannelRow(AvaloniaReflection r, object container,
         UprootedSettings settings, object? font, Action? onRefreshCurrentPage = null)
     {
+        const string CanaryColor = "#E89B3E"; // Warm amber
+
         var row = r.CreatePanel();
         if (row == null) return;
         r.SetMargin(row, 0, 14, 0, 0);
@@ -4147,14 +4149,14 @@ internal static class ContentPages
         {
             r.SetHorizontalAlignment(leftStack, "Left");
             r.SetVerticalAlignment(leftStack, "Center");
-            r.SetMargin(leftStack, 0, 0, 140, 0);
+            r.SetMargin(leftStack, 0, 0, 160, 0);
 
             var nameText = CreateBoundText(r, "Update channel", 13, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(nameText, 450);
             ApplyFont(r, nameText, font);
             r.AddChild(leftStack, nameText);
 
-            var descText = CreateBoundText(r, "Stable receives public releases, Developer receives pre-release builds", 12, TextMuted, "TextSecondary");
+            var descText = CreateBoundText(r, "Stable receives tested releases. Canary receives bleeding-edge builds.", 12, TextMuted, "TextSecondary");
             ApplyFont(r, descText, font);
             r.SetTextWrapping(descText, "Wrap");
             r.AddChild(leftStack, descText);
@@ -4162,98 +4164,156 @@ internal static class ContentPages
             r.AddChild(row, leftStack);
         }
 
-        // Right side: channel badge (clickable)
-        var isDev = settings.AutoUpdateChannel == "developer";
-        var badgeColor = isDev ? DevChannelBlack : AccentGreen;
-        var badgeLabel = isDev ? "Developer" : "Stable";
-        var badgeTextColor = isDev ? DevChannelBlue : ContrastText(AccentGreen);
-        var badgeText = r.CreateTextBlock(badgeLabel, 12, badgeTextColor);
-        r.SetFontWeight(badgeText, "Bold");
-        ApplyFont(r, badgeText, font);
-        r.SetHorizontalAlignment(badgeText, "Center");
+        // Right side: Stable [toggle] Canary
+        var isRight = !settings.AutoUpdateChannel.Equals("stable", StringComparison.OrdinalIgnoreCase);
+        // canary or developer → right position
 
-        var badge = r.CreateBorder(badgeColor, 8, badgeText);
-        if (badge != null)
+        var rightStack = r.CreateStackPanel(vertical: false, spacing: 8);
+        if (rightStack == null) return;
+        r.SetHorizontalAlignment(rightStack, "Right");
+        r.SetVerticalAlignment(rightStack, "Center");
+
+        // "Stable" label
+        var stableLabel = r.CreateTextBlock("Stable", 12, isRight ? TextDim : TextWhite);
+        r.SetFontWeightNumeric(stableLabel, isRight ? 400 : 600);
+        ApplyFont(r, stableLabel, font);
+        r.SetVerticalAlignment(stableLabel, "Center");
+        r.AddChild(rightStack, stableLabel);
+
+        // "Canary" label (created before pill so closures can reference it)
+        var canaryLabel = r.CreateTextBlock("Canary", 12, isRight ? TextWhite : TextDim);
+        r.SetFontWeightNumeric(canaryLabel, isRight ? 600 : 400);
+        ApplyFont(r, canaryLabel, font);
+        r.SetVerticalAlignment(canaryLabel, "Center");
+
+        // Toggle pill
+        bool[] state = { isRight };
+        bool[] hovered = { false };
+        var pillColor = isRight ? CanaryColor : AccentGreen;
+        var pill = r.CreateBorder(pillColor, 13);
+        if (pill != null)
         {
-            r.SetPadding(badge, 12, 5, 12, 5);
-            r.SetHorizontalAlignment(badge, "Right");
-            r.SetVerticalAlignment(badge, "Center");
-            r.SetCursorHand(badge);
-            r.SetTag(badge, "uprooted-no-recolor");
-            SetBorderStroke(r, badge, isDev ? DevChannelBlue : AdjustForHighlight(badgeColor, 18), ThickBorder);
+            r.SetWidth(pill, 44);
+            r.SetHeight(pill, 24);
+            r.SetVerticalAlignment(pill, "Center");
+            r.SetCursorHand(pill);
+            r.SetTag(pill, "uprooted-no-recolor");
 
-            var badgeRef = badge;
-            var badgeTextRef = badgeText;
-            var containerRef = container;
-            bool promptVisible = false;
-
-            r.SubscribeClickReleased(badge, () =>
+            var dot = r.CreateBorder(ContrastText(pillColor), 9);
+            if (dot != null)
             {
-                var current = UprootedSettings.Load().AutoUpdateChannel;
-                if (current == "developer")
+                r.SetWidth(dot, 18);
+                r.SetHeight(dot, 18);
+                r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
+                r.SetMargin(dot, 3, 3, 3, 3);
+                r.SetBorderChild(pill, dot);
+
+                var pillRef = pill;
+                var dotRef = dot;
+                var stableLabelRef = stableLabel;
+                var canaryLabelRef = canaryLabel;
+
+                r.SubscribeEvent(pill, "PointerPressed", () =>
                 {
-                    // Switch back to Stable — no password needed
-                    Logger.Log("AutoUpdate", "Switched to Stable channel");
-                    var s = UprootedSettings.Load();
-                    s.AutoUpdateChannel = "stable";
-                    if (s.Plugins.TryGetValue("recon-logger", out var reconEnabled) && reconEnabled)
-                        s.Plugins["recon-logger"] = false;
-                    s.Save();
-                    ApplyChannelRuntimeState(r, s);
-                    promptVisible = false;
-                    r.TextBlockType?.GetProperty("Text")?.SetValue(badgeTextRef, "Stable");
-                    r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeTextRef, r.CreateBrush(ContrastText(AccentGreen)));
-                    r.SetBackground(badgeRef, AccentGreen);
-                    SetBorderStroke(r, badgeRef, AdjustForHighlight(AccentGreen, 18), ThickBorder);
-                    onRefreshCurrentPage?.Invoke();
-                }
-                else
+                    var basis = state[0] ? CanaryColor : AccentGreen;
+                    r.SetRenderScale(pillRef, 0.985);
+                    r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
+                });
+
+                r.SubscribeClickReleased(pill, () =>
                 {
-                    // Show inline password prompt below the row (guard against duplicates)
-                    if (!promptVisible && badgeTextRef != null)
+                    r.SetRenderScale(pillRef, 1.0);
+                    state[0] = !state[0];
+                    var newChannel = state[0] ? "canary" : "stable";
+                    var rest = state[0] ? CanaryColor : AccentGreen;
+                    var hover = state[0] ? AdjustForHighlight(CanaryColor, 10) : AdjustForHighlight(AccentGreen, 10);
+                    r.SetBackground(pillRef, hovered[0] ? hover : rest);
+                    r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
+                    r.SetBackground(dotRef, ContrastText(rest));
+
+                    // Update label emphasis
+                    r.SetFontWeightNumeric(stableLabelRef, state[0] ? 400 : 600);
+                    r.SetForeground(stableLabelRef, state[0] ? TextDim : TextWhite);
+                    if (canaryLabelRef != null)
                     {
-                        promptVisible = true;
-                        ShowChannelPasswordPrompt(r, containerRef, row, badgeRef, badgeTextRef, font,
-                            onClose: () => { promptVisible = false; },
-                            onChannelChanged: () =>
-                            {
-                                ApplyChannelRuntimeState(r, UprootedSettings.Load());
-                                onRefreshCurrentPage?.Invoke();
-                            });
+                        r.SetFontWeightNumeric(canaryLabelRef, state[0] ? 600 : 400);
+                        r.SetForeground(canaryLabelRef, state[0] ? TextWhite : TextDim);
                     }
-                }
-            });
 
-            r.SubscribeEvent(badge, "PointerEntered", () =>
-            {
-                var c = UprootedSettings.Load().AutoUpdateChannel;
-                if (c == "developer")
-                {
-                    r.SetBackground(badge, AdjustForHighlight(DevChannelBlack, 8));
-                    SetBorderStroke(r, badge, AdjustForHighlight(DevChannelBlue, 24), ThickBorder);
-                }
-                else
-                {
-                    r.SetBackground(badge, AdjustForHighlight(AccentGreen, 10));
-                    SetBorderStroke(r, badge, AdjustForHighlight(AccentGreen, 40), ThickBorder);
-                }
-            });
-            r.SubscribeEvent(badge, "PointerExited", () =>
-            {
-                var c = UprootedSettings.Load().AutoUpdateChannel;
-                if (c == "developer")
-                {
-                    r.SetBackground(badge, DevChannelBlack);
-                    SetBorderStroke(r, badge, DevChannelBlue, ThickBorder);
-                }
-                else
-                {
-                    r.SetBackground(badge, AccentGreen);
-                    SetBorderStroke(r, badge, AdjustForHighlight(AccentGreen, 18), ThickBorder);
-                }
-            });
+                    // Save channel
+                    var s = UprootedSettings.Load();
+                    // If switching from developer, disable dev-only plugins
+                    if (newChannel == "stable" && s.AutoUpdateChannel == "developer")
+                    {
+                        if (s.Plugins.TryGetValue("recon-logger", out var reconEnabled) && reconEnabled)
+                            s.Plugins["recon-logger"] = false;
+                    }
+                    s.AutoUpdateChannel = newChannel;
+                    s.Save();
 
-            r.AddChild(row, badge);
+                    ApplyChannelRuntimeState(r, s);
+                    Logger.Log("AutoUpdate", $"Switched to {newChannel} channel");
+                    onRefreshCurrentPage?.Invoke();
+                });
+
+                r.SubscribeEvent(pill, "PointerEntered", () =>
+                {
+                    hovered[0] = true;
+                    var hover = state[0] ? AdjustForHighlight(CanaryColor, 10) : AdjustForHighlight(AccentGreen, 10);
+                    r.SetBackground(pillRef, hover);
+                });
+                r.SubscribeEvent(pill, "PointerExited", () =>
+                {
+                    hovered[0] = false;
+                    r.SetRenderScale(pillRef, 1.0);
+                    r.SetBackground(pillRef, state[0] ? CanaryColor : AccentGreen);
+                });
+            }
+
+            r.AddChild(rightStack, pill);
+        }
+
+        // Add canary label after the pill
+        r.AddChild(rightStack, canaryLabel);
+
+        r.AddChild(row, rightStack);
+
+        // Developer channel access: clicking the description text shows password prompt.
+        // Subtle — normal users won't discover it, devs know to click.
+        if (leftStack != null)
+        {
+            var containerRef = container;
+            bool[] promptVisible = { false };
+            var rowRef = row;
+
+            r.SetCursorHand(leftStack);
+            r.SubscribeClickReleased(leftStack, () =>
+            {
+                if (promptVisible[0]) return;
+                if (pill == null || canaryLabel == null) return;
+                promptVisible[0] = true;
+                ShowChannelPasswordPrompt(r, containerRef, rowRef, pill, canaryLabel, font,
+                    onClose: () => { promptVisible[0] = false; },
+                    onChannelChanged: () =>
+                    {
+                        // Developer channel activated — update toggle to right position
+                        state[0] = true;
+                        if (pill != null)
+                        {
+                            r.SetBackground(pill, DevChannelBlack);
+                            var dot2 = pill; // dot is inside pill as child
+                        }
+                        r.SetFontWeightNumeric(stableLabel, 400);
+                        r.SetForeground(stableLabel, TextDim);
+                        if (canaryLabel != null)
+                        {
+                            r.SetFontWeightNumeric(canaryLabel, 600);
+                            r.SetForeground(canaryLabel, TextWhite);
+                        }
+                        ApplyChannelRuntimeState(r, UprootedSettings.Load());
+                        onRefreshCurrentPage?.Invoke();
+                    });
+            });
         }
 
         r.AddChild(container, row);

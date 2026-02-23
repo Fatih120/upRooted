@@ -232,9 +232,11 @@ internal class ProfileBadgeInjector
     {
         try
         {
+            Logger.Log("ProfileBadge", ">>> OverlayChanged START");
             ScanOverlayLayer(tagNonProfiles: false);  // First scan: don't tag — popup may still be loading
             ScheduleOverlayRetry(80,  tagNonProfiles: true);  // 80ms retry: tag confirmed non-profiles so the 200ms retry skips them
             ScheduleOverlayRetry(200, tagNonProfiles: false); // 200ms final check: don't re-tag (just catch slow-loading profile popups)
+            Logger.Log("ProfileBadge", "<<< OverlayChanged END");
         }
         catch (Exception ex)
         {
@@ -264,7 +266,12 @@ internal class ProfileBadgeInjector
         {
             _r.RunOnUIThread(() =>
             {
-                try { ScanTopLevels(); }
+                try
+                {
+                    Logger.Log("ProfileBadge", ">>> ScanTopLevels START");
+                    ScanTopLevels();
+                    Logger.Log("ProfileBadge", "<<< ScanTopLevels END");
+                }
                 catch (Exception ex) { Logger.Log("ProfileBadge", $"Fallback scan error: {ex.Message}"); }
                 finally { Interlocked.Exchange(ref _scanning, 0); }
             });

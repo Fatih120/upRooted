@@ -184,7 +184,12 @@ internal class SidebarInjector
             {
                 using var ev = WideEvent.BeginSampled("Injector", "poll_tick", _sampler);
                 ev.Set("injected", _injected);
-                try { CheckAndInject(ev); }
+                try
+                {
+                    Logger.Log("Injector", ">>> poll_tick START");
+                    CheckAndInject(ev);
+                    Logger.Log("Injector", "<<< poll_tick END");
+                }
                 catch (Exception ex)
                 {
                     ev.SetError(ex);
@@ -206,6 +211,7 @@ internal class SidebarInjector
     /// </summary>
     private void OnLayoutUpdated()
     {
+        Logger.Log("Injector", ">>> LayoutUpdated");
         if (_injected)
         {
             // Catch Root's async save bar creation the instant it triggers a layout pass.
@@ -258,7 +264,9 @@ internal class SidebarInjector
         // _injected=true and return harmlessly.
         try
         {
+            Logger.Log("Injector", ">>> LayoutUpdated CheckAndInject START");
             CheckAndInject(null);
+            Logger.Log("Injector", "<<< LayoutUpdated CheckAndInject END");
         }
         catch (Exception ex)
         {

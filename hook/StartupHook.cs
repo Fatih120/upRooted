@@ -508,16 +508,12 @@ internal class StartupHook
                         for (int attempt = 1; attempt <= 6; attempt++)
                         {
                             attempts = attempt;
-                            using var found = new ManualResetEventSlim(false);
-                            object? result = null;
-                            capturedResolver.RunOnUIThread(() =>
-                            {
-                                try { result = browserReflection.FindBrowserDirect(); }
-                                catch (Exception ex) { Logger.Log("Startup", $"Phase 5: FindBrowserDirect UI error: {ex.Message}"); }
-                                found.Set();
-                            });
-                            found.Wait(15_000);
-                            browser = result;
+                            // FindBrowserDirect uses reflection on services/static fields —
+                            // does NOT need the UI thread. Running it on the UI thread caused
+                            // permanent freezes: DI resolution can trigger synchronous Chromium
+                            // initialization which blocks the UI thread indefinitely.
+                            try { browser = browserReflection.FindBrowserDirect(); }
+                            catch (Exception ex) { Logger.Log("Startup", $"Phase 5: FindBrowserDirect error: {ex.Message}"); }
                             if (browser != null) break;
                             Thread.Sleep(5_000);
                         }
