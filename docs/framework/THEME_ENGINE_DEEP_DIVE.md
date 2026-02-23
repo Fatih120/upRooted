@@ -1,22 +1,22 @@
 # Theme Engine Deep Dive
 
-> **What this is:** ThemeEngine implementation deep dive — algorithm, data structures, and the resource-first migration plan that fixes the known color inconsistency bugs.
+> **What this is:** ThemeEngine v2 implementation deep dive — architecture (in-place switching, bind-once walker, WeakRef live preview), data structures, palette generation, and key gotchas.
 > **Read when:** Modifying ThemeEngine; fixing theme switch bugs; changing custom theme palette generation; implementing ping color override.
-> **Before this:** [ROOT_CONTROL_REFERENCE §Theme System](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — confirms Root uses its own 32 keys (not FluentTheme), explains why current approach fails.
+> **Before this:** [ROOT_CONTROL_REFERENCE §Theme System](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) — Root's 32-key color system that ThemeEngine v2 targets.
 > **Color key hex values:** [ROOT_THEME_SYSTEM_FINDINGS](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) — all 32 keys across 3 themes with exact ARGB values.
 > **Does NOT cover:** Root's custom control types or style class system → [ROOT_CONTROL_REFERENCE](ROOT_CONTROL_REFERENCE.md).
 > **Related docs:** [HOOK_REFERENCE](HOOK_REFERENCE.md) | [ARCHITECTURE](ARCHITECTURE.md) | [AVALONIA_PATTERNS](AVALONIA_PATTERNS.md) | [ROOT_THEME_SYSTEM_FINDINGS](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) | [ROOT_CONTROL_REFERENCE](ROOT_CONTROL_REFERENCE.md)
 
 For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 
-> **Research Complete (2026-02-19):** ILSpy decompilation of Root v0.9.93 has fully mapped Root's color system. Root uses its own 32 custom resource keys (`BrandPrimary`, `TextPrimary`, etc.) in `Application.Resources.ThemeDictionaries[variant]` — NOT FluentTheme or SimpleTheme keys. All Root views and control styles bind to these 32 keys via `DynamicResourceExtension`, meaning overriding them propagates instantly to all bound controls with zero visual tree walking. Root uses `SimpleTheme` + `MediaFluentTheme` (NOT standard FluentTheme). The existing ThemeEngine targets the wrong keys; a resource-first migration is the correct fix for the known theme inconsistency bugs. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full 32-key catalog and color values, and [`docs/framework/ROOT_CONTROL_REFERENCE.md`](ROOT_CONTROL_REFERENCE.md#theme-system-mechanics) for the implementation guide.
+> **Architecture (2026-02-22):** ThemeEngine v2 overrides Root's 32 custom resource keys (`BrandPrimary`, `TextPrimary`, etc.) directly in `Application.Resources.ThemeDictionaries[variant]`. DynamicResource propagation handles most controls instantly. A bind-once visual tree walker converts remaining hardcoded-color controls to DynamicResource bindings on first encounter. In-place theme switching (`PrepareForNewTheme`) eliminates the flash-of-defaults between themes. A WeakReference tracking list enables O(~16) live preview updates. See [`research/ROOT_THEME_SYSTEM_FINDINGS.md`](../../research/ROOT_THEME_SYSTEM_FINDINGS.md) for the full 32-key catalog.
 
 ---
 
 ## Table of Contents
 
 1. [Overview](#overview)
-2. [Resource-First Migration Plan](#resource-first-migration-plan)
+2. [Resource-First Architecture (Implemented)](#resource-first-architecture-implemented)
 3. [Resource Dictionary Injection](#resource-dictionary-injection)
 4. [Theme Palette Format](#theme-palette-format)
 5. [Live Preview System](#live-preview-system)
@@ -43,60 +43,98 @@ The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at
 runtime, without patching any files on disk and without restarting the application.
 
-Root is an Avalonia 11 desktop app. Root's actual color system uses:
+Root is an Avalonia 11 desktop app. Root's color system uses **32 custom resource keys**
+(`BrandPrimary`, `TextPrimary`, `BackgroundPrimary`, etc.) in
+`Application.Resources.ThemeDictionaries[variant]`. Every Root view binds to these keys
+via `DynamicResourceExtension`. ThemeEngine v2 overrides these keys directly — most
+controls auto-update instantly with zero tree walking.
 
-1. **32 custom resource keys** -- `ImmutableSolidColorBrush` values (`BrandPrimary`,
-   `TextPrimary`, `BackgroundPrimary`, etc.) stored in `Application.Resources.ThemeDictionaries[variant]`.
-   Every Root view binds to these keys via `DynamicResourceExtension`. This is the
-   primary color mechanism — hardcoded ARGB values are nearly nonexistent (only server-defined
-   role colors and transparent placeholders).
-2. **FluentTheme/SimpleTheme keys** -- standard Avalonia theme keys (`SystemAccentColor`,
-   `ThemeAccentBrush`, etc.) from `SimpleTheme` + `MediaFluentTheme`. Root's custom views
-   do NOT bind to these keys; only a handful of base control states reference them.
+A secondary set of FluentTheme/SimpleTheme keys (`SystemAccentColor`, `ThemeAccentBrush`,
+etc.) is also overridden for the handful of base control states that reference them.
 
-The current theme engine targets mechanism (2) via resource overrides, and compensates for
-the mismatch with mechanism (1) by walking the visual tree to physically replace brush
-objects. A planned migration will target Root's actual 32 keys directly, allowing
-DynamicResource bindings to propagate automatically.
+### Current Architecture (v2)
+
+**Theme apply** (`ApplyThemeInternal`) uses in-place switching:
+
+| Step | What it does | Mechanism |
+|------|-------------|-----------|
+| Prep | `PrepareForNewTheme` removes stale keys (theme→theme) or `RevertTheme` (first apply) | Diff-based |
+| 1 | Override Root's 32 keys in `ThemeDictionaries[variant]` | DynamicResource propagation |
+| 2 | Override `Styles[0].Resources` + inject `MergedDictionary` | FluentTheme/SimpleTheme compat |
+| 3 | Delayed tree walk: bind-once converts untagged → DynamicResource, updates dyn-tagged | Visual tree walk |
+| 4 | DWM title bar color via Win32 API | P/Invoke |
+| 5 | Custom ping color override if set | ThemeDictionaries |
+
+**Live preview** (`UpdateCustomThemeLive`) during color slider drag:
+1. Update ThemeDictionaries → DynamicResource-bound controls update at 16ms
+2. `UpdateDynTaggedControlsFromPalette` iterates WeakRef list → O(~16) targeted updates
+3. 100ms throttled full tree walk as safety net
+
+**Revert to native** (`RevertTheme`) — full cleanup: remove overrides, ClearValue on known colors, purge walker artifacts.
+
+### WalkAndRecolor Control Flow
+
+The visual tree walker (`WalkAndRecolor`) handles three categories per control:
+
+```
+for each visual in tree (DFS, max depth 50):
+    tag = GetTag(visual)
+
+    if tag == "uprooted-no-recolor":
+        SKIP (Uprooted's own UI manages its colors)
+
+    else if tag starts with "dyn-":
+        // DYN-TAGGED: parse tag parts, look up palette value, set property
+        // e.g. "dyn-fg:TextPrimary,dyn-bg:BackgroundSecondary"
+        for each part in tag.Split(','):
+            mode, key = parse "dyn-{mode}:{key}"
+            brush = palette[key]
+            visual.{mode→property} = brush
+        register in _dynTaggedControls WeakRef list
+
+    else:
+        // UNTAGGED (bind-once): convert to DynamicResource if foreground matches
+        colorStr = GetBrushColorString(visual.Foreground)
+        if ColorToPaletteKey.TryGetValue(colorStr, out paletteKey):
+            BindToDynamicResource(visual, "Foreground", paletteKey)
+            SetTag(visual, "dyn-fg:" + paletteKey)
+            register in _dynTaggedControls
+        else:
+            // Unknown color — direct prop.SetValue fallback if in color map
+```
+
+### Key Gotchas for ThemeEngine Work
+
+These cause real bugs — check before modifying walker or theme apply code:
+
+1. **Bind-once `else` guard**: The untagged block MUST be guarded by `else` so it only runs for non-dyn-tagged controls. Without it, a control tagged `dyn-bg:X,dyn-bb:Y` gets its tag overwritten to `dyn-fg:TextPrimary`, destroying the bg/bb bindings.
+
+2. **Card borders need both tag AND binding**: Setting `dyn-bb:Border` tag alone is NOT enough for live updates. You must also call `BindToDynamicResource(card, "BorderBrush", "Border")` at creation time. The tag is for the walker; the binding is for DynamicResource propagation.
+
+3. **PointerExited must re-bind**: If a hover handler sets a static brush on a DynamicResource-bound control, `PointerExited` must call `BindToDynamicResource` to restore the binding — not set a static value.
+
+4. **ThemeDictionaries writes trigger `ActualThemeVariantChanged`**: Must use `_applyingThemeDictOverrides` re-entrancy guard on ALL write paths (apply, revert, live preview, ping color).
+
+5. **RegisterDynTaggedControl for external callers**: SidebarInjector tags controls with `dyn-fg:` etc. but those controls aren't discovered by the walker until the next full walk. Call `ThemeEngine.RegisterDynTaggedControl(control)` to add them to the WeakRef list immediately.
+
+6. **Computed palette keys**: `BackgroundButtonOnElevated` and `BackgroundButtonOnSecondary` must be added to `GenerateV2Palette` AND all preset theme dictionaries when adding new derived keys.
 
 ### Role in the Dual-Layer Architecture
 
-Uprooted has two layers: a C# hook (native Avalonia manipulation) and a TypeScript
-injection (CSS/DOM manipulation inside the embedded Chromium browser). The theme engine
-is a C# component that operates entirely on the native Avalonia side. It communicates
-with the TypeScript layer indirectly -- when a theme is applied, `ContentPages` updates
-its static color fields, and the TypeScript theme plugin reads CSS variables injected
-into the browser DOM. See [CSS Variable Bridge](#css-variable-bridge) for details.
-
-### Six-Phase Application
-
-Theme application proceeds through six phases in `ApplyThemeInternal`
-(`hook/ThemeEngine.cs:365-586`):
-
-| Phase | What it does | Target |
-|-------|-------------|--------|
-| 1 | Override `Styles[0].Resources` | Root's custom theme keys |
-| 2 | Inject `MergedDictionary` into `Application.Resources` | Standard FluentTheme keys |
-| 3 | Build visual tree color maps with cross-mapping | Hardcoded ARGB controls |
-| 4 | Immediate walk + continuous 500ms timer + `LayoutUpdated` hook | All visual tree nodes |
-| 5 | Set DWM title bar color via Win32 API | Windows title bar |
-| 6 | Apply custom ping color override if set | Highlight resource keys |
+The theme engine is a C# component on the native Avalonia side. It communicates
+with the TypeScript layer indirectly — `ContentPages.UpdateLiveColors()` syncs
+static color fields that flow to CSS variables in the browser DOM.
+See [CSS Variable Bridge](#css-variable-bridge) for details.
 
 ---
 
-## Resource-First Migration Plan
+## Resource-First Architecture (Implemented)
 
-This section documents the planned migration from the current tree-walk approach to a resource-first approach that directly targets Root's 32 color keys. This will fix the known theme inconsistency bugs.
+> **Status:** Complete. ThemeEngine v2 overrides Root's 32 keys directly in `ThemeDictionaries[variant]`. The migration from the old FluentTheme-targeting approach is done. This section documents the override path for reference.
 
-### Why the Current Approach Has Bugs
+### Why DynamicResource Propagation Works
 
-The current ThemeEngine has two phases of resource overrides (Phases 1–2) that target FluentTheme/SimpleTheme keys. Root's views do NOT bind to these keys — they bind to Root's own 32 keys (`BrandPrimary`, `TextPrimary`, etc.). So the resource overrides are nearly inert. The visual tree walk (Phase 4) compensates by brute-forcing brush replacement on live controls, but:
-
-1. Controls created/recycled after the walk (VirtualizingStackPanel recycling, new popups) show wrong colors until the next 500ms timer tick
-2. Controls that create new visuals on state change (toggle switch checking, combobox item hovering) resolve fresh resource values — which haven't been overridden
-3. Settings tabs show stale colors until controls are rebuilt on tab switch
-
-All of these are **fixed** by overriding Root's actual 32 keys in `ThemeDictionaries`.
+Root's views bind to 32 custom keys via `DynamicResourceExtension`. Overriding these keys in `ThemeDictionaries` causes instant propagation to all bound controls — no tree walk needed. This fixes all the historical issues (recycled controls, state-change visuals, settings tabs) that required the old 500ms timer walker.
 
 ### The Correct Override Path
 
@@ -219,10 +257,15 @@ Do NOT override `Error` for ping color — it also controls notification badge b
 ## Resource Dictionary Injection
 
 > **↳ Canonical source for exact hex values:** [ROOT_THEME_SYSTEM_FINDINGS.md §Dark Theme Color Table](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#dark-theme--complete-color-table) and [§Three-Theme Color Comparison](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#complete-three-theme-color-comparison).
+>
+> **Note on line numbers:** Sections below reference specific line numbers from earlier versions. These are approximate — use method names (in **bold**) to locate code. The file has grown from ~1280 to ~2624 lines.
 
 ### Where Root Stores Its Colors
 
-> **Note:** The resource locations described below are what the **current** ThemeEngine implementation targets. These are NOT Root's actual theme keys. See [Resource-First Migration Plan](#resource-first-migration-plan) above for the correct approach. Research has confirmed that Root's actual 32 color keys live in `Application.Resources.ThemeDictionaries[variant]`, and Root's views bind to those keys (not the FluentTheme/SimpleTheme keys below). See the Research Update at the top of this document.
+Root's actual 32 color keys live in `Application.Resources.ThemeDictionaries[variant]`.
+ThemeEngine v2 overrides these directly via `OverrideThemeDictKeys`. The Styles[0] and
+MergedDictionary overrides below are a secondary compatibility layer for FluentTheme/
+SimpleTheme keys that a handful of base Avalonia controls reference.
 
 Root's Avalonia application uses two resource locations that the current engine targets:
 
