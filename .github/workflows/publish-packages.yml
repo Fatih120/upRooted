@@ -231,7 +231,6 @@ jobs:
 
       - name: Publish to AUR
         uses: KSXGitHub/github-actions-deploy-aur@v3
-        if: ${{ secrets.AUR_SSH_PRIVATE_KEY != '' }}
         with:
           pkgname: uprooted-bin
           pkgbuild: packaging/arch/PKGBUILD
