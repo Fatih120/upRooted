@@ -1,4 +1,4 @@
-# Uprooted Hook - Session State (2026-02-22)
+# Uprooted Hook - Session State (2026-02-23)
 
 ## Release: v0.5.0
 
@@ -15,7 +15,7 @@ The Theme Engine is the most recently active area. Major work this session:
 
 ### Known Issues / TODOs
 
-- **Version copy intercept** — commented out in SidebarInjector, needs fix for Root's async `SetTextAsync` race
+- **Version copy intercept** — fixed (2026-02-21): Root's async `SetTextAsync` race no longer races with our clipboard write
 - **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure needs investigation
 - **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, PresenceBeacon all deployed but need real-world testing
 

@@ -732,4 +732,4 @@ from source.
 
 **Canonical for:** install/uninstall procedures (Windows + Linux), console installer usage, manual PowerShell/bash install, troubleshooting, file locations, verification steps, Arch Linux instructions
 **Not canonical for:** build from source → [BUILD.md](BUILD.md) | installer internals → [INSTALLER.md](../framework/INSTALLER.md) | runtime behavior → [HOOK_REFERENCE.md](../framework/HOOK_REFERENCE.md)
-*Installation guide for Uprooted v0.4.2. Last updated 2026-02-19.*
+*Installation guide for Uprooted v0.5.0. Last updated 2026-02-23.*

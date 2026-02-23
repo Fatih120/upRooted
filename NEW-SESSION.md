@@ -40,19 +40,19 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 **Always also read** `hook/SESSION_STATE.md` if working on any `hook/` code.
 
-## 4. File Map — Hook Layer (35 .cs files)
+## 4. File Map — Hook Layer (37 .cs files)
 
 | File | Lines | Purpose |
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr |
-| `StartupHook.cs` | 637 | Multi-phase startup orchestrator (Phase 0-5) |
-| `HtmlPatchVerifier.cs` | 443 | Phase 0: self-healing HTML patches |
+| `StartupHook.cs` | 633 | Multi-phase startup orchestrator (Phase 0-5) |
+| `HtmlPatchVerifier.cs` | 447 | Phase 0: self-healing HTML patches |
 | `AvaloniaReflection.cs` | 3320 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
-| `SidebarInjector.cs` | 2034 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 4718 | Settings page builders (Uprooted, Plugins, Themes) |
-| `ThemeEngine.cs` | 2624 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
+| `SidebarInjector.cs` | 2053 | Settings page monitor + sidebar injection |
+| `ContentPages.cs` | 4909 | Settings page builders (Uprooted, Plugins, Themes) |
+| `ThemeEngine.cs` | 2932 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |
 | `UprootedSettings.cs` | 268 | INI-based settings + 10s TTL cache |
@@ -64,17 +64,17 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `MessageLogger.cs` | 1707 | Edit/delete detection + visual indicators |
 | `MessageStore.cs` | 278 | Flat-file message persistence |
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
-| `AutoUpdater.cs` | 1039 | Encrypted .uprpkg auto-updater |
+| `AutoUpdater.cs` | 1045 | Encrypted .uprpkg auto-updater |
 | `DesktopNotification.cs` | 86 | OS-level toast notifications |
-| `ProfileBadgeInjector.cs` | 1208 | "Uprooted Dev" profile badge |
+| `ProfileBadgeInjector.cs` | 1218 | "Uprooted Dev" profile badge |
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |
 | `NsfwFilter.cs` | 482 | Avalonia-native NSFW filter |
 | `RootcordEngine.cs` | 4945 | Discord-style vertical sidebar (experimental) |
 | `TranslateEngine.cs` | 1156 | DeepL-powered message translation |
 | `TranslateConfigPopup.cs` | 555 | Translate config UI |
 | `UprootedPresenceBeacon.cs` | 500 | Uprooted user detection via gRPC |
-| `WhoReactedEngine.cs` | 575 | Who Reacted: shows reaction authors on messages |
-| `UserBioEngine.cs` | 559 | User Bio: injects bio text into profile popups |
+| `WhoReactedEngine.cs` | 577 | Who Reacted: shows reaction authors on messages |
+| `UserBioEngine.cs` | 859 | User Bio: injects bio text + own-profile editor into profile popups |
 | `ReconLogger.cs` | 788 | Visual tree + style diagnostic dumper |
 | `LogConsole.cs` | ~301 | Dev-only live log terminal via named pipe |
 | `Logger.cs` | ~170 | Thread-safe file logging + wide event emission |

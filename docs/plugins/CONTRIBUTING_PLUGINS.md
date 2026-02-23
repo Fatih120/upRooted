@@ -572,4 +572,4 @@ These documents cover specific aspects of plugin development in more depth:
 
 **Canonical for:** plugin PR workflow, quality checklist, reviewer expectations, naming conventions, plugin testing
 **Not canonical for:** general contributing → [CONTRIBUTING.md](../../CONTRIBUTING.md) | plugin API → [API_REFERENCE.md](API_REFERENCE.md) | plugin tutorial → [GETTING_STARTED.md](GETTING_STARTED.md)
-*Plugin contribution guide. Last updated 2026-02-19.*
+*Plugin contribution guide. Last updated 2026-02-23.*

@@ -42,7 +42,7 @@ uprooted-private/
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3320 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
-│   ├── ContentPages.cs                # Settings page builders (4718 lines)
+│   ├── ContentPages.cs                # Settings page builders (4909 lines)
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (in-place switching, bind-once walker, WeakRef live preview, custom ping color)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB/OKLCH color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
@@ -60,14 +60,14 @@ uprooted-private/
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
-│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1208 lines)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1218 lines)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)
 │   ├── TranslateEngine.cs            # Translate plugin: DeepL-powered message translation (1156 lines)
 │   ├── TranslateConfigPopup.cs       # Translate config popup UI (language picker, API key)
 │   ├── WhoReactedEngine.cs           # Who Reacted: shows reaction authors on messages
-│   ├── UserBioEngine.cs              # User Bio: injects bio text into profile popups
+│   ├── UserBioEngine.cs              # User Bio: injects bio text + own-profile editor into profile popups
 │   ├── UprootedPresenceBeacon.cs     # Presence beacon: Uprooted user detection via gRPC metadata
 │   ├── ReconLogger.cs                # Recon logger: visual tree + style property diagnostic dumper
 │   ├── Entry.cs                       # Profiler injection entry point
@@ -95,6 +95,7 @@ uprooted-private/
 │   ├── uninstall-hook.ps1             # Hook removal script
 │   ├── diagnose.ps1                   # Installation diagnostics
 │   ├── pack-update.py                 # Packs 6 update files into encrypted .uprpkg (no pip deps)
+│   ├── build-local.sh                 # Local build script (hook + profiler + installer)
 │   └── (additional build/test/analysis scripts)
 ├── tests/                             # Test suites
 │   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush)

@@ -263,7 +263,7 @@ Uprooted injects into a closed-source application that updates independently. Tr
 
 | Uprooted Version | Root Versions Tested | Status | Notes |
 |-------------------|---------------------|--------|-------|
-| 0.4.2 (current) | v0.9.86 - v0.9.93 | Active | Primary development target |
+| 0.5.0 (current) | v0.9.86 - v0.9.93 | Active | Primary development target |
 
 Maintain this matrix as new Root versions are released. When a user reports a bug, the first diagnostic question should be which Root version they are running.
 
@@ -316,10 +316,10 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-21 — added LiquidGlass medium-term plan, added Translate + Presence Beacon goals, removed stale NSFW filter issue, updated MessageLogger status*
+*Last updated: 2026-02-23 — updated version to v0.5.0
 
 ---
 
 **Canonical for:** known issues, planned features, future direction, priority assessment
 **Not canonical for:** active tasks → [TASKS.md](../TASKS.md) | plugin roadmap → [PLUGIN_ROADMAP.md](PLUGIN_ROADMAP.md) | current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md)
-*Roadmap for Uprooted. Last updated 2026-02-21.*
+*Roadmap for Uprooted v0.5.0. Last updated 2026-02-23.*

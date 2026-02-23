@@ -37,7 +37,7 @@ For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 
 ## Overview
 
-**File:** `hook/ThemeEngine.cs` (~2624 lines)
+**File:** `hook/ThemeEngine.cs` (~2932 lines)
 
 The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at
@@ -258,7 +258,7 @@ Do NOT override `Error` for ping color — it also controls notification badge b
 
 > **↳ Canonical source for exact hex values:** [ROOT_THEME_SYSTEM_FINDINGS.md §Dark Theme Color Table](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#dark-theme--complete-color-table) and [§Three-Theme Color Comparison](../../research/ROOT_THEME_SYSTEM_FINDINGS.md#complete-three-theme-color-comparison).
 >
-> **Note on line numbers:** Sections below reference specific line numbers from earlier versions. These are approximate — use method names (in **bold**) to locate code. The file has grown from ~1280 to ~2624 lines.
+> **Note on line numbers:** Sections below reference specific line numbers from earlier versions. These are approximate — use method names (in **bold**) to locate code. The file has grown from ~1280 to ~2932 lines.
 
 ### Where Root Stores Its Colors
 

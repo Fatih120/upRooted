@@ -886,4 +886,4 @@ npx tsx scripts/build.ts # Direct invocation
 
 **Canonical for:** TypeScript browser injection layer, core runtime (preload, pluginLoader, patcher, settings), plugin API (bridge proxy, CSS, DOM, native), built-in plugins (sentry-blocker, themes, settings-panel), type definitions (bridge interfaces, plugin interface, settings), build system (esbuild), bridge proxy deferred installation pattern, DOM discovery algorithm
 **Not canonical for:** C# hook layer → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | bridge method catalog → [BRIDGE_REFERENCE.md](../plugins/BRIDGE_REFERENCE.md) | architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md)
-*TypeScript reference for Uprooted v0.4.2. Last updated 2026-02-19.*
+*TypeScript reference for Uprooted v0.5.0. Last updated 2026-02-23.*
