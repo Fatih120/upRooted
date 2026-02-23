@@ -415,16 +415,12 @@ internal class HtmlPatchVerifier : IDisposable
         if (File.Exists(webRtcIndex))
             targets.Add(webRtcIndex);
 
-        var rootAppsDir = Path.Combine(_profileDir, "RootApps");
-        if (Directory.Exists(rootAppsDir))
-        {
-            foreach (var appDir in Directory.GetDirectories(rootAppsDir))
-            {
-                var indexPath = Path.Combine(appDir, "index.html");
-                if (File.Exists(indexPath))
-                    targets.Add(indexPath);
-            }
-        }
+        // RootApps scan: isolated so MissingMethodException from a trimmed host
+        // (Directory.GetDirectories removed by the .NET trimmer) is catchable here.
+        // The main WebRtcBundle patch is already found above; this is secondary.
+        try { ScanRootAppsHtml(targets); }
+        catch (MissingMethodException) { Logger.Log("HtmlPatch", "Directory.GetDirectories unavailable (trimmed host) — skipping RootApps scan"); }
+        catch (TypeLoadException) { Logger.Log("HtmlPatch", "Directory.GetDirectories unavailable (trimmed host) — skipping RootApps scan"); }
 
         // Also check DotNetBrowser Host/Bundle context where chat renders
         var hostBundleDir = Path.Combine(_profileDir, "HostBundle");
@@ -436,6 +432,24 @@ internal class HtmlPatchVerifier : IDisposable
         }
 
         return targets;
+    }
+
+    /// <summary>
+    /// Scan RootApps subdirectories for index.html files.
+    /// Isolated in [NoInlining] method so that if Directory.GetDirectories is trimmed
+    /// from the host app, the MissingMethodException from JIT is catchable by the caller.
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private void ScanRootAppsHtml(List<string> targets)
+    {
+        var rootAppsDir = Path.Combine(_profileDir, "RootApps");
+        if (!Directory.Exists(rootAppsDir)) return;
+        foreach (var appDir in Directory.GetDirectories(rootAppsDir))
+        {
+            var indexPath = Path.Combine(appDir, "index.html");
+            if (File.Exists(indexPath))
+                targets.Add(indexPath);
+        }
     }
 
     private string GetRelativeName(string fullPath)

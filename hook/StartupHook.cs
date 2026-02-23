@@ -497,29 +497,25 @@ internal class StartupHook
                     {
                         if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
                         {
-                            // Event-driven: wait for DotNetBrowser assembly load
-                            using var dnbSignal = new ManualResetEventSlim(false);
-                            void OnDnbAssemblyLoad(object? s, AssemblyLoadEventArgs a)
-                            {
-                                if ((a.LoadedAssembly.GetName().Name ?? "").StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase))
-                                    dnbSignal.Set();
-                            }
-                            AppDomain.CurrentDomain.AssemblyLoad += OnDnbAssemblyLoad;
+                            Func<string?, bool> dnbMatch = name =>
+                                (name ?? "").StartsWith("DotNetBrowser", StringComparison.OrdinalIgnoreCase);
+                            var dnbTimeout = TimeSpan.FromSeconds(90);
+
+                            bool loaded;
                             try
                             {
-                                // Double-check after subscribing
-                                if (!DotNetBrowserReflection.AreDotNetBrowserAssembliesLoaded())
-                                {
-                                    if (!dnbSignal.Wait(90_000))
-                                    {
-                                        ev.Set("result", "timeout");
-                                        return;
-                                    }
-                                }
+                                loaded = WaitForAssemblyViaEvent(dnbMatch, dnbTimeout);
                             }
-                            finally
+                            catch (TypeLoadException)
                             {
-                                AppDomain.CurrentDomain.AssemblyLoad -= OnDnbAssemblyLoad;
+                                Logger.Log("Startup", "Phase 5: AssemblyLoad event unavailable (trimmed host) — polling for DotNetBrowser");
+                                loaded = WaitForAssemblyViaPolling(dnbMatch, dnbTimeout, intervalMs: 500);
+                            }
+
+                            if (!loaded)
+                            {
+                                ev.Set("result", "timeout");
+                                return;
                             }
                             Thread.Sleep(200); // brief settle for remaining DotNetBrowser assemblies
                         }
@@ -621,11 +617,35 @@ internal class StartupHook
                 return true;
         }
 
-        // Event-driven: wait for AssemblyLoad event instead of polling
+        Func<string?, bool> match = name =>
+            (name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase);
+
+        // Try event-driven first; fall back to polling if AssemblyLoadEventHandler
+        // is trimmed from the host app's System.Runtime (Root publishes with trimming).
+        try
+        {
+            return WaitForAssemblyViaEvent(match, timeout);
+        }
+        catch (TypeLoadException)
+        {
+            Logger.Log("Startup", "AssemblyLoad event unavailable (trimmed host) — falling back to polling");
+            return WaitForAssemblyViaPolling(match, timeout);
+        }
+    }
+
+    /// <summary>
+    /// Wait for an assembly matching the predicate using AppDomain.AssemblyLoad event.
+    /// Isolated in its own [NoInlining] method so that if AssemblyLoadEventHandler is
+    /// trimmed from the host app's System.Runtime, the TypeLoadException from JIT is
+    /// catchable by the caller (WaitForAvaloniaAssemblies / Phase 5).
+    /// </summary>
+    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+    private static bool WaitForAssemblyViaEvent(Func<string?, bool> match, TimeSpan timeout)
+    {
         using var signal = new ManualResetEventSlim(false);
         void OnAssemblyLoad(object? sender, AssemblyLoadEventArgs args)
         {
-            if ((args.LoadedAssembly.GetName().Name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
+            if (match(args.LoadedAssembly.GetName().Name))
                 signal.Set();
         }
         AppDomain.CurrentDomain.AssemblyLoad += OnAssemblyLoad;
@@ -634,7 +654,7 @@ internal class StartupHook
             // Double-check after subscribing (race window)
             foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
             {
-                if ((asm.GetName().Name ?? "").Equals("Avalonia.Controls", StringComparison.OrdinalIgnoreCase))
+                if (match(asm.GetName().Name))
                     return true;
             }
             return signal.Wait(timeout);
@@ -643,6 +663,26 @@ internal class StartupHook
         {
             AppDomain.CurrentDomain.AssemblyLoad -= OnAssemblyLoad;
         }
+    }
+
+    /// <summary>
+    /// Polling fallback for when AssemblyLoadEventHandler is trimmed from the host app.
+    /// Checks every <paramref name="intervalMs"/> — typically only needed on the startup
+    /// hook injection path where Avalonia assemblies haven't loaded yet.
+    /// </summary>
+    private static bool WaitForAssemblyViaPolling(Func<string?, bool> match, TimeSpan timeout, int intervalMs = 50)
+    {
+        var deadline = DateTime.UtcNow + timeout;
+        while (DateTime.UtcNow < deadline)
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (match(asm.GetName().Name))
+                    return true;
+            }
+            Thread.Sleep(intervalMs);
+        }
+        return false;
     }
 
     private static bool WaitFor(Func<bool> condition, TimeSpan timeout)
