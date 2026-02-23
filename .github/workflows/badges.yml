@@ -1,15 +1,6 @@
 name: Update Badges
 
 on:
-  schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours
-  push:
-    branches: [main]
-    paths:
-      - 'VERSION'
-      - 'hook/**/*.cs'
-      - 'src/**/*.ts'
-      - 'tests/**'
   workflow_dispatch:
 
 jobs:

@@ -10,8 +10,6 @@ name: Release
 #   - manual dispatch with explicit channel + version
 
 on:
-  release:
-    types: [published]
   workflow_dispatch:
     inputs:
       channel:
