@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFrameworks>net9.0;net10.0</TargetFrameworks>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -23,11 +23,20 @@
        The Confuser.MSBuild NuGet package provides the ConfuserEx engine DLLs;
        its MSBuild task integration is broken on .NET Core SDK, so we run
        the engine directly through a small dotnet tool project instead. -->
-  <Target Name="ObfuscateAssembly" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
+  <!-- Pre-build tools once in the outer (cross-targeting) build so the parallel
+       per-TFM inner builds don't race over the same tool output directory. -->
+  <Target Name="PreBuildTools" BeforeTargets="DispatchToInnerBuilds"
+          Condition="'$(TargetFramework)' == '' and '$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
+    <Exec Command="dotnet build &quot;$(ProjectDir)../tools/confuse/confuse.csproj&quot; -c Release"
+          WorkingDirectory="$(ProjectDir)" />
+    <Exec Command="dotnet build &quot;$(ProjectDir)../tools/verify-obfuscation/verify-obfuscation.csproj&quot; -c Release"
+          WorkingDirectory="$(ProjectDir)" />
+  </Target>
+  <Target Name="ObfuscateAssembly" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true' and '$(TargetFramework)' != ''">
     <PropertyGroup>
       <_ConfuseOutputDir>$(TargetDir)confused/</_ConfuseOutputDir>
     </PropertyGroup>
-    <Exec Command="dotnet run --project &quot;$(ProjectDir)../tools/confuse/confuse.csproj&quot; -c Release -- &quot;$(ProjectDir)UprootedHook.crproj&quot; &quot;$(TargetDir).&quot; &quot;$(_ConfuseOutputDir).&quot;"
+    <Exec Command="dotnet run --no-build --project &quot;$(ProjectDir)../tools/confuse/confuse.csproj&quot; -c Release -- &quot;$(ProjectDir)UprootedHook.crproj&quot; &quot;$(TargetDir).&quot; &quot;$(_ConfuseOutputDir).&quot;"
           WorkingDirectory="$(ProjectDir)"
           IgnoreExitCode="false" />
     <!-- Replace the original DLL with the obfuscated one -->
@@ -39,8 +48,8 @@
           DestinationFiles="$(TargetDir)UprootedHook.symbols.map"
           Condition="Exists('$(_ConfuseOutputDir)symbols.map')" />
   </Target>
-  <Target Name="VerifyObfuscation" AfterTargets="ObfuscateAssembly" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true'">
-    <Exec Command="dotnet run --project &quot;$(ProjectDir)../tools/verify-obfuscation/verify-obfuscation.csproj&quot; -c Release -- &quot;$(TargetPath)&quot;"
+  <Target Name="VerifyObfuscation" AfterTargets="ObfuscateAssembly" Condition="'$(Configuration)' == 'Release' and '$(Obfuscate)' == 'true' and '$(TargetFramework)' != ''">
+    <Exec Command="dotnet run --no-build --project &quot;$(ProjectDir)../tools/verify-obfuscation/verify-obfuscation.csproj&quot; -c Release -- &quot;$(TargetPath)&quot;"
           IgnoreExitCode="false" />
   </Target>
 </Project>

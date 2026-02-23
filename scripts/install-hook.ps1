@@ -39,7 +39,7 @@ $SettingsFile = Join-Path $ProfileDir "uprooted-settings.ini"
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $RepoRoot = Split-Path $ScriptDir -Parent
 $ToolsDir = Join-Path $RepoRoot "tools"
-$HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net9.0"
+$HookBinDir = Join-Path $RepoRoot "hook\bin\Release\net10.0"
 
 # Source artifacts
 $SrcProfilerDll = Join-Path $ToolsDir "uprooted_profiler.dll"
