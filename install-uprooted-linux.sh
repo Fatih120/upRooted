@@ -1,4 +1,4 @@
-﻿#!/bin/bash
+#!/bin/bash
 # Uprooted Linux Installer v0.4.2
 # Standalone bash installer for systems without the GUI installer.
 #
@@ -234,7 +234,7 @@ run_diagnose() {
         warn "  profiler.log: not found (profiler has never loaded)"
     fi
 
-    local hook_log="$INSTALL_DIR/uprooted-hook.log"
+    local hook_log="$PROFILE_DIR/uprooted-hook.log"
     if [[ -f "$hook_log" ]]; then
         log "  uprooted-hook.log exists ($(wc -l < "$hook_log") lines)"
         log "  Last 10 lines:"
