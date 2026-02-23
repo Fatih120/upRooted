@@ -499,7 +499,7 @@ internal class AutoUpdater
         }
         catch
         {
-            // Rollback: restore original file so we don't leave the user with nothing
+            // Rollback: restore original so we don't leave the user with nothing
             try { File.Move(old, dst); } catch { /* best effort */ }
             throw;
         }

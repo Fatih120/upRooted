@@ -316,7 +316,7 @@ When suggesting a feature, include:
 
 ---
 
-*Last updated: 2026-02-23 — updated version compatibility to v0.5.0*
+*Last updated: 2026-02-23 — updated version to v0.5.0*
 
 ---
 
