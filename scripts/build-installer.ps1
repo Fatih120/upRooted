@@ -74,8 +74,8 @@ if ($LASTEXITCODE -ne 0) {
     exit 1
 }
 
-$hookDll = Join-Path $HookProjectDir "bin\Release\net9.0\UprootedHook.dll"
-$hookDeps = Join-Path $HookProjectDir "bin\Release\net9.0\UprootedHook.deps.json"
+$hookDll = Join-Path $HookProjectDir "bin\Release\net10.0\UprootedHook.dll"
+$hookDeps = Join-Path $HookProjectDir "bin\Release\net10.0\UprootedHook.deps.json"
 
 if (-not (Test-Path $hookDll)) { Write-Err "UprootedHook.dll not found at $hookDll"; exit 1 }
 
@@ -85,7 +85,7 @@ if (Test-Path $hookDeps) {
 }
 
 # Stage DotNetBrowser JS scripts (injected into Chromium by the hook)
-$hookBinDir = Join-Path $HookProjectDir "bin\Release\net9.0"
+$hookBinDir = Join-Path $HookProjectDir "bin\Release\net10.0"
 foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
     $srcJs = Join-Path $hookBinDir $jsFile
     if (Test-Path $srcJs) {
@@ -93,7 +93,19 @@ foreach ($jsFile in @("nsfw-filter.js", "link-embeds.js")) {
         Write-OK "  Staged $jsFile"
     }
 }
-Write-OK "Staged UprootedHook.dll + deps.json + JS scripts"
+# Stage net9.0 fallback DLL
+$hookBinDirNet9 = Join-Path $HookProjectDir "bin\Release\net9.0"
+$hookDllNet9 = Join-Path $hookBinDirNet9 "UprootedHook.dll"
+$hookDepsNet9 = Join-Path $hookBinDirNet9 "UprootedHook.deps.json"
+if (Test-Path $hookDllNet9) {
+    Copy-Item $hookDllNet9 (Join-Path $ArtifactsDir "UprootedHook.net9.dll") -Force
+    Write-OK "  Staged UprootedHook.net9.dll"
+}
+if (Test-Path $hookDepsNet9) {
+    Copy-Item $hookDepsNet9 (Join-Path $ArtifactsDir "UprootedHook.net9.deps.json") -Force
+    Write-OK "  Staged UprootedHook.net9.deps.json"
+}
+Write-OK "Staged UprootedHook.dll + deps.json + net9 fallback + JS scripts"
 
 # Step 3: Compile profiler DLL
 Write-Step "Compiling uprooted_profiler.dll (cl.exe)..."
@@ -148,6 +160,8 @@ $required = @(
     "uprooted_profiler.dll",
     "UprootedHook.dll",
     "UprootedHook.deps.json",
+    "UprootedHook.net9.dll",
+    "UprootedHook.net9.deps.json",
     "uprooted-preload.js",
     "uprooted.css",
     "nsfw-filter.js",

@@ -69,6 +69,8 @@ internal class AutoUpdater
     {
         "UprootedHook.dll",
         "UprootedHook.deps.json",
+        "UprootedHook.net9.dll",
+        "UprootedHook.net9.deps.json",
         "uprooted-preload.js",
         "uprooted.css",
         "nsfw-filter.js",
@@ -443,6 +445,26 @@ internal class AutoUpdater
                 var dst = Path.Combine(uprootedDir, filename);
                 CopyFileRobust(src, dst);
             }
+
+            // Select correct TFM for this runtime — net10.0 is the primary DLL,
+            // but if running on .NET 9 we overwrite it with the net9.0 variant.
+            if (Environment.Version.Major < 10)
+            {
+                var net9Dll = Path.Combine(uprootedDir, "UprootedHook.net9.dll");
+                var net9Deps = Path.Combine(uprootedDir, "UprootedHook.net9.deps.json");
+                if (File.Exists(net9Dll))
+                    CopyFileRobust(net9Dll, Path.Combine(uprootedDir, "UprootedHook.dll"));
+                if (File.Exists(net9Deps))
+                    CopyFileRobust(net9Deps, Path.Combine(uprootedDir, "UprootedHook.deps.json"));
+                ev.Set("tfm_selected", "net9.0");
+            }
+            else
+            {
+                ev.Set("tfm_selected", "net10.0");
+            }
+            // Clean up variant files
+            try { File.Delete(Path.Combine(uprootedDir, "UprootedHook.net9.dll")); } catch { }
+            try { File.Delete(Path.Combine(uprootedDir, "UprootedHook.net9.deps.json")); } catch { }
 
             // Clean up staging
             try { Directory.Delete(stagingDir, true); }

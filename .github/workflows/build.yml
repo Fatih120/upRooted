@@ -72,10 +72,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup .NET 10
+      - name: Setup .NET 9 + 10
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "10.0.103"
+          dotnet-version: |
+            9.0.x
+            10.0.103
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -104,10 +106,12 @@ jobs:
           path: |
             dist/uprooted-preload.js
             dist/uprooted.css
+            hook/bin/Release/net10.0/UprootedHook.dll
+            hook/bin/Release/net10.0/UprootedHook.deps.json
+            hook/bin/Release/net10.0/nsfw-filter.js
+            hook/bin/Release/net10.0/link-embeds.js
             hook/bin/Release/net9.0/UprootedHook.dll
             hook/bin/Release/net9.0/UprootedHook.deps.json
-            hook/bin/Release/net9.0/nsfw-filter.js
-            hook/bin/Release/net9.0/link-embeds.js
 
   # ────────────────────────────────────────────────────────────────
   # Job 3: Build platform-specific installer (matrix)
@@ -217,10 +221,14 @@ jobs:
         run: |
           cp _shared/dist/uprooted-preload.js installer/src-tauri/artifacts/
           cp _shared/dist/uprooted.css installer/src-tauri/artifacts/
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll installer/src-tauri/artifacts/
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json installer/src-tauri/artifacts/
-          cp _shared/hook/bin/Release/net9.0/nsfw-filter.js installer/src-tauri/artifacts/
-          cp _shared/hook/bin/Release/net9.0/link-embeds.js installer/src-tauri/artifacts/
+          # net10.0 as primary
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js installer/src-tauri/artifacts/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js installer/src-tauri/artifacts/
+          # net9.0 fallback
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll installer/src-tauri/artifacts/UprootedHook.net9.dll
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json installer/src-tauri/artifacts/UprootedHook.net9.deps.json
 
       # Compile platform-specific profiler
 
@@ -234,6 +242,7 @@ jobs:
         shell: bash
         run: |
           for f in "${{ matrix.profiler_name }}" UprootedHook.dll UprootedHook.deps.json \
+                   UprootedHook.net9.dll UprootedHook.net9.deps.json \
                    uprooted-preload.js uprooted.css nsfw-filter.js link-embeds.js; do
             path="installer/src-tauri/artifacts/$f"
             [ -f "$path" ] || { echo "Missing: $f"; exit 1; }
@@ -308,10 +317,14 @@ jobs:
           mkdir -p _uprpkg
           cp _shared/dist/uprooted-preload.js _uprpkg/
           cp _shared/dist/uprooted.css _uprpkg/
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll _uprpkg/
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json _uprpkg/
-          cp _shared/hook/bin/Release/net9.0/nsfw-filter.js _uprpkg/
-          cp _shared/hook/bin/Release/net9.0/link-embeds.js _uprpkg/
+          # net10.0 as primary
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js _uprpkg/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js _uprpkg/
+          # net9.0 fallback
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll _uprpkg/UprootedHook.net9.dll
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json _uprpkg/UprootedHook.net9.deps.json
 
       - name: Pack auto-update package
         run: python3 scripts/pack-update.py --input-dir _uprpkg --output _artifacts/auto-update.uprpkg --verify
@@ -321,12 +334,16 @@ jobs:
       - name: Package Linux artifacts tarball
         run: |
           mkdir -p _tarball
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll _tarball/
-          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json _tarball/
+          # net10.0 as primary
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.dll _tarball/
+          cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json _tarball/
           cp _shared/dist/uprooted-preload.js _tarball/
           cp _shared/dist/uprooted.css _tarball/
-          cp _shared/hook/bin/Release/net9.0/nsfw-filter.js _tarball/
-          cp _shared/hook/bin/Release/net9.0/link-embeds.js _tarball/
+          cp _shared/hook/bin/Release/net10.0/nsfw-filter.js _tarball/
+          cp _shared/hook/bin/Release/net10.0/link-embeds.js _tarball/
+          # net9.0 fallback
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.dll _tarball/UprootedHook.net9.dll
+          cp _shared/hook/bin/Release/net9.0/UprootedHook.deps.json _tarball/UprootedHook.net9.deps.json
           tar -czf _artifacts/uprooted-linux-artifacts.tar.gz -C _tarball .
 
       # Copy bash installer

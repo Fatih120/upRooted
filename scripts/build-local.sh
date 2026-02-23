@@ -67,7 +67,8 @@ echo ""
 echo "[2/7] C# Hook: building..."
 dotnet build hook/UprootedHook.csproj -c Release 2>&1 | tail -3
 
-HOOK_OUT="hook/bin/Release/net9.0"
+HOOK_OUT="hook/bin/Release/net10.0"
+HOOK_OUT_NET9="hook/bin/Release/net9.0"
 for f in UprootedHook.dll UprootedHook.deps.json nsfw-filter.js link-embeds.js; do
     [ -f "$HOOK_OUT/$f" ] || { echo "  ERROR: Missing $f"; exit 1; }
     echo "  $f  ($(wc -c < "$HOOK_OUT/$f") bytes)"
@@ -91,13 +92,17 @@ fi
 
 echo ""
 echo "[4/7] Staging shared artifacts..."
+# net10.0 as primary
 cp "$HOOK_OUT/UprootedHook.dll" "$ARTS/"
 cp "$HOOK_OUT/UprootedHook.deps.json" "$ARTS/"
 cp "$HOOK_OUT/nsfw-filter.js" "$ARTS/"
 cp "$HOOK_OUT/link-embeds.js" "$ARTS/"
+# net9.0 fallback
+cp "$HOOK_OUT_NET9/UprootedHook.dll" "$ARTS/UprootedHook.net9.dll"
+cp "$HOOK_OUT_NET9/UprootedHook.deps.json" "$ARTS/UprootedHook.net9.deps.json"
 cp dist/uprooted-preload.js "$ARTS/"
 cp dist/uprooted.css "$ARTS/"
-echo "  6 shared artifacts staged"
+echo "  8 shared artifacts staged"
 
 # ─── Phase 5: Platform profiler + installer ─────────────────
 
@@ -228,10 +233,14 @@ echo "[6/7] Packing auto-update.uprpkg..."
 UPRPKG_DIR="$REPO_ROOT/_uprpkg_staging"
 rm -rf "$UPRPKG_DIR"
 mkdir -p "$UPRPKG_DIR"
+# net10.0 as primary
 cp "$HOOK_OUT/UprootedHook.dll" "$UPRPKG_DIR/"
 cp "$HOOK_OUT/UprootedHook.deps.json" "$UPRPKG_DIR/"
 cp "$HOOK_OUT/nsfw-filter.js" "$UPRPKG_DIR/"
 cp "$HOOK_OUT/link-embeds.js" "$UPRPKG_DIR/"
+# net9.0 fallback
+cp "$HOOK_OUT_NET9/UprootedHook.dll" "$UPRPKG_DIR/UprootedHook.net9.dll"
+cp "$HOOK_OUT_NET9/UprootedHook.deps.json" "$UPRPKG_DIR/UprootedHook.net9.deps.json"
 cp dist/uprooted-preload.js "$UPRPKG_DIR/"
 cp dist/uprooted.css "$UPRPKG_DIR/"
 
@@ -246,10 +255,14 @@ echo "[7/7] Supplementary files + checksums..."
 
 # Linux artifacts tarball (shared artifacts for bash installer --prebuilt)
 mkdir -p "$REPO_ROOT/_tarball_staging"
+# net10.0 as primary
 cp "$HOOK_OUT/UprootedHook.dll" "$REPO_ROOT/_tarball_staging/"
 cp "$HOOK_OUT/UprootedHook.deps.json" "$REPO_ROOT/_tarball_staging/"
 cp "$HOOK_OUT/nsfw-filter.js" "$REPO_ROOT/_tarball_staging/"
 cp "$HOOK_OUT/link-embeds.js" "$REPO_ROOT/_tarball_staging/"
+# net9.0 fallback
+cp "$HOOK_OUT_NET9/UprootedHook.dll" "$REPO_ROOT/_tarball_staging/UprootedHook.net9.dll"
+cp "$HOOK_OUT_NET9/UprootedHook.deps.json" "$REPO_ROOT/_tarball_staging/UprootedHook.net9.deps.json"
 cp dist/uprooted-preload.js "$REPO_ROOT/_tarball_staging/"
 cp dist/uprooted.css "$REPO_ROOT/_tarball_staging/"
 tar -czf "$OUT/uprooted-linux-artifacts.tar.gz" -C "$REPO_ROOT/_tarball_staging" .

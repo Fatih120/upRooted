@@ -24,6 +24,8 @@ MASTER_KEY = bytes([
 EXPECTED_FILES = [
     "UprootedHook.dll",
     "UprootedHook.deps.json",
+    "UprootedHook.net9.dll",
+    "UprootedHook.net9.deps.json",
     "uprooted-preload.js",
     "uprooted.css",
     "nsfw-filter.js",
@@ -131,7 +133,7 @@ def unpack(package_path: str) -> dict[str, bytes]:
 
 def main():
     parser = argparse.ArgumentParser(description="Pack Uprooted update files into encrypted .uprpkg")
-    parser.add_argument("--input-dir", required=True, help="Directory containing the 6 update files")
+    parser.add_argument("--input-dir", required=True, help="Directory containing the 8 update files")
     parser.add_argument("--output", required=True, help="Output .uprpkg path")
     parser.add_argument("--verify", action="store_true", help="Pack then unpack and verify byte-for-byte match")
     args = parser.parse_args()

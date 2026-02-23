@@ -33,11 +33,6 @@ internal class ThemeEngine
     private readonly Dictionary<string, object?> _savedStyleOriginals = new();
     private readonly HashSet<string> _addedStyleKeys = new();
 
-    // MainWindow.Resources — scoped resource overrides that don't affect DotNetBrowser
-    // TopLevel windows. Writing to Application.Resources.ThemeDictionaries causes permanent
-    // UI freeze when joining VC (DotNetBrowser resource evaluation deadlocks Chromium IPC).
-    private object? _windowResources;
-
     // Track controls recolored by the walker, so we can ClearValue on revert
     // to let DynamicResource reassert. Set of (control, propertyFieldName) pairs.
     private readonly HashSet<(object control, string propertyField)> _walkerRecolored = new();
@@ -272,7 +267,7 @@ internal class ThemeEngine
                     var found = tryGet.Invoke(app, args);
                     if (found is not true || args[2] == null) continue;
 
-                    var resource = args[2];
+                    var resource = args[2]!; // non-null: guarded by args[2] == null check above
                     // Use A/R/G/B properties — ToString() can return named colors like "White"
                     var colorProp = resource.GetType().GetProperty("Color");
                     if (colorProp != null)
@@ -327,7 +322,7 @@ internal class ThemeEngine
             var found = tryGet.Invoke(app, args);
             if (found is not true || args[2] == null) return null;
 
-            var colorProp = args[2].GetType().GetProperty("Color");
+            var colorProp = args[2]!.GetType().GetProperty("Color"); // non-null: guarded above
             if (colorProp == null) return null;
             var color = colorProp.GetValue(args[2]);
             if (color == null) return null;
@@ -1245,24 +1240,15 @@ internal class ThemeEngine
     }
 
     /// <summary>
-    /// Override Root's color keys. Writes to MainWindow.Resources (scoped) instead of
-    /// ThemeDictionaries to prevent DotNetBrowser deadlock during VC join.
-    /// MainWindow children see our overrides; DotNetBrowser TopLevel windows see Root's originals.
+    /// Override Root's 32 keys in ThemeDictionaries[activeVariant].
+    /// Direct entries in a ResourceDictionary beat MergedDictionaries[0] entries,
+    /// so DynamicResource bindings auto-propagate our values.
+    /// Uses ImmutableSolidColorBrush to match Root's native type — Root casts
+    /// theme dict brushes directly to ISCB.
     /// </summary>
     private void OverrideThemeDictKeys(Dictionary<string, string> rootKeys)
     {
-        // Resolve MainWindow.Resources once — prevents VC freeze by keeping overrides
-        // out of Application.Resources.ThemeDictionaries (which DotNetBrowser evaluates).
-        if (_windowResources == null)
-        {
-            var mainWindow = _r.GetMainWindow();
-            if (mainWindow != null)
-                _windowResources = mainWindow.GetType().GetProperty("Resources")?.GetValue(mainWindow);
-            if (_windowResources != null)
-                Logger.Log("Theme", "Using MainWindow.Resources for scoped theme overrides");
-        }
-
-        if (_windowResources == null && _activeVariantDict == null) return;
+        if (_activeVariantDict == null) return;
 
         int count = 0;
         int skipped = 0;
@@ -1304,9 +1290,7 @@ internal class ThemeEngine
 
     private void SetThemeDictValue(string key, string hex)
     {
-        // Target: MainWindow.Resources (scoped, safe for DotNetBrowser) or ThemeDictionaries (fallback)
-        var target = _windowResources ?? _activeVariantDict;
-        if (target == null) return;
+        if (_activeVariantDict == null) return;
 
         if (key == "ScrollShadow")
         {
@@ -1317,62 +1301,65 @@ internal class ThemeEngine
                 (ColorUtils.WithAlpha(hex, 0x00), 1.0)
             });
             if (brush != null)
-                _r.AddResource(target, key, brush);
+                _r.AddResource(_activeVariantDict, key, brush);
         }
         else if (ColorTypeKeys.Contains(key))
         {
             // DropShadow is stored as Color in Root's ThemeDictionaries
             var color = _r.ParseColor(hex);
             if (color != null)
-                _r.AddResource(target, key, color);
+                _r.AddResource(_activeVariantDict, key, color);
         }
         else
         {
-            // All other Root keys are ImmutableSolidColorBrush — store as SolidColorBrush
-            var brush = _r.CreateBrush(hex);
-            if (brush != null)
-                _r.AddResource(target, key, brush);
+            // Use ImmutableSolidColorBrush to match Root's native type — Root casts theme
+            // dict brushes directly to ISCB, mutable SolidColorBrush causes InvalidCastException.
+            var iscb = _r.CreateImmutableBrush(hex);
+            if (iscb != null)
+            {
+                _r.AddResource(_activeVariantDict, key, iscb);
+            }
+            else
+            {
+                Logger.Log("Theme", $"ISCB creation failed for {key}={hex}, falling back to SolidColorBrush");
+                var brush = _r.CreateBrush(hex);
+                if (brush != null)
+                    _r.AddResource(_activeVariantDict, key, brush);
+            }
         }
     }
 
     /// <summary>
-    /// Remove our overrides from MainWindow.Resources (or ThemeDictionaries fallback).
-    /// Root's original DynamicResource values reassert automatically.
+    /// Remove our direct entries from ThemeDictionaries[variant].
+    /// MergedDictionaries[0] values (Root's originals) reassert via DynamicResource.
     /// </summary>
     private void RemoveThemeDictOverrides()
     {
-        if (_overriddenThemeDictKeys.Count == 0) return;
+        if (_activeVariantDict == null || _overriddenThemeDictKeys.Count == 0) return;
 
         int removed = 0;
-        var target = _windowResources ?? _activeVariantDict;
-        if (target != null)
+        foreach (var key in _overriddenThemeDictKeys)
         {
-            foreach (var key in _overriddenThemeDictKeys)
+            try
             {
-                try
-                {
-                    if (_r.RemoveResource(target, key))
-                        removed++;
-                }
-                catch { }
+                if (_r.RemoveResource(_activeVariantDict, key))
+                    removed++;
             }
+            catch { }
         }
-        Logger.Log("Theme", (_windowResources != null ? "MainWindow.Resources" : "ThemeDictionaries") +
-            ": removed " + removed + "/" + _overriddenThemeDictKeys.Count + " overrides");
+        Logger.Log("Theme", "ThemeDictionaries: removed " + removed + "/" + _overriddenThemeDictKeys.Count + " overrides");
         _overriddenThemeDictKeys.Clear();
 
         // Clear cached refs so they re-resolve next apply
         _activeVariantDict = null;
         _activeVariantKey = null;
         _themeDicts = null;
-        _windowResources = null;
     }
 
     private void RemoveThemeDictKey(string key)
     {
-        var target = _windowResources ?? _activeVariantDict;
-        if (target == null) return;
-        try { _r.RemoveResource(target, key); }
+        if (_activeVariantDict == null) return;
+        try { _r.RemoveResource(_activeVariantDict, key); }
         catch { }
         _overriddenThemeDictKeys.Remove(key);
     }

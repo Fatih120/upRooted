@@ -324,6 +324,44 @@ The auto-generation step (`hook/ThemeEngine.cs:474-479`) is important: when a Co
 key like `SystemAccentColor` is added, a corresponding `SystemAccentColorBrush` is
 also created. This covers controls that bind to the Brush variant of a Color key.
 
+### CRITICAL: ImmutableSolidColorBrush for ThemeDictionaries
+
+Root's ThemeDictionaries store all color values as `Avalonia.Media.Immutable.ImmutableSolidColorBrush` (ISCB), **not** mutable `SolidColorBrush`. Root's internal code casts theme dictionary values directly to ISCB without safe-cast checks:
+
+```csharp
+// Root's decompiled code (multiple call sites):
+var brush = (ImmutableSolidColorBrush)themeDict["BrandPrimary"];
+```
+
+**If you write a `SolidColorBrush` to ThemeDictionaries, Root throws `InvalidCastException`.** This crashes A/V settings, VC join, and any code path that evaluates themed resources. The exception surfaces as an unobserved task exception that kills the app.
+
+**The fix**: Use `_r.CreateImmutableBrush(hex)` for ALL ThemeDictionary entries. This creates an `ImmutableSolidColorBrush` matching Root's native type.
+
+**Trimming gotcha**: The `ImmutableSolidColorBrush(Color)` constructor is **trimmed** in Root's single-file binary. The `ImmutableSolidColorBrush(uint argb)` constructor survives trimming because Root uses it extensively (`new ImmutableSolidColorBrush(0xFF3B6AF8u)`). `CreateImmutableBrush` uses `ParseHexToArgb()` to convert hex → uint ARGB and calls the uint constructor.
+
+**Where to use each brush type:**
+
+| Location | Brush Type | Method | Why |
+|----------|-----------|--------|-----|
+| ThemeDictionaries[variant] | `ImmutableSolidColorBrush` | `_r.CreateImmutableBrush(hex)` | Root casts to ISCB |
+| Styles[0].Resources | `SolidColorBrush` | `_r.CreateBrush(hex)` | SimpleTheme doesn't cast |
+| UI controls we create | `SolidColorBrush` | `_r.CreateBrush(hex)` | Our own controls, no cast |
+| MainWindow.Resources | Either | Either | Not evaluated by Root's cast paths |
+
+**What NOT to do** (all of these crash):
+
+- `_r.CreateBrush(hex)` → `_r.AddResource(_activeVariantDict, key, brush)` — SolidColorBrush in ThemeDictionaries → crash
+- `_windowResources` approach (writing to MainWindow.Resources instead) — avoids crash but breaks DynamicResource propagation; accent colors fall back to Root defaults
+- `_windowResources` + variant pulse — MainWindow.Resources entries are unreachable by Root's template-scoped DynamicResource bindings
+
+**Timeline of this bug:**
+
+1. ThemeEngine v2 originally used `SolidColorBrush` in ThemeDictionaries (worked for most controls)
+2. Opening A/V settings / joining VC crashed because those code paths cast to ISCB
+3. Workaround: `_windowResources` (commit 5826a4c) moved writes to MainWindow.Resources — fixed crash but broke accent color propagation
+4. Root cause found: `InvalidCastException` in `research/debug/root-app.txt` — type mismatch, not a notification deadlock
+5. Fix: `CreateImmutableBrush` with uint constructor — writes ISCB directly to ThemeDictionaries, propagation works, no crash
+
 ### Reflection Mechanics
 
 All resource operations go through `AvaloniaReflection` because Uprooted cannot
@@ -334,8 +372,12 @@ reference Avalonia assemblies at compile time. The key methods:
 - `_r.AddResource(dict, key, value)` -- Calls the indexer setter or `Add` method
   via reflection
 - `_r.GetResource(dict, key)` -- Calls the indexer getter via reflection
-- `_r.CreateBrush(hex)` -- Creates `SolidColorBrush` via parameterless constructor
-  plus Color property setter (the `SolidColorBrush(Color)` constructor is trimmed)
+- `_r.CreateImmutableBrush(hex)` -- Creates `ImmutableSolidColorBrush` via uint
+  constructor (`ParseHexToArgb` converts hex → packed ARGB). **Must** be used for
+  ThemeDictionary entries. Falls back to Color constructor, then logs failure.
+- `_r.CreateBrush(hex)` -- Creates mutable `SolidColorBrush` via parameterless
+  constructor plus Color property setter (the `SolidColorBrush(Color)` constructor
+  is trimmed). Use for Styles, UI controls, and non-ThemeDictionary resources only.
 - `_r.ParseColor(hex)` -- Calls `Color.Parse(string)` via cached `MethodInfo`
 
 ---

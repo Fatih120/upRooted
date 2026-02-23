@@ -24,6 +24,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/ContentPages.cs`
 - **Dev channel easter egg unreachable** — Tap counter was resetting on each toggle, preventing the 6-rapid-toggle sequence from ever completing.
   - File: `hook/ContentPages.cs`
+- **Custom themes crash A/V settings and VC join** — Root casts ThemeDictionary brushes directly to `ImmutableSolidColorBrush`; we were writing mutable `SolidColorBrush`, causing `InvalidCastException`. Added `CreateImmutableBrush(hex)` using the `uint` constructor (the `Color` constructor is trimmed). Reverted the `_windowResources` workaround which avoided the crash but broke DynamicResource propagation (accent colors fell back to Root defaults).
+  - Files: `hook/ThemeEngine.cs`, `hook/AvaloniaReflection.cs`
 
 ---
 

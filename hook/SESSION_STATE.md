@@ -13,6 +13,7 @@ The Theme Engine is the most recently active area, with a critical startup safet
 - **Accent-aware text contrast** — `ContrastText()` helper on all accent-bg buttons and toggle thumbs. Hardcoded on-colors for experimental/ping toggles.
 - **Theme state machine fixes** — `PrepareForNewTheme` removes ALL keys (color + SVG) from current variant dict, preventing cross-variant palette/SVG leaks. Same-family variant pulse (Dark↔PureDark) prevents SVG flash. Sidebar highlight binding scoped to Themes tab only.
 - **Version text fix** — Root's native version TextBlocks bound to TextTertiary during injection for stable revert.
+- **ImmutableSolidColorBrush fix** — Root casts ThemeDictionary brushes directly to ISCB. We were writing `SolidColorBrush`, causing `InvalidCastException` that crashed A/V settings and VC join. Fixed by using `CreateImmutableBrush(hex)` with `uint` constructor (Color constructor is trimmed). The `_windowResources` workaround (commit 5826a4c) is reverted — it broke DynamicResource propagation.
 
 ### Known Issues / TODOs
 
