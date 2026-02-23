@@ -1605,6 +1605,7 @@ internal static class ContentPages
                 if (filterMode[0] != 0)
                 {
                     bool enabled = cardIds[ci] == "content-filter" ? settings.NsfwFilterEnabled
+                        : cardIds[ci] == "themes" ? (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
                         : (settings.Plugins.TryGetValue(cardIds[ci], out var en2) && en2);
                     if (filterMode[0] == 1 && !enabled) continue;
                     if (filterMode[0] == 2 && enabled) continue;
@@ -1621,8 +1622,10 @@ internal static class ContentPages
                 var cmp = sb.CompareTo(sa);
                 if (cmp != 0) return cmp;
                 bool aOn = cardIds[a] == "content-filter" ? settings.NsfwFilterEnabled
+                    : cardIds[a] == "themes" ? (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
                     : (settings.Plugins.TryGetValue(cardIds[a], out var ea) && ea);
                 bool bOn = cardIds[b] == "content-filter" ? settings.NsfwFilterEnabled
+                    : cardIds[b] == "themes" ? (themeEngine?.ActiveThemeName != null && themeEngine.ActiveThemeName != "default-dark")
                     : (settings.Plugins.TryGetValue(cardIds[b], out var eb) && eb);
                 if (aOn != bOn) return aOn ? -1 : 1;
                 return string.Compare(cardNames[a], cardNames[b], StringComparison.OrdinalIgnoreCase);
