@@ -189,7 +189,6 @@ jobs:
             setup_msvc: false
 
     runs-on: ${{ matrix.runner }}
-    if: inputs.platform == '' || inputs.platform == matrix.platform
     env:
       VERSION: ${{ needs.resolve.outputs.version }}
     steps:

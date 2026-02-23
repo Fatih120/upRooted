@@ -134,6 +134,7 @@ uprooted-private/
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
 ├── install-uprooted-linux.sh          # Standalone bash installer for Linux
 ├── TASKS.md                           # Active task board (read by /hi each session)
+├── BUGS.md                            # Known bugs list
 ├── NEXT-RELEASE.md                    # Changes since last release (replaced each release)
 ├── CHANGELOG.md                       # Internal changelog (Keep a Changelog format)
 ├── CHANGELOG_PUBLIC.md                # Public changelog (mirrors GitHub release notes)

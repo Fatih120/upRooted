@@ -590,8 +590,11 @@ internal class ProfileBadgeInjector
         }
 
         // Check if the viewed user has Uprooted (for bio injection — independent of badge eligibility)
-        bool isUprootedUser = userId != null && _beacon != null
-            && _beacon.TryGetCached(userId) == true;
+        // Self is always an Uprooted user; for others, check beacon cache
+        bool isOwnProfile = userId != null && _beacon != null
+            && string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
+        bool isUprootedUser = isOwnProfile || (userId != null && _beacon != null
+            && _beacon.TryGetCached(userId) == true);
 
         bool needsBadges = isDevUser || isAlphaUser;
         bool needsBio = _bioEngine != null && isUprootedUser && userId != null;

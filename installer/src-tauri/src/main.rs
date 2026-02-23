@@ -376,6 +376,7 @@ mod tui {
                 Step::new("Check for running Root process"),
                 Step::new("Remove environment variables"),
                 Step::new("Restore HTML files"),
+                Step::new("Remove settings files"),
                 Step::new("Remove deployed files"),
             ],
             title: "Uninstall",
@@ -417,12 +418,25 @@ mod tui {
                 state.steps[2].status = StepStatus::Failed(result.message);
             }
 
-            // Step 3: Remove files
+            // Step 3: Remove settings
             state.steps[3].status = StepStatus::Running;
-            match hook::remove_files() {
-                Ok(()) => state.steps[3].status = StepStatus::Done,
+            match hook::reset_settings() {
+                Ok(n) => {
+                    state.steps[3].label = format!("Settings removed ({} file{})", n, if n == 1 { "" } else { "s" });
+                    state.steps[3].status = StepStatus::Done;
+                }
                 Err(e) => {
                     state.steps[3].status = StepStatus::Failed(e);
+                    // Non-fatal — continue with file removal
+                }
+            }
+
+            // Step 4: Remove files
+            state.steps[4].status = StepStatus::Running;
+            match hook::remove_files() {
+                Ok(()) => state.steps[4].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[4].status = StepStatus::Failed(e);
                     state.finished = true;
                     state.message = "Uninstall had errors.".to_string();
                     return;
@@ -439,12 +453,13 @@ mod tui {
         let state = AppState {
             steps: vec![
                 Step::new("Check for running Root process"),
+                Step::new("Reset settings (plugins, themes, preferences)"),
                 Step::new("Re-deploy hook files"),
                 Step::new("Set environment variables"),
                 Step::new("Re-patch HTML files"),
                 Step::new("Verify installation"),
             ],
-            title: "Repair",
+            title: "Repair (resets all settings)",
             finished: false,
             success: false,
             message: String::new(),
@@ -462,10 +477,13 @@ mod tui {
             }
             state.steps[0].status = StepStatus::Done;
 
-            // Step 1: Deploy files
+            // Step 1: Reset settings
             state.steps[1].status = StepStatus::Running;
-            match hook::deploy_files() {
-                Ok(()) => state.steps[1].status = StepStatus::Done,
+            match hook::reset_settings() {
+                Ok(n) => {
+                    state.steps[1].label = format!("Settings reset ({} file{} removed)", n, if n == 1 { "" } else { "s" });
+                    state.steps[1].status = StepStatus::Done;
+                }
                 Err(e) => {
                     state.steps[1].status = StepStatus::Failed(e);
                     state.finished = true;
@@ -474,9 +492,9 @@ mod tui {
                 }
             }
 
-            // Step 2: Set env vars
+            // Step 2: Deploy files
             state.steps[2].status = StepStatus::Running;
-            match hook::set_env_vars() {
+            match hook::deploy_files() {
                 Ok(()) => state.steps[2].status = StepStatus::Done,
                 Err(e) => {
                     state.steps[2].status = StepStatus::Failed(e);
@@ -486,25 +504,37 @@ mod tui {
                 }
             }
 
-            // Step 3: Repair HTML
+            // Step 3: Set env vars
             state.steps[3].status = StepStatus::Running;
+            match hook::set_env_vars() {
+                Ok(()) => state.steps[3].status = StepStatus::Done,
+                Err(e) => {
+                    state.steps[3].status = StepStatus::Failed(e);
+                    state.finished = true;
+                    state.message = "Repair failed.".to_string();
+                    return;
+                }
+            }
+
+            // Step 4: Repair HTML
+            state.steps[4].status = StepStatus::Running;
             let result = patcher::repair();
             if result.success {
-                state.steps[3].status = StepStatus::Done;
+                state.steps[4].status = StepStatus::Done;
             } else {
-                state.steps[3].status = StepStatus::Failed(result.message);
+                state.steps[4].status = StepStatus::Failed(result.message);
                 state.finished = true;
                 state.message = "Repair failed.".to_string();
                 return;
             }
 
-            // Step 4: Verify
-            state.steps[4].status = StepStatus::Running;
+            // Step 5: Verify
+            state.steps[5].status = StepStatus::Running;
             let final_check = detection::detect();
             if final_check.hook_status.files_ok && final_check.is_installed {
-                state.steps[4].status = StepStatus::Done;
+                state.steps[5].status = StepStatus::Done;
             } else {
-                state.steps[4].status = StepStatus::Failed("Verification found issues".to_string());
+                state.steps[5].status = StepStatus::Failed("Verification found issues".to_string());
             }
 
             state.finished = true;
@@ -514,10 +544,10 @@ mod tui {
     }
 
     pub fn run_mode_selector() -> crate::InstallerMode {
-        const ITEMS: &[(&str, crate::InstallerMode)] = &[
-            ("Install", crate::InstallerMode::Install),
-            ("Uninstall", crate::InstallerMode::Uninstall),
-            ("Repair", crate::InstallerMode::Repair),
+        const ITEMS: &[(&str, &str, crate::InstallerMode)] = &[
+            ("Install", "", crate::InstallerMode::Install),
+            ("Uninstall", "", crate::InstallerMode::Uninstall),
+            ("Repair", "resets all settings & plugins", crate::InstallerMode::Repair),
         ];
 
         let _ = enable_raw_mode();
@@ -561,17 +591,25 @@ mod tui {
                 )));
                 lines.push(Line::from(""));
 
-                for (i, (label, _)) in ITEMS.iter().enumerate() {
+                for (i, (label, desc, _)) in ITEMS.iter().enumerate() {
                     if i == selected {
-                        lines.push(Line::from(vec![
+                        let mut spans = vec![
                             Span::styled("  \u{25b6} ", Style::default().fg(Color::Cyan).add_modifier(Modifier::BOLD)),
                             Span::styled(*label, Style::default().fg(Color::White).add_modifier(Modifier::BOLD)),
-                        ]));
+                        ];
+                        if !desc.is_empty() {
+                            spans.push(Span::styled(format!("  ({})", desc), Style::default().fg(Color::Yellow)));
+                        }
+                        lines.push(Line::from(spans));
                     } else {
-                        lines.push(Line::from(vec![
+                        let mut spans = vec![
                             Span::raw("    "),
                             Span::styled(*label, Style::default().fg(Color::DarkGray)),
-                        ]));
+                        ];
+                        if !desc.is_empty() {
+                            spans.push(Span::styled(format!("  ({})", desc), Style::default().fg(Color::DarkGray)));
+                        }
+                        lines.push(Line::from(spans));
                     }
                 }
 
@@ -609,6 +647,6 @@ mod tui {
 
         let _ = disable_raw_mode();
         let _ = execute!(terminal.backend_mut(), LeaveAlternateScreen);
-        ITEMS[selected].1
+        ITEMS[selected].2
     }
 }

@@ -1,7 +1,7 @@
 # Tasks
 
 > Active task board for Uprooted contributors. Pick up items, mark them done, add new ones.
-> For strategic direction: [docs/ROADMAP.md](docs/ROADMAP.md). For plugin plans: [docs/PLUGIN_ROADMAP.md](docs/PLUGIN_ROADMAP.md).
+> For strategic direction: [docs/ROADMAP.md](docs/ROADMAP.md). For plugin plans: [docs/PLUGIN_ROADMAP.md](docs/PLUGIN_ROADMAP.md). For known bugs: [BUGS.md](BUGS.md).
 
 ---
 

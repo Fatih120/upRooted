@@ -121,6 +121,11 @@ pub fn run_uninstall_plain() {
         fail(&format!("HTML restore failed: {}", result.message));
     }
 
+    match hook::reset_settings() {
+        Ok(n) => ok(&format!("Settings removed ({} file{} deleted)", n, if n == 1 { "" } else { "s" })),
+        Err(e) => fail(&format!("Failed to remove settings: {e}")),
+    }
+
     match hook::remove_files() {
         Ok(()) => ok("Files removed"),
         Err(e) => fail(&format!("Failed to remove files: {e}")),
@@ -138,7 +143,7 @@ pub fn run_uninstall_plain() {
 pub fn run_repair_plain() {
     println!();
     println!(
-        "{BOLD}  Uprooted v{} — Repair{RESET}",
+        "{BOLD}  Uprooted v{} — Repair (resets all settings){RESET}",
         env!("CARGO_PKG_VERSION")
     );
     println!("{DIM}  {}{RESET}", "═".repeat(40));
@@ -149,6 +154,15 @@ pub fn run_repair_plain() {
         ok(&format!("Closed Root ({} process{})", killed, if killed == 1 { "" } else { "es" }));
     } else {
         ok("Root is not running");
+    }
+
+    // Reset settings (plugins, themes, preferences)
+    match hook::reset_settings() {
+        Ok(n) => ok(&format!("Settings reset ({} file{} removed)", n, if n == 1 { "" } else { "s" })),
+        Err(e) => {
+            fail(&format!("Settings reset failed: {e}"));
+            return;
+        }
     }
 
     match hook::deploy_files() {

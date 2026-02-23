@@ -231,8 +231,7 @@ internal class UserBioEngine
     /// </summary>
     internal void TryInjectBio(object popup, object verticalPanel, int insertIndex, string userId)
     {
-        // Skip own bio
-        if (userId == _beacon?.OwnUuidStr) return;
+        bool isSelf = string.Equals(userId, _beacon?.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
 
         // Dedup: check if bio already injected in this popup
         var walker = new VisualTreeWalker(_r);
@@ -246,6 +245,14 @@ internal class UserBioEngine
         var settings = UprootedSettings.Load();
         var pluginEnabled = settings.Plugins.TryGetValue("user-bio", out var enabled) && enabled;
         if (!pluginEnabled) return;
+
+        if (isSelf)
+        {
+            // Own profile: show editable bio section (read from local settings, not server)
+            if (!settings.UserBioViewOnly)
+                InjectOwnBioSection(verticalPanel, insertIndex, settings);
+            return;
+        }
 
         var cached = TryGetCachedBio(userId);
         if (cached != null)
@@ -285,13 +292,21 @@ internal class UserBioEngine
     }
 
     /// <summary>
-    /// Create and insert a bio TextBlock into the vertical panel.
+    /// Create and insert a bio display into the vertical panel.
+    /// Supports basic markdown: **bold** and *italic*.
     /// </summary>
     private void InjectBioText(object verticalPanel, int insertIndex, string bioText)
     {
         try
         {
-            // CreateTextBlock(text, fontSize, foregroundHex)
+            // Try markdown-formatted rendering first
+            if (TryInjectFormattedBio(verticalPanel, insertIndex, bioText))
+            {
+                Logger.Log(Tag, $"Bio injected (markdown): {bioText.Length} chars");
+                return;
+            }
+
+            // Fallback: plain TextBlock
             var textBlock = _r.CreateTextBlock(bioText, 12.0, "#9A9AAA");
             if (textBlock == null)
             {
@@ -300,18 +315,286 @@ internal class UserBioEngine
             }
 
             _r.SetTextWrapping(textBlock, "Wrap");
+            _r.SetHorizontalAlignment(textBlock, "Center");
+            CenterTextAlignment(textBlock);
             _r.SetMargin(textBlock, 0, 6, 0, 2);
             _r.SetMaxWidth(textBlock, 240);
             _r.SetTag(textBlock, BioTag);
 
-            // Insert into panel
             _r.InsertChild(verticalPanel, insertIndex, textBlock);
-
             Logger.Log(Tag, $"Bio injected: {bioText.Length} chars");
         }
         catch (Exception ex)
         {
             Logger.Log(Tag, $"InjectBioText error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Try to render bio text with basic markdown (bold/italic) using TextBlock Inlines.
+    /// Returns false if Inline types can't be resolved (fallback to plain text).
+    /// </summary>
+    private bool TryInjectFormattedBio(object verticalPanel, int insertIndex, string bioText)
+    {
+        var segments = ParseMarkdownSegments(bioText);
+        bool hasFormatting = false;
+        foreach (var seg in segments)
+            if (seg.bold || seg.italic) { hasFormatting = true; break; }
+        if (!hasFormatting) return false;
+
+        try
+        {
+            // Create TextBlock with foreground + font size (empty text — Inlines will render)
+            var textBlock = _r.CreateTextBlock("", 12.0, "#9A9AAA");
+            if (textBlock == null) return false;
+
+            // Resolve Inline types from same assembly as TextBlock
+            var asm = textBlock.GetType().Assembly;
+            var runType = asm.GetType("Avalonia.Controls.Documents.Run");
+            if (runType == null) return false;
+
+            var inlinesProp = textBlock.GetType().GetProperty("Inlines");
+            var inlines = inlinesProp?.GetValue(textBlock);
+            if (inlines == null) return false;
+
+            var addMethod = inlines.GetType().GetMethod("Add");
+            if (addMethod == null) return false;
+
+            foreach (var (text, bold, italic) in segments)
+            {
+                if (string.IsNullOrEmpty(text)) continue;
+
+                var run = Activator.CreateInstance(runType);
+                if (run == null) continue;
+                run.GetType().GetProperty("Text")?.SetValue(run, text);
+
+                if (bold && _r.FontWeightType != null)
+                {
+                    try
+                    {
+                        var boldWeight = Activator.CreateInstance(_r.FontWeightType, 700);
+                        run.GetType().GetProperty("FontWeight")?.SetValue(run, boldWeight);
+                    }
+                    catch { }
+                }
+
+                if (italic)
+                {
+                    try
+                    {
+                        var fontStyleType = asm.GetType("Avalonia.Media.FontStyle");
+                        if (fontStyleType != null)
+                        {
+                            var italicVal = Enum.Parse(fontStyleType, "Italic");
+                            run.GetType().GetProperty("FontStyle")?.SetValue(run, italicVal);
+                        }
+                    }
+                    catch { }
+                }
+
+                try { addMethod.Invoke(inlines, new[] { run }); }
+                catch { return false; }
+            }
+
+            _r.SetTextWrapping(textBlock, "Wrap");
+            _r.SetHorizontalAlignment(textBlock, "Center");
+            CenterTextAlignment(textBlock);
+            _r.SetMargin(textBlock, 0, 6, 0, 2);
+            _r.SetMaxWidth(textBlock, 240);
+            _r.SetTag(textBlock, BioTag);
+
+            _r.InsertChild(verticalPanel, insertIndex, textBlock);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"TryInjectFormattedBio error (falling back to plain): {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Parse basic markdown: **bold** and *italic* segments.
+    /// Returns list of (text, bold, italic) tuples.
+    /// </summary>
+    private static List<(string text, bool bold, bool italic)> ParseMarkdownSegments(string input)
+    {
+        var segments = new List<(string text, bool bold, bool italic)>();
+        int i = 0;
+        var buf = new StringBuilder();
+
+        while (i < input.Length)
+        {
+            if (i + 1 < input.Length && input[i] == '*' && input[i + 1] == '*')
+            {
+                if (buf.Length > 0) { segments.Add((buf.ToString(), false, false)); buf.Clear(); }
+                int close = input.IndexOf("**", i + 2, StringComparison.Ordinal);
+                if (close >= 0)
+                {
+                    segments.Add((input.Substring(i + 2, close - i - 2), true, false));
+                    i = close + 2;
+                }
+                else { buf.Append("**"); i += 2; }
+            }
+            else if (input[i] == '*')
+            {
+                if (buf.Length > 0) { segments.Add((buf.ToString(), false, false)); buf.Clear(); }
+                int close = input.IndexOf('*', i + 1);
+                if (close >= 0)
+                {
+                    segments.Add((input.Substring(i + 1, close - i - 1), false, true));
+                    i = close + 1;
+                }
+                else { buf.Append('*'); i++; }
+            }
+            else { buf.Append(input[i]); i++; }
+        }
+
+        if (buf.Length > 0) segments.Add((buf.ToString(), false, false));
+        return segments;
+    }
+
+    /// <summary>
+    /// Create and insert an editable bio section into the user's own profile popup.
+    /// Features: live character counter, Save button, auto-save on LostFocus.
+    /// </summary>
+    private void InjectOwnBioSection(object verticalPanel, int insertIndex, UprootedSettings settings)
+    {
+        try
+        {
+            // Container for the editable bio section
+            var container = _r.CreateStackPanel(vertical: true, spacing: 4);
+            if (container == null) return;
+            _r.SetTag(container, BioTag);
+            _r.SetMargin(container, 0, 6, 0, 2);
+            _r.SetMaxWidth(container, 240);
+            _r.SetHorizontalAlignment(container, "Center");
+
+            // Editable TextBox with current bio
+            var bioBox = _r.CreateTextBox("Set your bio...", settings.UserBioText, MaxBioLength);
+            if (bioBox == null) return;
+
+            // Style to be compact and blend with the profile popup
+            try { bioBox.GetType().GetProperty("FontSize")?.SetValue(bioBox, 12.0); } catch { }
+
+            // Set TextWrapping directly on the TextBox (AvaloniaReflection.SetTextWrapping
+            // uses TextBlock's PropertyInfo which doesn't apply to TextBox)
+            if (_r.TextWrappingType != null)
+            {
+                try
+                {
+                    var wrapVal = Enum.Parse(_r.TextWrappingType, "Wrap");
+                    bioBox.GetType().GetProperty("TextWrapping")?.SetValue(bioBox, wrapVal);
+                }
+                catch { }
+            }
+
+            _r.SetHeight(bioBox, 48);
+            _r.SetPadding(bioBox, 8, 6, 8, 6);
+            _r.SetBackground(bioBox, "#18ffffff");
+            _r.SetForeground(bioBox, "#9A9AAA");
+
+            // Subtle rounded corners, no border
+            try
+            {
+                if (_r.CornerRadiusType != null)
+                {
+                    var cr = Activator.CreateInstance(_r.CornerRadiusType, 6.0, 6.0, 6.0, 6.0);
+                    bioBox.GetType().GetProperty("CornerRadius")?.SetValue(bioBox, cr);
+                }
+                if (_r.ThicknessType != null)
+                {
+                    var zero = Activator.CreateInstance(_r.ThicknessType, 0.0, 0.0, 0.0, 0.0);
+                    bioBox.GetType().GetProperty("BorderThickness")?.SetValue(bioBox, zero);
+                }
+            }
+            catch { }
+
+            // --- Bottom row: character counter + Save button ---
+            var counterText = _r.CreateTextBlock(
+                $"{settings.UserBioText.Length}/{MaxBioLength}",
+                10.0, "#666680");
+
+            // Save button: small pill
+            var saveBtnText = _r.CreateTextBlock("Save", 10.0, "#B0B0C0");
+            object? saveBtn = null;
+            if (saveBtnText != null)
+            {
+                _r.SetVerticalAlignment(saveBtnText, "Center");
+                saveBtn = _r.CreateBorder(bgHex: "#28ffffff", cornerRadius: 4, child: saveBtnText);
+                if (saveBtn != null)
+                {
+                    _r.SetPadding(saveBtn, 10, 3, 10, 3);
+                    _r.SetCursorHand(saveBtn);
+                }
+            }
+
+            // Horizontal row: counter (left) + spacer + save button (right)
+            var bottomRow = _r.CreateStackPanel(vertical: false, spacing: 6);
+            if (bottomRow != null)
+                _r.SetHorizontalAlignment(bottomRow, "Right");
+
+            // Shared save logic
+            var bioBoxRef = bioBox;
+            var counterRef = counterText;
+            Action doSave = () =>
+            {
+                try
+                {
+                    var text = _r.GetTextBoxText(bioBoxRef)?.Trim() ?? "";
+                    if (text.Length > MaxBioLength) text = text[..MaxBioLength];
+                    var s = UprootedSettings.Load();
+                    s.UserBioText = text;
+                    try { s.Save(); } catch { }
+                    try { counterRef?.GetType().GetProperty("Text")?.SetValue(counterRef, $"{text.Length}/{MaxBioLength}"); } catch { }
+                    if (!string.IsNullOrWhiteSpace(text))
+                        RegisterBio(text);
+                    else
+                        DeleteBio();
+                    Logger.Log(Tag, $"Own bio saved: {text.Length} chars");
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log(Tag, $"Own bio save error: {ex.Message}");
+                }
+            };
+
+            // Live character counter: update on every keystroke via TextChanged
+            _r.SubscribeEvent(bioBox, "TextChanged", () =>
+            {
+                try
+                {
+                    var text = _r.GetTextBoxText(bioBoxRef) ?? "";
+                    counterRef?.GetType().GetProperty("Text")?.SetValue(counterRef, $"{text.Length}/{MaxBioLength}");
+                }
+                catch { }
+            });
+
+            // Save on LostFocus
+            _r.SubscribeEvent(bioBox, "LostFocus", () => doSave());
+
+            // Save on button click
+            if (saveBtn != null)
+                _r.SubscribeClickReleased(saveBtn, () => doSave());
+
+            // Assemble bottom row
+            if (bottomRow != null)
+            {
+                if (counterText != null) _r.AddChild(bottomRow, counterText);
+                if (saveBtn != null) _r.AddChild(bottomRow, saveBtn);
+            }
+
+            // Assemble container
+            _r.AddChild(container, bioBox);
+            if (bottomRow != null) _r.AddChild(container, bottomRow);
+            else if (counterText != null) _r.AddChild(container, counterText);
+
+            _r.InsertChild(verticalPanel, insertIndex, container);
+            Logger.Log(Tag, $"Own bio section injected (current: {settings.UserBioText.Length} chars)");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"InjectOwnBioSection error: {ex.Message}");
         }
     }
 
@@ -485,6 +768,25 @@ internal class UserBioEngine
             Logger.Log(Tag, $"HttpSend({methodName}) error: {ex.Message}");
             return -1;
         }
+    }
+
+    // ===== UI helpers =====
+
+    /// <summary>
+    /// Set TextAlignment.Center on a TextBlock via reflection.
+    /// </summary>
+    private static void CenterTextAlignment(object textBlock)
+    {
+        try
+        {
+            var textAlignType = textBlock.GetType().Assembly.GetType("Avalonia.Media.TextAlignment");
+            if (textAlignType != null)
+            {
+                var centerVal = Enum.Parse(textAlignType, "Center");
+                textBlock.GetType().GetProperty("TextAlignment")?.SetValue(textBlock, centerVal);
+            }
+        }
+        catch { }
     }
 
     // ===== JSON helpers (no System.Text.Json) =====

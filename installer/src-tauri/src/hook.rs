@@ -667,6 +667,28 @@ fn check_env_vars_active() -> bool {
 
 // ==================== Common: file operations ====================
 
+/// Delete Uprooted settings files from the profile directory.
+/// Removes both uprooted-settings.ini (C# hook) and uprooted-settings.json (TypeScript),
+/// plus the message log file. This resets all plugin states, themes, and preferences.
+pub fn reset_settings() -> Result<u32, String> {
+    let profile = crate::detection::get_profile_dir();
+    let files = [
+        "uprooted-settings.ini",
+        "uprooted-settings.json",
+        "uprooted-message-log.dat",
+    ];
+    let mut deleted = 0u32;
+    for name in &files {
+        let path = profile.join(name);
+        if path.exists() {
+            fs::remove_file(&path)
+                .map_err(|e| format!("Failed to delete {}: {}", name, e))?;
+            deleted += 1;
+        }
+    }
+    Ok(deleted)
+}
+
 /// Delete the uprooted install directory.
 pub fn remove_files() -> Result<(), String> {
     let dir = get_uprooted_dir();
