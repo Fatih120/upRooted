@@ -159,7 +159,7 @@ This section describes the key classes and modules that form the framework's bac
 | `Entry` | `hook/Entry.cs` | Profiler injection entry point. `[ModuleInitializer]` and constructor both guarded by `Interlocked.CompareExchange` for one-time initialization. Calls `StartupHook.Initialize()`. |
 | `StartupHook` | `hook/StartupHook.cs` | Initialization orchestrator. Process name guard, background thread, multi-phase startup (Phase 0-5). Coordinates Avalonia injection and DotNetBrowser feature loading. |
 | `HtmlPatchVerifier` | `hook/HtmlPatchVerifier.cs` | Self-healing HTML patches. Runs at Phase 0 (no Avalonia needed). Verifies injection markers exist in profile HTML files. Sets up `FileSystemWatcher` to re-patch when Root auto-updates overwrite files. |
-| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (2920 lines). |
+| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (3320 lines). |
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
 | `SidebarInjector` | `hook/SidebarInjector.cs` | Settings page monitor. 200ms timer polls the visual tree, detects settings page open/close, injects the UPROOTED sidebar section, manages content page overlays, handles click events and cleanup. |
 | `ContentPages` | `hook/ContentPages.cs` | Page builders for the Uprooted, Plugins, and Themes settings pages. Creates native Avalonia controls via reflection, matching Root's exact card styling (background, corner radius, border, padding, typography). |
@@ -283,7 +283,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 **Purpose:** Wait for Root to initialize its Avalonia `Application` singleton.
 
 - **Thread:** Background
-- **Timeout:** 30 seconds, polling every 500ms
+- **Timeout:** 30 seconds, polling every 50ms
 - **Condition:** `AvaloniaReflection.GetAppCurrent()` returns non-null
 - **On failure:** Logs error and returns.
 
@@ -292,7 +292,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 **Purpose:** Wait for Root to create and display its main window.
 
 - **Thread:** Background
-- **Timeout:** 60 seconds, polling every 500ms
+- **Timeout:** 60 seconds, polling every 50ms
 - **Condition:** `AvaloniaReflection.GetMainWindow()` returns non-null (accessed via `Application.Current.ApplicationLifetime.MainWindow`)
 - **On failure:** Logs error and returns.
 
@@ -632,10 +632,10 @@ These rules reflect hard-won lessons from real bugs. Violating them causes crash
 
 The TypeScript layer uses a separate JSON-based settings file (`uprooted-settings.json`) inlined into HTML by the patcher. Runtime changes made via the browser-side settings panel only update the in-memory `window.__UPROOTED_SETTINGS__` object -- they do not persist to disk because the browser has no file system access in Root's incognito Chromium. Settings written by the installer/CLI do persist.
 
-### Display-Only Features
+### Feature Status Notes
 
-- **Theme switching in C# pages:** The Themes page shows available themes with "ACTIVE" badges and has click handlers for theme switching and a color picker for custom themes. Theme selection persists via the INI settings file.
-- **Plugin management in C# pages:** The Plugins page lists plugins with toggle switches, but the toggles are display-only and cannot actually enable/disable plugins at runtime.
+- **Theme switching in C# pages:** The Theme Engine page provides 8 presets and a custom theme editor with live keystroke-apply, OKLCH palette generation, and variant switching. Fully functional.
+- **Plugin management in C# pages:** The Plugins page lists plugins with toggle switches that persist to INI settings. Plugin state takes effect on next restart (a restart banner appears when toggles change).
 - **Custom CSS injection:** Only available in the TypeScript layer (session-only). The C# page shows "will be available in a future update."
 
 ### Profiler Injection Scope
@@ -707,4 +707,4 @@ The patcher uses comment markers (`<!-- uprooted:start -->` / `<!-- uprooted:end
 
 **Canonical for:** system design, layer boundaries, critical rules (full with code), threading model, error handling patterns, startup phase overview, known limitations, security considerations
 **Not canonical for:** per-class implementation detail → [HOOK_REFERENCE.md](HOOK_REFERENCE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | native profiler → [CLR_PROFILER.md](CLR_PROFILER.md) | repository structure → [CLAUDE.md](../../CLAUDE.md)
-*Architecture reference for Uprooted v0.4.2. Last updated 2026-02-21.*
+*Architecture reference for Uprooted v0.5.0. Last updated 2026-02-23.*

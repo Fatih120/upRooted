@@ -619,4 +619,4 @@ See [ROOT_ENVIRONMENT.md](ROOT_ENVIRONMENT.md#debugging-strategies) for more det
 
 **Canonical for:** first plugin tutorial, 5 hands-on examples, plugin project setup, basic lifecycle
 **Not canonical for:** API surface → [API_REFERENCE.md](API_REFERENCE.md) | bridge method catalog → [BRIDGE_REFERENCE.md](BRIDGE_REFERENCE.md) | advanced patterns → [ADVANCED_DEVELOPMENT.md](ADVANCED_DEVELOPMENT.md)
-*Plugin getting started guide. Last updated 2026-02-19.*
+*Plugin getting started guide. Last updated 2026-02-23.*

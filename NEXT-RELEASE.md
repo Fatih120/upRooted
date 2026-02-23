@@ -1,12 +1,12 @@
 # Next Release
 
-> Changes included in v0.5.0-rc. This file is replaced each release.
+> Changes included in v0.5.0. This file is replaced each release.
 
 <!-- NEVER mention obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in this file. This content flows to public release notes. -->
 
 ---
 
-# What's New in v0.5.0-rc
+# What's New in v0.5.0
 
 This is a big one. Since the last release we shipped a new plugin, reworked the entire custom theme system, rebuilt Rootcord's user card, added a presence beacon with community badges, overhauled the settings UI, and made startup meaningfully faster. A lot happened.
 

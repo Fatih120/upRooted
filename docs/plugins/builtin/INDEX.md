@@ -92,4 +92,4 @@ These run inside Root's .NET process via the CLR profiler. Key characteristics:
 ---
 
 **Canonical for:** built-in plugin inventory, load order, C# vs TypeScript runtime layer differences
-*Built-in plugins index. Last updated 2026-02-19.*
+*Built-in plugins index. Last updated 2026-02-23.*

@@ -44,8 +44,8 @@ Avalonia concept and the reflection pattern used to reach it.
 - Events are wired via `Expression.Lambda` because delegate types are unknown at compile time.
 - Mistakes produce silent failures, cryptic exceptions, or UI freezes.
 
-The central class is `AvaloniaReflection` (`hook/AvaloniaReflection.cs`, ~2030
-lines). It resolves roughly 50 Avalonia types and 55 member handles during startup,
+The central class is `AvaloniaReflection` (`hook/AvaloniaReflection.cs`, ~3320
+lines). It resolves roughly 80 Avalonia types and caches their member handles during startup,
 then exposes them through typed wrapper methods.
 
 ---
@@ -1069,4 +1069,4 @@ Reference: `research/docs/reports/REPORT_AVALONIA_SKIA_CUSTOM_DRAW.md`.
 
 **Canonical for:** Avalonia reflection patterns, property system (StyledProperty/DirectProperty/AttachedProperty), visual tree traversal, threading/DispatcherPriority, control creation via reflection, Expression.Lambda event subscription, WindowImpl.s*instances, TranslatePoint, OverlayLayer, Root custom control types summary, AvaloniaEdit integration, 14 pitfall solutions with code
 **Not canonical for:** critical rules (text) → [ARCHITECTURE.md](ARCHITECTURE.md#9-critical-rules) | Root control exhaustive reference → [ROOT_CONTROL_REFERENCE.md](ROOT_CONTROL_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-\_Avalonia patterns reference for Uprooted v0.5.0-rc. Last updated 2026-02-22.*
+*Avalonia patterns reference for Uprooted v0.5.0. Last updated 2026-02-23.*

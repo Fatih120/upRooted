@@ -37,7 +37,7 @@ For the overview, see [Hook Reference](HOOK_REFERENCE.md#theme-engine).
 
 ## Overview
 
-**File:** `hook/ThemeEngine.cs` (~2624 lines)
+**File:** `hook/ThemeEngine.cs` (~2932 lines)
 
 The theme engine is the largest single component in the Uprooted hook layer. It
 transforms Root Communications' default dark-blue UI into arbitrary color schemes at

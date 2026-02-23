@@ -6,7 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.5.0-rc] - 2026-02-22
+## [0.5.0] - 2026-02-23
 
 ### Added
 
@@ -508,7 +508,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
-[0.5.0-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.2...v0.5.0-rc
+[0.5.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.2...v0.5.0
 [0.4.2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.1...v0.4.2
 [0.4.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.3.6-rc...v0.4.0

@@ -493,7 +493,16 @@ internal class AutoUpdater
         var old = dst + ".old";
         try { File.Delete(old); } catch { /* stale .old from previous run */ }
         File.Move(dst, old);      // atomic rename: old inode moves to .old path
-        File.Copy(src, dst);      // new inode written at original path
+        try
+        {
+            File.Copy(src, dst);  // new inode written at original path
+        }
+        catch
+        {
+            // Rollback: restore original file so we don't leave the user with nothing
+            try { File.Move(old, dst); } catch { /* best effort */ }
+            throw;
+        }
         try { File.Delete(old); } catch { /* non-fatal — cleaned up on next run */ }
     }
 

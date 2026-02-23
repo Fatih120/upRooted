@@ -793,10 +793,8 @@ Uninstall reverses everything: remove environment variables, restore HTML files 
 ### Known limitations
 
 1. **C# settings can't load JSON** -- `System.Text.Json` throws `MissingMethodException` in the profiler-injected context. Settings use INI-based persistence instead.
-2. **Theme switching is display-only** -- the Themes page shows themes but clicking them does nothing yet.
-3. **Plugin management is display-only** -- can't toggle plugins from the native UI yet.
-4. **Environment variables are user-scoped** -- the profiler env vars affect ALL .NET apps. We guard with a process name check, but the vars are still set globally.
-5. **No DevTools** -- Root's Chromium has no remote debugging port. TypeScript errors show as a red banner; there's no console or inspector.
+2. **Environment variables are user-scoped** -- the profiler env vars affect ALL .NET apps. We guard with a process name check, but the vars are still set globally.
+3. **No DevTools** -- Root's Chromium has no remote debugging port. TypeScript errors show as a red banner; there's no console or inspector.
 
 ---
 
@@ -821,4 +819,4 @@ Two independent injection layers. Zero binary modifications. Full cleanup on uni
 
 **Canonical for:** reverse-engineering narrative, historical context (why binary patching was abandoned), discovery walkthrough, origin story
 **Not canonical for:** current architecture → [ARCHITECTURE.md](framework/ARCHITECTURE.md) | implementation detail → [HOOK_REFERENCE.md](framework/HOOK_REFERENCE.md) | theme algorithm → [THEME_ENGINE_DEEP_DIVE.md](framework/THEME_ENGINE_DEEP_DIVE.md) | 32-key values → [ROOT_THEME_SYSTEM_FINDINGS.md](../research/ROOT_THEME_SYSTEM_FINDINGS.md)
-*Narrative walkthrough for Uprooted v0.4.2. Last updated 2026-02-19.*
+*Narrative walkthrough for Uprooted v0.5.0. Last updated 2026-02-23.*

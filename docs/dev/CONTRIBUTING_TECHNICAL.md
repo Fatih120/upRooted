@@ -787,4 +787,4 @@ running. The hook reads settings once during Phase 3.5 of startup.
 
 **Canonical for:** dev environment setup, project layout orientation, debugging workflows (both layers), failure mode table, scripts reference, verification checklists, log file locations
 **Not canonical for:** build pipeline → [BUILD.md](../install/BUILD.md) | branch/PR rules → [CONTRIBUTING.md](../../CONTRIBUTING.md) | critical rules (full) → [ARCHITECTURE.md §9](../framework/ARCHITECTURE.md#9-critical-rules) | architecture → [ARCHITECTURE.md](../framework/ARCHITECTURE.md)
-*Technical onboarding guide for Uprooted. Last updated 2026-02-19.*
+*Technical onboarding guide for Uprooted. Last updated 2026-02-23.*
