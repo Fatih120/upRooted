@@ -207,7 +207,6 @@ internal class SidebarInjector
     /// </summary>
     private void OnLayoutUpdated()
     {
-        Logger.Log("Injector", ">>> LayoutUpdated");
         if (_injected)
         {
             // Catch Root's async save bar creation the instant it triggers a layout pass.

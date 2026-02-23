@@ -50,8 +50,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `HtmlPatchVerifier.cs` | 447 | Phase 0: self-healing HTML patches |
 | `AvaloniaReflection.cs` | 3446 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
-| `SidebarInjector.cs` | 2049 | Settings page monitor + sidebar injection |
-| `ContentPages.cs` | 5193 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |
+| `SidebarInjector.cs` | 2048 | Settings page monitor + sidebar injection |
+| `ContentPages.cs` | 5086 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |
 | `ThemeEngine.cs` | 3031 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |

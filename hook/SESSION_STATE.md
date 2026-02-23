@@ -4,10 +4,12 @@
 
 ## Current State Summary
 
-Bash installer channel support, installer resilience, and UI polish are the most recent work.
+Bash installer channel support, installer resilience, updates card rework, and log noise reduction are the most recent work.
 
 - **Bash installer `--channel` flag** — `--channel canary` or `--channel dev` to download from canary/dev repos instead of stable-only public repo. Dev requires GITHUB_TOKEN. Canary/dev use `?per_page=1` endpoint since prereleases are invisible to `/releases/latest`.
 - **Installer non-fatal HTML patching** — HTML patch step is now a warning (not fatal) when Root hasn't been launched yet. Hook's HtmlPatchVerifier self-heals at runtime. Both TUI and plain CLI modes updated.
+- **Updates card reworked** — Auto-check and notification toggles fixed for DPI rounding errors by delegating to `BuildToggleSwitch` (44×24, 16×16 thumb, 4px margin) instead of inline pill (52×26, 3px margins). Update channel control replaced with badge button cycling Stable↔Canary on click — matching Developer badge style. Dev channel easter egg timing tightened: 6 taps/1.5s (was 3s).
+- **`LayoutUpdated` log noise eliminated** — Pre-throttle `>>> LayoutUpdated` log removed from `SidebarInjector.OnLayoutUpdated`; was firing on every Avalonia layout pass before the 50ms throttle and `_injected` early-return.
 - **ProfileBadge/Injector log spam eliminated** — Fallback tick (200ms) and poll tick no longer emit raw START/END logs on every cycle. `ProfileBadgeInjector` now uses `TailSampler` + `WideEvent.BeginSampled`. `SidebarInjector` redundant plain `Logger.Log` lines removed (already had `WideEvent.BeginSampled`).
 - **ReconLogger card redesigned** — Dev Console ReconLogger card rebuilt in plugin card format: bold name left, toggle right, description, "Dev" status badge. Toggle now refreshes the About page so Dev Plugins count updates immediately.
 - **ThemeEngine enabled state fixed** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort all now use `themeEngine.ActiveThemeName` (not `settings.Plugins["themes"]`, which was always `true` from legacy migration). `SidebarInjector` no longer force-sets `Plugins["themes"] = true` for new installs.

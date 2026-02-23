@@ -17,6 +17,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **Installer: HTML patching no longer fatal** — The Windows/Linux installer treated "No target HTML files found in profile directory" as a fatal error, aborting the entire install even though the C# hook was deployed successfully. HTML files are created by Root on first launch, so fresh installs always hit this. Now shows a yellow warning and continues. The hook's `HtmlPatchVerifier` self-heals patches at runtime.
   - Files: `installer/src-tauri/src/main.rs`, `installer/src-tauri/src/cli.rs`
+- **Updates card DPI rounding errors on toggles** — Auto-check and notification toggles used an inline pill (52×26, 20×20 thumb, 3px margin) that rounded incorrectly at 150% DPI. Both now delegate to `BuildToggleSwitch` (44×24, 16×16 thumb, 4px margin) — the same DPI-safe implementation used by plugin cards.
+  - File: `hook/ContentPages.cs`
+- **Update channel control reworked** — Replaced `Stable [toggle pill] Canary` with a badge button (dark background, colored border) that cycles Stable↔Canary on click, matching the Developer badge style. Dev channel easter egg timing tightened from 6 taps in 3s to 6 taps in 1.5s.
+  - File: `hook/ContentPages.cs`
+- **`LayoutUpdated` log firing on every layout pass** — `SidebarInjector.OnLayoutUpdated` emitted `>>> LayoutUpdated` before the 50ms throttle and the `_injected` early-return, logging on every Avalonia layout pass. Removed; the throttle-gated START/END logs inside `CheckAndInject` are sufficient.
+  - File: `hook/SidebarInjector.cs`
 - **ReconLogger Dev Console card now matches plugin card format** — Replaced simple title + `BuildSettingsToggle` layout with full plugin card layout: bold name left, toggle right, description, "Dev" status badge. Toggle now calls `onRefreshCurrentPage` so the Dev Plugins count on the About page updates immediately.
   - File: `hook/ContentPages.cs`
 - **ThemeEngine always counted as enabled when native theme active** — `BuildPluginsPage` `isEnabled` check and `rebuildGrid` filter/sort used `settings.Plugins["themes"]` (always `true` due to legacy migration) instead of `themeEngine.ActiveThemeName`. All three sites now use the live theme engine state, matching the About page count logic. `SidebarInjector` default init no longer force-sets `Plugins["themes"] = true` for new installs.

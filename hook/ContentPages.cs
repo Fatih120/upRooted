@@ -4347,63 +4347,12 @@ internal static class ContentPages
             r.AddChild(row, leftStack);
         }
 
-        // Right side: toggle pill
-        bool[] state = { currentValue };
-        bool[] hovered = { false };
-        var toggleBg = currentValue ? AccentGreen : AdjustForHighlight(CardBg, 20);
-        var pill = r.CreateBorder(toggleBg, 13);
+        // Right side: toggle pill — delegate to BuildToggleSwitch for DPI-safe sizing
+        var pill = BuildToggleSwitch(r, currentValue, font, onChanged);
         if (pill != null)
         {
-            r.SetWidth(pill, 52);
-            r.SetHeight(pill, 26);
             r.SetHorizontalAlignment(pill, "Right");
             r.SetVerticalAlignment(pill, "Center");
-            r.SetCursorHand(pill);
-
-            var dot = r.CreateBorder(ContrastText(toggleBg), 9);
-            if (dot != null)
-            {
-                r.SetWidth(dot, 20);
-                r.SetHeight(dot, 20);
-                r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
-                r.SetMargin(dot, 3, 3, 3, 3);
-                r.SetBorderChild(pill, dot);
-
-                var pillRef = pill;
-                var dotRef = dot;
-                r.SubscribeEvent(pill, "PointerPressed", () =>
-                {
-                    var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
-                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
-                    var basis = hovered[0] ? hover : rest;
-                    r.SetRenderScale(pillRef, 0.985);
-                    r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
-                });
-                r.SubscribeClickReleased(pill, () =>
-                {
-                    r.SetRenderScale(pillRef, 1.0);
-                    state[0] = !state[0];
-                    var rest = state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20);
-                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
-                    r.SetBackground(pillRef, hovered[0] ? hover : rest);
-                    r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
-                    r.SetBackground(dotRef, ContrastText(rest));
-                    onChanged(state[0]);
-                });
-                r.SubscribeEvent(pill, "PointerEntered", () =>
-                {
-                    hovered[0] = true;
-                    var hover = state[0] ? AdjustForHighlight(AccentGreen, 10) : AdjustForHighlight(AdjustForHighlight(CardBg, 20), 8);
-                    r.SetBackground(pillRef, hover);
-                });
-                r.SubscribeEvent(pill, "PointerExited", () =>
-                {
-                    hovered[0] = false;
-                    r.SetRenderScale(pillRef, 1.0);
-                    r.SetBackground(pillRef, state[0] ? AccentGreen : AdjustForHighlight(CardBg, 20));
-                });
-            }
-
             r.AddChild(row, pill);
         }
 
@@ -4411,9 +4360,9 @@ internal static class ContentPages
     }
 
     /// <summary>
-    /// Build the update channel row: Stable/Canary toggle pill with labeled sides.
-    /// Developer channel: toggling 6 times within 3 seconds triggers password prompt.
-    /// On successful dev auth, the toggle is replaced with a "Developer" badge.
+    /// Build the update channel row: badge button cycling Stable ↔ Canary.
+    /// Developer channel: clicking the badge 6 times within 1.5 seconds triggers password prompt.
+    /// On successful dev auth, the badge row is replaced with a "Developer" badge.
     /// If already on Developer channel at load time, shows the badge directly.
     /// </summary>
     private static void BuildChannelRow(AvaloniaReflection r, object container,
@@ -4421,7 +4370,7 @@ internal static class ContentPages
     {
         const string CanaryColor = "#E89B3E"; // Warm amber
         const int DevTapCount = 6;
-        const int DevTapWindowMs = 3000;
+        const int DevTapWindowMs = 1500;
 
         // If already on developer channel, show the dev badge directly
         if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
@@ -4440,7 +4389,7 @@ internal static class ContentPages
         {
             r.SetHorizontalAlignment(leftStack, "Left");
             r.SetVerticalAlignment(leftStack, "Center");
-            r.SetMargin(leftStack, 0, 0, 160, 0);
+            r.SetMargin(leftStack, 0, 0, 140, 0);
 
             var nameText = CreateBoundText(r, "Update channel", 13, TextWhite, "TextPrimary");
             r.SetFontWeightNumeric(nameText, 450);
@@ -4455,164 +4404,108 @@ internal static class ContentPages
             r.AddChild(row, leftStack);
         }
 
-        // Right side: Stable [toggle] Canary
-        var isRight = settings.AutoUpdateChannel.Equals("canary", StringComparison.OrdinalIgnoreCase);
+        // Right side: badge button cycling Stable ↔ Canary
+        bool isCanary = settings.AutoUpdateChannel.Equals("canary", StringComparison.OrdinalIgnoreCase);
+        bool[] channelState = { isCanary };
 
-        var rightStack = r.CreateStackPanel(vertical: false, spacing: 8);
-        if (rightStack == null) return;
-        r.SetHorizontalAlignment(rightStack, "Right");
-        r.SetVerticalAlignment(rightStack, "Center");
+        var badgeColor = isCanary ? CanaryColor : AccentGreen;
+        var badgeLabel = r.CreateTextBlock(isCanary ? "Canary" : "Stable", 12, badgeColor);
+        r.SetFontWeight(badgeLabel, "Bold");
+        ApplyFont(r, badgeLabel, font);
+        r.SetHorizontalAlignment(badgeLabel, "Center");
 
-        // "Stable" label
-        var stableLabel = r.CreateTextBlock("Stable", 12, isRight ? TextDim : TextWhite);
-        r.SetFontWeightNumeric(stableLabel, isRight ? 400 : 600);
-        ApplyFont(r, stableLabel, font);
-        r.SetVerticalAlignment(stableLabel, "Center");
-        r.AddChild(rightStack, stableLabel);
-
-        // "Canary" label (created before pill so closures can reference it)
-        var canaryLabel = r.CreateTextBlock("Canary", 12, isRight ? TextWhite : TextDim);
-        r.SetFontWeightNumeric(canaryLabel, isRight ? 600 : 400);
-        ApplyFont(r, canaryLabel, font);
-        r.SetVerticalAlignment(canaryLabel, "Center");
-
-        // Toggle pill
-        bool[] state = { isRight };
-        bool[] hovered = { false };
-        var pillColor = isRight ? CanaryColor : AccentGreen;
-        var pill = r.CreateBorder(pillColor, 13);
-        if (pill != null)
+        var badge = r.CreateBorder(DevChannelBlack, 8, badgeLabel);
+        if (badge != null)
         {
-            r.SetWidth(pill, 44);
-            r.SetHeight(pill, 24);
-            r.SetVerticalAlignment(pill, "Center");
-            r.SetCursorHand(pill);
-            r.SetTag(pill, "uprooted-no-recolor");
+            r.SetPadding(badge, 12, 5, 12, 5);
+            r.SetHorizontalAlignment(badge, "Right");
+            r.SetVerticalAlignment(badge, "Center");
+            r.SetCursorHand(badge);
+            r.SetTag(badge, "uprooted-no-recolor");
+            SetBorderStroke(r, badge, badgeColor, ThickBorder);
 
-            var dot = r.CreateBorder(ContrastText(pillColor), 9);
-            if (dot != null)
+            var badgeRef = badge;
+            var badgeLabelRef = badgeLabel;
+            var containerRef = container;
+            var rowRef = row;
+
+            int[] tapCount = { 0 };
+            long[] firstTapTicks = { 0 };
+            bool[] promptVisible = { false };
+
+            r.SubscribeClickReleased(badge, () =>
             {
-                r.SetWidth(dot, 18);
-                r.SetHeight(dot, 18);
-                r.SetHorizontalAlignment(dot, state[0] ? "Right" : "Left");
-                r.SetMargin(dot, 3, 3, 3, 3);
-                r.SetBorderChild(pill, dot);
-
-                var pillRef = pill;
-                var dotRef = dot;
-                var stableLabelRef = stableLabel;
-                var canaryLabelRef = canaryLabel;
-
-                // Dev easter egg: track rapid toggles
-                int[] tapCount = { 0 };
-                long[] firstTapTicks = { 0 };
-                bool[] promptVisible = { false };
-                var containerRef = container;
-                var rowRef = row;
-                var rightStackRef = rightStack;
-
-                r.SubscribeEvent(pill, "PointerPressed", () =>
+                // Track rapid clicks for dev channel unlock
+                long now = DateTime.UtcNow.Ticks;
+                if (tapCount[0] == 0 || (now - firstTapTicks[0]) > DevTapWindowMs * TimeSpan.TicksPerMillisecond)
                 {
-                    var basis = state[0] ? CanaryColor : AccentGreen;
-                    r.SetRenderScale(pillRef, 0.985);
-                    r.SetBackground(pillRef, AdjustForHighlight(basis, 10));
-                });
-
-                r.SubscribeClickReleased(pill, () =>
+                    tapCount[0] = 1;
+                    firstTapTicks[0] = now;
+                }
+                else
                 {
-                    r.SetRenderScale(pillRef, 1.0);
+                    tapCount[0]++;
+                }
 
-                    // Track rapid taps for dev channel unlock
-                    long now = DateTime.UtcNow.Ticks;
-                    if (tapCount[0] == 0 || (now - firstTapTicks[0]) > DevTapWindowMs * TimeSpan.TicksPerMillisecond)
+                // 6th click within window → show password prompt (don't cycle channel)
+                if (tapCount[0] >= DevTapCount)
+                {
+                    tapCount[0] = 0;
+                    if (!promptVisible[0] && badgeLabelRef != null)
                     {
-                        tapCount[0] = 1;
-                        firstTapTicks[0] = now;
-                    }
-                    else
-                    {
-                        tapCount[0]++;
-                    }
-
-                    // 6th tap within window → show password prompt
-                    if (tapCount[0] >= DevTapCount)
-                    {
-                        tapCount[0] = 0;
-                        if (!promptVisible[0] && canaryLabelRef != null)
-                        {
-                            promptVisible[0] = true;
-                            Logger.Log("AutoUpdate", "Dev channel easter egg triggered (6 rapid toggles)");
-                            ShowChannelPasswordPrompt(r, containerRef, rowRef, pillRef, canaryLabelRef, font,
-                                onClose: () => { promptVisible[0] = false; },
-                                onChannelChanged: () =>
+                        promptVisible[0] = true;
+                        Logger.Log("AutoUpdate", "Dev channel easter egg triggered (6 rapid clicks)");
+                        ShowChannelPasswordPrompt(r, containerRef, rowRef, badgeRef, badgeLabelRef, font,
+                            onClose: () => { promptVisible[0] = false; },
+                            onChannelChanged: () =>
+                            {
+                                try
                                 {
-                                    // Replace the entire toggle row with the dev badge
-                                    try
-                                    {
-                                        var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
-                                        children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { rowRef });
-                                    }
-                                    catch { }
-                                    BuildDevChannelBadgeRow(r, containerRef, font, onRefreshCurrentPage);
-                                    ApplyChannelRuntimeState(r, UprootedSettings.Load());
-                                    onRefreshCurrentPage?.Invoke();
-                                });
-                        }
-                        return; // Don't toggle on the 6th tap
+                                    var children = containerRef.GetType().GetProperty("Children")?.GetValue(containerRef);
+                                    children?.GetType().GetMethod("Remove")?.Invoke(children, new[] { rowRef });
+                                }
+                                catch { }
+                                BuildDevChannelBadgeRow(r, containerRef, font, onRefreshCurrentPage);
+                                ApplyChannelRuntimeState(r, UprootedSettings.Load());
+                                onRefreshCurrentPage?.Invoke();
+                            });
                     }
+                    return;
+                }
 
-                    // Normal toggle: Stable ↔ Canary
-                    state[0] = !state[0];
-                    var newChannel = state[0] ? "canary" : "stable";
-                    var rest = state[0] ? CanaryColor : AccentGreen;
-                    var hover = state[0] ? AdjustForHighlight(CanaryColor, 10) : AdjustForHighlight(AccentGreen, 10);
-                    r.SetBackground(pillRef, hovered[0] ? hover : rest);
-                    r.SetHorizontalAlignment(dotRef, state[0] ? "Right" : "Left");
-                    r.SetBackground(dotRef, ContrastText(rest));
+                // Normal click: cycle Stable ↔ Canary
+                channelState[0] = !channelState[0];
+                var newChannel = channelState[0] ? "canary" : "stable";
+                var newColor = channelState[0] ? CanaryColor : AccentGreen;
 
-                    // Update label emphasis
-                    r.SetFontWeightNumeric(stableLabelRef, state[0] ? 400 : 600);
-                    r.SetForeground(stableLabelRef, state[0] ? TextDim : TextWhite);
-                    if (canaryLabelRef != null)
-                    {
-                        r.SetFontWeightNumeric(canaryLabelRef, state[0] ? 600 : 400);
-                        r.SetForeground(canaryLabelRef, state[0] ? TextWhite : TextDim);
-                    }
+                SetBorderStroke(r, badgeRef, newColor, ThickBorder);
+                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeLabelRef, channelState[0] ? "Canary" : "Stable");
+                r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeLabelRef, r.CreateBrush(newColor));
 
-                    // Save channel
-                    var s = UprootedSettings.Load();
-                    // If switching from developer, disable dev-only plugins
-                    if (newChannel != "developer" && s.AutoUpdateChannel == "developer")
-                        ApplyChannelRuntimeState(r, s);
-                    s.AutoUpdateChannel = newChannel;
-                    s.Save();
-                    Logger.Log("AutoUpdate", $"Switched to {newChannel} channel");
-                    // Don't call onRefreshCurrentPage here — the visual toggle already
-                    // updates pill/labels. Rebuilding the page would reset the tap counter
-                    // needed for the dev channel easter egg.
-                });
+                var s = UprootedSettings.Load();
+                if (newChannel != "developer" && s.AutoUpdateChannel == "developer")
+                    ApplyChannelRuntimeState(r, s);
+                s.AutoUpdateChannel = newChannel;
+                s.Save();
+                Logger.Log("AutoUpdate", $"Switched to {newChannel} channel");
+            });
 
-                r.SubscribeEvent(pill, "PointerEntered", () =>
-                {
-                    hovered[0] = true;
-                    var hover = state[0] ? AdjustForHighlight(CanaryColor, 10) : AdjustForHighlight(AccentGreen, 10);
-                    r.SetBackground(pillRef, hover);
-                });
-                r.SubscribeEvent(pill, "PointerExited", () =>
-                {
-                    hovered[0] = false;
-                    r.SetRenderScale(pillRef, 1.0);
-                    r.SetBackground(pillRef, state[0] ? CanaryColor : AccentGreen);
-                });
-            }
+            r.SubscribeEvent(badge, "PointerEntered", () =>
+            {
+                var c = channelState[0] ? CanaryColor : AccentGreen;
+                r.SetBackground(badgeRef, AdjustForHighlight(DevChannelBlack, 8));
+                SetBorderStroke(r, badgeRef, AdjustForHighlight(c, 24), ThickBorder);
+            });
+            r.SubscribeEvent(badge, "PointerExited", () =>
+            {
+                var c = channelState[0] ? CanaryColor : AccentGreen;
+                r.SetBackground(badgeRef, DevChannelBlack);
+                SetBorderStroke(r, badgeRef, c, ThickBorder);
+            });
 
-            r.AddChild(rightStack, pill);
+            r.AddChild(row, badge);
         }
 
-        // Add canary label after the pill
-        r.AddChild(rightStack, canaryLabel);
-
-        r.AddChild(row, rightStack);
         r.AddChild(container, row);
     }
 
