@@ -169,6 +169,13 @@ These cause real bugs -- do not violate:
 - **Never mention obfuscation in public-facing content** -- The hook DLL is obfuscated, but this is a private implementation detail. Never reference obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in: `CHANGELOG_PUBLIC.md`, `NEXT-RELEASE.md`, GitHub release notes, README, or any content that reaches the public repo. Commit messages in this private repo are acceptable. See `docs/framework/OBFUSCATION.md` for the internal reference.
 - **Never use `SolidColorBrush` in ThemeDictionaries** -- Root casts theme dictionary brushes directly to `ImmutableSolidColorBrush`. Writing a mutable `SolidColorBrush` causes `InvalidCastException` that crashes A/V settings, VC join, and anything else that evaluates themed resources. Always use `_r.CreateImmutableBrush(hex)` for ThemeDictionary entries. The `ImmutableSolidColorBrush(Color)` constructor is trimmed; use the `uint` constructor via `ParseHexToArgb()`. `SolidColorBrush` is fine for non-ThemeDictionary uses (Styles, UI controls we create). See `docs/framework/THEME_ENGINE_DEEP_DIVE.md` §Resource Dictionary Injection for full details.
 
+## Writing Style
+
+When updating docs, code comments, or this file:
+
+- **Use colons instead of em dashes**: Write "example: like this" not "example — like this"
+- This applies to all markdown, documentation, and commit messages in this repo
+
 ## Related Repos
 
 - **Public scaffold**: `The-Uprooted-Project/uprooted` -- TypeScript source, plugin API, theme engine
