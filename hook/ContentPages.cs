@@ -1117,7 +1117,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
                 new() { Id = "themes", DisplayName = "ThemeEngine", Version = "0.5.1-dev6",
                     Description = "Full theme engine with 8 presets (dark and light) and a custom theme builder. Pick accent, background, and text colors with live preview. Adapts SVGs, borders, text contrast, and mention colors automatically.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 2 },
+                    DefaultEnabled = false, HasSettings = false, TestingStatus = 3 },
                 new() { Id = "link-embeds", DisplayName = "LinkEmbeds", Version = "0.5.1-dev6",
                     Description = "Rich link previews right in chat. YouTube videos show a thumbnail with a play button that opens in your browser, Twitter/X posts show tweet content and images, Reddit threads display with subreddit labels, and image or GIF links render as inline previews.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 2 },
