@@ -70,9 +70,6 @@ Current focus areas (in order):
 - [ ] **Rootcord: validate tab-switch highlight fix** — `RefreshSelectedHighlight()` IsBorder guards added. Enable Rootcord → click server icons → check hook log.
   - Files: `hook/RootcordEngine.cs`
 
-- [ ] **Rootcord: validate user card + 4-button cluster** — Profile intercept removed, avatar/text→ProfilePane, P/D/N/⚙ buttons.
-  - Files: `hook/RootcordEngine.cs`
-
 - [ ] **MessageLogger: real-world validation** — Major reliability overhaul deployed: property fix, author names, INPC detection, self-delete fallback. Validate delete/edit detection, card positioning, edit indicators.
   - Files: `hook/MessageLogger.cs`
 
@@ -159,6 +156,12 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Rootcord: 3-col grid layout + GridSplitter fix** (2026-02-24) — Rebuilt as 3-column layout matching Root's native CommunityView. Set ResizeDirection=Columns, default 280px, Min/Max 107/450.
+  - File: `hook/RootcordEngine.cs`
+- [x] **Rootcord: user card + button cluster validated** (2026-02-24) — Profile card width tracks user bar, 4-button cluster working.
+  - File: `hook/RootcordEngine.cs`
+- [x] **ThemeEngine promoted to Stable** (2026-02-24)
+  - File: `hook/ContentPages.cs`
 - [x] **Linux profiler Console TypeRef fix** (2026-02-23) — Verbose catch handler's `Console.WriteLine` TypeRef was scoped to `System.Runtime` instead of `System.Console`. Fixed by searching for `System.Console` AssemblyRef via `IMetaDataAssemblyImport`. Falls back to silent catch if not found.
   - File: `tools/uprooted_profiler_linux.c`
 - [x] **Linux installer simplified** (2026-02-23) — Removed build-from-source path entirely. Two modes: download from GitHub releases (default) or `--local` (deploy from repo build output). No more auto-installing dotnet/gcc/pnpm.

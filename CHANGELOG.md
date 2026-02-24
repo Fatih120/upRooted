@@ -6,6 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.1-dev7] - 2026-02-24
+
+### Changed
+
+- **ThemeEngine promoted to Stable** — Testing status upgraded from Alpha to Stable after extensive validation. Plugin description corrected: 7 presets, icons are PNG not SVG.
+  - File: `hook/ContentPages.cs`
+- **Stable channel button matches Canary/Dev sizing** — Added `[Canary]` version tag for canary channel UI consistency.
+  - File: `hook/ContentPages.cs`
+
+### Fixed
+
+- **Rootcord 3-column grid layout matching Root's native CommunityView** — Previous 4-column grid rebuild gave the GridSplitter its own dedicated 4px column, causing whitespace on drag and a gap between channels and chat. Rebuilt as 3-column layout (Channels+Splitter | Chat | Members) matching Root's native `CommunityView.axaml`. Set `ResizeDirection=Columns` explicitly (was missing, causing drag to do nothing). Default channels width 280px matching `CommunityChannelsWidth`, Min/Max 107/450 matching native constraints.
+  - File: `hook/RootcordEngine.cs`
+- **Rootcord user bar deferred width tracking** — User bar now tracks channel width dynamically via chat panel left-edge snapping. Pane-open/close correctly shrinks/grows user bar. Username and status text truncate with ellipsis when channels narrowed.
+  - File: `hook/RootcordEngine.cs`
+- **Rootcord native tooltip with notch arrow** — Server icon tooltips now use Avalonia-native `RootToolTip` with a triangular notch pointing to the icon. Tooltip colors follow the live theme.
+  - File: `hook/RootcordEngine.cs`
+- **Theme engine bugs: Sakura hover direction, revert settings desync, Linux freeze** — Fixed Sakura theme hover going wrong direction on light backgrounds. Fixed theme revert causing settings page desync. Fixed Linux freeze during theme application.
+  - File: `hook/ThemeEngine.cs`
+
+---
+
 ## [0.5.1-dev6] - 2026-02-23
 
 ### Added
@@ -652,6 +674,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev7]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev6...v0.5.1-dev7
 [0.5.1-dev6]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev5...v0.5.1-dev6
 [0.5.1-dev5]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev4...v0.5.1-dev5
 [0.5.1-dev4]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev3...v0.5.1-dev4
