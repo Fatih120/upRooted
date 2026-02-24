@@ -76,7 +76,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `WhoReactedEngine.cs` | 577 | Who Reacted: shows reaction authors on messages |
 | `UserBioEngine.cs` | 1208 | User Bio: injects bio text + own-profile editor into profile popups |
 | `ReconLogger.cs` | 788 | Visual tree + style diagnostic dumper |
-| `LogConsole.cs` | ~301 | Dev-only live log terminal via named pipe |
+| `LogConsole.cs` | ~351 | Dev-only live log terminal via named pipe (Windows) / FIFO (Linux) |
 | `Logger.cs` | ~170 | Thread-safe file logging + wide event emission |
 | `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks |
 | `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value, dur_ms) |

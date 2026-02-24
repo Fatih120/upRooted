@@ -71,7 +71,7 @@ uprooted-private/
 │   ├── UprootedPresenceBeacon.cs     # Presence beacon: Uprooted user detection via gRPC metadata
 │   ├── ReconLogger.cs                # Recon logger: visual tree + style property diagnostic dumper
 │   ├── Entry.cs                       # Profiler injection entry point
-│   ├── LogConsole.cs                  # Dev-only live log terminal via named pipe (~301 lines)
+│   ├── LogConsole.cs                  # Dev-only live log terminal via named pipe / FIFO (~351 lines)
 │   ├── Logger.cs                      # File-based logging + wide event emission (~183 lines)
 │   ├── TailSampler.cs                # Tail sampling for high-frequency scan ticks (~71 lines)
 │   ├── WideEvent.cs                  # Structured wide event builder (IDisposable, key=value, dur_ms) (~150 lines)

@@ -17,6 +17,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
+- **Live Console on Linux** — .NET `NamedPipeServerStream` on Linux creates Unix domain sockets with a validation handshake that raw clients can't perform. Replaced with `mkfifo` FIFO on Linux so `cat` reads natively. Windows path unchanged.
+  - File: `hook/LogConsole.cs`
 - **Rootcord 3-column grid layout matching Root's native CommunityView** — Previous 4-column grid rebuild gave the GridSplitter its own dedicated 4px column, causing whitespace on drag and a gap between channels and chat. Rebuilt as 3-column layout (Channels+Splitter | Chat | Members) matching Root's native `CommunityView.axaml`. Set `ResizeDirection=Columns` explicitly (was missing, causing drag to do nothing). Default channels width 280px matching `CommunityChannelsWidth`, Min/Max 107/450 matching native constraints.
   - File: `hook/RootcordEngine.cs`
 - **Rootcord user bar deferred width tracking** — User bar now tracks channel width dynamically via chat panel left-edge snapping. Pane-open/close correctly shrinks/grows user bar. Username and status text truncate with ellipsis when channels narrowed.

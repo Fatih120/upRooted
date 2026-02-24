@@ -1,10 +1,10 @@
-# Uprooted Hook - Session State (2026-02-23)
+# Uprooted Hook - Session State (2026-02-24)
 
 ## Release: v0.5.1-dev7
 
 ## Current State Summary
 
-Rootcord theme integration, profile card layout fix, translate settings persistence, and trimmed-host exception broadening are the most recent work.
+Live Console Linux fix is the most recent work. LogConsole now uses FIFO (`mkfifo`) on Linux instead of `NamedPipeServerStream` (which creates Unix domain sockets with a validation handshake incompatible with `cat`/`socat`). Windows path unchanged.
 
 - **Bash installer `--channel` flag** — `--channel canary` or `--channel dev` to download from canary/dev repos instead of stable-only public repo. Dev requires GITHUB_TOKEN. Canary/dev use `?per_page=1` endpoint since prereleases are invisible to `/releases/latest`.
 - **Installer non-fatal HTML patching** — HTML patch step is now a warning (not fatal) when Root hasn't been launched yet. Hook's HtmlPatchVerifier self-heals at runtime. Both TUI and plain CLI modes updated.
