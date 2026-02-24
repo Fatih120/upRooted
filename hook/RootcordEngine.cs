@@ -114,7 +114,7 @@ internal class RootcordEngine
     private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
     private object? _channelsWidthPanel;       // Channels panel reference for live width tracking
     private object? _chatPanelRef;             // Chat panel (Star-width column) for edge snapping
-    private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
+    private const double UserBarHeight = 49;   // Height of user card (for bottom padding): 32px avatar + 16px margin + 0.5px border
     private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
     private double _lastUserBarLeft = double.NaN; // Guards SetMargin: skip if left offset unchanged
     private double _lastUserBarWidth = double.NaN; // Guards SetWidth: skip if value unchanged (prevents layout loop)
@@ -1958,20 +1958,42 @@ internal class RootcordEngine
                 return;
             }
 
-            double targetRight = StripWidth + channelsBounds.Value.W;
-            if (_homeViewGrid != null)
+            double targetRight = StripWidth + channelsBounds.Value.W;  // baseline fallback
+
+            // Primary: _communityGrid Col 0 ActualWidth → TranslatePoint to _homeViewGrid.
+            // This is the exact rendered boundary between channels column and chat column.
+            if (_communityGrid != null && _homeViewGrid != null)
             {
-                var channelsRight = _r.TranslatePoint(channelsPanel, channelsBounds.Value.W, 0, _homeViewGrid);
-                if (channelsRight != null)
-                    targetRight = channelsRight.Value.X;
+                try
+                {
+                    var colDefs = _r.GetColumnDefinitions(_communityGrid);
+                    if (colDefs != null && colDefs.Count > 0)
+                    {
+                        var actualW = colDefs[0]?.GetType().GetProperty("ActualWidth")?.GetValue(colDefs[0]);
+                        if (actualW is double aw && aw > 0)
+                        {
+                            var boundary = _r.TranslatePoint(_communityGrid, aw, 0, _homeViewGrid);
+                            if (boundary != null && boundary.Value.X > 0)
+                                targetRight = boundary.Value.X;
+                        }
+                    }
+                }
+                catch { }
             }
 
-            // Prefer chat panel left edge: it's the exact boundary including the splitter
+            // Fallback 1: chat panel left edge in _homeViewGrid coords
             if (_chatPanelRef != null && _homeViewGrid != null)
             {
                 var chatLeft = _r.TranslatePoint(_chatPanelRef, 0, 0, _homeViewGrid);
                 if (chatLeft != null && chatLeft.Value.X > 0)
                     targetRight = chatLeft.Value.X;
+            }
+            // Fallback 2: channels panel right edge in _homeViewGrid coords
+            else if (_homeViewGrid != null)
+            {
+                var channelsRight = _r.TranslatePoint(channelsPanel, channelsBounds.Value.W, 0, _homeViewGrid);
+                if (channelsRight != null)
+                    targetRight = channelsRight.Value.X;
             }
 
             // When a home pane is open (PanePlacement=Left), it sits between strip and
