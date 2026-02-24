@@ -869,69 +869,6 @@ is_kde() {
     || [[ "${KDE_FULL_SESSION:-}" == "true" ]]
 }
 
-# ── Set session-wide env vars (systemd environment.d) ──
-
-set_env_vars() {
-    local env_dir="$HOME/.config/environment.d"
-    mkdir -p "$env_dir"
-
-    cat > "$env_dir/uprooted.conf" << ENVCONF
-# Uprooted -- remove this file or run the uninstaller to disable
-# .NET 10+ (DOTNET_ prefix)
-DOTNET_EnableDiagnostics=1
-DOTNET_ENABLE_PROFILING=1
-DOTNET_PROFILER=$PROFILER_GUID
-DOTNET_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
-DOTNET_ReadyToRun=0
-# Legacy (.NET 8/9)
-CORECLR_ENABLE_PROFILING=1
-CORECLR_PROFILER=$PROFILER_GUID
-CORECLR_PROFILER_PATH=$INSTALL_DIR/libuprooted_profiler.so
-ENVCONF
-    log "Session env vars written to $env_dir/uprooted.conf"
-
-    # KDE Plasma env script -- only written when running under KDE
-    if is_kde; then
-        local plasma_env_dir="$HOME/.config/plasma-workspace/env"
-        mkdir -p "$plasma_env_dir"
-        cat > "$plasma_env_dir/uprooted.sh" << PLASMAENV
-#!/bin/sh
-# Uprooted -- remove this file or run the uninstaller to disable
-export DOTNET_EnableDiagnostics=1
-export DOTNET_ENABLE_PROFILING=1
-export DOTNET_PROFILER='$PROFILER_GUID'
-export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
-export CORECLR_ENABLE_PROFILING=1
-export CORECLR_PROFILER='$PROFILER_GUID'
-export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-PLASMAENV
-        chmod +x "$plasma_env_dir/uprooted.sh"
-        log "KDE Plasma env script written to $plasma_env_dir/uprooted.sh"
-    fi
-
-    # Also add to ~/.profile as fallback for non-systemd sessions (X11, login shells)
-    if ! grep -q "DOTNET_ENABLE_PROFILING" "$HOME/.profile" 2>/dev/null; then
-        cat >> "$HOME/.profile" << PROFILE
-
-# Uprooted (remove these lines to disable)
-export DOTNET_EnableDiagnostics=1
-export DOTNET_ENABLE_PROFILING=1
-export DOTNET_PROFILER='$PROFILER_GUID'
-export DOTNET_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-export DOTNET_ReadyToRun=0
-export CORECLR_ENABLE_PROFILING=1
-export CORECLR_PROFILER='$PROFILER_GUID'
-export CORECLR_PROFILER_PATH='$INSTALL_DIR/libuprooted_profiler.so'
-PROFILE
-        log "Env vars appended to ~/.profile (login shell fallback)"
-    else
-        log "~/.profile already contains Uprooted env vars"
-    fi
-
-    warn "Log out and back in (or reboot) for env vars to take effect globally."
-    warn "Or use the wrapper script below for immediate use."
-}
 
 # ── Create wrapper script ──
 
@@ -1125,7 +1062,6 @@ run_repair() {
     deploy_artifacts
 
     # Re-set env vars
-    set_env_vars
     create_wrapper
 
     if [[ "$CREATE_DESKTOP" == true ]]; then
@@ -1183,7 +1119,6 @@ echo ""
 find_root
 resolve_root_exec
 deploy_artifacts
-set_env_vars
 create_wrapper
 
 if [[ "$CREATE_DESKTOP" == true ]]; then
