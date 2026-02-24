@@ -197,7 +197,9 @@ internal class AvaloniaReflection
     private bool _loggedBindStrategy;
     private bool _loggedBindStrategyB;
     private readonly Dictionary<string, FieldInfo?> _avaloniaPropertyFieldCache = new();
-    private readonly ConditionalWeakTable<object, PressFeedbackState> _pressFeedbackStates = new();
+    // Using Dictionary instead of ConditionalWeakTable — CWT may be trimmed from single-file hosts.
+    // Strong refs are acceptable since _pressFeedbackSubscribed already holds strong refs to the same keys.
+    private readonly Dictionary<object, PressFeedbackState> _pressFeedbackStates = new(RefEqualityComparer.Instance);
     private readonly HashSet<object> _pressFeedbackSubscribed = new(RefEqualityComparer.Instance);
 
     private sealed class PressFeedbackState
@@ -1421,7 +1423,11 @@ internal class AvaloniaReflection
             return;
         }
 
-        var state = _pressFeedbackStates.GetValue(control, _ => new PressFeedbackState());
+        if (!_pressFeedbackStates.TryGetValue(control, out var state))
+        {
+            state = new PressFeedbackState();
+            _pressFeedbackStates[control] = state;
+        }
 
         SubscribeEvent(control, "PointerPressed", () =>
         {
