@@ -87,6 +87,7 @@ internal class RootcordEngine
     private List<(object child, int originalCol)>? _originalChildColumns;
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
+    private object? _collapsedSplitView;   // SplitView whose pane we collapsed (restore on revert)
 
     // Custom community header injected into channels panel
     private object? _injectedHeader;       // The header outer stack we built
@@ -1189,30 +1190,12 @@ internal class RootcordEngine
                 _r.SetGridColumn(nonSplitters[i].child, newCol);
             }
 
-            // Place splitters between consecutive panels in their new positions.
-            // The offset-based approach placed splitters out of bounds when a panel
-            // moved to the rightmost column (e.g., splitter at col 1 next to Members
-            // at col 0 → Members maps to col 4 → splitter would go to col 5).
-            // Instead, directly assign splitters to gap columns between adjacent panels.
-            var newPanelCols = new List<int>();
-            for (int i = 0; i < n; i++)
-                newPanelCols.Add(_r.GetGridColumn(nonSplitters[i].child));
-            newPanelCols.Sort();
-
-            int si = 0;
-            for (int gap = 0; gap < newPanelCols.Count - 1 && si < gridSplitters.Count; gap++)
-            {
-                int gapCol = newPanelCols[gap] + 1;
-                if (gapCol < newPanelCols[gap + 1])
-                {
-                    _r.SetGridColumn(gridSplitters[si].child, gapCol);
-                    si++;
-                }
-            }
-            // Hide surplus splitters that have no gap to fill
-            for (; si < gridSplitters.Count; si++)
-                _r.SetIsVisible(gridSplitters[si].child, false);
-            Logger.Log(Tag, $"SwapCommunityMembers: rotated {gridSplitters.Count} GridSplitters");
+            // Hide all GridSplitters — Rootcord layout uses fixed columns, no user resize needed.
+            // The splitter shares a column with a content panel (Root uses 3 cols for 3 panels + 1 splitter),
+            // and after rotation its hit-test area creates a visible gap between Chat and Members.
+            foreach (var (splitter, _) in gridSplitters)
+                _r.SetIsVisible(splitter, false);
+            Logger.Log(Tag, $"SwapCommunityMembers: hid {gridSplitters.Count} GridSplitters");
 
             // Set correct column widths after rotation.
             // The original layout is [Members=Auto] [Splitter=1px] [Chat=Star].
@@ -1321,6 +1304,34 @@ internal class RootcordEngine
             }
             catch { }
 
+            // Collapse the RootSplitView pane inside the Chat column.
+            // Members was originally the SplitView's pane — we moved it to a separate Grid column,
+            // but the SplitView still allocates 48px (SplitViewCompactPaneThemeLength) for the compact pane.
+            try
+            {
+                for (int pi = 0; pi < n; pi++)
+                {
+                    int origCol = nonSplitters[pi].col;
+                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                    if (origW.unit != "Star" && origW.unit != "star") continue;
+                    // This is the chat panel — find the RootSplitView inside it
+                    var chatPanel = nonSplitters[pi].child;
+                    foreach (var child in _r.GetVisualChildren(chatPanel))
+                    {
+                        if (child.GetType().Name.Contains("SplitView"))
+                        {
+                            _collapsedSplitView = child;
+                            _r.SetValueLocalPriority(child, "CompactPaneLengthProperty", 0.0);
+                            _r.SetValueLocalPriority(child, "OpenPaneLengthProperty", 0.0);
+                            Logger.Log(Tag, "SwapCommunityMembers: collapsed SplitView pane (CompactPaneLength=0)");
+                            break;
+                        }
+                    }
+                    break;
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: SplitView pane collapse error: {ex.Message}"); }
+
             // Members column host: rightmost non-splitter child; walk its tree to clear ScrollViewer padding
             try
             {
@@ -1420,50 +1431,34 @@ internal class RootcordEngine
                             _r.AddGridColumnAuto(layoutGrid);
                         else
                         {
-                            // Check if a GridSplitter currently occupies this column (after rotation)
-                            bool hasSplitter = false;
+                            // Check if a visible child occupies this column (skip hidden splitters)
+                            bool hasVisibleChild = false;
                             foreach (var child in _r.GetVisualChildren(layoutGrid))
                             {
-                                if (child.GetType().Name.Contains("GridSplitter") && _r.GetGridColumn(child) == ci)
-                                { hasSplitter = true; break; }
+                                if (_r.GetGridColumn(child) == ci && _r.GetIsVisible(child))
+                                { hasVisibleChild = true; break; }
                             }
 
-                            if (hasSplitter)
+                            if (!hasVisibleChild)
                             {
-                                // GridSplitter column: Auto sizes to the splitter's own width
-                                _r.AddGridColumnAuto(layoutGrid);
+                                // No visible child: collapse to 0px (hidden splitters, empty columns)
+                                _r.AddGridColumnPixel(layoutGrid, 0);
                             }
                             else
                             {
-                                // Check if ANY child occupies this column
-                                bool hasChild = false;
-                                foreach (var child in _r.GetVisualChildren(layoutGrid))
-                                {
-                                    if (_r.GetGridColumn(child) == ci)
-                                    { hasChild = true; break; }
-                                }
-
-                                if (!hasChild)
-                                {
-                                    // Empty column (no panel, no splitter): collapse to 0px
-                                    _r.AddGridColumnPixel(layoutGrid, 0);
-                                }
+                                // Channels or other content column — use original Pixel width
+                                var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
+                                if (origW.unit == "Pixel" && origW.width > 10)
+                                    _r.AddGridColumnPixel(layoutGrid, origW.width);
                                 else
-                                {
-                                    // Channels or other content column — use original Pixel width
-                                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
-                                    if (origW.unit == "Pixel" && origW.width > 10)
-                                        _r.AddGridColumnPixel(layoutGrid, origW.width);
-                                    else
-                                        _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
+                                    _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
 
-                                    // Set Min/MaxWidth on channels column to bound the GridSplitter
-                                    var chColDefs = _r.GetColumnDefinitions(layoutGrid);
-                                    if (chColDefs?.Count > ci)
-                                    {
-                                        chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
-                                        chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
-                                    }
+                                // Set Min/MaxWidth on channels column
+                                var chColDefs = _r.GetColumnDefinitions(layoutGrid);
+                                if (chColDefs?.Count > ci)
+                                {
+                                    chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
+                                    chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
                                 }
                             }
                         }
@@ -1674,6 +1669,17 @@ internal class RootcordEngine
                 }
             }
 
+            // Restore SplitView pane length (was collapsed to 0 during rotation)
+            if (_collapsedSplitView != null)
+            {
+                try
+                {
+                    _r.SetValueLocalPriority(_collapsedSplitView, "CompactPaneLengthProperty", 48.0);
+                    _r.SetValueLocalPriority(_collapsedSplitView, "OpenPaneLengthProperty", 320.0);
+                }
+                catch { }
+            }
+
             Logger.Log(Tag, "SwapCommunityMembers: reverted to original layout");
         }
         catch (Exception ex)
@@ -1685,6 +1691,7 @@ internal class RootcordEngine
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
+        _collapsedSplitView = null;
 
         // NOTE: RemoveInjectedHeader is NOT called here — it's deferred to happen
         // right before InjectChannelsHeader in the 500ms callback, preventing visible flash.
