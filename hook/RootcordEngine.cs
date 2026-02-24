@@ -113,6 +113,7 @@ internal class RootcordEngine
     private object? _userBarLayoutHandler;     // LayoutUpdated handler on community layoutGrid
     private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
     private object? _channelsWidthPanel;       // Channels panel reference for live width tracking
+    private object? _chatPanelRef;             // Chat panel (Star-width column) for edge snapping
     private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
     private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
     private double _lastUserBarLeft = double.NaN; // Guards SetMargin: skip if left offset unchanged
@@ -1414,15 +1415,14 @@ internal class RootcordEngine
             }
             catch { }
 
-            // Rebuild columns as a clean 4-column layout:
-            //   Col 0: Channels (Pixel, resizable via GridSplitter)
-            //   Col 1: GridSplitter (4px)
-            //   Col 2: Chat (Star, fills remaining space)
-            //   Col 3: Members (Auto)
+            // Rebuild columns as a 3-column layout matching Root's native CommunityView:
+            //   Col 0: Channels (Pixel 240px) + GridSplitter (HorizontalAlignment=Right, same column)
+            //   Col 1: Chat (Star, fills remaining space)
+            //   Col 2: Members (Auto)
             //
-            // The original 3-col grid had the splitter sharing col 1 with a panel.
-            // After rotation the splitter ended up behind the chat panel (both at col 1),
-            // making it unclickable. This rebuild gives the splitter its own column.
+            // The GridSplitter sits inside the channels column (not in a dedicated column).
+            // This matches Root's native pattern: the splitter in-column with
+            // HorizontalAlignment=Right resizes the column it belongs to.
             try
             {
                 var colDefsList = _r.GetColumnDefinitions(layoutGrid);
@@ -1446,40 +1446,35 @@ internal class RootcordEngine
                             channelsIdx = pi;
                     }
 
-                    // Assign children to new columns
+                    // Assign children to new columns (splitter shares Col 0 with channels)
                     if (channelsIdx >= 0) _r.SetGridColumn(nonSplitters[channelsIdx].child, 0);
-                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 1);
-                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 2);
-                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 3);
+                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 0);
+                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 1);
+                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 2);
 
-                    // Add 4 column definitions.
-                    // Use the MEMBERS panel original column width (Auto, ~280px natural) for channels,
-                    // since channels is now the left sidebar (same role members had natively).
-                    // The channels panel was originally sharing the 1px splitter col and overflowing.
-                    var membersOrigW = _originalColWidths.FirstOrDefault(x => x.colIdx == nonSplitters[maxAssignedIdx].col);
-                    if (membersOrigW.unit == "Auto" || membersOrigW.width == 0)
-                        _r.AddGridColumnAuto(layoutGrid);       // Col 0: Channels (Auto like native sidebar)
-                    else
-                        _r.AddGridColumnPixel(layoutGrid, membersOrigW.width);
-                    _r.AddGridColumnPixel(layoutGrid, 4);       // Col 1: Splitter
-                    _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 2: Chat
-                    _r.AddGridColumnAuto(layoutGrid);            // Col 3: Members
+                    // Add 3 column definitions
+                    _r.AddGridColumnPixel(layoutGrid, 240);     // Col 0: Channels + Splitter
+                    _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 1: Chat
+                    _r.AddGridColumnAuto(layoutGrid);            // Col 2: Members
 
-                    // Set min/max on chat column so it can't disappear
+                    // Set min/max on column definitions (GridSplitter respects these during drag)
                     var newColDefs = _r.GetColumnDefinitions(layoutGrid);
-                    if (newColDefs?.Count >= 3)
+                    if (newColDefs?.Count >= 2)
                     {
-                        newColDefs[2]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[2], 350.0);
+                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 200.0);
+                        newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 420.0);
+                        newColDefs[1]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[1], 350.0);
                     }
 
-                    // Ensure splitter is visible and interactive
+                    // Ensure splitter is visible, interactive, and right-aligned within channels column
                     foreach (var (splitter, _) in gridSplitters)
                     {
                         _r.SetIsVisible(splitter, true);
                         _r.SetIsHitTestVisible(splitter, true);
+                        _r.SetHorizontalAlignment(splitter, "Right");
                     }
 
-                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 4-col layout [Ch|Spl|Chat|Members] (splitter at own col 1)");
+                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 3-col layout [Ch+Spl|Chat|Members]");
                     _membersPanelCollapsed = false;
                 }
 
@@ -1523,11 +1518,11 @@ internal class RootcordEngine
                     }
                     else
                     {
-                        // Channels panel — min 270px (user card needs ~326px total, minus 56px strip)
+                        // Channels panel — min 200px (user bar text truncates with ellipsis)
                         // max 420px so it can't push chat off-screen
-                        _r.SetMinWidth(panel, 270);
+                        _r.SetMinWidth(panel, 200);
                         _r.SetMaxWidth(panel, 420);
-                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=270 MaxWidth=420");
+                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=200 MaxWidth=420");
                     }
                 }
             }
@@ -1565,10 +1560,9 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: border error: {ex.Message}"); }
 
-            // Un-hide the GridSplitter between channels and chat for column resizing.
-            // The splitter stays at its original Grid.Column (unchanged by rotation).
-            // After rotation, only the splitter at the channels/chat boundary is useful;
-            // hide any splitter at the members column (rightmost) to avoid a gap there.
+            // Safety: re-assert splitter visibility after the 3-col rebuild.
+            // The rebuild block already sets splitters visible + HorizontalAlignment=Right,
+            // but this ensures any edge-case splitter at the members boundary stays hidden.
             try
             {
                 int shownSplitters = 0;
@@ -1868,6 +1862,19 @@ internal class RootcordEngine
         if (channelsPanel == null) return;
         _channelsWidthPanel = _channelsPanelRef ?? channelsPanel;
 
+        // Find chat panel (Star-width column) for edge snapping
+        for (int i = 0; i < nonSplitters.Count; i++)
+        {
+            if (i == membersIdx) continue;
+            int origCol = nonSplitters[i].col;
+            var origW = _originalColWidths?.FirstOrDefault(x => x.colIdx == origCol);
+            if (origW != null && (origW.Value.unit == "Star" || origW.Value.unit == "star"))
+            {
+                _chatPanelRef = nonSplitters[i].child;
+                break;
+            }
+        }
+
         // Initial width update
         UpdateUserBarWidth();
 
@@ -1894,7 +1901,7 @@ internal class RootcordEngine
         }
         catch (Exception ex) { Logger.Log(Tag, $"UserBar: width tracking subscription failed: {ex.Message}"); }
 
-        // Deferred width updates: the initial measurement fires before the 4-col rebuild
+        // Deferred width updates: the initial measurement fires before the 3-col rebuild
         // layout has settled (channels reports stale bounds X=280,W=107). LayoutUpdated may
         // not fire again if the grid doesn't change internally. These retries catch the
         // correct bounds once Avalonia finishes measuring the rebuilt columns.
@@ -1942,15 +1949,26 @@ internal class RootcordEngine
                     targetRight = channelsRight.Value.X;
             }
 
-            // Note: when a utility pane opens (PanePlacement=Left), the SplitView pushes
-            // ContentRoot rightward. The channels panel is inside ContentRoot, so its
-            // TranslatePoint-based right edge automatically shifts right to include the pane.
-            // No explicit pane measurement needed: channelsRight already accounts for it.
+            // Prefer chat panel left edge: it's the exact boundary including the splitter
+            if (_chatPanelRef != null && _homeViewGrid != null)
+            {
+                var chatLeft = _r.TranslatePoint(_chatPanelRef, 0, 0, _homeViewGrid);
+                if (chatLeft != null && chatLeft.Value.X > 0)
+                    targetRight = chatLeft.Value.X;
+            }
 
-            // Note: when a utility pane opens (PanePlacement=Left), the SplitView pushes
-            // ContentRoot rightward. The channels panel is inside ContentRoot, so its
-            // TranslatePoint-based right edge automatically shifts right to include the pane.
-            // No explicit pane measurement needed: channelsRight already accounts for it.
+            // When a home pane is open (PanePlacement=Left), it sits between strip and
+            // channels. Shrink user bar to snap to the pane's right edge (= channels left edge).
+            if (_homeViewModel != null)
+            {
+                var paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
+                if (paneOpen is true && _homeViewGrid != null)
+                {
+                    var channelsLeft = _r.TranslatePoint(channelsPanel, 0, 0, _homeViewGrid);
+                    if (channelsLeft != null && channelsLeft.Value.X > 0)
+                        targetRight = channelsLeft.Value.X;
+                }
+            }
 
             double targetWidth = targetRight - targetLeft;
             if (targetWidth <= 0) return;
@@ -2050,6 +2068,7 @@ internal class RootcordEngine
         _userBarLayoutHandler = null;
         _userBarLayoutTarget = null;
         _channelsWidthPanel = null;
+        _chatPanelRef = null;
         _userBarOverPane = false;
         _lastUserBarLeft = double.NaN;
         _lastUserBarWidth = double.NaN;
@@ -3782,13 +3801,12 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, avatarGrid);
             }
 
-            // --- Col 2: Username + status label (star column, MinWidth=120) ---
+            // --- Col 2: Username + status label (star column, shrinks with ellipsis) ---
             var textPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
             if (textPanel != null)
             {
                 _r.SetGridColumn(textPanel, 2);
                 _r.SetVerticalAlignment(textPanel, "Center");
-                _r.SetMinWidth(textPanel, 120);
 
                 var nameText = _r.CreateTextBlock(username, 13, _text);
                 if (nameText != null)
@@ -3825,6 +3843,8 @@ internal class RootcordEngine
                     {
                         statusText.GetType().GetProperty("TextWrapping")?.SetValue(statusText,
                             Enum.Parse(statusText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
+                        statusText.GetType().GetProperty("TextTrimming")?.SetValue(statusText,
+                            Enum.Parse(statusText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
                     _r.AddChild(textPanel, statusText);
