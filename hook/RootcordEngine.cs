@@ -304,6 +304,37 @@ internal class RootcordEngine
                 }
             }
         }
+
+        // Selection pills and highlight states (accent color may have changed)
+        RefreshSelectedHighlight();
+
+        // Separator between home button and server icons
+        if (_stripGrid != null)
+        {
+            // Row 0 contains the topPanel StackPanel; the separator is its last child
+            foreach (var row0child in _r.GetVisualChildren(_stripGrid))
+            {
+                if (_r.GetGridRow(row0child) != 0) continue;
+                var kids = _r.GetChildren(row0child);
+                if (kids == null) continue;
+                foreach (var kid in kids)
+                {
+                    if (kid == null) continue;
+                    // Separator is a Border with Height=1 and no children
+                    try
+                    {
+                        var h = kid.GetType().GetProperty("Height")?.GetValue(kid);
+                        if (h is double hd && Math.Abs(hd - 1.0) < 0.1 && _r.IsBorder(kid))
+                        {
+                            _r.SetBackground(kid, AdjustForHighlight(_cardBg, 15));
+                            break;
+                        }
+                    }
+                    catch { }
+                }
+                break;
+            }
+        }
     }
 
     /// <summary>
@@ -3148,11 +3179,10 @@ internal class RootcordEngine
         }
         var btnRef = btn;
         var iconRef = icon;
-        var hoverBg = AdjustForHighlight(_cardBg, 14);
         _r.SubscribeEvent(btn, "PointerPressed", onClick);
         _r.SubscribeEvent(btn, "PointerEntered", () =>
         {
-            _r.SetBackground(btnRef, hoverBg);
+            _r.SetBackground(btnRef, AdjustForHighlight(_cardBg, 14));
             if (iconRef != null) _r.SetForeground(iconRef, _text);
         });
         _r.SubscribeEvent(btn, "PointerExited", () =>
@@ -3386,9 +3416,7 @@ internal class RootcordEngine
         var initial = isDm ? "\u2709" : (displayName.Length > 0 ? displayName[0].ToString().ToUpper() : "?");
         Logger.Log(Tag, $"  Icon: {displayName} -> '{initial}' (DM={isDm}, selected={isSelected}, hasImage={bitmap != null})");
 
-        // Icon colors from cached ContentPages statics
-        var bgColor = _cardBg;
-        var bgHover = AdjustForHighlight(_cardBg, 10);
+        // Icon colors read live from cached fields (not captured locals) so theme changes apply
 
         // Outer container: Grid with 2 Auto columns [pill | icon], centered as a unit.
         // The Grid itself is centered in the strip, keeping icon alignment stable on resize.
@@ -3412,7 +3440,7 @@ internal class RootcordEngine
         }
 
         // Circular icon border (ClipToBounds clips image to circle)
-        var iconBorder = _r.CreateBorder(isSelected ? _accent : bgColor, IconCornerRadius);
+        var iconBorder = _r.CreateBorder(isSelected ? _accent : _cardBg, IconCornerRadius);
         if (iconBorder == null) return container;
 
         _r.SetWidth(iconBorder, IconSize);
@@ -3508,13 +3536,13 @@ internal class RootcordEngine
         _r.SubscribeEvent(iconBorder, "PointerEntered", () =>
         {
             if (_r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel") != capturedVm)
-                _r.SetBackground(iconRef, bgHover);
+                _r.SetBackground(iconRef, AdjustForHighlight(_cardBg, 10));
             ShowIconTooltip(iconRef, capturedName, capturedVm);
         });
         _r.SubscribeEvent(iconBorder, "PointerExited", () =>
         {
             if (_r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel") != capturedVm)
-                _r.SetBackground(iconRef, bgColor);
+                _r.SetBackground(iconRef, _cardBg);
             DismissIconTooltip();
         });
 
@@ -3557,8 +3585,6 @@ internal class RootcordEngine
     /// </summary>
     private object? BuildHomeButton(bool isDmSelected)
     {
-        var bgColor = _cardBg;
-        var bgHover = AdjustForHighlight(_cardBg, 10);
 
         // Outer container: Grid with 2 Auto columns [pill | icon], centered as a unit
         var container = _r.CreateGrid();
@@ -3581,7 +3607,7 @@ internal class RootcordEngine
         }
 
         // Circular icon
-        var iconBorder = _r.CreateBorder(isDmSelected ? _accent : bgColor, IconCornerRadius);
+        var iconBorder = _r.CreateBorder(isDmSelected ? _accent : _cardBg, IconCornerRadius);
         if (iconBorder == null) return container;
         _r.SetWidth(iconBorder, IconSize);
         _r.SetHeight(iconBorder, IconSize);
@@ -3623,14 +3649,14 @@ internal class RootcordEngine
         {
             var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
             if (sel == null || (!IsDmTab(sel) && !IsNewTab(sel)))
-                _r.SetBackground(iconRef, bgHover);
+                _r.SetBackground(iconRef, AdjustForHighlight(_cardBg, 10));
             ShowIconTooltip(iconRef, "Explore Servers", null);
         });
         _r.SubscribeEvent(iconBorder, "PointerExited", () =>
         {
             var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
             if (sel == null || (!IsDmTab(sel) && !IsNewTab(sel)))
-                _r.SetBackground(iconRef, bgColor);
+                _r.SetBackground(iconRef, _cardBg);
             DismissIconTooltip();
         });
 
@@ -3797,29 +3823,52 @@ internal class RootcordEngine
         string initial = username.Length > 0 ? username[0].ToString().ToUpper() : "U";
 
         // Popup container — native card: CardBg, 12 radius, subtle border
+        // Width matches the user bar so right edge snaps to the channel list / action buttons
         _userCardPopupPanel = _r.CreateBorder(_cardBg, 12);
         if (_userCardPopupPanel == null) return;
         _r.SetTag(_userCardPopupPanel, "rootcord-usercard-popup");
-        _r.SetWidth(_userCardPopupPanel, 220);
+        double popupWidth = !double.IsNaN(_lastUserBarWidth) && _lastUserBarWidth > 0
+            ? _lastUserBarWidth : StripWidth + 220;
+        _r.SetWidth(_userCardPopupPanel, popupWidth);
         SetBorderStroke(_userCardPopupPanel, AdjustForHighlight(_cardBg, 15), 1.5);
 
         var content = _r.CreateStackPanel(vertical: true, spacing: 0);
         if (content == null) return;
 
-        // Avatar + name section
-        var headerPanel = _r.CreateStackPanel(vertical: true, spacing: 6);
-        if (headerPanel != null)
+        // Avatar + name section — horizontal layout matching user bar style
+        var headerGrid = _r.CreateGrid();
+        if (headerGrid != null)
         {
-            _r.SetMargin(headerPanel, 14, 14, 14, 10);
-            _r.SetHorizontalAlignment(headerPanel, "Center");
+            _r.SetMargin(headerGrid, 14, 14, 14, 10);
 
-            // Large avatar (48x48)
+            // 3 columns: [Auto avatar] [10px gap] [* text]
+            _r.AddGridColumn(headerGrid, 1.0);
+            _r.AddGridColumn(headerGrid, 1.0);
+            _r.AddGridColumn(headerGrid, 1.0);
+            var headerCols = _r.GetColumnDefinitions(headerGrid);
+            if (headerCols?.Count >= 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            {
+                try
+                {
+                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                    var pixelUnit = Enum.Parse(_r.GridUnitTypeEnum, "Pixel");
+                    headerCols[0]?.GetType().GetProperty("Width")?.SetValue(headerCols[0],
+                        Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit));
+                    headerCols[1]?.GetType().GetProperty("Width")?.SetValue(headerCols[1],
+                        Activator.CreateInstance(_r.GridLengthType, 10d, pixelUnit));
+                    // Col 2 stays Star
+                }
+                catch { }
+            }
+
+            // Col 0: Avatar (48x48) + status dot overlay
             var avatarGrid = _r.CreateGrid();
             if (avatarGrid != null)
             {
                 _r.SetWidth(avatarGrid, 48);
                 _r.SetHeight(avatarGrid, 48);
-                _r.SetHorizontalAlignment(avatarGrid, "Center");
+                _r.SetVerticalAlignment(avatarGrid, "Center");
+                _r.SetGridColumn(avatarGrid, 0);
 
                 var avBorder = _r.CreateBorder(_bg, 24);
                 if (avBorder != null)
@@ -3830,62 +3879,96 @@ internal class RootcordEngine
                     if (avatarBitmap != null)
                     {
                         var img = _r.CreateImage("UniformToFill");
-                        if (img != null) { _r.SetImageSource(img, avatarBitmap); _r.SetWidth(img, 48); _r.SetHeight(img, 48); _r.SetBorderChild(avBorder, img); }
-                        else SetAvatarInitial(avBorder, initial, _text);
+                        if (img != null)
+                        {
+                            _r.SetImageSource(img, avatarBitmap);
+                            _r.SetWidth(img, 48);
+                            _r.SetHeight(img, 48);
+                            _r.SetBorderChild(avBorder, img);
+                        }
+                        else
+                            SetAvatarInitial(avBorder, initial, _text);
                     }
-                    else SetAvatarInitial(avBorder, initial, _text);
+                    else
+                        SetAvatarInitial(avBorder, initial, _text);
                     _r.AddChild(avatarGrid, avBorder);
                 }
                 var dot = _r.CreateBorder(onlineColor, 7);
-                if (dot != null) { _r.SetWidth(dot, 14); _r.SetHeight(dot, 14); _r.SetHorizontalAlignment(dot, "Right"); _r.SetVerticalAlignment(dot, "Bottom"); _r.AddChild(avatarGrid, dot); }
-                _r.AddChild(headerPanel, avatarGrid);
+                if (dot != null)
+                {
+                    _r.SetWidth(dot, 14);
+                    _r.SetHeight(dot, 14);
+                    _r.SetHorizontalAlignment(dot, "Right");
+                    _r.SetVerticalAlignment(dot, "Bottom");
+                    _r.AddChild(avatarGrid, dot);
+                }
+                _r.AddChild(headerGrid, avatarGrid);
             }
 
-            // Username
-            var nameBlock = _r.CreateTextBlock(username, 14, _text);
-            if (nameBlock != null) { _r.SetFontWeight(nameBlock, "SemiBold"); _r.SetHorizontalAlignment(nameBlock, "Center"); _r.AddChild(headerPanel, nameBlock); }
-
-            // Status selector — clickable, shows current status with dropdown
-            var currentStatus = GetCurrentStatusLabel();
-            var statusColor = GetStatusColor(currentStatus);
-            var statusBtnBg = AdjustForHighlight(_cardBg, 5);
-            var statusBtn = _r.CreateBorder(statusBtnBg, 10);
-            if (statusBtn != null)
+            // Col 2: Username + status selector
+            var textPanel = _r.CreateStackPanel(vertical: true, spacing: 4);
+            if (textPanel != null)
             {
-                _r.SetHorizontalAlignment(statusBtn, "Center");
-                _r.SetCursorHand(statusBtn);
+                _r.SetGridColumn(textPanel, 2);
+                _r.SetVerticalAlignment(textPanel, "Center");
 
-                var statusLayout = _r.CreateStackPanel(vertical: false, spacing: 4);
-                if (statusLayout != null)
+                var nameBlock = _r.CreateTextBlock(username, 15, _text);
+                if (nameBlock != null)
                 {
-                    _r.SetMargin(statusLayout, 10, 4, 10, 4);
-                    _r.SetVerticalAlignment(statusLayout, "Center");
-
-                    var statusDotText = _r.CreateTextBlock("\u25CF", 10, statusColor);
-                    if (statusDotText != null) { _r.SetVerticalAlignment(statusDotText, "Center"); _r.AddChild(statusLayout, statusDotText); }
-
-                    var statusLabel = _r.CreateTextBlock(currentStatus, 11, _muted);
-                    if (statusLabel != null) { _r.SetVerticalAlignment(statusLabel, "Center"); _r.AddChild(statusLayout, statusLabel); }
-
-                    var chevron = _r.CreateTextBlock("\u25BE", 10, _muted);
-                    if (chevron != null) { _r.SetVerticalAlignment(chevron, "Center"); _r.AddChild(statusLayout, chevron); }
-
-                    _r.SetBorderChild(statusBtn, statusLayout);
+                    _r.SetFontWeight(nameBlock, "SemiBold");
+                    try
+                    {
+                        nameBlock.GetType().GetProperty("TextTrimming")?.SetValue(nameBlock,
+                            Enum.Parse(nameBlock.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
+                    }
+                    catch { }
+                    _r.AddChild(textPanel, nameBlock);
                 }
 
-                var statusBtnHover = AdjustForHighlight(_cardBg, 10);
-                var statusBtnNormal = statusBtnBg;
-                var statusBtnRef = statusBtn;
-                _r.SubscribeEvent(statusBtn, "PointerEntered", () => _r.SetBackground(statusBtnRef, statusBtnHover));
-                _r.SubscribeEvent(statusBtn, "PointerExited", () => _r.SetBackground(statusBtnRef, statusBtnNormal));
-                _r.SubscribeEvent(statusBtn, "PointerPressed", () =>
+                // Status selector pill — clickable, shows current status with dropdown
+                var currentStatus = GetCurrentStatusLabel();
+                var statusColor = GetStatusColor(currentStatus);
+                var statusBtnBg = AdjustForHighlight(_cardBg, 5);
+                var statusBtn = _r.CreateBorder(statusBtnBg, 10);
+                if (statusBtn != null)
                 {
-                    ShowStatusSelector(statusBtnRef, content);
-                });
-                _r.AddChild(headerPanel, statusBtn);
+                    _r.SetHorizontalAlignment(statusBtn, "Left");
+                    _r.SetCursorHand(statusBtn);
+
+                    var statusLayout = _r.CreateStackPanel(vertical: false, spacing: 4);
+                    if (statusLayout != null)
+                    {
+                        _r.SetMargin(statusLayout, 10, 4, 10, 4);
+                        _r.SetVerticalAlignment(statusLayout, "Center");
+
+                        var statusDotText = _r.CreateTextBlock("\u25CF", 10, statusColor);
+                        if (statusDotText != null) { _r.SetVerticalAlignment(statusDotText, "Center"); _r.AddChild(statusLayout, statusDotText); }
+
+                        var statusLabel = _r.CreateTextBlock(currentStatus, 11, _muted);
+                        if (statusLabel != null) { _r.SetVerticalAlignment(statusLabel, "Center"); _r.AddChild(statusLayout, statusLabel); }
+
+                        var chevron = _r.CreateTextBlock("\u25BE", 10, _muted);
+                        if (chevron != null) { _r.SetVerticalAlignment(chevron, "Center"); _r.AddChild(statusLayout, chevron); }
+
+                        _r.SetBorderChild(statusBtn, statusLayout);
+                    }
+
+                    var statusBtnHover = AdjustForHighlight(_cardBg, 10);
+                    var statusBtnNormal = statusBtnBg;
+                    var statusBtnRef = statusBtn;
+                    _r.SubscribeEvent(statusBtn, "PointerEntered", () => _r.SetBackground(statusBtnRef, statusBtnHover));
+                    _r.SubscribeEvent(statusBtn, "PointerExited", () => _r.SetBackground(statusBtnRef, statusBtnNormal));
+                    _r.SubscribeEvent(statusBtn, "PointerPressed", () =>
+                    {
+                        ShowStatusSelector(statusBtnRef, content);
+                    });
+                    _r.AddChild(textPanel, statusBtn);
+                }
+
+                _r.AddChild(headerGrid, textPanel);
             }
 
-            _r.AddChild(content, headerPanel);
+            _r.AddChild(content, headerGrid);
         }
 
         // Divider
@@ -3972,8 +4055,8 @@ internal class RootcordEngine
             });
         }
 
-        // Position popup: above the anchor, aligned to left edge of strip
-        double popupH = 200; // estimated height (avatar + name + status + 2 buttons)
+        // Position popup: above the anchor, left-aligned to strip + channels
+        double popupH = 260; // estimated height (avatar + name + status + 3 buttons)
         double popupX = anchorX;
         double popupY = anchorY - popupH;
         if (popupY < 0) popupY = 0;

@@ -49,6 +49,9 @@ internal class UprootedSettings
     public string TranslateToLang        { get; set; } = "en";   // received to
     public string TranslateSendFromLang  { get; set; } = "auto"; // sent from
     public string TranslateSendToLang    { get; set; } = "en";   // sent to
+    public string TranslateService                 { get; set; } = "google"; // "google"|"deepl"|"deepl-pro"
+    public string TranslateDeeplApiKey             { get; set; } = "";
+    public bool   TranslateShowAutoTranslateAlert  { get; set; } = true;
 
     // User Bio settings
     public bool   UserBioViewOnly { get; set; } = false;
@@ -147,6 +150,9 @@ internal class UprootedSettings
                     case "Translate.ToLang":         settings.TranslateToLang        = val; break;
                     case "Translate.SendFromLang":   settings.TranslateSendFromLang  = val; break;
                     case "Translate.SendToLang":     settings.TranslateSendToLang    = val; break;
+                    case "Translate.Service":        settings.TranslateService       = val; break;
+                    case "Translate.DeeplApiKey":    settings.TranslateDeeplApiKey   = Uri.UnescapeDataString(val); break;
+                    case "Translate.ShowAutoTranslateAlert": settings.TranslateShowAutoTranslateAlert = val == "true"; break;
                     case "UserBio.ViewOnly": settings.UserBioViewOnly = val == "true"; break;
                     case "UserBio.Text":    settings.UserBioText = Uri.UnescapeDataString(val); break;
                     case var k when k.StartsWith("Plugin."):
@@ -244,6 +250,9 @@ internal class UprootedSettings
                     "Translate.ToLang="        + TranslateToLang,
                     "Translate.SendFromLang="  + TranslateSendFromLang,
                     "Translate.SendToLang="    + TranslateSendToLang,
+                    "Translate.Service="       + TranslateService,
+                    "Translate.DeeplApiKey="   + Uri.EscapeDataString(TranslateDeeplApiKey),
+                    "Translate.ShowAutoTranslateAlert=" + (TranslateShowAutoTranslateAlert ? "true" : "false"),
                     "UserBio.ViewOnly=" + (UserBioViewOnly ? "true" : "false"),
                     "UserBio.Text=" + Uri.EscapeDataString(UserBioText)
                 };
