@@ -18,9 +18,9 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ### Git Workflow (IMPORTANT)
 
-- **Always commit as the logged-in git user** -- never add `Co-Authored-By` trailers. Commits should be authored by whoever `git config user.name`/`user.email` returns, not by Claude.
-- **Always `git pull` before starting any work** -- the other contributor may have pushed changes
-- **Always push after committing** -- don't leave unpushed commits sitting locally
+- **Always commit as the logged-in git user**: never add `Co-Authored-By` trailers. Commits should be authored by whoever `git config user.name`/`user.email` returns, not by Claude.
+- **Always `git pull` before starting any work**: the other contributor may have pushed changes
+- **Always push after committing**: don't leave unpushed commits sitting locally
 - **Write clear, descriptive commit messages** following this format:
   - `type: concise description of what changed and why`
   - Types: `fix:`, `feat:`, `refactor:`, `docs:`, `chore:`, `style:`
@@ -31,7 +31,7 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
     - `refactor: prefer in-place stripping over stale backup restore`
 - **Never force-push to main** without explicit approval from both contributors
 - **Check `git log` before committing** to see recent history and match style
-- If there are merge conflicts, resolve carefully -- don't discard the other person's work
+- If there are merge conflicts, resolve carefully: don't discard the other person's work
 
 ## Repository Structure
 
@@ -156,18 +156,18 @@ cd installer/src-tauri && cargo build --release
 
 ## Critical Rules
 
-These cause real bugs -- do not violate:
+These cause real bugs: do not violate:
 
-- **Never use `Type.GetType()` for Avalonia types** -- use `AvaloniaReflection`
-- **Never modify `ContentControl.Content` directly** -- causes UI freeze, use Grid overlay
-- **Never use `System.Text.Json` in hook** -- causes MissingMethodException in profiler context
-- **Never use `EventInfo.AddEventHandler` for RoutedEvents** -- use Expression lambdas
-- **Never use localStorage** -- Root runs Chromium with `--incognito`
+- **Never use `Type.GetType()` for Avalonia types**: use `AvaloniaReflection`
+- **Never modify `ContentControl.Content` directly**: causes UI freeze, use Grid overlay
+- **Never use `System.Text.Json` in hook**: causes MissingMethodException in profiler context
+- **Never use `EventInfo.AddEventHandler` for RoutedEvents**: use Expression lambdas
+- **Never use localStorage**: Root runs Chromium with `--incognito`
 - **`DispatcherPriority` is a struct not enum** in Avalonia 11+
-- **Never gate `Logger` to developer channel only** -- stable users MUST produce logs so we can diagnose their bug reports. `Logger.Disable()` and `Logger.Enable()` do not exist. Do not add them. Do not add `_enabled` flags or channel checks inside `Logger`. This was removed intentionally -- see `hook/Logger.cs` header comment.
-- **When replicating Root UI elements, ALWAYS examine Root's source first** -- Root's .NET assemblies are fully decompilable via ILSpy. Decompiled sources live in `research/ilspy-dumps/`. Don't reinvent controls (scrollbars, themes, etc.) from scratch when Root already has working implementations you can instantiate directly or study for exact behavior. Example: `RootScrollViewer` provides overlay scrollbars natively -- use it instead of hacking stock `ScrollViewer`.
-- **Never mention obfuscation in public-facing content** -- The hook DLL is obfuscated, but this is a private implementation detail. Never reference obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in: `CHANGELOG_PUBLIC.md`, `NEXT-RELEASE.md`, GitHub release notes, README, or any content that reaches the public repo. Commit messages in this private repo are acceptable. See `docs/framework/OBFUSCATION.md` for the internal reference.
-- **Never use `SolidColorBrush` in ThemeDictionaries** -- Root casts theme dictionary brushes directly to `ImmutableSolidColorBrush`. Writing a mutable `SolidColorBrush` causes `InvalidCastException` that crashes A/V settings, VC join, and anything else that evaluates themed resources. Always use `_r.CreateImmutableBrush(hex)` for ThemeDictionary entries. The `ImmutableSolidColorBrush(Color)` constructor is trimmed; use the `uint` constructor via `ParseHexToArgb()`. `SolidColorBrush` is fine for non-ThemeDictionary uses (Styles, UI controls we create). See `docs/framework/THEME_ENGINE_DEEP_DIVE.md` §Resource Dictionary Injection for full details.
+- **Never gate `Logger` to developer channel only**: stable users MUST produce logs so we can diagnose their bug reports. `Logger.Disable()` and `Logger.Enable()` do not exist. Do not add them. Do not add `_enabled` flags or channel checks inside `Logger`. This was removed intentionally: see `hook/Logger.cs` header comment.
+- **When replicating Root UI elements, ALWAYS examine Root's source first**: Root's .NET assemblies are fully decompilable via ILSpy. Decompiled sources live in `research/ilspy-dumps/`. Don't reinvent controls (scrollbars, themes, etc.) from scratch when Root already has working implementations you can instantiate directly or study for exact behavior. Example: `RootScrollViewer` provides overlay scrollbars natively: use it instead of hacking stock `ScrollViewer`.
+- **Never mention obfuscation in public-facing content**: The hook DLL is obfuscated, but this is a private implementation detail. Never reference obfuscation, ConfuserEx, protected names, or the obfuscation pipeline in: `CHANGELOG_PUBLIC.md`, `NEXT-RELEASE.md`, GitHub release notes, README, or any content that reaches the public repo. Commit messages in this private repo are acceptable. See `docs/framework/OBFUSCATION.md` for the internal reference.
+- **Never use `SolidColorBrush` in ThemeDictionaries**: Root casts theme dictionary brushes directly to `ImmutableSolidColorBrush`. Writing a mutable `SolidColorBrush` causes `InvalidCastException` that crashes A/V settings, VC join, and anything else that evaluates themed resources. Always use `_r.CreateImmutableBrush(hex)` for ThemeDictionary entries. The `ImmutableSolidColorBrush(Color)` constructor is trimmed; use the `uint` constructor via `ParseHexToArgb()`. `SolidColorBrush` is fine for non-ThemeDictionary uses (Styles, UI controls we create). See `docs/framework/THEME_ENGINE_DEEP_DIVE.md` §Resource Dictionary Injection for full details.
 
 ## Writing Style
 
@@ -178,6 +178,6 @@ When updating docs, code comments, or this file:
 
 ## Related Repos
 
-- **Public scaffold**: `The-Uprooted-Project/uprooted` -- TypeScript source, plugin API, theme engine
-- These repos are **strictly separate** -- never copy, reference, or leak code/commits between them
-- **Obfuscation is private-repo-only knowledge** -- never reference obfuscation, ConfuserEx, or protected names in the public repo, its release notes, or any user-facing documentation
+- **Public scaffold**: `The-Uprooted-Project/uprooted`: TypeScript source, plugin API, theme engine
+- These repos are **strictly separate**: never copy, reference, or leak code/commits between them
+- **Obfuscation is private-repo-only knowledge**: never reference obfuscation, ConfuserEx, or protected names in the public repo, its release notes, or any user-facing documentation
