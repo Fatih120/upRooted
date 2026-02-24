@@ -111,34 +111,76 @@ echo "[5/7] Building $PLATFORM profiler + installer..."
 
 case "$PLATFORM" in
     windows)
-        # Need MSVC cl.exe — check if available
-        if ! command -v cl.exe &>/dev/null; then
-            echo "  cl.exe not found. Trying to activate MSVC..."
-            # Try common VS paths
-            for vsver in "2022" "2019"; do
-                for edition in "Community" "Professional" "Enterprise" "BuildTools"; do
-                    VCVARS="/c/Program Files/Microsoft Visual Studio/$vsver/$edition/VC/Auxiliary/Build/vcvars64.bat"
-                    if [ -f "$VCVARS" ]; then
-                        echo "  Found: $VCVARS"
-                        # Can't source .bat in bash — user must run from Developer Command Prompt
-                        echo ""
-                        echo "  ERROR: cl.exe not in PATH. Run this script from a"
-                        echo "  'Developer Command Prompt for VS' or 'x64 Native Tools'"
-                        echo "  command prompt, OR run: source vcvars64.bat"
+        # Need MSVC cl.exe — find via vswhere or PATH
+        CL_CMD=""
+        VCVARS_BAT=""
+        if command -v cl.exe &>/dev/null; then
+            CL_CMD="cl.exe"
+        else
+            echo "  cl.exe not found in PATH. Locating via vswhere..."
+            VSWHERE="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+            if [ -f "$VSWHERE" ]; then
+                VS_PATH=$("$VSWHERE" -products '*' -latest -property installationPath 2>/dev/null)
+                if [ -n "$VS_PATH" ]; then
+                    # Convert Windows path to Git Bash path for file test
+                    VS_PATH_UNIX=$(echo "$VS_PATH" | sed 's|\\|/|g; s|^\([A-Za-z]\):|/\L\1|')
+                    VCVARS_BAT="$VS_PATH\\VC\\Auxiliary\\Build\\vcvars64.bat"
+                    if [ -f "$VS_PATH_UNIX/VC/Auxiliary/Build/vcvars64.bat" ]; then
+                        echo "  Found: $VCVARS_BAT"
+                    else
+                        echo "  ERROR: vswhere found VS at $VS_PATH but vcvars64.bat is missing."
                         exit 1
                     fi
+                fi
+            fi
+            if [ -z "$VCVARS_BAT" ]; then
+                # Fallback: search common paths (both Program Files locations)
+                for base in "/c/Program Files" "/c/Program Files (x86)"; do
+                    for vsver in "2022" "2019"; do
+                        for edition in "BuildTools" "Community" "Professional" "Enterprise"; do
+                            if [ -f "$base/Microsoft Visual Studio/$vsver/$edition/VC/Auxiliary/Build/vcvars64.bat" ]; then
+                                VCVARS_BAT="$base/Microsoft Visual Studio/$vsver/$edition/VC/Auxiliary/Build/vcvars64.bat"
+                                echo "  Found: $VCVARS_BAT"
+                                break 3
+                            fi
+                        done
+                    done
                 done
-            done
-            echo "  ERROR: Visual Studio not found. Install VS Build Tools."
-            exit 1
+            fi
+            if [ -z "$VCVARS_BAT" ]; then
+                echo "  ERROR: Visual Studio / Build Tools not found. Install VS Build Tools."
+                exit 1
+            fi
         fi
 
-        cl.exe /LD /O2 /GS- \
-            /Fe:"$ARTS/uprooted_profiler.dll" \
-            tools/uprooted_profiler.c \
-            /link ole32.lib kernel32.lib shell32.lib \
-            /DEF:tools/uprooted_profiler.def \
-            /DEBUG:NONE /OPT:REF /OPT:ICF 2>&1 | tail -2
+        # Build profiler DLL
+        PROFILER_SRC="$(cd "$REPO_ROOT" && pwd -W)\\tools\\uprooted_profiler.c"
+        PROFILER_DEF="$(cd "$REPO_ROOT" && pwd -W)\\tools\\uprooted_profiler.def"
+        PROFILER_OUT="$(cd "$ARTS" && pwd -W)\\uprooted_profiler.dll"
+        if [ -n "$CL_CMD" ]; then
+            # cl.exe already in PATH
+            cl.exe /LD /O2 /GS- \
+                /Fe:"$ARTS/uprooted_profiler.dll" \
+                tools/uprooted_profiler.c \
+                /link ole32.lib kernel32.lib shell32.lib \
+                /DEF:tools/uprooted_profiler.def \
+                /DEBUG:NONE /OPT:REF /OPT:ICF 2>&1 | tail -2
+        else
+            # Use temp batch file — cmd.exe quoting doesn't survive Git Bash
+            echo "  Invoking cl.exe via vcvars64.bat..."
+            BAT_TMP=$(mktemp /tmp/build_profiler_XXXXX.bat)
+            cat > "$BAT_TMP" <<CLEOF
+@echo off
+call "$VCVARS_BAT" >nul 2>&1
+cl.exe /LD /O2 /GS- /Fe:"$PROFILER_OUT" "$PROFILER_SRC" /link ole32.lib kernel32.lib shell32.lib /DEF:"$PROFILER_DEF" /DEBUG:NONE /OPT:REF /OPT:ICF
+CLEOF
+            cmd.exe //C "$(cygpath -w "$BAT_TMP")" 2>&1 | tail -5
+            rm -f "$BAT_TMP"
+        fi
+        if [ ! -f "$ARTS/uprooted_profiler.dll" ]; then
+            echo "  ERROR: uprooted_profiler.dll not found after build"
+            exit 1
+        fi
         echo "  uprooted_profiler.dll  ($(wc -c < "$ARTS/uprooted_profiler.dll") bytes)"
 
         cd installer/src-tauri
