@@ -1841,10 +1841,19 @@ internal class RootcordEngine
             }
             else
             {
-                // Pane is closed: user bar covers strip + channels (original behavior)
+                // Pane is closed: user bar covers strip + channels + splitter (original behavior)
                 var bounds = _r.GetBounds(_channelsWidthPanel);
                 if (bounds == null || bounds.Value.W <= 0) return;
-                targetWidth = StripWidth + bounds.Value.W;
+
+                // Use TranslatePoint for precise alignment (accounts for all SplitView
+                // margins, borders, and offsets between the strip and the channels panel)
+                var pt = _homeViewGrid != null
+                    ? _r.TranslatePoint(_channelsWidthPanel, bounds.Value.W, 0, _homeViewGrid)
+                    : null;
+                if (pt != null && pt.Value.X > StripWidth)
+                    targetWidth = pt.Value.X;
+                else
+                    targetWidth = StripWidth + bounds.Value.W; // fallback
 
                 if (_userBarOverPane)
                 {
