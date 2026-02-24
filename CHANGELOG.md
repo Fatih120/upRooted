@@ -13,6 +13,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 - **Google Translate backend for Translate plugin** — Translate engine now supports Google Translate (free, no API key needed) alongside DeepL. Users pick their service in the config popup. Google language list covers 130+ languages. Settings persist the service choice (`TranslateService`), DeepL API key, and auto-translate alert preference.
   - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`, `hook/UprootedSettings.cs`
 
+### Changed
+
+- **Linux installer simplified to two modes** — Removed build-from-source path entirely. Two modes: download from GitHub releases (default) or `--local` (deploy from repo build output). No more auto-installing dotnet/gcc/pnpm.
+  - File: `install-uprooted-linux.sh`
+- **GearLever AppImage compatibility** — Added `~/AppImages/` and lowercase `.appimage` patterns to Root search paths. Skip FUSE mount paths (`/tmp/.mount_*`) in /proc fallback.
+  - File: `install-uprooted-linux.sh`
+- **Linux installer auto-relaunch** — Installer kills running Root and relaunches via wrapper after install/repair.
+  - File: `install-uprooted-linux.sh`
+
 ### Fixed
 
 - **Rootcord theme colors stale after theme switch** — `BuildServerIcon`, `BuildHomeButton`, and `BuildActionButton` captured color values into local variables at build time. When the theme changed, hover handler closures still referenced the old colors. All three now read live from instance fields (`_cardBg`, `_accent`, etc.) so hover states update immediately after `NotifyThemeChanged`.
@@ -25,6 +34,10 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
   - File: `hook/UprootedSettings.cs`
 - **StartupHook crash on trimmed .NET hosts** — `catch (TypeLoadException)` in `AssemblyLoadEventHandler` and `GetDirectories` only caught one specific exception type. Trimmed hosts can throw other types (e.g., `FileNotFoundException`). Broadened to `catch (Exception)`.
   - File: `hook/StartupHook.cs`
+- **Linux profiler Console TypeRef crash** — Verbose catch handler's `Console.WriteLine` TypeRef was scoped to `System.Runtime` instead of `System.Console` assembly. Fixed by searching for `System.Console` AssemblyRef via `IMetaDataAssemblyImport`. Falls back to silent catch if not found.
+  - File: `tools/uprooted_profiler_linux.c`
+- **Linux installer: removed global env var pollution** — No more `~/.config/environment.d/uprooted.conf`, KDE plasma env script, or `~/.profile` injection. Wrapper script (`launch-root.sh`) scopes profiler env vars to Root only.
+  - File: `install-uprooted-linux.sh`
 
 ---
 

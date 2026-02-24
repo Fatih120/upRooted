@@ -159,6 +159,17 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **Linux profiler Console TypeRef fix** (2026-02-23) — Verbose catch handler's `Console.WriteLine` TypeRef was scoped to `System.Runtime` instead of `System.Console`. Fixed by searching for `System.Console` AssemblyRef via `IMetaDataAssemblyImport`. Falls back to silent catch if not found.
+  - File: `tools/uprooted_profiler_linux.c`
+- [x] **Linux installer simplified** (2026-02-23) — Removed build-from-source path entirely. Two modes: download from GitHub releases (default) or `--local` (deploy from repo build output). No more auto-installing dotnet/gcc/pnpm.
+  - File: `install-uprooted-linux.sh`
+- [x] **GearLever AppImage compat** (2026-02-23) — Added `~/AppImages/` and lowercase `.appimage` patterns to search paths. Skip FUSE mount paths (`/tmp/.mount_*`) in /proc fallback.
+  - File: `install-uprooted-linux.sh`
+- [x] **Removed global env vars from Linux installer** (2026-02-23) — No more `~/.config/environment.d/uprooted.conf`, KDE plasma env script, or `~/.profile` injection. Wrapper script (`launch-root.sh`) scopes profiler env vars to Root only.
+  - File: `install-uprooted-linux.sh`
+- [x] **Linux installer auto-relaunch** (2026-02-23) — Installer kills running Root and relaunches via wrapper after install/repair.
+  - File: `install-uprooted-linux.sh`
+- [x] **Obfuscated build confirmed on Linux** (2026-02-23) — Full obfuscated hook DLL working on Ubuntu 24.
 - [x] **Bash installer --channel flag** (2026-02-23) — `--channel canary|dev|stable` to download from different release channels. Dev channel requires GITHUB_TOKEN.
   - File: `install-uprooted-linux.sh`
 - [x] **Verbose CLR profiler catch handler** (2026-02-23) — Both Windows and Linux profilers now inject verbose catch handler that prints full exception to console when hook loading fails. Pre-flight check logs DLL existence/size.
