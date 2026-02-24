@@ -37,7 +37,7 @@ Parse `$ARGUMENTS` to extract channels, build mode, and version:
   - Single: `canary`, `dev`, `stable`
   - Multi (slash-separated): `canary/dev`, `stable/canary`, `stable/canary/dev`
   - Aliases: `developer` = `dev`, `all-channels` = `stable/canary/dev`
-- **BUILD_MODE** — optional: `local` or `remote` (default: `remote`)
+- **BUILD_MODE** — optional: `local` or `remote` (default: `local`)
   - `local` — build artifacts on the current machine using `scripts/build-local.sh`, then upload to target repos. Use when CI minutes are exhausted or for quick iteration.
   - `remote` — trigger GitHub Actions `build.yml` workflow and monitor it. The standard CI/CD path.
 - **VERSION** — last word: the version number (e.g. `0.6.0`, `0.5.0-rc`)
@@ -56,7 +56,7 @@ Channels (can combine with /):
   canary/dev  — both canary and dev in one release
   stable/canary/dev — all three channels
 
-Build mode (optional, default: remote):
+Build mode (optional, default: local):
   local   — build on this machine via scripts/build-local.sh
   remote  — trigger GitHub Actions CI and monitor
 
@@ -539,7 +539,7 @@ for f in _release_artifacts/*; do
 done
 ```
 
-**If BUILD_MODE is `remote` (default):**
+**If BUILD_MODE is `remote`:**
 
 First, check if push-triggered builds are already running for the release tag:
 
