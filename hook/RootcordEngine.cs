@@ -114,7 +114,7 @@ internal class RootcordEngine
     private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
     private object? _channelsWidthPanel;       // Channels panel reference for live width tracking
     private object? _chatPanelRef;             // Chat panel (Star-width column) for edge snapping
-    private const double UserBarHeight = 49;   // Height of user card (for bottom padding): 32px avatar + 16px margin + 0.5px border
+    private const double UserBarHeight = 60;   // Height of user card (for bottom padding): content + breathing room
     private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
     private double _lastUserBarLeft = double.NaN; // Guards SetMargin: skip if left offset unchanged
     private double _lastUserBarWidth = double.NaN; // Guards SetWidth: skip if value unchanged (prevents layout loop)
@@ -891,6 +891,9 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"PaneDisplayService set error: {ex.Message}"); }
 
+            // TODO: home pane (DM/Friends) bottom margin — needs ILSpy research on the actual
+            // view tree path before implementing. Current attempts at SplitView margin were ineffective.
+
             // Guard: if Root resets PanePlacement to Right, immediately re-assert Left
             var capturedSplitView = _rootSplitView;
             _panePlacementGuardHandler = _r.SubscribePropertyChanged(_rootSplitView, (propName) =>
@@ -1457,13 +1460,13 @@ internal class RootcordEngine
                     _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 1: Chat
                     _r.AddGridColumnAuto(layoutGrid);            // Col 2: Members
 
-                    // Set min/max on column definitions matching Root's native CommunityView:
-                    //   Col 0 (Channels): MinWidth=107, MaxWidth=450
+                    // Set min/max on column definitions:
+                    //   Col 0 (Channels): MinWidth=200 (readable channel names even with pane open), MaxWidth=450
                     //   Col 1 (Chat):     MinWidth=350 (prevent collapse)
                     var newColDefs = _r.GetColumnDefinitions(layoutGrid);
                     if (newColDefs?.Count >= 2)
                     {
-                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 107.0);
+                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 200.0);
                         newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 450.0);
                         newColDefs[1]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[1], 350.0);
                     }
@@ -1958,42 +1961,20 @@ internal class RootcordEngine
                 return;
             }
 
-            double targetRight = StripWidth + channelsBounds.Value.W;  // baseline fallback
-
-            // Primary: _communityGrid Col 0 ActualWidth → TranslatePoint to _homeViewGrid.
-            // This is the exact rendered boundary between channels column and chat column.
-            if (_communityGrid != null && _homeViewGrid != null)
+            double targetRight = StripWidth + channelsBounds.Value.W;
+            if (_homeViewGrid != null)
             {
-                try
-                {
-                    var colDefs = _r.GetColumnDefinitions(_communityGrid);
-                    if (colDefs != null && colDefs.Count > 0)
-                    {
-                        var actualW = colDefs[0]?.GetType().GetProperty("ActualWidth")?.GetValue(colDefs[0]);
-                        if (actualW is double aw && aw > 0)
-                        {
-                            var boundary = _r.TranslatePoint(_communityGrid, aw, 0, _homeViewGrid);
-                            if (boundary != null && boundary.Value.X > 0)
-                                targetRight = boundary.Value.X;
-                        }
-                    }
-                }
-                catch { }
+                var channelsRight = _r.TranslatePoint(channelsPanel, channelsBounds.Value.W, 0, _homeViewGrid);
+                if (channelsRight != null)
+                    targetRight = channelsRight.Value.X;
             }
 
-            // Fallback 1: chat panel left edge in _homeViewGrid coords
+            // Prefer chat panel left edge: it's the exact boundary including the splitter
             if (_chatPanelRef != null && _homeViewGrid != null)
             {
                 var chatLeft = _r.TranslatePoint(_chatPanelRef, 0, 0, _homeViewGrid);
                 if (chatLeft != null && chatLeft.Value.X > 0)
                     targetRight = chatLeft.Value.X;
-            }
-            // Fallback 2: channels panel right edge in _homeViewGrid coords
-            else if (_homeViewGrid != null)
-            {
-                var channelsRight = _r.TranslatePoint(channelsPanel, channelsBounds.Value.W, 0, _homeViewGrid);
-                if (channelsRight != null)
-                    targetRight = channelsRight.Value.X;
             }
 
             // When a home pane is open (PanePlacement=Left), it sits between strip and
@@ -2021,12 +2002,23 @@ internal class RootcordEngine
             if (_userBarLogCount++ % 50 == 0)
                 Logger.Log(Tag, $"UpdateUserBarWidth: chBounds={channelsBounds.Value.X:F0},{channelsBounds.Value.W:F0} targetRight={targetRight:F0} targetW={targetWidth:F0} lastW={_lastUserBarWidth:F0}");
 
+            // Channel list bottom padding is handled by AddChannelListBottomPadding().
+
             // Guard: skip SetWidth if value hasn't changed by more than 0.5px.
             // Without this, SetWidth triggers InvalidateMeasure → LayoutUpdated → UpdateUserBarWidth → loop.
-            if (Math.Abs(targetWidth - _lastUserBarWidth) < 0.5) return;
+            double delta = Math.Abs(targetWidth - _lastUserBarWidth);
+            bool isNaN = double.IsNaN(_lastUserBarWidth);
+            if (!isNaN && delta < 0.5) return;
             _lastUserBarWidth = targetWidth;
-            _r.SetWidth(_userBar, targetWidth);
-            Logger.Log(Tag, $"UpdateUserBarWidth: SET width={targetWidth:F0}");
+            try
+            {
+                _r.SetWidth(_userBar, targetWidth);
+                Logger.Log(Tag, $"UpdateUserBarWidth: SET width={targetWidth:F0} (wasNaN={isNaN} delta={delta:F1})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log(Tag, $"UpdateUserBarWidth: SetWidth FAILED: {ex.Message}");
+            }
         }
         catch { }
     }
@@ -2160,9 +2152,9 @@ internal class RootcordEngine
         var existingChild = _r.GetBorderChild(channelsPanel);
         if (existingChild != null && (_r.GetTag(existingChild) as string) == "rootcord-channel-wrapper") return;
 
-        // Width bounds match SwapCommunityMembersToRight constraints
-        _r.SetMinWidth(channelsPanel, 270);
-        _r.SetMaxWidth(channelsPanel, 420);
+        // Width bounds are handled by the column definition (MinWidth=107, MaxWidth=450).
+        // Do NOT set panel-level MinWidth/MaxWidth: they create a mismatch where the panel
+        // stops stretching before the column boundary, leaving whitespace at max drag.
 
         // ===== COMMUNITY INFO CARD =====
         var headerBorder = _r.CreateBorder(_cardBg, 12);
@@ -2355,15 +2347,14 @@ internal class RootcordEngine
                 if (row <= 3)
                 {
                     _r.SetIsVisible(child, false);
-                    // InMenuPanel/OutMenuPanel have IsVisible bindings to MenuIn/!MenuIn
-                    // that re-show them when MenuIn changes. MaxHeight=0 prevents overflow
-                    // regardless of binding state (no MaxHeight binding exists on them).
-                    var name = child.GetType().GetProperty("Name")?.GetValue(child) as string;
-                    if (name == "InMenuPanel" || name == "OutMenuPanel")
-                    {
-                        _r.SetMaxHeight(child, 0);
+                    _r.SetMaxHeight(child, 0);
+                    _r.SetHeight(child, 0);
+                    // Move to row 0 and collapse — prevents ANY layout contribution
+                    _r.SetGridRow(child, 0);
+                    _r.SetGridRowSpan(child, 1);
+                    _hiddenHeaderPanels ??= new List<object>();
+                    if (!_hiddenHeaderPanels.Contains(child))
                         _hiddenHeaderPanels.Add(child);
-                    }
                 }
             }
 
@@ -2445,13 +2436,20 @@ internal class RootcordEngine
             // Fallback to known-safe defaults only if reflection copy fails.
             if (!ApplyNativeTitleBarButtonLayout(supportBtn, btn))
             {
-                svgBtnType.GetProperty("SvgWidth")?.SetValue(btn, 14.0);
-                svgBtnType.GetProperty("SvgHeight")?.SetValue(btn, 14.0);
                 svgBtnType.GetProperty("Width")?.SetValue(btn, 20.0);
                 svgBtnType.GetProperty("Height")?.SetValue(btn, 20.0);
                 svgBtnType.GetProperty("Margin")?.SetValue(btn,
                     Activator.CreateInstance(_r.ThicknessType!, 0.0, 0.0, 8.0, 0.0));
             }
+
+            // SvgWidth/SvgHeight are setter-only on RootSvgButton (no getter), so
+            // ApplyNativeTitleBarButtonLayout silently skips them. Always set explicitly
+            // to match SupportButton's native 18×18 SVG dimensions.
+            svgBtnType.GetProperty("SvgWidth")?.SetValue(btn, 18.0);
+            svgBtnType.GetProperty("SvgHeight")?.SetValue(btn, 18.0);
+
+            // Ensure vertical centering within the titlebar StackPanel (Height=22, our btn=20).
+            _r.SetVerticalAlignment(btn, "Center");
 
             // Bind SvgPath dynamically so the icon flips with Light/Dark themes.
             // CommunityMembersSVG matches Root's member-list affordance and carries theme-variant assets.
@@ -2849,21 +2847,20 @@ internal class RootcordEngine
             var rowDefs = _r.GetRowDefinitions(_membersViewGrid);
             if (rowDefs == null) return;
 
-            // Re-hide all children in rows 0-3
+            // Re-hide all children in rows 0-3 (Height=0 + MaxHeight=0 + move to row 0)
             foreach (var child in _r.GetVisualChildren(_membersViewGrid))
             {
                 int row = _r.GetGridRow(child);
                 if (row <= 3)
                 {
                     _r.SetIsVisible(child, false);
-                    var name = child.GetType().GetProperty("Name")?.GetValue(child) as string;
-                    if (name == "InMenuPanel" || name == "OutMenuPanel")
-                    {
-                        _r.SetMaxHeight(child, 0);
-                        _hiddenHeaderPanels ??= new List<object>();
-                        if (!_hiddenHeaderPanels.Contains(child))
-                            _hiddenHeaderPanels.Add(child);
-                    }
+                    _r.SetMaxHeight(child, 0);
+                    _r.SetHeight(child, 0);
+                    _r.SetGridRow(child, 0);
+                    _r.SetGridRowSpan(child, 1);
+                    _hiddenHeaderPanels ??= new List<object>();
+                    if (!_hiddenHeaderPanels.Contains(child))
+                        _hiddenHeaderPanels.Add(child);
                 }
             }
 
@@ -3563,7 +3560,12 @@ internal class RootcordEngine
             var placementType = _toolTipSetPlacementMethod.GetParameters()[1].ParameterType;
             if (!placementType.IsEnum) return false;
 
-            _tooltipLeftPlacement = Enum.Parse(placementType, "Left");
+            // Use Right placement: tooltip body appears to the RIGHT of the target with
+            // the notch pointing LEFT (toward the member name). After Rootcord moves
+            // members to the right side, the default RightEdgeAlignedTop flyout placement
+            // is already flipped to LeftEdgeAlignedTop, but tooltips need explicit Right
+            // so the RootToolTip template's notch faces the correct direction.
+            _tooltipLeftPlacement = Enum.Parse(placementType, "Right");
             return true;
         }
         catch { return false; }
@@ -3742,7 +3744,8 @@ internal class RootcordEngine
             // Top border separator matching Root's native 0.5px panel dividers
             _r.SetBorderBrush(_userBar, _border);
             _r.SetBorderThickness(_userBar, 0, 0.5, 0, 0); // top only
-            // Width is set dynamically by UpdateUserBarWidth (tracks channels panel bounds)
+            // Initial width — dynamically updated by UpdateUserBarWidth (tracks channels panel bounds)
+            _r.SetWidth(_userBar, StripWidth + 280); // default: strip + channels default width
 
             // Position in HomeView Grid: Col=0, spanning all rows, bottom-left, ZIndex=10
             _r.SetGridColumn(_userBar, 0);
