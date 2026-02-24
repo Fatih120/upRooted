@@ -39,7 +39,7 @@ Before installing Uprooted, make sure you have the following:
 
 **Important:** Uprooted does **not** require administrator or root privileges.
 On Windows, all environment variables are set at user scope (`HKCU\Environment`).
-On Linux, everything lives under `~/.local/` and `~/.config/`.
+On Linux, everything lives under `~/.local/share/uprooted/`.
 
 ---
 
@@ -54,8 +54,8 @@ with no external dependencies.
 
 1. **Download the installer** from the
    [latest release](https://github.com/The-Uprooted-Project/uprooted/releases/latest).
-   - Windows: `Uprooted-0.4.2-Setup.exe`
-   - Linux: `Uprooted-0.4.2-linux-amd64`
+   - Windows: `Uprooted-<version>-Setup.exe`
+   - Linux: use the [bash installer](#linux-install) instead (see below)
 
 2. **Close Root** if it is currently running. The installer will warn you if Root is
    still open.
@@ -63,11 +63,7 @@ with no external dependencies.
 3. **Run the installer** from a terminal:
    ```bash
    # Windows (PowerShell or Command Prompt)
-   .\Uprooted-0.4.2-Setup.exe
-
-   # Linux
-   chmod +x Uprooted-0.4.2-linux-amd64
-   ./Uprooted-0.4.2-linux-amd64
+   .\Uprooted-<version>-Setup.exe
    ```
    The TUI will guide you through the installation process. It will:
    - Auto-detect Root's installation path
@@ -206,31 +202,33 @@ If this concerns you, use the StartupHooks method instead, which only sets
 
 ## Linux Install
 
+The bash installer is the recommended method for Linux. It downloads pre-built
+artifacts from GitHub: no build tools, compilers, or SDKs are required. The only
+dependency is `curl` or `wget`.
+
 ### Usage
 
 ```bash
-# Auto-detect Root.AppImage location
+# Download and run (auto-detects Root.AppImage)
+curl -LO https://raw.githubusercontent.com/The-Uprooted-Project/uprooted/main/install-uprooted-linux.sh
+chmod +x install-uprooted-linux.sh
 ./install-uprooted-linux.sh
 
 # Specify Root path manually
 ./install-uprooted-linux.sh --root-path /path/to/Root.AppImage
 ```
 
-### Build Dependencies
+### CLI Flags
 
-The Linux script builds from source, so you need:
-
-- `gcc` -- to compile the native profiler shared library
-- `dotnet` -- .NET 10 SDK to build the hook DLL
-- `node` -- Node.js for the TypeScript build
-- `pnpm` -- package manager for the TypeScript layer
-
-On Ubuntu/Debian:
-```bash
-sudo apt install gcc nodejs
-# Install .NET 10: https://dotnet.microsoft.com/download
-# Install pnpm: npm install -g pnpm
-```
+| Flag | Description |
+|------|-------------|
+| `--root-path PATH` | Manually specify Root AppImage location (skips auto-detection) |
+| `--channel CH` | Release channel: `stable` (default), `canary`, `dev` (requires `GITHUB_TOKEN`) |
+| `--local` | Deploy from local repo build output instead of downloading (dev use) |
+| `--desktop` | Create a `.desktop` file for the app menu |
+| `--repair` | Re-deploy artifacts and re-patch HTML |
+| `--uninstall` | Remove Uprooted completely |
+| `--diagnose` | Print installation health report |
 
 ### What the Script Does (Step by Step)
 
@@ -246,61 +244,37 @@ sudo apt install gcc nodejs
 
    Use `--root-path` to override auto-detection.
 
-2. **Checks build prerequisites** (`gcc`, `dotnet`, `node`, `pnpm`).
+2. **Downloads pre-built artifacts** from the GitHub release matching the script's
+   version and channel. The tarball contains all five deployment files.
 
-3. **Builds all artifacts from source:**
-   - TypeScript layer: `pnpm install && pnpm build`
-   - Hook DLL: `dotnet build hook/UprootedHook.csproj -c Release`
-   - Profiler shared library: `gcc -shared -fPIC -O2 -o libuprooted_profiler.so tools/uprooted_profiler_linux.c`
-
-4. **Deploys files** to `~/.local/share/uprooted/`:
+3. **Deploys files** to `~/.local/share/uprooted/`:
    - `libuprooted_profiler.so` (with execute permission)
    - `UprootedHook.dll`
    - `UprootedHook.deps.json`
    - `uprooted-preload.js`
    - `uprooted.css`
 
-5. **Sets session-wide environment variables** by writing
-   `~/.config/environment.d/uprooted.conf`:
-   ```ini
-   DOTNET_EnableDiagnostics=1
-   DOTNET_ENABLE_PROFILING=1
-   DOTNET_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
-   DOTNET_PROFILER_PATH=~/.local/share/uprooted/libuprooted_profiler.so
-   CORECLR_ENABLE_PROFILING=1
-   CORECLR_PROFILER={D1A6F5A0-1234-4567-89AB-CDEF01234567}
-   CORECLR_PROFILER_PATH=~/.local/share/uprooted/libuprooted_profiler.so
-   DOTNET_ReadyToRun=0
-   ```
-   Both `DOTNET_` (primary, .NET 10+) and `CORECLR_` (legacy, .NET 8/9) prefixes
-   are set for compatibility. These take effect after your next login. The wrapper
-   script (below) provides immediate use without re-logging.
+4. **Creates a wrapper script** at `~/.local/share/uprooted/launch-root.sh` that
+   exports the CLR profiler environment variables and then executes Root. The env
+   vars are scoped to Root's process only: no global env vars are set by default.
 
-6. **Creates a wrapper script** at `~/.local/share/uprooted/launch-root.sh` that
-   exports the profiler environment variables and then executes Root. This is
-   useful for immediate testing without logging out and back in.
-
-7. **Creates a `.desktop` file** at `~/.local/share/applications/root-uprooted.desktop`
-   so you can find "Root (Uprooted)" in your application menu.
-
-8. **Patches HTML files** in Root's profile directory
+5. **Patches HTML files** in Root's profile directory
    (`~/.local/share/Root Communications/Root/profile/default/`):
    - Looks for `index.html` in `WebRtcBundle/` and `RootApps/*/`
    - Injects `<script>` and `<link>` tags inside `<!-- uprooted:start -->` /
      `<!-- uprooted:end -->` markers before the `</head>` tag
    - Creates `.uprooted.bak` backup of each original file
 
+6. **Kills and relaunches Root** via the wrapper script so Uprooted loads
+   immediately.
+
 ### How to Launch After Install
 
-You have three options:
+The installer auto-launches Root after installation. For future sessions, just
+launch Root normally: the wrapper script handles env vars internally.
 
-1. **Log out and back in**, then launch Root normally (environment variables will
-   be loaded by systemd `environment.d`).
-2. **Run the wrapper script** directly:
-   ```bash
-   ~/.local/share/uprooted/launch-root.sh
-   ```
-3. **Use the application menu** entry "Root (Uprooted)".
+Optionally, pass `--desktop` during install to create a "Root (Uprooted)" entry
+in your application menu.
 
 ---
 
@@ -318,8 +292,8 @@ makepkg -si
 ```
 
 A proper AUR submission (`uprooted-bin`) is planned for a future release. For now,
-use the standalone Linux install script or the console installer binary
-(`Uprooted-0.4.2-linux-amd64`).
+use the [bash installer](#linux-install). Uninstall with
+`./install-uprooted-linux.sh --uninstall`.
 
 ---
 
@@ -387,11 +361,8 @@ If you installed via the console TUI installer, run it again with the `--uninsta
 flag:
 
 ```bash
-# Windows
-.\Uprooted-0.4.2-Setup.exe --uninstall
-
-# Linux
-./Uprooted-0.4.2-linux-amd64 --uninstall
+# Windows (console TUI installer)
+.\Uprooted-<version>-Setup.exe --uninstall
 ```
 
 The installer will:
@@ -399,8 +370,6 @@ The installer will:
 - Remove all environment variables (both `DOTNET_` and `CORECLR_` profiler vars,
   plus startup hooks)
 - Strip injected tags from HTML files (or restore from backups)
-- On Linux: remove the wrapper script, `.desktop` file, and
-  `environment.d/uprooted.conf`
 
 Restart Root to confirm it runs without Uprooted.
 
@@ -441,25 +410,28 @@ The script performs these steps:
 
 ### Linux
 
-Run the uninstall script:
+Run the installer with the `--uninstall` flag:
 
 ```bash
-./uninstall-uprooted-linux.sh
+./install-uprooted-linux.sh --uninstall
 ```
 
 The script performs these steps:
 
-1. **Checks if Root is running** and exits if so (close Root first).
+1. **Strips HTML patches.** Removes all Uprooted-injected lines (markers, script
+   tags, CSS links) from `index.html` files and deletes `.uprooted.bak` backups.
 
-2. **Restores HTML files.** Looks for `.uprooted-backup` files and restores them.
-   If no backups are found, strips Uprooted-injected lines (script tags, CSS links)
-   from `index.html` files directly.
+2. **Removes `~/.config/environment.d/uprooted.conf`** (legacy session-wide env vars).
 
-3. **Removes `~/.config/environment.d/uprooted.conf`** (session-wide env vars).
+3. **Removes KDE Plasma env script** (`~/.config/plasma-workspace/env/uprooted.sh`)
+   if present.
 
-4. **Removes `~/.local/share/applications/root-uprooted.desktop`** (menu entry).
+4. **Cleans Uprooted env vars from `~/.profile`** (legacy fallback for non-systemd
+   sessions).
 
-5. **Removes `~/.local/share/uprooted/`** (all deployed files, including the
+5. **Removes `~/.local/share/applications/root-uprooted.desktop`** (menu entry).
+
+6. **Removes `~/.local/share/uprooted/`** (all deployed files, including the
    wrapper script).
 
 ### Manual Cleanup
@@ -507,9 +479,10 @@ To remove Windows environment variables manually:
 **Linux:**
 ```
 # Files
-~/.local/share/uprooted/                                   (entire directory)
-~/.config/environment.d/uprooted.conf                      (env vars)
-~/.local/share/applications/root-uprooted.desktop           (menu entry)
+~/.local/share/uprooted/                                   (entire directory, including launch-root.sh wrapper)
+~/.config/environment.d/uprooted.conf                      (legacy env vars, if present)
+~/.config/plasma-workspace/env/uprooted.sh                 (KDE env vars, if present)
+~/.local/share/applications/root-uprooted.desktop           (menu entry, if created with --desktop)
 
 # Optional data files
 ~/.local/share/Root Communications/Root/profile/default/uprooted-hook.log
@@ -555,13 +528,9 @@ Just restart Root and the hook will repair the patches itself.
 If automatic repair does not trigger (e.g. the hook DLL was also updated), you have
 these options:
 
-**Console installer:**
+**Console installer (Windows):**
 ```bash
-# Windows
-.\Uprooted-0.4.2-Setup.exe --repair
-
-# Linux
-./Uprooted-0.4.2-linux-amd64 --repair
+.\Uprooted-<version>-Setup.exe --repair
 ```
 This strips any old injection, re-deploys files, and re-patches HTML fresh.
 
@@ -626,8 +595,8 @@ overlay instead of modifying Content). If it does occur:
   # Both should output: 1
   ```
   ```bash
-  # Linux
-  cat ~/.config/environment.d/uprooted.conf
+  # Linux (wrapper script is the source of truth for env vars)
+  cat ~/.local/share/uprooted/launch-root.sh
   ```
 
 - **Wrong profiler path:** Both `DOTNET_PROFILER_PATH` and `CORECLR_PROFILER_PATH`
@@ -663,8 +632,10 @@ However, if this concerns you:
 - **Switch to the StartupHooks method** (`.\Install-Uprooted.ps1 -Method StartupHooks`),
   which only sets `DOTNET_STARTUP_HOOKS` and does not trigger profiler loading in
   other apps.
-- **On Linux, use the wrapper script** (`~/.local/share/uprooted/launch-root.sh`)
-  instead of session-wide env vars, and remove `~/.config/environment.d/uprooted.conf`.
+- **On Linux, no action needed:** the bash installer scopes env vars to Root's
+  process via the wrapper script (`~/.local/share/uprooted/launch-root.sh`). No
+  global env vars are set. If you have a legacy `~/.config/environment.d/uprooted.conf`
+  from an older install, the `--uninstall` flag cleans it up.
 
 ### Hook loads but no log file
 
@@ -717,7 +688,7 @@ All paths Uprooted uses on each platform.
 | **Log file** | `%LOCALAPPDATA%\Root Communications\Root\profile\default\uprooted-hook.log` | `~/.local/share/Root Communications/Root/profile/default/uprooted-hook.log` |
 | **Root HTML files** | `%LOCALAPPDATA%\Root Communications\Root\profile\default\WebRtcBundle\index.html` and `RootApps\*\index.html` | `~/.local/share/Root Communications/Root/profile/default/WebRtcBundle/index.html` and `RootApps/*/index.html` |
 | **Root executable** | `%LOCALAPPDATA%\Root\current\Root.exe` | `~/Applications/Root.AppImage` (varies) |
-| **Env var config** | User registry (`HKCU\Environment`) | `~/.config/environment.d/uprooted.conf` |
+| **Env var config** | User registry (`HKCU\Environment`) | `~/.local/share/uprooted/launch-root.sh` (wrapper script) |
 | **Wrapper script** | N/A | `~/.local/share/uprooted/launch-root.sh` |
 | **Desktop entry** | N/A | `~/.local/share/applications/root-uprooted.desktop` |
 | **Root.exe backup** | `%LOCALAPPDATA%\Root\current\Root.exe.uprooted.bak` (StartupHooks only) | N/A |
@@ -732,4 +703,4 @@ from source.
 
 **Canonical for:** install/uninstall procedures (Windows + Linux), console installer usage, manual PowerShell/bash install, troubleshooting, file locations, verification steps, Arch Linux instructions
 **Not canonical for:** build from source → [BUILD.md](BUILD.md) | installer internals → [INSTALLER.md](../framework/INSTALLER.md) | runtime behavior → [HOOK_REFERENCE.md](../framework/HOOK_REFERENCE.md)
-*Installation guide for Uprooted v0.5.0. Last updated 2026-02-23.*
+*Installation guide for Uprooted. Last updated 2026-02-24.*

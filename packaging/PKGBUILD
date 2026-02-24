@@ -39,7 +39,6 @@ package() {
     install -Dm644 dist/uprooted-preload.js "$pkgdir/usr/lib/uprooted/uprooted-preload.js"
     install -Dm644 dist/uprooted.css "$pkgdir/usr/lib/uprooted/uprooted.css"
 
-    # Install standalone scripts
+    # Install standalone script (--uninstall flag handles removal)
     install -Dm755 install-uprooted-linux.sh "$pkgdir/usr/bin/uprooted-install"
-    install -Dm755 uninstall-uprooted-linux.sh "$pkgdir/usr/bin/uprooted-uninstall"
 }

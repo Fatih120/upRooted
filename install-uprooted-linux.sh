@@ -1,5 +1,5 @@
 #!/bin/bash
-# Uprooted Linux Installer v0.4.2
+# Uprooted Linux Installer
 # Standalone bash installer for systems without the GUI installer.
 #
 # Usage: ./install-uprooted-linux.sh [--root-path /path/to/Root.AppImage]

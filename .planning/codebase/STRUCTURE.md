@@ -126,8 +126,7 @@ uprooted-private/
 ├── TASKS.md                    # Active task board
 ├── Install-Uprooted.ps1        # PowerShell one-click installer (Windows)
 ├── Uninstall-Uprooted.ps1      # PowerShell uninstaller (Windows)
-├── install-uprooted-linux.sh   # Bash installer for Linux
-└── uninstall-uprooted-linux.sh # Bash uninstaller for Linux
+└── install-uprooted-linux.sh   # Bash installer for Linux (--uninstall to remove)
 ```
 
 ## Directory Purposes

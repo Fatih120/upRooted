@@ -677,7 +677,7 @@ The C# profiler DLL includes a process name guard. On `ICorProfilerCallback::Ini
 
 ### Environment Variable Cleanup
 
-The `Uninstall-Uprooted.ps1` and `uninstall-uprooted-linux.sh` scripts remove all CLR profiler environment variables. The installer's uninstall function also removes registry entries (Windows) or shell profile entries (Linux) and broadcasts `WM_SETTINGCHANGE`.
+The `Uninstall-Uprooted.ps1` (Windows) and `install-uprooted-linux.sh --uninstall` (Linux) scripts remove all CLR profiler environment variables. The installer's uninstall function also removes registry entries (Windows) or shell profile entries (Linux) and broadcasts `WM_SETTINGCHANGE`.
 
 ### No Credential Storage
 

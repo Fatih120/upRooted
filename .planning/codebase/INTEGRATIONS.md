@@ -271,8 +271,7 @@
 - Self-contained executable: `Uprooted-[version]-linux-amd64`
   - All artifacts embedded via `include_bytes!()`
   - Console TUI interface
-- Shell script installer (legacy): `install-uprooted-linux.sh`
-- Shell script uninstall: `uninstall-uprooted-linux.sh`
+- Shell script installer: `install-uprooted-linux.sh` (also handles `--uninstall`, `--repair`, `--diagnose`)
 - Git repository clone option: https://github.com/The-Uprooted-Project/uprooted
 
 ## Installer Mechanics
