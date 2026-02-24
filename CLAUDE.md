@@ -37,7 +37,7 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ```
 uprooted-private/
-├── hook/                              # C# .NET hook (CLR profiler injection) — 37 .cs files
+├── hook/                              # C# .NET hook (CLR profiler injection): 37 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3446 lines)
