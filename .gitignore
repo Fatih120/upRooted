@@ -68,6 +68,7 @@ symbols.map
 *.sh.upload
 _publish/
 _release_artifacts/
+_deploy/
 
 # Temporary media files
 media/tmp*
