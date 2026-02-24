@@ -286,21 +286,56 @@ internal class RootcordEngine
             }
         }
 
-        // Channels header: background + text colors
+        // Channels header: background, border, text colors, icon container
         if (_channelsPanelRef != null)
         {
-            var child = _r.GetBorderChild(_channelsPanelRef);
-            if (child != null && (_r.GetTag(child) as string) == "rootcord-channel-wrapper")
+            var wrapperChild = _r.GetBorderChild(_channelsPanelRef);
+            if (wrapperChild != null && (_r.GetTag(wrapperChild) as string) == "rootcord-channel-wrapper")
             {
-                // Walk to find the header border (row 0) inside the wrapper
-                foreach (var gridChild in _r.GetVisualChildren(child))
+                // Find the header card border by tag inside the wrapper
+                var headerWalker = new VisualTreeWalker(_r);
+                foreach (var node in headerWalker.DescendantsDepthFirst(wrapperChild))
                 {
-                    if (_r.GetGridRow(gridChild) == 0 && _r.IsBorder(gridChild))
+                    if ((_r.GetTag(node) as string) != "rootcord-channel-header" || !_r.IsBorder(node))
+                        continue;
+
+                    // Header card border: update background + stroke
+                    _r.SetBackground(node, _cardBg);
+                    SetBorderStroke(node, AdjustForHighlight(_cardBg, 15), 0.5);
+
+                    // Walk into the card grid to update inner elements
+                    var cardGrid = _r.GetBorderChild(node);
+                    if (cardGrid != null && _r.IsGrid(cardGrid))
                     {
-                        _r.SetBackground(gridChild, _cardBg);
-                        SetBorderStroke(gridChild, AdjustForHighlight(_cardBg, 15), 0.5);
-                        break;
+                        foreach (var cardChild in _r.GetVisualChildren(cardGrid))
+                        {
+                            int col = _r.GetGridColumn(cardChild);
+                            if (col == 0 && _r.IsBorder(cardChild))
+                            {
+                                // Icon container: update background
+                                _r.SetBackground(cardChild, _bg);
+                                // Update initial letter TextBlock if present (no image loaded)
+                                var iconChild = _r.GetBorderChild(cardChild);
+                                if (iconChild != null && _r.IsTextBlock(iconChild))
+                                    _r.SetForeground(iconChild, _text);
+                            }
+                            else if (col == 2)
+                            {
+                                // Text panel: update community name + member count TextBlocks
+                                foreach (var txt in headerWalker.DescendantsDepthFirst(cardChild))
+                                {
+                                    if (!_r.IsTextBlock(txt)) continue;
+                                    try
+                                    {
+                                        var fs = txt.GetType().GetProperty("FontSize")?.GetValue(txt);
+                                        _r.SetForeground(txt, (fs is double fsd && fsd >= 14) ? _text : _muted);
+                                    }
+                                    catch { _r.SetForeground(txt, _text); }
+                                }
+                            }
+                        }
                     }
+                    break;
                 }
             }
         }
@@ -1154,28 +1189,29 @@ internal class RootcordEngine
                 _r.SetGridColumn(nonSplitters[i].child, newCol);
             }
 
-            // Rotate GridSplitters using the same column mapping.
-            // A splitter at col X should move to the mapped col for X, or the nearest mapped col.
-            foreach (var (splitter, oldCol) in gridSplitters)
+            // Place splitters between consecutive panels in their new positions.
+            // The offset-based approach placed splitters out of bounds when a panel
+            // moved to the rightmost column (e.g., splitter at col 1 next to Members
+            // at col 0 → Members maps to col 4 → splitter would go to col 5).
+            // Instead, directly assign splitters to gap columns between adjacent panels.
+            var newPanelCols = new List<int>();
+            for (int i = 0; i < n; i++)
+                newPanelCols.Add(_r.GetGridColumn(nonSplitters[i].child));
+            newPanelCols.Sort();
+
+            int si = 0;
+            for (int gap = 0; gap < newPanelCols.Count - 1 && si < gridSplitters.Count; gap++)
             {
-                if (colMapping.TryGetValue(oldCol, out int mappedCol))
+                int gapCol = newPanelCols[gap] + 1;
+                if (gapCol < newPanelCols[gap + 1])
                 {
-                    _r.SetGridColumn(splitter, mappedCol);
-                }
-                else
-                {
-                    // Splitter is between two panels — find the nearest panel column <= splitterCol
-                    // and apply its mapping offset
-                    int bestOld = -1;
-                    foreach (var oc in columns)
-                        if (oc <= oldCol && oc > bestOld) bestOld = oc;
-                    if (bestOld >= 0 && colMapping.TryGetValue(bestOld, out int panelNew))
-                    {
-                        int offset = oldCol - bestOld;
-                        _r.SetGridColumn(splitter, panelNew + offset);
-                    }
+                    _r.SetGridColumn(gridSplitters[si].child, gapCol);
+                    si++;
                 }
             }
+            // Hide surplus splitters that have no gap to fill
+            for (; si < gridSplitters.Count; si++)
+                _r.SetIsVisible(gridSplitters[si].child, false);
             Logger.Log(Tag, $"SwapCommunityMembers: rotated {gridSplitters.Count} GridSplitters");
 
             // Set correct column widths after rotation.
@@ -1384,27 +1420,50 @@ internal class RootcordEngine
                             _r.AddGridColumnAuto(layoutGrid);
                         else
                         {
-                            // Channels or splitter column — use original Pixel width.
-                            // The channels panel was at a Pixel column in Root's native
-                            // layout (resizable via GridSplitter). Keep it Pixel so the
-                            // splitter continues to work. Use 300px default if Auto/tiny.
-                            var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
-                            if (origW.unit == "Pixel" && origW.width > 10)
-                                _r.AddGridColumnPixel(layoutGrid, origW.width);
-                            else
-                                _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
-
-                            // Set Min/MaxWidth on channels column definition to bound the GridSplitter
-                            bool isSplitter = false;
-                            foreach (var (s, sc) in gridSplitters)
-                                if (sc == ci) { isSplitter = true; break; }
-                            if (!isSplitter)
+                            // Check if a GridSplitter currently occupies this column (after rotation)
+                            bool hasSplitter = false;
+                            foreach (var child in _r.GetVisualChildren(layoutGrid))
                             {
-                                var chColDefs = _r.GetColumnDefinitions(layoutGrid);
-                                if (chColDefs?.Count > ci)
+                                if (child.GetType().Name.Contains("GridSplitter") && _r.GetGridColumn(child) == ci)
+                                { hasSplitter = true; break; }
+                            }
+
+                            if (hasSplitter)
+                            {
+                                // GridSplitter column: Auto sizes to the splitter's own width
+                                _r.AddGridColumnAuto(layoutGrid);
+                            }
+                            else
+                            {
+                                // Check if ANY child occupies this column
+                                bool hasChild = false;
+                                foreach (var child in _r.GetVisualChildren(layoutGrid))
                                 {
-                                    chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
-                                    chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
+                                    if (_r.GetGridColumn(child) == ci)
+                                    { hasChild = true; break; }
+                                }
+
+                                if (!hasChild)
+                                {
+                                    // Empty column (no panel, no splitter): collapse to 0px
+                                    _r.AddGridColumnPixel(layoutGrid, 0);
+                                }
+                                else
+                                {
+                                    // Channels or other content column — use original Pixel width
+                                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
+                                    if (origW.unit == "Pixel" && origW.width > 10)
+                                        _r.AddGridColumnPixel(layoutGrid, origW.width);
+                                    else
+                                        _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
+
+                                    // Set Min/MaxWidth on channels column to bound the GridSplitter
+                                    var chColDefs = _r.GetColumnDefinitions(layoutGrid);
+                                    if (chColDefs?.Count > ci)
+                                    {
+                                        chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
+                                        chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
+                                    }
                                 }
                             }
                         }
@@ -1502,21 +1561,34 @@ internal class RootcordEngine
             var headerNonSplitters = nonSplitters;
             var headerMaxIdx = maxAssignedIdx;
             var headerToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-            Task.Delay(200, headerToken).ContinueWith(_ =>
+
+            // Try immediate header injection (eliminates 200ms stutter on tab switch)
+            try
             {
-                if (headerToken.IsCancellationRequested) return;
-                _r.RunOnUIThread(() =>
+                RemoveInjectedHeader();
+                InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader immediate: {ex.Message}"); }
+
+            // Deferred fallback if visual tree wasn't ready (initial Apply, slow tab load)
+            if (_injectedHeader == null)
+            {
+                Task.Delay(200, headerToken).ContinueWith(_ =>
                 {
-                    try
+                    if (headerToken.IsCancellationRequested) return;
+                    _r.RunOnUIThread(() =>
                     {
-                        // Remove old header right before injecting new one (prevents visible flash)
-                        RemoveInjectedHeader();
-                        InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
-                        SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
-                    }
-                    catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader error: {ex.Message}"); }
-                });
-            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+                        try
+                        {
+                            RemoveInjectedHeader();
+                            InjectChannelsHeader(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                            SetupUserBarWidthTracking(headerLayoutGrid, headerNonSplitters, headerMaxIdx);
+                        }
+                        catch (Exception ex) { Logger.Log(Tag, $"InjectChannelsHeader deferred error: {ex.Message}"); }
+                    });
+                }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+            }
 
             // Progressive retry: re-inject header when member counts become available.
             // Checks at 1s, 3s, 6s, 10s — stops as soon as counts are found.
@@ -1581,11 +1653,14 @@ internal class RootcordEngine
                     _r.SetGridColumn(child, originalCol);
             }
 
-            // Restore GridSplitter column assignments
+            // Restore GridSplitter column assignments and visibility
             if (_originalSplitterColumns != null)
             {
                 foreach (var (splitter, originalCol) in _originalSplitterColumns)
+                {
                     _r.SetGridColumn(splitter, originalCol);
+                    _r.SetIsVisible(splitter, true); // restore visibility (may have been hidden during rotation)
+                }
             }
 
             // Restore column definition widths
