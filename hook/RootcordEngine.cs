@@ -96,7 +96,6 @@ internal class RootcordEngine
     private bool   _membersPanelCollapsed;  // Current visual collapse state (mirrors !MenuIn)
     private object? _collapseToggleBtn;     // Our toggle button Border (for icon/color refresh)
     private object? _membersMenuInHandler;  // INPC handler on MembersViewModel.MenuIn
-    private object? _ctrlUKeyHandler;       // KeyDown delegate on _mainWindow for Ctrl+U
 
     // Custom community header injected into channels panel
     private object? _injectedHeader;       // The header outer stack we built
@@ -1651,7 +1650,9 @@ internal class RootcordEngine
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
 
-            SetupCtrlUHandler();
+            // NOTE: Root already has native Ctrl+U keybinding for ToggleMenuCommand.
+            // Our PropertyChanged handler on MenuIn reacts to that natively.
+            // Do NOT register a duplicate Ctrl+U handler (causes double-toggle).
         }
         catch (Exception ex)
         {
@@ -1668,7 +1669,6 @@ internal class RootcordEngine
         if (_membersPanelCollapsed && _membersPanel != null)
             _r.SetIsVisible(_membersPanel, true);
 
-        TeardownCtrlUHandler();
         _membersPanelCollapsed = false;
         _membersColDef = null;
         _membersColumnIdx = -1;
@@ -2313,6 +2313,7 @@ internal class RootcordEngine
                 pressedEvent.AddEventHandler(btn, (Delegate)lambda.Compile());
             }
 
+            Logger.Log(Tag, "BuildCollapseToggleButton: built successfully");
             return btn;
         }
         catch (Exception ex)
@@ -2391,90 +2392,6 @@ internal class RootcordEngine
 
         UpdateCollapseButtonIcon();
         Logger.Log(Tag, $"MembersPanel: {(expanded ? "expanded" : "collapsed")}");
-    }
-
-    private void SetupCtrlUHandler()
-    {
-        if (_ctrlUKeyHandler != null) return;
-        try
-        {
-            Type? keyType = null, keyModType = null, inputElementType = null, routingType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.FullName?.StartsWith("Avalonia") != true) continue;
-                keyType         ??= asm.GetType("Avalonia.Input.Key");
-                keyModType      ??= asm.GetType("Avalonia.Input.KeyModifiers");
-                inputElementType ??= asm.GetType("Avalonia.Input.InputElement");
-                routingType     ??= asm.GetType("Avalonia.Interactivity.RoutingStrategies");
-                if (keyType != null && keyModType != null && inputElementType != null && routingType != null) break;
-            }
-            if (keyType == null || inputElementType == null) { Logger.Log(Tag, "Ctrl+U: types not found"); return; }
-
-            var keyDownField = inputElementType.GetField("KeyDownEvent",
-                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
-            var keyDownEvent = keyDownField?.GetValue(null);
-            if (keyDownEvent == null) { Logger.Log(Tag, "Ctrl+U: KeyDownEvent not found"); return; }
-
-            var addHandler = _mainWindow.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                .FirstOrDefault(m => m.Name == "AddHandler" && !m.IsGenericMethod && m.GetParameters().Length == 4);
-            if (addHandler == null) { Logger.Log(Tag, "Ctrl+U: AddHandler(4) not found"); return; }
-
-            var routing = Enum.ToObject(routingType!,
-                (int)Enum.Parse(routingType!, "Bubble") |
-                (int)Enum.Parse(routingType!, "Tunnel") |
-                (int)Enum.Parse(routingType!, "Direct"));
-
-            // Build delegate type from CLR event
-            var clrEvent     = inputElementType.GetEvent("KeyDown")!;
-            var delegateType = clrEvent.EventHandlerType!;
-            var invokeParams = delegateType.GetMethod("Invoke")!.GetParameters();
-
-            var p0 = Expression.Parameter(typeof(object),                "sender");
-            var p1 = Expression.Parameter(invokeParams[1].ParameterType, "e"); // KeyEventArgs
-
-            var keyU    = Expression.Constant(Convert.ToInt32(Enum.Parse(keyType, "U")));
-            var ctrlVal = Expression.Constant(Convert.ToInt32(Enum.Parse(keyModType!, "Control")));
-
-            var isU     = Expression.Equal(
-                Expression.Convert(Expression.Property(p1, "Key"), typeof(int)), keyU);
-            var hasCtrl = Expression.NotEqual(
-                Expression.And(
-                    Expression.Convert(Expression.Property(p1, "KeyModifiers"), typeof(int)), ctrlVal),
-                Expression.Constant(0));
-
-            var capturedThis = Expression.Constant(this);
-            var toggleMeth   = typeof(RootcordEngine).GetMethod("ToggleMembersPanelViaCommand",
-                BindingFlags.NonPublic | BindingFlags.Instance)!;
-            var toggleCall   = Expression.Call(capturedThis, toggleMeth);
-
-            var handledProp = p1.Type.GetProperty("Handled");
-            Expression actionBody = handledProp != null
-                ? Expression.Block(toggleCall,
-                    Expression.Assign(Expression.Property(p1, handledProp), Expression.Constant(true)))
-                : toggleCall;
-
-            var body   = Expression.IfThen(Expression.AndAlso(isU, hasCtrl), actionBody);
-            var lambda = Expression.Lambda(delegateType, body, p0, p1);
-            var handler = lambda.Compile();
-
-            addHandler.Invoke(_mainWindow, new[] { keyDownEvent, (object)handler, routing, (object)true });
-            _ctrlUKeyHandler = handler;
-            Logger.Log(Tag, "Ctrl+U: subscribed to main window KeyDown");
-        }
-        catch (Exception ex) { Logger.Log(Tag, $"SetupCtrlUHandler error: {ex.Message}"); }
-    }
-
-    private void TeardownCtrlUHandler()
-    {
-        if (_ctrlUKeyHandler == null) return;
-        try
-        {
-            var ev = _mainWindow.GetType().GetEvent("KeyDown");
-            if (ev != null && _ctrlUKeyHandler is Delegate del)
-                ev.RemoveEventHandler(_mainWindow, del);
-        }
-        catch { }
-        _ctrlUKeyHandler = null;
     }
 
     /// <summary>
