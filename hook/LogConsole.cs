@@ -5,13 +5,18 @@ namespace Uprooted;
 
 /// <summary>
 /// Dev-only plugin: spawns a system console window (PowerShell/terminal) that streams
-/// live log output via a named pipe. The console window is independent of Root — it
-/// stays open even after Root closes, and can be reopened at any time.
+/// live log output via a named pipe (Windows) or FIFO (Linux). The console window is
+/// independent of Root — it stays open even after Root closes, and can be reopened
+/// at any time.
 ///
 /// Architecture:
 ///   1. Logger.OnLine fires for every log line (set up in Logger.cs)
-///   2. LogConsole writes each line to a NamedPipeServerStream
-///   3. A spawned PowerShell/bash process connects to the pipe and prints lines
+///   2. LogConsole writes each line to a NamedPipeServerStream (Windows) or FIFO (Linux)
+///   3. A spawned PowerShell/bash process connects to the pipe/FIFO and prints lines
+///
+/// Linux note: .NET NamedPipeServerStream uses Unix domain sockets with a validation
+/// handshake that raw clients (cat/socat) can't perform. A FIFO (mkfifo) is used
+/// instead, which `cat` reads natively.
 ///
 /// Toggle: Enable/Disable from plugin settings (dev channel only, live toggle).
 /// </summary>
@@ -25,6 +30,7 @@ internal static class LogConsole
     private static NamedPipeServerStream? _pipeServer;
     private static StreamWriter? _pipeWriter;
     private static Process? _consoleProcess;
+    private static string? _fifoPath;
     private static readonly object _pipeLock = new();
 
     /// <summary>
@@ -70,40 +76,74 @@ internal static class LogConsole
 
     private static void StartConsole()
     {
-        // Clean up any leftover pipe from a previous session
+        // Clean up any leftover pipe/FIFO from a previous session
         CleanupPipe();
 
-        // Create named pipe server (one-way: server writes, client reads)
-        _pipeServer = new NamedPipeServerStream(
-            PipeName,
-            PipeDirection.Out,
-            1,
-            PipeTransmissionMode.Byte,
-            PipeOptions.Asynchronous);
-
-        Logger.Log("LogConsole", "Named pipe created, spawning console...");
-
-        // Spawn a console process that reads from the pipe
         if (OperatingSystem.IsWindows())
+        {
+            // Windows: NamedPipeServerStream + PowerShell with NamedPipeClientStream
+            _pipeServer = new NamedPipeServerStream(
+                PipeName,
+                PipeDirection.Out,
+                1,
+                PipeTransmissionMode.Byte,
+                PipeOptions.Asynchronous);
+
+            Logger.Log("LogConsole", "Named pipe created, spawning console...");
             SpawnWindowsConsole();
+
+            try
+            {
+                _pipeServer.WaitForConnection();
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("LogConsole", $"Pipe connection failed: {ex.Message}");
+                CleanupPipe();
+                _enabled = false;
+                return;
+            }
+
+            _pipeWriter = new StreamWriter(_pipeServer) { AutoFlush = true };
+        }
         else
+        {
+            // Linux: FIFO instead of NamedPipeServerStream.
+            // .NET named pipes on Linux use Unix domain sockets with a validation
+            // handshake that raw clients (cat/socat) can't perform.
+            _fifoPath = Path.Combine(Path.GetTempPath(), "uprooted-log-console.fifo");
+
+            try { File.Delete(_fifoPath); } catch { }
+
+            using var mkfifo = Process.Start("mkfifo", _fifoPath);
+            mkfifo?.WaitForExit();
+
+            if (!File.Exists(_fifoPath))
+            {
+                Logger.Log("LogConsole", "Failed to create FIFO");
+                _enabled = false;
+                return;
+            }
+
+            Logger.Log("LogConsole", $"FIFO created at {_fifoPath}, spawning console...");
             SpawnLinuxConsole();
 
-        // Wait for the console process to connect to our pipe
-        try
-        {
-            _pipeServer.WaitForConnection();
-        }
-        catch (Exception ex)
-        {
-            Logger.Log("LogConsole", $"Pipe connection failed: {ex.Message}");
-            CleanupPipe();
-            _enabled = false;
-            return;
+            // Opening a FIFO for writing blocks until a reader (cat) opens it
+            try
+            {
+                var fs = new FileStream(_fifoPath, FileMode.Open, FileAccess.Write, FileShare.Read);
+                _pipeWriter = new StreamWriter(fs) { AutoFlush = true };
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("LogConsole", $"FIFO open failed: {ex.Message}");
+                CleanupPipe();
+                _enabled = false;
+                return;
+            }
         }
 
-        _pipeWriter = new StreamWriter(_pipeServer) { AutoFlush = true };
-        Logger.Log("LogConsole", "Console connected to pipe");
+        Logger.Log("LogConsole", "Console connected");
 
         // Write backfill (last N lines from log file)
         WriteBackfill();
@@ -202,16 +242,19 @@ $null = $host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
 
     private static void SpawnLinuxConsole()
     {
-        // Bash script that connects to the named pipe and prints lines
-        var pipePath = $"/tmp/CoreFxPipe_{PipeName}";
-        var script = $@"
+        // cat reads natively from FIFOs: no socat/python3 needed
+        var scriptPath = Path.Combine(Path.GetTempPath(), "uprooted-log-console.sh");
+
+        File.WriteAllText(scriptPath,
+$@"#!/bin/bash
 echo -e '\033]0;Uprooted Log Console\007'
-cat '{pipePath}' 2>/dev/null || echo '[pipe not available]'
+cat '{_fifoPath}'
 echo ''
 echo '--- Root process ended. Log stream closed. ---'
 echo 'Press Enter to close...'
 read
-";
+");
+
         // Try common terminal emulators
         string[] terminals = { "x-terminal-emulator", "gnome-terminal", "konsole", "xfce4-terminal", "xterm" };
         foreach (var term in terminals)
@@ -221,7 +264,9 @@ read
                 _consoleProcess = Process.Start(new ProcessStartInfo
                 {
                     FileName = term,
-                    Arguments = term == "gnome-terminal" ? $"-- bash -c \"{script}\"" : $"-e bash -c \"{script}\"",
+                    Arguments = term == "gnome-terminal"
+                        ? $"-- bash {scriptPath}"
+                        : $"-e bash {scriptPath}",
                     UseShellExecute = false,
                 });
                 if (_consoleProcess != null)
@@ -247,7 +292,7 @@ read
             }
             catch
             {
-                // Pipe broken (console closed) — disable silently
+                // Pipe/FIFO broken (console closed) — disable silently
                 _enabled = false;
                 Logger.OnLine = null;
                 ThreadPool.QueueUserWorkItem(_ => CleanupPipe());
@@ -295,6 +340,11 @@ read
             try { _pipeServer?.Dispose(); } catch { }
             _pipeWriter = null;
             _pipeServer = null;
+        }
+        if (_fifoPath != null)
+        {
+            try { File.Delete(_fifoPath); } catch { }
+            _fifoPath = null;
         }
         // Don't kill the console process — let it stay open showing the last output
     }
