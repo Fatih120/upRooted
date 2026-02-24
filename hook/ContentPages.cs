@@ -4612,16 +4612,24 @@ internal static class ContentPages
         }
 
         // Right side: badge button cycling Stable ↔ Canary
+        // Stable uses the standard subtle button style (matches "Open Logs" / "Live Console").
+        // Canary keeps the colored badge style to visually distinguish the non-default channel.
         bool isCanary = settings.AutoUpdateChannel.Equals("canary", StringComparison.OrdinalIgnoreCase);
         bool[] channelState = { isCanary };
 
-        var badgeColor = isCanary ? CanaryColor : AccentGreen;
-        var badgeLabel = r.CreateTextBlock(isCanary ? "Canary" : "Stable", 12, badgeColor);
+        var stableBtnBg = AdjustForHighlight(CardBg, 2);
+        var initialBg = isCanary ? DevChannelBlack : stableBtnBg;
+        var initialTextColor = isCanary ? CanaryColor : TextMuted;
+        var initialBorder = isCanary ? CanaryColor : AdjustForHighlight(stableBtnBg, 4, CardBg);
+
+        var badgeLabel = isCanary
+            ? r.CreateTextBlock("Canary", 12, CanaryColor)
+            : CreateBoundText(r, "Stable", 12, TextMuted, "TextSecondary");
         r.SetFontWeight(badgeLabel, "Bold");
         ApplyFont(r, badgeLabel, font);
         r.SetHorizontalAlignment(badgeLabel, "Center");
 
-        var badge = r.CreateBorder(DevChannelBlack, 8, badgeLabel);
+        var badge = r.CreateBorder(initialBg, 8, badgeLabel);
         if (badge != null)
         {
             r.SetPadding(badge, 12, 5, 12, 5);
@@ -4629,7 +4637,7 @@ internal static class ContentPages
             r.SetVerticalAlignment(badge, "Center");
             r.SetCursorHand(badge);
             r.SetTag(badge, "uprooted-no-recolor");
-            SetBorderStroke(r, badge, badgeColor, ThickBorder);
+            SetBorderStroke(r, badge, initialBorder, ThickBorder);
 
             var badgeRef = badge;
             var badgeLabelRef = badgeLabel;
@@ -4639,6 +4647,23 @@ internal static class ContentPages
             int[] tapCount = { 0 };
             long[] firstTapTicks = { 0 };
             bool[] promptVisible = { false };
+
+            // Helpers to apply the two visual styles
+            void ApplyStableStyle(bool hover)
+            {
+                var bg = AdjustForHighlight(CardBg, 2);
+                r.SetBackground(badgeRef, hover ? AdjustForHighlight(bg, 5, CardBg) : bg);
+                SetBorderStroke(r, badgeRef, AdjustForHighlight(bg, hover ? 36 : 4, CardBg), ThickBorder);
+                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeLabelRef, "Stable");
+                r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeLabelRef, r.CreateBrush(TextMuted));
+            }
+            void ApplyCanaryStyle(bool hover)
+            {
+                r.SetBackground(badgeRef, hover ? AdjustForHighlight(DevChannelBlack, 8) : DevChannelBlack);
+                SetBorderStroke(r, badgeRef, hover ? AdjustForHighlight(CanaryColor, 24) : CanaryColor, ThickBorder);
+                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeLabelRef, "Canary");
+                r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeLabelRef, r.CreateBrush(CanaryColor));
+            }
 
             r.SubscribeClickReleased(badge, () =>
             {
@@ -4683,11 +4708,11 @@ internal static class ContentPages
                 // Normal click: cycle Stable ↔ Canary
                 channelState[0] = !channelState[0];
                 var newChannel = channelState[0] ? "canary" : "stable";
-                var newColor = channelState[0] ? CanaryColor : AccentGreen;
 
-                SetBorderStroke(r, badgeRef, newColor, ThickBorder);
-                r.TextBlockType?.GetProperty("Text")?.SetValue(badgeLabelRef, channelState[0] ? "Canary" : "Stable");
-                r.TextBlockType?.GetProperty("Foreground")?.SetValue(badgeLabelRef, r.CreateBrush(newColor));
+                if (channelState[0])
+                    ApplyCanaryStyle(false);
+                else
+                    ApplyStableStyle(false);
 
                 var s = UprootedSettings.Load();
                 if (newChannel != "developer" && s.AutoUpdateChannel == "developer")
@@ -4699,15 +4724,17 @@ internal static class ContentPages
 
             r.SubscribeEvent(badge, "PointerEntered", () =>
             {
-                var c = channelState[0] ? CanaryColor : AccentGreen;
-                r.SetBackground(badgeRef, AdjustForHighlight(DevChannelBlack, 8));
-                SetBorderStroke(r, badgeRef, AdjustForHighlight(c, 24), ThickBorder);
+                if (channelState[0])
+                    ApplyCanaryStyle(true);
+                else
+                    ApplyStableStyle(true);
             });
             r.SubscribeEvent(badge, "PointerExited", () =>
             {
-                var c = channelState[0] ? CanaryColor : AccentGreen;
-                r.SetBackground(badgeRef, DevChannelBlack);
-                SetBorderStroke(r, badgeRef, c, ThickBorder);
+                if (channelState[0])
+                    ApplyCanaryStyle(false);
+                else
+                    ApplyStableStyle(false);
             });
 
             r.AddChild(row, badge);

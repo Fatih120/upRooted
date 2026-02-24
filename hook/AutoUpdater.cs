@@ -206,7 +206,10 @@ internal class AutoUpdater
     /// </summary>
     internal (string text, string color) GetStatus()
     {
-        var channelTag = IsDevChannel ? " [Dev]" : "";
+        var channel = UprootedSettings.Load().AutoUpdateChannel;
+        var channelTag = channel == "developer" ? " [Dev]"
+            : channel == "canary" ? " [Canary]"
+            : "";
 
         if (_checking != 0)
             return ("Checking for updates...", ContentPages.TextMuted);
