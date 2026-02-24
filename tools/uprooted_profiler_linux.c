@@ -97,6 +97,9 @@ static const WCHAR W_GetType[] = {
 static const WCHAR W_System_Console[] = {
     'S','y','s','t','e','m','.','C','o','n','s','o','l','e', 0
 };
+static const WCHAR W_System_Console_Asm[] = {
+    'S','y','s','t','e','m','.','C','o','n','s','o','l','e', 0
+};
 static const WCHAR W_WriteLine[] = {
     'W','r','i','t','e','L','i','n','e', 0
 };
@@ -284,6 +287,10 @@ static const MYGUID IID_IMetaDataImport =
     { 0x7DAC8207, 0xD3AE, 0x4c75, { 0x9B, 0x67, 0x92, 0x80, 0x1A, 0x49, 0x7D, 0x44 } };
 static const MYGUID IID_IMetaDataEmit =
     { 0xBA3FEE4C, 0xECB9, 0x4e41, { 0x83, 0xB7, 0x18, 0x3F, 0xA4, 0x1C, 0xD8, 0x59 } };
+static const MYGUID IID_IMetaDataAssemblyImport =
+    { 0xEE62470B, 0xE94B, 0x424e, { 0x9B, 0x7C, 0x2F, 0x00, 0xC9, 0x24, 0x9F, 0x93 } };
+static const MYGUID IID_IMetaDataAssemblyEmit =
+    { 0x211EF15B, 0x5317, 0x4438, { 0xB1, 0x96, 0xDE, 0xC8, 0x7B, 0x88, 0x76, 0x93 } };
 
 /* ---- ICorProfilerInfo vtable indices (from corprof.idl) ---- */
 #define VT_PI_GetFunctionInfo           15
@@ -309,6 +316,13 @@ static const MYGUID IID_IMetaDataEmit =
 #define VT_ME_DefineTypeRefByName 12
 #define VT_ME_DefineMemberRef    14
 #define VT_ME_DefineUserString   28
+
+/* IMetaDataAssemblyImport vtable indices */
+#define VT_MAI_EnumAssemblyRefs     10
+#define VT_MAI_GetAssemblyRefProps  11
+
+/* IMetaDataAssemblyEmit vtable indices */
+#define VT_MAE_DefineAssemblyRef    4
 
 /* COR_PRF_MONITOR flags */
 #define COR_PRF_MONITOR_MODULE_LOADS    0x00000004
@@ -806,10 +820,52 @@ static BOOL PrepareTargetModule(UINT_PTR moduleId) {
         DefineMemberRefFn2 defMemberRef2 = (DefineMemberRefFn2)emitVt[VT_ME_DefineMemberRef];
         DefineUserStringFn2 defStr2 = (DefineUserStringFn2)emitVt[VT_ME_DefineUserString];
 
-        /* TypeRef for System.Console */
+        /* TypeRef for System.Console — must use System.Console AssemblyRef as scope,
+         * NOT System.Runtime (Console is not type-forwarded there in .NET 10). */
         g_tokConsoleTR = SearchTypeRef(pImport, importVt, W_System_Console, NULL);
         if (!g_tokConsoleTR) {
-            hr = defTypeRef2(pEmit, runtimeScope, W_System_Console, &g_tokConsoleTR);
+            /* Find System.Console AssemblyRef by enumerating assembly refs */
+            unsigned int consoleScope = 0;
+            void* pAsmImport = NULL;
+            hr = ((HRESULT (*)(void*, const MYGUID*, void**))((*(void***)pImport)[0]))(
+                pImport, &IID_IMetaDataAssemblyImport, &pAsmImport);
+            if (hr == 0 && pAsmImport) {
+                void** asmVt = *(void***)pAsmImport;
+                typedef HRESULT (*EnumAsmRefsFn)(void*, void**, unsigned int[], ULONG, ULONG*);
+                typedef HRESULT (*GetAsmRefPropsFn)(void*, unsigned int, const void**, ULONG*,
+                    WCHAR*, ULONG, ULONG*, void*, void*, const void**, ULONG*, DWORD*);
+                EnumAsmRefsFn enumRefs = (EnumAsmRefsFn)asmVt[VT_MAI_EnumAssemblyRefs];
+                GetAsmRefPropsFn getRefProps = (GetAsmRefPropsFn)asmVt[VT_MAI_GetAssemblyRefProps];
+                void* hEnum2 = NULL;
+                unsigned int refs[32];
+                ULONG refCount = 0;
+                HRESULT hr2 = enumRefs(pAsmImport, &hEnum2, refs, 32, &refCount);
+                while (hr2 == 0 && refCount > 0) {
+                    for (ULONG ri = 0; ri < refCount; ri++) {
+                        WCHAR asmName[256];
+                        memset(asmName, 0, sizeof(asmName));
+                        ULONG nameLen = 0;
+                        getRefProps(pAsmImport, refs[ri], NULL, NULL, asmName, 256, &nameLen,
+                                    NULL, NULL, NULL, NULL, NULL);
+                        if (u16cmp(asmName, W_System_Console_Asm) == 0) {
+                            consoleScope = refs[ri];
+                            break;
+                        }
+                    }
+                    if (consoleScope) break;
+                    hr2 = enumRefs(pAsmImport, &hEnum2, refs, 32, &refCount);
+                }
+                if (hEnum2) {
+                    typedef HRESULT (*CloseEnumFn2)(void*, void*);
+                    ((CloseEnumFn2)asmVt[3])(pAsmImport, hEnum2);
+                }
+                SafeRelease(pAsmImport);
+            }
+            if (!consoleScope) {
+                PLog("  Verbose catch: System.Console AssemblyRef not found, using silent catch");
+                break;
+            }
+            hr = defTypeRef2(pEmit, consoleScope, W_System_Console, &g_tokConsoleTR);
             if (hr != 0) { PLog("  Verbose catch: Console TypeRef failed, using silent catch"); break; }
         }
         PLogFmt("  Console TypeRef=0x%08X", g_tokConsoleTR);
