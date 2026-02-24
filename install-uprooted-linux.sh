@@ -20,11 +20,21 @@
 
 set -euo pipefail
 
+# When launched by double-clicking in a file manager, the terminal auto-closes
+# on exit. Trap errors so the user can read what went wrong before it vanishes.
+trap 'echo ""; error "Script failed (line $LINENO). See error above."; echo ""; read -rp "Press Enter to exit..." || true' ERR
+
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
 VERSION="0.5.1-dev7"
-CHANNEL="stable"
+
+# Default channel: pre-release versions (dev/alpha/beta/rc) use canary channel
+if [[ "$VERSION" == *-dev* || "$VERSION" == *-alpha* || "$VERSION" == *-beta* || "$VERSION" == *-rc* ]]; then
+    CHANNEL="canary"
+else
+    CHANNEL="stable"
+fi
 ROOT_EXEC=""        # actual binary/AppRun to exec (may differ from ROOT_PATH)
 SQUASHFS_ROOT=""    # set when using an extracted AppImage
 
@@ -1098,16 +1108,19 @@ run_repair() {
 
 if [[ "$MODE" == "diagnose" ]]; then
     run_diagnose
+    read -rp "Press Enter to exit..." || true
     exit 0
 fi
 
 if [[ "$MODE" == "uninstall" ]]; then
     run_uninstall
+    read -rp "Press Enter to exit..." || true
     exit 0
 fi
 
 if [[ "$MODE" == "repair" ]]; then
     run_repair
+    read -rp "Press Enter to exit..." || true
     exit 0
 fi
 
@@ -1145,3 +1158,4 @@ echo ""
 log "Installation complete! Root is launching."
 log "Trouble? Run: $0 --diagnose"
 echo ""
+read -rp "Press Enter to exit..." || true
