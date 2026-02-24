@@ -1446,27 +1446,30 @@ internal class RootcordEngine
                             channelsIdx = pi;
                     }
 
-                    // Assign children to 3 columns. Splitter shares col 0 with channels
-                    // (HAlign=Right, like Root's native layout) so ResizeDirection=Columns
-                    // correctly resizes col 0 (channels) + col 1 (chat). A separate splitter
-                    // column (old 4-col) broke resize and left a 4px gap.
+                    // Assign children to new columns
                     if (channelsIdx >= 0) _r.SetGridColumn(nonSplitters[channelsIdx].child, 0);
-                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 0);
-                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 1);
-                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 2);
+                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 1);
+                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 2);
+                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 3);
 
-                    // Add 3 column definitions
-                    _r.AddGridColumnAuto(layoutGrid);            // Col 0: Channels + Splitter
-                    _r.AddGridColumnStar(layoutGrid, 1.0);       // Col 1: Chat
-                    _r.AddGridColumnAuto(layoutGrid);             // Col 2: Members
+                    // Add 4 column definitions.
+                    // Use the MEMBERS panel original column width (Auto, ~280px natural) for channels,
+                    // since channels is now the left sidebar (same role members had natively).
+                    // The channels panel was originally sharing the 1px splitter col and overflowing.
+                    var membersOrigW = _originalColWidths.FirstOrDefault(x => x.colIdx == nonSplitters[maxAssignedIdx].col);
+                    if (membersOrigW.unit == "Auto" || membersOrigW.width == 0)
+                        _r.AddGridColumnAuto(layoutGrid);       // Col 0: Channels (Auto like native sidebar)
+                    else
+                        _r.AddGridColumnPixel(layoutGrid, membersOrigW.width);
+                    _r.AddGridColumnPixel(layoutGrid, 4);       // Col 1: Splitter
+                    _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 2: Chat
+                    _r.AddGridColumnAuto(layoutGrid);            // Col 3: Members
 
-                    // Set min/max on ColumnDefinitions to constrain GridSplitter drag range
+                    // Set min/max on chat column so it can't disappear
                     var newColDefs = _r.GetColumnDefinitions(layoutGrid);
-                    if (newColDefs?.Count >= 2)
+                    if (newColDefs?.Count >= 3)
                     {
-                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 220.0);
-                        newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 380.0);
-                        newColDefs[1]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[1], 350.0);
+                        newColDefs[2]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[2], 350.0);
                     }
 
                     // Ensure splitter is visible and interactive
@@ -1476,7 +1479,7 @@ internal class RootcordEngine
                         _r.SetIsHitTestVisible(splitter, true);
                     }
 
-                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 3-col layout [Ch+Spl@0|Chat@1|Members@2]");
+                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 4-col layout [Ch|Spl|Chat|Members] (splitter at own col 1)");
                     _membersPanelCollapsed = false;
                 }
 
@@ -1890,6 +1893,21 @@ internal class RootcordEngine
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"UserBar: width tracking subscription failed: {ex.Message}"); }
+
+        // Deferred width updates: the initial measurement fires before the 4-col rebuild
+        // layout has settled (channels reports stale bounds X=280,W=107). LayoutUpdated may
+        // not fire again if the grid doesn't change internally. These retries catch the
+        // correct bounds once Avalonia finishes measuring the rebuilt columns.
+        var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        foreach (var delayMs in new[] { 50, 150, 300, 600, 1200 })
+        {
+            var d = delayMs;
+            Task.Delay(d, token).ContinueWith(_ =>
+            {
+                if (token.IsCancellationRequested) return;
+                _r.RunOnUIThread(() => { try { UpdateUserBarWidth(); } catch { } });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+        }
     }
 
     /// <summary>
@@ -1923,6 +1941,11 @@ internal class RootcordEngine
                 if (channelsRight != null)
                     targetRight = channelsRight.Value.X;
             }
+
+            // Note: when a utility pane opens (PanePlacement=Left), the SplitView pushes
+            // ContentRoot rightward. The channels panel is inside ContentRoot, so its
+            // TranslatePoint-based right edge automatically shifts right to include the pane.
+            // No explicit pane measurement needed: channelsRight already accounts for it.
 
             // Note: when a utility pane opens (PanePlacement=Left), the SplitView pushes
             // ContentRoot rightward. The channels panel is inside ContentRoot, so its
@@ -3759,12 +3782,13 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, avatarGrid);
             }
 
-            // --- Col 2: Username + status label (star column, shrinks with ellipsis) ---
+            // --- Col 2: Username + status label (star column, MinWidth=120) ---
             var textPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
             if (textPanel != null)
             {
                 _r.SetGridColumn(textPanel, 2);
                 _r.SetVerticalAlignment(textPanel, "Center");
+                _r.SetMinWidth(textPanel, 120);
 
                 var nameText = _r.CreateTextBlock(username, 13, _text);
                 if (nameText != null)
@@ -3801,8 +3825,6 @@ internal class RootcordEngine
                     {
                         statusText.GetType().GetProperty("TextWrapping")?.SetValue(statusText,
                             Enum.Parse(statusText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
-                        statusText.GetType().GetProperty("TextTrimming")?.SetValue(statusText,
-                            Enum.Parse(statusText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
                     _r.AddChild(textPanel, statusText);
@@ -5788,10 +5810,11 @@ internal class RootcordEngine
 
     /// <summary>
     /// Show a native-style tooltip to the right of the hovered server icon.
-    /// Replicates Root's CommunityTabView member count pill exactly:
-    ///   - Name:  13px, SemiBold, TextPrimary (_text)
-    ///   - Count: 11px, Medium(500), TextSecondary (_muted), with 5×5 BrandPrimary dot
-    ///   - Card:  CardBg, 12px radius, 1.5px border (ContentPages.CreateCard style)
+    /// Replicates Root's RootToolTip template (decompiled from ToolTip.axaml):
+    ///   Panel container with 7px-margin content border + 6x6 rotated notch border.
+    ///   Notch: 6x6 border rotated 315deg (PointingLeft), VCenter/HLeft, 4px left margin.
+    ///   Content: CornerRadius=8, Padding=12,8,12,8, BackgroundSecondary + HighlightLight dual layer.
+    ///   Font: RootFont, weight=450 (SemiBold), size=14px.
     /// </summary>
     private void ShowIconTooltip(object iconBorder, string displayName, object? tabViewModel)
     {
@@ -5804,7 +5827,6 @@ internal class RootcordEngine
         if (overlay == null) return;
         _tooltipOverlay = overlay;
 
-        // Position: to the right of the icon, vertically centered
         var iconBounds = _r.GetBounds(iconBorder);
         var translated = _r.TranslatePoint(iconBorder, 0, 0, overlay);
         if (iconBounds == null || translated == null) return;
@@ -5813,33 +5835,34 @@ internal class RootcordEngine
         double iconY = translated.Value.Y;
         double iconH = iconBounds.Value.H;
 
-        // Member counts (0 for DMs or unavailable)
         var (attached, total) = GetTabMemberCounts(tabViewModel);
         bool hasAttached = attached > 0;
         bool hasTotal    = total > 0;
         bool hasCounts   = hasAttached || hasTotal;
 
-        // Card: CardBg, 12px radius, 1.5px border — matches ContentPages.CreateCard()
-        _tooltipPanel = _r.CreateBorder(_cardBg, 12);
+        string strokeColor = AdjustForHighlight(_cardBg, 15);
+        string fillColor = AdjustForHighlight(_cardBg, 5);
+
+        _tooltipPanel = _r.CreatePanel();
         if (_tooltipPanel == null) return;
         _r.SetTag(_tooltipPanel, "rootcord-tooltip");
-        SetBorderStroke(_tooltipPanel, AdjustForHighlight(_cardBg, 15), 1.5);
+        _r.SetIsHitTestVisible(_tooltipPanel, false);
 
-        // Outer content stack (vertical, name + optional count row)
+        var contentBorder = _r.CreateBorder(fillColor, 8);
+        if (contentBorder == null) return;
+        _r.SetMargin(contentBorder, 7, 7, 7, 7);
+        SetBorderStroke(contentBorder, strokeColor, 0.5);
+
         var content = _r.CreateStackPanel(vertical: true, spacing: 4);
         if (content == null) return;
         _r.SetMargin(content, 12, 8, 12, 8);
 
-        // --- Name line: 13px, SemiBold, TextPrimary ---
-        // Matches CommunityNameTextBlock font/weight from CommunityTabView
-        var nameText = _r.CreateTextBlock(displayName, 13, _text);
+        var nameText = _r.CreateTextBlock(displayName, 14, _text);
         if (nameText == null) return;
         _r.SetFontWeight(nameText, "SemiBold");
         _r.SetVerticalAlignment(nameText, "Center");
         _r.AddChild(content, nameText);
 
-        // --- Member count row: [●dot] [X online • Y members] ---
-        // Matches Root's native MemberCountTextBlock: 11px, Medium(500), TextSecondary
         if (hasCounts)
         {
             var countRow = _r.CreateStackPanel(vertical: false, spacing: 4);
@@ -5847,8 +5870,7 @@ internal class RootcordEngine
             {
                 _r.SetVerticalAlignment(countRow, "Center");
 
-                // 5×5 BrandPrimary dot (matches the ellipse in CommunityTabView native pill)
-                var dot = _r.CreateBorder(_accent, 3); // ~3px radius for a 5px circle
+                var dot = _r.CreateBorder(_accent, 3);
                 if (dot != null)
                 {
                     _r.SetWidth(dot, 5);
@@ -5857,7 +5879,6 @@ internal class RootcordEngine
                     _r.AddChild(countRow, dot);
                 }
 
-                // Count label: "X online • Y members" or "X online" or "Y members"
                 string countLabel;
                 if (hasAttached && hasTotal && total != attached)
                     countLabel = $"{attached} online \u2022 {total} members";
@@ -5869,7 +5890,6 @@ internal class RootcordEngine
                 var countText = _r.CreateTextBlock(countLabel, 11, _muted);
                 if (countText != null)
                 {
-                    // FontWeight.Medium (500) — matches MemberCountTextBlock native style
                     _r.SetFontWeight(countText, "Medium");
                     _r.SetVerticalAlignment(countText, "Center");
                     _r.AddChild(countRow, countText);
@@ -5879,12 +5899,30 @@ internal class RootcordEngine
             }
         }
 
-        _r.SetBorderChild(_tooltipPanel, content);
+        _r.SetBorderChild(contentBorder, content);
+        _r.AddChild(_tooltipPanel, contentBorder);
 
-        // Position: right of icon with 12px gap, vertically centered on icon.
-        // Estimated height: 30px (name only) or 46px (name + count)
-        double estH = hasCounts ? 46 : 30;
-        double tooltipX = iconX + IconSize + 12;
+        var notch = _r.CreateBorder(fillColor, 0);
+        if (notch != null)
+        {
+            _r.SetWidth(notch, 6);
+            _r.SetHeight(notch, 6);
+            _r.SetMargin(notch, 4, 0, 0, 0);
+            _r.SetVerticalAlignment(notch, "Center");
+            _r.SetHorizontalAlignment(notch, "Left");
+            _r.SetBorderBrush(notch, strokeColor);
+            _r.SetBorderThickness(notch, 0.5, 0.5, 0, 0);
+            _r.SetRenderRotation(notch, 315);
+
+            var notchInner = _r.CreateBorder(fillColor, 0);
+            if (notchInner != null)
+                _r.SetBorderChild(notch, notchInner);
+
+            _r.AddChild(_tooltipPanel, notch);
+        }
+
+        double estH = hasCounts ? 70 : 50;
+        double tooltipX = iconX + IconSize + 8;
         double tooltipY = iconY + (iconH / 2) - (estH / 2);
         _r.SetCanvasPosition(_tooltipPanel, tooltipX, tooltipY);
 
