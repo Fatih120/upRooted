@@ -1452,26 +1452,44 @@ internal class RootcordEngine
                     if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 1);
                     _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 2);
 
-                    // Add 3 column definitions
-                    _r.AddGridColumnPixel(layoutGrid, 240);     // Col 0: Channels + Splitter
+                    // Add 3 column definitions (280px matches Root's default CommunityChannelsWidth)
+                    _r.AddGridColumnPixel(layoutGrid, 280);     // Col 0: Channels + Splitter
                     _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 1: Chat
                     _r.AddGridColumnAuto(layoutGrid);            // Col 2: Members
 
-                    // Set min/max on column definitions (GridSplitter respects these during drag)
+                    // Set min/max on column definitions matching Root's native CommunityView:
+                    //   Col 0 (Channels): MinWidth=107, MaxWidth=450
+                    //   Col 1 (Chat):     MinWidth=350 (prevent collapse)
                     var newColDefs = _r.GetColumnDefinitions(layoutGrid);
                     if (newColDefs?.Count >= 2)
                     {
-                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 200.0);
-                        newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 420.0);
+                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 107.0);
+                        newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 450.0);
                         newColDefs[1]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[1], 350.0);
                     }
 
-                    // Ensure splitter is visible, interactive, and right-aligned within channels column
+                    // Configure splitter to match Root's native ChannelGridSplitter:
+                    //   ResizeDirection=Columns, HorizontalAlignment=Right, Width=4, RowSpan=3
                     foreach (var (splitter, _) in gridSplitters)
                     {
                         _r.SetIsVisible(splitter, true);
                         _r.SetIsHitTestVisible(splitter, true);
                         _r.SetHorizontalAlignment(splitter, "Right");
+
+                        // ResizeDirection = GridResizeDirection.Columns (required for drag to work)
+                        try
+                        {
+                            var rdProp = splitter.GetType().GetProperty("ResizeDirection");
+                            if (rdProp != null)
+                            {
+                                var enumVal = Enum.Parse(rdProp.PropertyType, "Columns");
+                                rdProp.SetValue(splitter, enumVal);
+                            }
+                        }
+                        catch { }
+
+                        // Ensure splitter spans all rows (matches native RowSpan=3)
+                        _r.SetGridRowSpan(splitter, 3);
                     }
 
                     Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 3-col layout [Ch+Spl|Chat|Members]");
@@ -1518,11 +1536,10 @@ internal class RootcordEngine
                     }
                     else
                     {
-                        // Channels panel — min 200px (user bar text truncates with ellipsis)
-                        // max 420px so it can't push chat off-screen
-                        _r.SetMinWidth(panel, 200);
-                        _r.SetMaxWidth(panel, 420);
-                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=200 MaxWidth=420");
+                        // Channels panel — match Root's native Min=107, Max=450
+                        _r.SetMinWidth(panel, 107);
+                        _r.SetMaxWidth(panel, 450);
+                        Logger.Log(Tag, $"SwapCommunityMembers: channels panel MinWidth=107 MaxWidth=450");
                     }
                 }
             }
