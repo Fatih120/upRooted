@@ -3793,6 +3793,8 @@ internal static class ContentPages
             BuildLinkEmbedSettings(r, content, settings, font);
         else if (pluginId == "user-bio")
             BuildUserBioSettings(r, content, settings, font);
+        else if (pluginId == "translate")
+            BuildTranslateSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -4311,6 +4313,191 @@ internal static class ContentPages
             r.SetMargin(helperText, 0, 6, 0, 0);
             r.AddChild(content, helperText);
         }
+    }
+
+    private static void BuildTranslateSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // Service selector
+        var svcTitle = CreateSectionHeader(r, "TRANSLATION SERVICE", font, scale: LightboxScale);
+        if (svcTitle != null) { r.SetMargin(svcTitle, 0, 18, 0, 0); r.AddChild(content, svcTitle); }
+
+        var svcOptions = new[] {
+            ("Google Translate", "google"),
+            ("DeepL Free", "deepl"),
+            ("DeepL Pro", "deepl-pro"),
+        };
+
+        var radioIndicators = new List<(object outer, object? inner, string value)>();
+
+        foreach (var (label, value) in svcOptions)
+        {
+            bool isActive = settings.TranslateService == value;
+            var optionRow = r.CreateStackPanel(vertical: false, spacing: 12);
+            if (optionRow == null) continue;
+            r.SetMargin(optionRow, 0, 12, 0, 0);
+            r.SetCursorHand(optionRow);
+            r.SetBackground(optionRow, "Transparent");
+
+            var radioOuter = r.CreateBorder(null, 4);
+            object? radioInner = null;
+            if (radioOuter != null)
+            {
+                r.SetWidth(radioOuter, 18);
+                r.SetHeight(radioOuter, 18);
+                SetBorderStroke(r, radioOuter,
+                    isActive ? AccentGreen : AdjustForHighlight(CardBg, 25), 2.0);
+                r.SetVerticalAlignment(radioOuter, "Center");
+
+                if (isActive)
+                {
+                    radioInner = r.CreateBorder(AccentGreen, 2);
+                    if (radioInner != null)
+                    {
+                        r.SetWidth(radioInner, 8);
+                        r.SetHeight(radioInner, 8);
+                        r.SetMargin(radioInner, 3, 3, 3, 3);
+                    }
+                    r.SetBorderChild(radioOuter, radioInner);
+                }
+
+                r.AddChild(optionRow, radioOuter);
+                radioIndicators.Add((radioOuter, radioInner, value));
+            }
+
+            var nameText = CreateBoundText(r, label, LightboxScale.Label, TextWhite, "TextPrimary");
+            r.SetFontWeightNumeric(nameText, 450);
+            ApplyFont(r, nameText, font);
+            r.SetVerticalAlignment(nameText, "Center");
+            r.AddChild(optionRow, nameText);
+
+            var capturedValue = value;
+            r.SubscribeClickReleased(optionRow, () =>
+            {
+                settings.TranslateService = capturedValue;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("TranslateSettings", $"Save error: {sx.Message}"); }
+                Logger.Log("TranslateSettings", $"Service set to {capturedValue}");
+
+                foreach (var (outer, inner, val) in radioIndicators)
+                {
+                    bool selected = val == capturedValue;
+                    SetBorderStroke(r, outer,
+                        selected ? AccentGreen : AdjustForHighlight(CardBg, 25), 2.0);
+                    if (selected)
+                    {
+                        var dot = r.CreateBorder(AccentGreen, 2);
+                        if (dot != null)
+                        {
+                            r.SetWidth(dot, 8);
+                            r.SetHeight(dot, 8);
+                            r.SetMargin(dot, 3, 3, 3, 3);
+                        }
+                        r.SetBorderChild(outer, dot);
+                    }
+                    else
+                    {
+                        r.SetBorderChild(outer, null);
+                    }
+                }
+            });
+
+            r.AddChild(content, optionRow);
+        }
+
+        // DeepL API key (shown for both deepl and deepl-pro)
+        if (settings.TranslateService == "deepl" || settings.TranslateService == "deepl-pro")
+        {
+            var keyTitle = CreateSectionHeader(r, "DEEPL API KEY", font, scale: LightboxScale);
+            if (keyTitle != null) { r.SetMargin(keyTitle, 0, 18, 0, 0); r.AddChild(content, keyTitle); }
+
+            var keyBox = r.CreateTextBox("Enter your DeepL API key", settings.TranslateDeeplApiKey, 100);
+            if (keyBox != null)
+            {
+                try { keyBox.GetType().GetProperty("FontSize")?.SetValue(keyBox, (double)LightboxScale.Description); }
+                catch { }
+                r.SetHeight(keyBox, 40);
+                r.SetPadding(keyBox, 10, 0, 10, 0);
+                if (r.VerticalAlignmentType != null)
+                {
+                    var center = Enum.Parse(r.VerticalAlignmentType, "Center");
+                    keyBox.GetType().GetProperty("VerticalContentAlignment")?.SetValue(keyBox, center);
+                }
+                r.SetBackground(keyBox, AdjustForHighlight(CardBg, 5));
+                r.SetForeground(keyBox, TextWhite);
+                ApplyFont(r, keyBox, font);
+                r.SetMargin(keyBox, 0, 12, 0, 0);
+                try
+                {
+                    if (r.CornerRadiusType != null)
+                    {
+                        var cr = Activator.CreateInstance(r.CornerRadiusType, 8.0, 8.0, 8.0, 8.0);
+                        keyBox.GetType().GetProperty("CornerRadius")?.SetValue(keyBox, cr);
+                    }
+                }
+                catch { }
+
+                // Set PasswordChar to mask the key
+                try { keyBox.GetType().GetProperty("PasswordChar")?.SetValue(keyBox, '\u2022'); }
+                catch { }
+
+                r.AddChild(content, keyBox);
+
+                // Save button
+                var saveBtnRow = r.CreateStackPanel(vertical: false, spacing: 0);
+                if (saveBtnRow != null)
+                {
+                    r.SetMargin(saveBtnRow, 0, 12, 0, 0);
+                    var saveBtn = r.CreateBorder(AccentGreen, 8);
+                    if (saveBtn != null)
+                    {
+                        r.SetTag(saveBtn, "dyn-bg:BrandPrimary");
+                        r.BindToDynamicResource(saveBtn, "Background", "BrandPrimary");
+                        r.SetCursorHand(saveBtn);
+                        SetBorderStroke(r, saveBtn, AdjustForHighlight(AccentGreen, 18), ThickBorder);
+                        var saveBtnText = r.CreateTextBlock("Save API Key", LightboxScale.Button, ContrastText(AccentGreen));
+                        r.SetFontWeightNumeric(saveBtnText, 500);
+                        ApplyFont(r, saveBtnText, font);
+                        r.SetPadding(saveBtn, 16, 6, 16, 6);
+                        r.SetBorderChild(saveBtn, saveBtnText);
+
+                        var keyBoxRef = keyBox;
+                        r.SubscribeClickReleased(saveBtn, () =>
+                        {
+                            var key = r.GetTextBoxText(keyBoxRef)?.Trim() ?? "";
+                            settings.TranslateDeeplApiKey = key;
+                            try { settings.Save(); }
+                            catch (Exception sx) { Logger.Log("TranslateSettings", $"Save error: {sx.Message}"); }
+                            Logger.Log("TranslateSettings", $"DeepL API key saved ({key.Length} chars)");
+                        });
+                        r.AddChild(saveBtnRow, saveBtn);
+                    }
+                    r.AddChild(content, saveBtnRow);
+                }
+            }
+        }
+
+        // Language settings section header
+        var langTitle = CreateSectionHeader(r, "LANGUAGE SETTINGS", font, scale: LightboxScale);
+        if (langTitle != null) { r.SetMargin(langTitle, 0, 18, 0, 0); r.AddChild(content, langTitle); }
+
+        var langHelp = CreateBoundText(r,
+            "Configure languages in the translate popup — click the translate button in the compose bar.",
+            LightboxScale.Description, TextDim, "TextTertiary");
+        if (langHelp != null) { ApplyFont(r, langHelp, font); r.SetTextWrapping(langHelp, "Wrap"); }
+        r.SetMargin(langHelp, 0, 6, 0, 0);
+        r.AddChild(content, langHelp);
+
+        // AutoTranslate toggle
+        BuildSettingsToggle(r, content, "AutoTranslate",
+            "Translate messages automatically on send and receive",
+            settings.TranslateAutoTranslate, font, isEnabled =>
+            {
+                settings.TranslateAutoTranslate = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("TranslateSettings", $"Save error: {sx.Message}"); }
+                TranslateEngine.Instance?.RefreshButtonColors(isEnabled);
+            }, scale: LightboxScale);
     }
 
     /// <summary>

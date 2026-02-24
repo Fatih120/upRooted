@@ -391,7 +391,14 @@ internal class TranslateEngine
                 int childCount = GetChildCount(node);
                 Logger.Log("Translate", $"  Candidate ItemsControl: children={childCount}");
 
-                // The button strip should have at least 1 child (even if empty it's still our target)
+                // The real button strip always has existing buttons (e.g. emoji, GIF, attach).
+                // An ItemsControl with 0 children is likely a template/placeholder — skip it.
+                if (childCount == 0)
+                {
+                    Logger.Log("Translate", "  Skipping empty ItemsControl (0 children)");
+                    continue;
+                }
+
                 buttonStrip = node;
                 Logger.Log("Translate", $"  Found button strip ItemsControl (children={childCount})");
                 break;
@@ -417,7 +424,11 @@ internal class TranslateEngine
             var btn = BuildTranslateButton(color);
             if (btn == null) return false;
 
-            InsertChildBeforeLast(buttonStrip, btn);
+            if (!InsertChildBeforeLast(buttonStrip, btn))
+            {
+                Logger.Log("Translate", "  Insert failed, will retry");
+                return false;
+            }
             _injectedToolbars.Add(stripId);
             _buttons[RuntimeHelpers.GetHashCode(textboxView)] = btn;
 
@@ -629,7 +640,7 @@ internal class TranslateEngine
         return 0;
     }
 
-    private void InsertChildBeforeLast(object panel, object child)
+    private bool InsertChildBeforeLast(object panel, object child)
     {
         try
         {
@@ -654,7 +665,7 @@ internal class TranslateEngine
                     int insertAt = Math.Max(0, count - 1);
                     insertMethod.Invoke(coll, new object[] { insertAt, child });
                     Logger.Log("Translate", $"Inserted button at index {insertAt} via {collPropName} (count was {count})");
-                    return;
+                    return true;
                 }
 
                 // Fallback: append
@@ -663,15 +674,17 @@ internal class TranslateEngine
                 {
                     addMethod.Invoke(coll, new[] { child });
                     Logger.Log("Translate", $"Appended button via {collPropName}.Add");
-                    return;
+                    return true;
                 }
             }
 
             Logger.Log("Translate", $"InsertChildBeforeLast: no suitable collection found on {panel.GetType().Name}");
+            return false;
         }
         catch (Exception ex)
         {
             Logger.Log("Translate", $"InsertChildBeforeLast error: {ex.Message}");
+            return false;
         }
     }
 
