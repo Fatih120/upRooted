@@ -91,11 +91,11 @@ internal class RootcordEngine
     private object? _collapsedSplitView;   // SplitView whose pane we collapsed (restore on revert)
 
     // Members panel collapse (driven by MembersViewModel.MenuIn)
-    private int    _membersColumnIdx = -1;  // Grid column index of members panel after rotation
-    private object? _membersColDef;         // ColumnDefinition for the members column
     private bool   _membersPanelCollapsed;  // Current visual collapse state (mirrors !MenuIn)
     private object? _collapseToggleBtn;     // Our toggle button Border (for icon/color refresh)
     private object? _membersMenuInHandler;  // INPC handler on MembersViewModel.MenuIn
+    private object? _membersViewGrid;       // MembersView's main Grid (for header hide + button inject)
+    private List<object>? _hiddenHeaderPanels; // InMenuPanel/OutMenuPanel refs (MaxHeight restore)
 
     // Custom community header injected into channels panel
     private object? _injectedHeader;       // The header outer stack we built
@@ -349,11 +349,11 @@ internal class RootcordEngine
             }
         }
 
-        // Collapse toggle button
+        // Collapse toggle button (on members panel)
         if (_collapseToggleBtn != null)
         {
-            _r.SetBackground(_collapseToggleBtn, _cardBg);
-            SetBorderStroke(_collapseToggleBtn, AdjustForHighlight(_cardBg, 15), 0.5);
+            _r.SetBackground(_collapseToggleBtn, _bg);
+            SetBorderStroke(_collapseToggleBtn, AdjustForHighlight(_bg, 15), 0.5);
             UpdateCollapseButtonIcon();
         }
 
@@ -1206,12 +1206,10 @@ internal class RootcordEngine
                 _r.SetGridColumn(nonSplitters[i].child, newCol);
             }
 
-            // Hide all GridSplitters — Rootcord layout uses fixed columns, no user resize needed.
-            // The splitter shares a column with a content panel (Root uses 3 cols for 3 panels + 1 splitter),
-            // and after rotation its hit-test area creates a visible gap between Chat and Members.
+            // Hide all GridSplitters during column rebuild (visibility check uses hidden state).
+            // The splitter between channels and chat is un-hidden after the rebuild (see below).
             foreach (var (splitter, _) in gridSplitters)
                 _r.SetIsVisible(splitter, false);
-            Logger.Log(Tag, $"SwapCommunityMembers: hid {gridSplitters.Count} GridSplitters");
 
             // Set correct column widths after rotation.
             // The original layout is [Members=Auto] [Splitter=1px] [Chat=Star].
@@ -1483,14 +1481,6 @@ internal class RootcordEngine
 
                     // Reset collapse state for a fresh Apply
                     _membersPanelCollapsed = false;
-
-                    // Capture the members ColumnDefinition for later collapse/expand
-                    var capturedColDefs = _r.GetColumnDefinitions(layoutGrid);
-                    if (capturedColDefs != null && maxAssignedCol >= 0 && maxAssignedCol < capturedColDefs.Count)
-                    {
-                        _membersColDef = capturedColDefs[maxAssignedCol];
-                        _membersColumnIdx = maxAssignedCol;
-                    }
                 }
 
                 // Invalidate to trigger fresh layout
@@ -1575,6 +1565,23 @@ internal class RootcordEngine
                 Logger.Log(Tag, "SwapCommunityMembers: added left-edge borders to columns");
             }
             catch (Exception ex) { Logger.Log(Tag, $"SwapCommunityMembers: border error: {ex.Message}"); }
+
+            // Un-hide the GridSplitter between channels and chat for column resizing.
+            // The splitter stays at its original Grid.Column (unchanged by rotation).
+            // After rotation, only the splitter at the channels/chat boundary is useful;
+            // hide any splitter at the members column (rightmost) to avoid a gap there.
+            try
+            {
+                foreach (var (splitter, splitterOrigCol) in gridSplitters)
+                {
+                    if (splitterOrigCol != maxAssignedCol)
+                    {
+                        _r.SetIsVisible(splitter, true);
+                        Logger.Log(Tag, $"SwapCommunityMembers: un-hid GridSplitter at col {splitterOrigCol}");
+                    }
+                }
+            }
+            catch { }
 
             // Build a custom community header and inject it at the top of the channels column.
             // Also hide the native header in the members column.
@@ -1665,13 +1672,9 @@ internal class RootcordEngine
     /// </summary>
     private void RevertCommunityMembersSwap()
     {
-        // Restore member panel visibility if it was collapsed
-        if (_membersPanelCollapsed && _membersPanel != null)
-            _r.SetIsVisible(_membersPanel, true);
-
+        // Restore members panel header and remove our collapse button
+        RestoreMembersViewHeader();
         _membersPanelCollapsed = false;
-        _membersColDef = null;
-        _membersColumnIdx = -1;
         _collapseToggleBtn = null;
 
         // Revert flyout placements before restoring column positions
@@ -2085,10 +2088,6 @@ internal class RootcordEngine
                 cardCols[1]?.GetType().GetProperty("Width")?.SetValue(cardCols[1],
                     Activator.CreateInstance(_r.GridLengthType, 10d, pixelUnit));
                 // Col 2 stays Star
-
-                // Col 3: 8px gap; Col 4: collapse button (Auto)
-                _r.AddGridColumnPixel(cardGrid, 8);
-                _r.AddGridColumnAuto(cardGrid);
             }
             catch { }
         }
@@ -2187,16 +2186,6 @@ internal class RootcordEngine
             _r.AddChild(cardGrid, textPanel);
         }
 
-        // Col 4: members toggle button
-        var toggleBtn = BuildCollapseToggleButton();
-        if (toggleBtn != null)
-        {
-            _r.SetGridColumn(toggleBtn, 4);
-            _r.SetVerticalAlignment(toggleBtn, "Center");
-            _r.AddChild(cardGrid, toggleBtn);
-            _collapseToggleBtn = toggleBtn;
-        }
-
         _r.SetBorderChild(headerBorder, cardGrid);
 
         // ===== COMMUNITY / CHANNEL TAB SWITCHER =====
@@ -2245,24 +2234,64 @@ internal class RootcordEngine
         _injectedHeader = headerStack;
         _channelsPanelRef = channelsPanel;
 
-        // ===== HIDE native header in members panel (MembersView Grid rows 0-3) =====
+        // ===== HIDE native header + inject collapse button in members panel =====
         var membersPanel = nonSplitters[membersIdx].child;
         var walker = new VisualTreeWalker(_r);
         foreach (var node in walker.DescendantsDepthFirst(membersPanel))
         {
             if (!_r.IsGrid(node)) continue;
             var rowDefs = _r.GetRowDefinitions(node);
-            if (rowDefs == null || rowDefs.Count < 4) continue;
+            if (rowDefs == null || rowDefs.Count < 5) continue;
+
+            _membersViewGrid = node;
+            _hiddenHeaderPanels = new List<object>();
 
             foreach (var child in _r.GetVisualChildren(node))
             {
                 int row = _r.GetGridRow(child);
-                if (row <= 3) _r.SetIsVisible(child, false);
+                if (row <= 3)
+                {
+                    _r.SetIsVisible(child, false);
+                    // InMenuPanel/OutMenuPanel have IsVisible bindings to MenuIn/!MenuIn
+                    // that re-show them when MenuIn changes. MaxHeight=0 prevents overflow
+                    // regardless of binding state (no MaxHeight binding exists on them).
+                    var name = child.GetType().GetProperty("Name")?.GetValue(child) as string;
+                    if (name == "InMenuPanel" || name == "OutMenuPanel")
+                    {
+                        _r.SetMaxHeight(child, 0);
+                        _hiddenHeaderPanels.Add(child);
+                    }
+                }
             }
-            for (int ri = 0; ri <= 3 && ri < rowDefs.Count; ri++)
-                _r.SetRowDefinitionPixelHeight(rowDefs[ri], 0);
 
-            Logger.Log(Tag, "InjectChannelsHeader: hidden native header in members panel");
+            // Zero rows 0-2 (header + separators), keep row 3 Auto for our collapse button
+            for (int ri = 0; ri <= 2 && ri < rowDefs.Count; ri++)
+                _r.SetRowDefinitionPixelHeight(rowDefs[ri], 0);
+            // Row 3 was Auto (RootMemberVisibilitySwitch, now hidden): keep Auto for our button
+            if (rowDefs.Count > 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            {
+                try
+                {
+                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                    var gl = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
+                    rowDefs[3]?.GetType().GetProperty("Height")?.SetValue(rowDefs[3], gl);
+                }
+                catch { }
+            }
+
+            // Inject collapse toggle button at row 3 (above the member list at row 4)
+            var toggleBtn = BuildCollapseToggleButton();
+            if (toggleBtn != null)
+            {
+                _r.SetGridRow(toggleBtn, 3);
+                _r.SetHorizontalAlignment(toggleBtn, "Right");
+                _r.SetVerticalAlignment(toggleBtn, "Center");
+                _r.SetMargin(toggleBtn, 0, 4, 8, 4);
+                _r.AddChild(node, toggleBtn);
+                _collapseToggleBtn = toggleBtn;
+            }
+
+            Logger.Log(Tag, "InjectChannelsHeader: hidden native header + added collapse button in members panel");
             break;
         }
 
@@ -2275,11 +2304,11 @@ internal class RootcordEngine
     {
         try
         {
-            var btn = _r.CreateBorder(_cardBg, 4);
+            var btn = _r.CreateBorder(_bg, 4);
             if (btn == null) return null;
             _r.SetWidth(btn, 26);
             _r.SetHeight(btn, 26);
-            SetBorderStroke(btn, AdjustForHighlight(_cardBg, 15), 0.5);
+            SetBorderStroke(btn, AdjustForHighlight(_bg, 15), 0.5);
 
             // People glyph: same as GlyphFriends ("\uE716"), Segoe Fluent/MDL2
             var icon = _r.CreateTextBlock("\uE716", 13, _muted);
@@ -2351,47 +2380,64 @@ internal class RootcordEngine
 
     private void ApplyMembersCollapseState(bool expanded)
     {
-        if (_membersColDef == null || _communityGrid == null) return;
-
+        // Root's native MenuIn toggle already handles the MembersView collapse/expand
+        // internally (compact bar vs full panel). We only track the state here for
+        // the button icon — no column width overrides needed.
         _membersPanelCollapsed = !expanded;
-
-        // Resolve members panel (may have been cleared by flyout unsub on tab switch)
-        var membersPanel = _membersPanel;
-        if (membersPanel == null && _membersColumnIdx >= 0)
-        {
-            foreach (var child in _r.GetVisualChildren(_communityGrid))
-            {
-                if (child.GetType().Name.Contains("GridSplitter")) continue;
-                if (_r.GetGridColumn(child) == _membersColumnIdx) { membersPanel = child; break; }
-            }
-        }
-
-        if (expanded)
-        {
-            // Restore column to Auto
-            if (_r.GridUnitTypeEnum != null && _r.GridLengthType != null)
-            {
-                try
-                {
-                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
-                    var gl = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
-                    _membersColDef.GetType().GetProperty("Width")?.SetValue(_membersColDef, gl);
-                }
-                catch { }
-            }
-            if (membersPanel != null) _r.SetIsVisible(membersPanel, true);
-        }
-        else
-        {
-            _r.SetColumnDefinitionPixelWidth(_membersColDef, 0);
-            if (membersPanel != null) _r.SetIsVisible(membersPanel, false);
-        }
-
-        _communityGrid.GetType().GetMethod("InvalidateMeasure")?.Invoke(_communityGrid, null);
-        _communityGrid.GetType().GetMethod("InvalidateArrange")?.Invoke(_communityGrid, null);
-
         UpdateCollapseButtonIcon();
         Logger.Log(Tag, $"MembersPanel: {(expanded ? "expanded" : "collapsed")}");
+    }
+
+    /// <summary>
+    /// Restore the MembersView header that was hidden by InjectChannelsHeader.
+    /// Removes our collapse button, restores row heights, and clears MaxHeight on panels.
+    /// </summary>
+    private void RestoreMembersViewHeader()
+    {
+        if (_membersViewGrid == null) return;
+        try
+        {
+            // Remove our collapse button
+            if (_collapseToggleBtn != null)
+                _r.RemoveChild(_membersViewGrid, _collapseToggleBtn);
+
+            // Restore MaxHeight on InMenuPanel/OutMenuPanel (clears our 0 override)
+            if (_hiddenHeaderPanels != null)
+            {
+                foreach (var panel in _hiddenHeaderPanels)
+                {
+                    _r.ClearMaxHeight(panel);
+                    // Clear our local IsVisible override so the binding takes effect again
+                    _r.ClearValue(panel, "IsVisibleProperty");
+                }
+            }
+
+            // Restore row heights: [Auto, 1px, 1px, Auto, Star]
+            var rowDefs = _r.GetRowDefinitions(_membersViewGrid);
+            if (rowDefs != null && rowDefs.Count >= 5 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            {
+                var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                var autoGL = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
+                rowDefs[0]?.GetType().GetProperty("Height")?.SetValue(rowDefs[0], autoGL);
+                _r.SetRowDefinitionPixelHeight(rowDefs[1], 1);
+                _r.SetRowDefinitionPixelHeight(rowDefs[2], 1);
+                rowDefs[3]?.GetType().GetProperty("Height")?.SetValue(rowDefs[3], autoGL);
+            }
+
+            // Restore visibility of native children in rows 0-3
+            foreach (var child in _r.GetVisualChildren(_membersViewGrid))
+            {
+                if (child == _collapseToggleBtn) continue; // skip our button (already removed)
+                int row = _r.GetGridRow(child);
+                if (row <= 3) _r.SetIsVisible(child, true);
+            }
+
+            Logger.Log(Tag, "RestoreMembersViewHeader: restored native header in members panel");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RestoreMembersViewHeader error: {ex.Message}"); }
+
+        _membersViewGrid = null;
+        _hiddenHeaderPanels = null;
     }
 
     /// <summary>
