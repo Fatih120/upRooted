@@ -63,6 +63,7 @@ internal class AvaloniaReflection
     public Type? ImmutableSolidColorBrushType { get; private set; }
     public Type? LinearGradientBrushType { get; private set; }
     public Type? ScaleTransformType { get; private set; }
+    public Type? RotateTransformType { get; private set; }
     public Type? GradientStopType { get; private set; }
     public Type? GradientStopsType { get; private set; }
     public Type? RelativePointType { get; private set; }
@@ -292,6 +293,7 @@ internal class AvaloniaReflection
         ImmutableSolidColorBrushType = Find("Avalonia.Media.Immutable.ImmutableSolidColorBrush");
         LinearGradientBrushType = Find("Avalonia.Media.LinearGradientBrush");
         ScaleTransformType = Find("Avalonia.Media.ScaleTransform");
+        RotateTransformType = Find("Avalonia.Media.RotateTransform");
         GradientStopType = Find("Avalonia.Media.GradientStop");
         GradientStopsType = Find("Avalonia.Media.GradientStops");
         RelativePointType = Find("Avalonia.RelativePoint");
@@ -2421,6 +2423,27 @@ internal class AvaloniaReflection
         catch (Exception ex)
         {
             Logger.Log("Reflection", $"SetRenderScale error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Apply a RotateTransform centered on the control.
+    /// Used by RootcordEngine for the tooltip notch (6×6 border rotated 315° to form a diamond arrow).
+    /// </summary>
+    public void SetRenderRotation(object? control, double angleDegrees)
+    {
+        if (control == null || _visualRenderTransform == null || RotateTransformType == null) return;
+        try
+        {
+            var transform = Activator.CreateInstance(RotateTransformType);
+            if (transform == null) return;
+            RotateTransformType.GetProperty("Angle")?.SetValue(transform, angleDegrees);
+            _visualRenderTransform.SetValue(control, transform);
+            SetRenderTransformOriginCenter(control);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Reflection", $"SetRenderRotation error: {ex.Message}");
         }
     }
 

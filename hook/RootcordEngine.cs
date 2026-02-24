@@ -1446,30 +1446,27 @@ internal class RootcordEngine
                             channelsIdx = pi;
                     }
 
-                    // Assign children to new columns
+                    // Assign children to 3 columns. Splitter shares col 0 with channels
+                    // (HAlign=Right, like Root's native layout) so ResizeDirection=Columns
+                    // correctly resizes col 0 (channels) + col 1 (chat). A separate splitter
+                    // column (old 4-col) broke resize and left a 4px gap.
                     if (channelsIdx >= 0) _r.SetGridColumn(nonSplitters[channelsIdx].child, 0);
-                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 1);
-                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 2);
-                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 3);
+                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 0);
+                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 1);
+                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 2);
 
-                    // Add 4 column definitions.
-                    // Use the MEMBERS panel original column width (Auto, ~280px natural) for channels,
-                    // since channels is now the left sidebar (same role members had natively).
-                    // The channels panel was originally sharing the 1px splitter col and overflowing.
-                    var membersOrigW = _originalColWidths.FirstOrDefault(x => x.colIdx == nonSplitters[maxAssignedIdx].col);
-                    if (membersOrigW.unit == "Auto" || membersOrigW.width == 0)
-                        _r.AddGridColumnAuto(layoutGrid);       // Col 0: Channels (Auto like native sidebar)
-                    else
-                        _r.AddGridColumnPixel(layoutGrid, membersOrigW.width);
-                    _r.AddGridColumnPixel(layoutGrid, 4);       // Col 1: Splitter
-                    _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 2: Chat
-                    _r.AddGridColumnAuto(layoutGrid);            // Col 3: Members
+                    // Add 3 column definitions
+                    _r.AddGridColumnAuto(layoutGrid);            // Col 0: Channels + Splitter
+                    _r.AddGridColumnStar(layoutGrid, 1.0);       // Col 1: Chat
+                    _r.AddGridColumnAuto(layoutGrid);             // Col 2: Members
 
-                    // Set min/max on chat column so it can't disappear
+                    // Set min/max on ColumnDefinitions to constrain GridSplitter drag range
                     var newColDefs = _r.GetColumnDefinitions(layoutGrid);
-                    if (newColDefs?.Count >= 3)
+                    if (newColDefs?.Count >= 2)
                     {
-                        newColDefs[2]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[2], 350.0);
+                        newColDefs[0]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[0], 220.0);
+                        newColDefs[0]?.GetType().GetProperty("MaxWidth")?.SetValue(newColDefs[0], 380.0);
+                        newColDefs[1]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[1], 350.0);
                     }
 
                     // Ensure splitter is visible and interactive
@@ -1479,7 +1476,7 @@ internal class RootcordEngine
                         _r.SetIsHitTestVisible(splitter, true);
                     }
 
-                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 4-col layout [Ch|Spl|Chat|Members] (splitter at own col 1)");
+                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 3-col layout [Ch+Spl@0|Chat@1|Members@2]");
                     _membersPanelCollapsed = false;
                 }
 
@@ -3762,13 +3759,12 @@ internal class RootcordEngine
                 _r.AddChild(contentGrid, avatarGrid);
             }
 
-            // --- Col 2: Username + status label (star column, MinWidth=120) ---
+            // --- Col 2: Username + status label (star column, shrinks with ellipsis) ---
             var textPanel = _r.CreateStackPanel(vertical: true, spacing: 0);
             if (textPanel != null)
             {
                 _r.SetGridColumn(textPanel, 2);
                 _r.SetVerticalAlignment(textPanel, "Center");
-                _r.SetMinWidth(textPanel, 120);
 
                 var nameText = _r.CreateTextBlock(username, 13, _text);
                 if (nameText != null)
@@ -3805,6 +3801,8 @@ internal class RootcordEngine
                     {
                         statusText.GetType().GetProperty("TextWrapping")?.SetValue(statusText,
                             Enum.Parse(statusText.GetType().GetProperty("TextWrapping")!.PropertyType, "NoWrap"));
+                        statusText.GetType().GetProperty("TextTrimming")?.SetValue(statusText,
+                            Enum.Parse(statusText.GetType().GetProperty("TextTrimming")!.PropertyType, "CharacterEllipsis"));
                     }
                     catch { }
                     _r.AddChild(textPanel, statusText);
