@@ -1,10 +1,10 @@
 # Uprooted Hook - Session State (2026-02-23)
 
-## Release: v0.5.1-dev5
+## Release: v0.5.1-dev6
 
 ## Current State Summary
 
-Bash installer channel support, installer resilience, updates card rework, and log noise reduction are the most recent work.
+Rootcord theme integration, profile card layout fix, translate settings persistence, and trimmed-host exception broadening are the most recent work.
 
 - **Bash installer `--channel` flag** — `--channel canary` or `--channel dev` to download from canary/dev repos instead of stable-only public repo. Dev requires GITHUB_TOKEN. Canary/dev use `?per_page=1` endpoint since prereleases are invisible to `/releases/latest`.
 - **Installer non-fatal HTML patching** — HTML patch step is now a warning (not fatal) when Root hasn't been launched yet. Hook's HtmlPatchVerifier self-heals at runtime. Both TUI and plain CLI modes updated.

@@ -24,7 +24,7 @@ set -euo pipefail
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.5.1-dev5"
+VERSION="0.5.1-dev6"
 CHANNEL="stable"
 AUTO_DEPS=false
 ROOT_EXEC=""        # actual binary/AppRun to exec (may differ from ROOT_PATH)

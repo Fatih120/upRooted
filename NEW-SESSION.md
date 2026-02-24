@@ -4,7 +4,7 @@
 
 ## 1. Identity
 
-**Uprooted** v0.5.1-dev5 — client mod framework for Root Communications desktop (v0.9.93+).
+**Uprooted** v0.5.1-dev6 — client mod framework for Root Communications desktop (v0.9.93+).
 Private repo (`The-Uprooted-Project/uprooted-private`). Contributors: `watchthelight` + `agomusio`.
 
 ## 2. Architecture
@@ -46,8 +46,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 |------|------:|---------|
 | `Entry.cs` | 37 | Profiler injection entry point |
 | `NativeEntry.cs` | 66 | Alternative entry via hostfxr |
-| `StartupHook.cs` | 662 | Multi-phase startup orchestrator (Phase 0-5) |
-| `HtmlPatchVerifier.cs` | 447 | Phase 0: self-healing HTML patches |
+| `StartupHook.cs` | 702 | Multi-phase startup orchestrator (Phase 0-5) |
+| `HtmlPatchVerifier.cs` | 460 | Phase 0: self-healing HTML patches |
 | `AvaloniaReflection.cs` | 3446 | Reflection cache for ~80 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
 | `SidebarInjector.cs` | 2048 | Settings page monitor + sidebar injection |
@@ -55,7 +55,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `ThemeEngine.cs` | 3031 | Resource-first theme engine v2, in-place switching, bind-once walker, WeakRef live preview |
 | `ColorPickerPopup.cs` | 536 | HSV color picker overlay |
 | `ColorUtils.cs` | 414 | HSL/RGB/OKLCH conversion |
-| `UprootedSettings.cs` | 268 | INI-based settings + 10s TTL cache |
+| `UprootedSettings.cs` | 277 | INI-based settings + 10s TTL cache |
 | `DotNetBrowserReflection.cs` | 1926 | DotNetBrowser type cache, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner |
 | `ClearUrlsEngine.cs` | 486 | Strip tracking params from URLs on send |
@@ -69,8 +69,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `ProfileBadgeInjector.cs` | 1288 | "Uprooted Dev" profile badge |
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |
 | `NsfwFilter.cs` | 484 | Avalonia-native NSFW filter |
-| `RootcordEngine.cs` | 4983 | Discord-style vertical sidebar (experimental) |
-| `TranslateEngine.cs` | 1156 | DeepL-powered message translation |
+| `RootcordEngine.cs` | 5066 | Discord-style vertical sidebar (experimental) |
+| `TranslateEngine.cs` | 1994 | Google Translate + DeepL-powered message translation |
 | `TranslateConfigPopup.cs` | 555 | Translate config UI |
 | `UprootedPresenceBeacon.cs` | 500 | Uprooted user detection via gRPC |
 | `WhoReactedEngine.cs` | 577 | Who Reacted: shows reaction authors on messages |
@@ -135,4 +135,4 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 ---
 
-*Quick-start reference for Uprooted v0.5.1-dev5. Last updated 2026-02-23.*
+*Quick-start reference for Uprooted v0.5.1-dev6. Last updated 2026-02-23.*

@@ -7,6 +7,20 @@ using System.Text.RegularExpressions;
 namespace Uprooted;
 
 /// <summary>
+/// Translation result containing the translated text and detected source language.
+/// </summary>
+internal readonly struct TranslationResult
+{
+    public readonly string? Text;
+    public readonly string? SourceLanguage;
+    public TranslationResult(string? text, string? sourceLanguage)
+    {
+        Text = text;
+        SourceLanguage = sourceLanguage;
+    }
+}
+
+/// <summary>
 /// Translate plugin engine.
 /// Injects a globe/translate icon button into the compose bar toolbar.
 /// Left-click opens TranslateConfigPopup. Right-click toggles AutoTranslate mode.
@@ -25,8 +39,72 @@ namespace Uprooted;
 internal class TranslateEngine
 {
     private const int ScanIntervalMs = 2_000;
-    private const int ReceiveScanIntervalMs = 500;
+    private const int ReceiveScanIntervalMs = 2_000;
     private const int MaxCacheSize = 500;
+    private const int DebounceMs = 1_000;
+
+    // Google Translate API key (public, embedded in Google Translate web app)
+    private const string GoogleApiKey = "AIzaSyDLEeFI5OtFBwYBIoK_jj5m32rZK5CkCXA";
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Language lists
+    // ──────────────────────────────────────────────────────────────────────────
+
+    internal static readonly (string Code, string Name)[] GoogleLanguages =
+    {
+        ("auto", "Detect language"),
+        ("af", "Afrikaans"), ("sq", "Albanian"), ("am", "Amharic"), ("ar", "Arabic"),
+        ("hy", "Armenian"), ("as", "Assamese"), ("ay", "Aymara"), ("az", "Azerbaijani"),
+        ("bm", "Bambara"), ("eu", "Basque"), ("be", "Belarusian"), ("bn", "Bengali"),
+        ("bho", "Bhojpuri"), ("bs", "Bosnian"), ("bg", "Bulgarian"), ("ca", "Catalan"),
+        ("ceb", "Cebuano"), ("ny", "Chichewa"), ("zh-CN", "Chinese (Simplified)"),
+        ("zh-TW", "Chinese (Traditional)"), ("co", "Corsican"), ("hr", "Croatian"),
+        ("cs", "Czech"), ("da", "Danish"), ("dv", "Dhivehi"), ("doi", "Dogri"),
+        ("nl", "Dutch"), ("en", "English"), ("eo", "Esperanto"), ("et", "Estonian"),
+        ("ee", "Ewe"), ("tl", "Filipino"), ("fi", "Finnish"), ("fr", "French"),
+        ("fy", "Frisian"), ("gl", "Galician"), ("ka", "Georgian"), ("de", "German"),
+        ("el", "Greek"), ("gn", "Guarani"), ("gu", "Gujarati"), ("ht", "Haitian Creole"),
+        ("ha", "Hausa"), ("haw", "Hawaiian"), ("iw", "Hebrew"), ("hi", "Hindi"),
+        ("hmn", "Hmong"), ("hu", "Hungarian"), ("is", "Icelandic"), ("ig", "Igbo"),
+        ("ilo", "Ilocano"), ("id", "Indonesian"), ("ga", "Irish"), ("it", "Italian"),
+        ("ja", "Japanese"), ("jw", "Javanese"), ("kn", "Kannada"), ("kk", "Kazakh"),
+        ("km", "Khmer"), ("rw", "Kinyarwanda"), ("gom", "Konkani"), ("ko", "Korean"),
+        ("kri", "Krio"), ("ku", "Kurdish (Kurmanji)"), ("ckb", "Kurdish (Sorani)"),
+        ("ky", "Kyrgyz"), ("lo", "Lao"), ("la", "Latin"), ("lv", "Latvian"),
+        ("ln", "Lingala"), ("lt", "Lithuanian"), ("lg", "Luganda"),
+        ("lb", "Luxembourgish"), ("mk", "Macedonian"), ("mai", "Maithili"),
+        ("mg", "Malagasy"), ("ms", "Malay"), ("ml", "Malayalam"), ("mt", "Maltese"),
+        ("mi", "Maori"), ("mr", "Marathi"), ("mni-Mtei", "Meiteilon (Manipuri)"),
+        ("lus", "Mizo"), ("mn", "Mongolian"), ("my", "Myanmar (Burmese)"),
+        ("ne", "Nepali"), ("no", "Norwegian"), ("or", "Odia (Oriya)"), ("om", "Oromo"),
+        ("ps", "Pashto"), ("fa", "Persian"), ("pl", "Polish"), ("pt", "Portuguese"),
+        ("pa", "Punjabi"), ("qu", "Quechua"), ("ro", "Romanian"), ("ru", "Russian"),
+        ("sm", "Samoan"), ("sa", "Sanskrit"), ("gd", "Scots Gaelic"), ("nso", "Sepedi"),
+        ("sr", "Serbian"), ("st", "Sesotho"), ("sn", "Shona"), ("sd", "Sindhi"),
+        ("si", "Sinhala"), ("sk", "Slovak"), ("sl", "Slovenian"), ("so", "Somali"),
+        ("es", "Spanish"), ("su", "Sundanese"), ("sw", "Swahili"), ("sv", "Swedish"),
+        ("tg", "Tajik"), ("ta", "Tamil"), ("tt", "Tatar"), ("te", "Telugu"),
+        ("th", "Thai"), ("ti", "Tigrinya"), ("ts", "Tsonga"), ("tr", "Turkish"),
+        ("tk", "Turkmen"), ("ak", "Twi"), ("uk", "Ukrainian"), ("ur", "Urdu"),
+        ("ug", "Uyghur"), ("uz", "Uzbek"), ("vi", "Vietnamese"), ("cy", "Welsh"),
+        ("xh", "Xhosa"), ("yi", "Yiddish"), ("yo", "Yoruba"), ("zu", "Zulu"),
+    };
+
+    internal static readonly (string Code, string Name)[] DeepLLanguages =
+    {
+        ("", "Detect language"),
+        ("ar", "Arabic"), ("bg", "Bulgarian"), ("cs", "Czech"), ("da", "Danish"),
+        ("de", "German"), ("el", "Greek"), ("en-us", "English (American)"),
+        ("en-gb", "English (British)"), ("es", "Spanish"), ("et", "Estonian"),
+        ("fi", "Finnish"), ("fr", "French"), ("hu", "Hungarian"), ("id", "Indonesian"),
+        ("it", "Italian"), ("ja", "Japanese"), ("ko", "Korean"), ("lt", "Lithuanian"),
+        ("lv", "Latvian"), ("nb", "Norwegian (Bokmal)"), ("nl", "Dutch"),
+        ("pl", "Polish"), ("pt-br", "Portuguese (Brazilian)"),
+        ("pt-pt", "Portuguese (European)"), ("ro", "Romanian"), ("ru", "Russian"),
+        ("sk", "Slovak"), ("sl", "Slovenian"), ("sv", "Swedish"), ("tr", "Turkish"),
+        ("uk", "Ukrainian"), ("zh-hans", "Chinese (Simplified)"),
+        ("zh-hant", "Chinese (Traditional)"),
+    };
 
     // Shared HttpClient — reused across all translation requests to avoid socket exhaustion.
     private static readonly HttpClient s_httpClient = new()
@@ -64,6 +142,21 @@ internal class TranslateEngine
 
     // Receive-side: messageId → translated text (thread-safe, capped at MaxCacheSize)
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, string> _receivedCache = new();
+
+    // Context menu tracking
+    private readonly HashSet<int> _hookedContextMenus = new();
+    private Type? _menuItemType;
+    private Type? _separatorType;
+    private bool _contextMenuTypesResolved;
+
+    // Send-side debounce
+    private Timer? _debounceTimer;
+    private string? _pendingDebounceText;
+    private bool _isSettingText;
+    private object? _cachedTextEditor; // the TextEditor for debounce callback
+
+    // Translation display tracking (hash of display panels injected)
+    private readonly HashSet<int> _translatedDisplays = new();
 
     // AvaloniaEdit types (resolved once)
     private Type? _textEditorType;
@@ -209,8 +302,12 @@ internal class TranslateEngine
 
             _r.RunOnUIThread(() =>
             {
-                try   { DiscoverToolbars(); }
-                catch (Exception ex) { Logger.Log("Translate", $"DiscoverToolbars error: {ex.Message}"); }
+                try
+                {
+                    DiscoverToolbars();
+                    ScanContextMenus();
+                }
+                catch (Exception ex) { Logger.Log("Translate", $"Discover error: {ex.Message}"); }
                 finally { Interlocked.Exchange(ref _discovering, 0); }
             });
 
@@ -460,6 +557,7 @@ internal class TranslateEngine
                 try
                 {
                     bool isRight = false;
+                    bool isShift = false;
                     // GetCurrentPoint(relativeTo) → PointerPoint → Properties → IsRightButtonPressed
                     var getCurrentPoint = argsObj.GetType().GetMethod("GetCurrentPoint",
                         BindingFlags.Public | BindingFlags.Instance);
@@ -477,7 +575,15 @@ internal class TranslateEngine
                             }
                         }
                     }
-                    callback(isRight);
+                    // Detect Shift key modifier — shift+left-click acts as toggle (like right-click)
+                    var keyModsProp = argsObj.GetType().GetProperty("KeyModifiers");
+                    if (keyModsProp != null)
+                    {
+                        var keyMods = keyModsProp.GetValue(argsObj);
+                        if (keyMods != null)
+                            isShift = ((int)keyMods & 2) != 0; // KeyModifiers.Shift = 2
+                    }
+                    callback(isRight || isShift);
                 }
                 catch (Exception ex)
                 {
@@ -738,7 +844,11 @@ internal class TranslateEngine
                 {
                     _hookedEditors.Add(id);
                     _hookedEditors.Add(RuntimeHelpers.GetHashCode(parentEditor));
+                    _cachedTextEditor = parentEditor;
                     Logger.Log("Translate", $"Hooked TextArea for send-side translate (id={id})");
+
+                    // Hook TextChanged for pre-translate debounce
+                    HookTextChanged(parentEditor);
                 }
                 return;
             }
@@ -747,6 +857,100 @@ internal class TranslateEngine
         {
             Logger.Log("Translate", $"HookTextArea error: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Hook TextEditor.TextChanged for pre-translate debounce.
+    /// While typing with AutoTranslate on, starts a 1s timer that pre-translates
+    /// and caches the result so Enter is instant.
+    /// </summary>
+    private void HookTextChanged(object textEditor)
+    {
+        try
+        {
+            var eventInfo = textEditor.GetType().GetEvent("TextChanged");
+            if (eventInfo == null)
+            {
+                Logger.Log("Translate", "TextChanged event not found on TextEditor");
+                return;
+            }
+
+            var handlerType = eventInfo.EventHandlerType!;
+            var invokeMethod = handlerType.GetMethod("Invoke")!;
+            var paramTypes = invokeMethod.GetParameters().Select(p => p.ParameterType).ToArray();
+
+            var capturedEditor = textEditor;
+            Action<object> onTextChanged = (_) =>
+            {
+                try
+                {
+                    if (_isSettingText) return;
+                    var settings = UprootedSettings.Load();
+                    if (!settings.TranslateAutoTranslate) return;
+
+                    string? text = _textProperty?.GetValue(capturedEditor) as string;
+                    if (string.IsNullOrWhiteSpace(text)) return;
+
+                    // Already cached?
+                    if (_translationCache.ContainsKey(text)) return;
+
+                    // Restart debounce timer
+                    _pendingDebounceText = text;
+                    _debounceTimer?.Dispose();
+                    _debounceTimer = new Timer(OnDebounceElapsed, null, DebounceMs, Timeout.Infinite);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Translate", $"TextChanged handler error: {ex.Message}");
+                }
+            };
+
+            var p0 = Expression.Parameter(paramTypes[0], "sender");
+            var p1 = Expression.Parameter(paramTypes[1], "e");
+            var cbExpr = Expression.Constant(onTextChanged);
+            var castE = Expression.Convert(p1, typeof(object));
+            var invExpr = Expression.Invoke(cbExpr, castE);
+            var lambda = Expression.Lambda(handlerType, invExpr, p0, p1);
+            var handler = lambda.Compile();
+
+            eventInfo.AddEventHandler(textEditor, handler);
+            Logger.Log("Translate", "Hooked TextChanged for debounce pre-translate");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"HookTextChanged error: {ex.Message}");
+        }
+    }
+
+    private void OnDebounceElapsed(object? state)
+    {
+        var text = _pendingDebounceText;
+        if (string.IsNullOrWhiteSpace(text)) return;
+
+        var settings = UprootedSettings.Load();
+        if (!settings.TranslateAutoTranslate) return;
+
+        var fromLang = settings.TranslateSendFromLang;
+        var toLang = settings.TranslateSendToLang;
+
+        Task.Run(async () =>
+        {
+            try
+            {
+                var result = await TranslateServiceAsync(text, fromLang, toLang)
+                    .ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(result.Text))
+                {
+                    if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
+                    _translationCache[text] = result.Text;
+                    Logger.Log("Translate", $"Debounce: cached translation ({text.Length} chars)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("Translate", $"Debounce translate error: {ex.Message}");
+            }
+        });
     }
 
     private bool AttachTranslateKeyHandler(object eventTarget, object textEditor)
@@ -778,35 +982,37 @@ internal class TranslateEngine
                     string? text = _textProperty?.GetValue(capturedEditor) as string;
                     if (string.IsNullOrWhiteSpace(text)) return;
 
-                    // Substitute from cache if available (most common case after first send)
+                    // Cache hit — synchronous SetValue (instant, common case after debounce)
                     if (_translationCache.TryGetValue(text, out var cached))
                     {
-                        _textProperty?.SetValue(capturedEditor, cached);
-                        Logger.Log("Translate", $"Send-side: substituted from cache ({text.Length}→{cached.Length})");
+                        _isSettingText = true;
+                        try { _textProperty?.SetValue(capturedEditor, cached); }
+                        finally { _isSettingText = false; }
+                        Logger.Log("Translate", $"Send-side: cache hit ({text.Length}→{cached.Length})");
                         return;
                     }
 
-                    // Not cached — warm the cache in background; next send will use it
+                    // Cache miss — synchronous translate (blocks ~200-500ms, rare after debounce)
                     var fromLang = settings.TranslateSendFromLang;
                     var toLang   = settings.TranslateSendToLang;
-                    var rawText  = text;
-                    Task.Run(async () =>
+                    try
                     {
-                        try
+                        var result = TranslateServiceAsync(text, fromLang, toLang)
+                            .GetAwaiter().GetResult();
+                        if (!string.IsNullOrEmpty(result.Text))
                         {
-                            var translated = await TranslateAsync(rawText, fromLang, toLang)
-                                .ConfigureAwait(false);
-                            if (!string.IsNullOrEmpty(translated))
-                            {
-                                if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
-                                _translationCache[rawText] = translated;
-                            }
+                            _isSettingText = true;
+                            try { _textProperty?.SetValue(capturedEditor, result.Text); }
+                            finally { _isSettingText = false; }
+                            if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
+                            _translationCache[text] = result.Text;
+                            Logger.Log("Translate", $"Send-side: sync translate ({text.Length}→{result.Text.Length})");
                         }
-                        catch (Exception ex2)
-                        {
-                            Logger.Log("Translate", $"Cache-fill error: {ex2.Message}");
-                        }
-                    });
+                    }
+                    catch (Exception ex2)
+                    {
+                        Logger.Log("Translate", $"Send-side sync translate error: {ex2.Message}");
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -911,7 +1117,7 @@ internal class TranslateEngine
             if (typeName.IndexOf("CTextBlock", StringComparison.OrdinalIgnoreCase) < 0) continue;
 
             var tag = _r.GetTag(node) as string ?? "";
-            if (tag.StartsWith("uprooted-translate:", StringComparison.Ordinal)) continue;
+            if (tag.StartsWith("uprooted-translate", StringComparison.Ordinal)) continue;
 
             string? text = TryGetCTextBlockContent(node);
             if (string.IsNullOrWhiteSpace(text) || text.Length < 3) continue;
@@ -934,16 +1140,21 @@ internal class TranslateEngine
             {
                 try
                 {
-                    var translated = await TranslateAsync(rawText, fromLang, toLang).ConfigureAwait(false);
-                    if (string.IsNullOrEmpty(translated) || translated == rawText) return;
+                    var result = await TranslateServiceAsync(rawText, fromLang, toLang)
+                        .ConfigureAwait(false);
+                    if (string.IsNullOrEmpty(result.Text) || result.Text == rawText) return;
 
                     if (_receivedCache.Count >= MaxCacheSize) _receivedCache.Clear();
-                    _receivedCache[capturedMsgId] = translated;
+                    _receivedCache[capturedMsgId] = result.Text;
 
                     _r.RunOnUIThread(() =>
                     {
-                        try { InjectTranslatedRow(capturedNode, translated, capturedMsgId); }
-                        catch (Exception ex) { Logger.Log("Translate", $"InjectRow error: {ex.Message}"); }
+                        try
+                        {
+                            InjectTranslationDisplay(capturedNode, result.Text,
+                                result.SourceLanguage, capturedMsgId);
+                        }
+                        catch (Exception ex) { Logger.Log("Translate", $"InjectDisplay error: {ex.Message}"); }
                     });
                 }
                 catch (Exception ex)
@@ -1050,11 +1261,16 @@ internal class TranslateEngine
         return false;
     }
 
-    private void InjectTranslatedRow(object anchorNode, string translatedText, string msgId)
+    /// <summary>
+    /// Inject a styled translation display panel below the anchor node.
+    /// Shows translated text, source language info, and a dismiss link.
+    /// </summary>
+    private void InjectTranslationDisplay(object anchorNode, string translatedText,
+        string? sourceLanguage, string trackingId)
     {
         try
         {
-            // Walk up to find a Grid or StackPanel to add the translation row to
+            // Walk up to find a Grid or StackPanel to add the display to
             object? container = null;
             var current = anchorNode;
             for (int i = 0; i < 10; i++)
@@ -1073,33 +1289,553 @@ internal class TranslateEngine
             }
             if (container == null) return;
 
-            // Build translation label: "🌐 {text}"
-            var tb = _r.CreateTextBlock($"🌐 {translatedText}", 12, ContentPages.TextMuted, "Normal");
-            if (tb == null) return;
-            _r.SetMargin(tb, 0, 2, 0, 0);
-            _r.SetTag(tb, $"uprooted-translate:{msgId}");
-            _r.SetIsHitTestVisible(tb, false);
+            var displayTag = $"uprooted-translate-display:{trackingId}";
 
-            // Also tag the anchor so it won't be re-queued
-            _r.SetTag(anchorNode, $"uprooted-translate:{msgId}");
+            // Check if already injected
+            foreach (var child in _walker.DescendantsDepthFirst(container))
+            {
+                var t = _r.GetTag(child) as string;
+                if (t == displayTag) return;
+            }
 
-            _r.AddChild(container, tb);
+            // Build display panel: StackPanel(vertical, spacing=4)
+            var panel = _r.CreateStackPanel(vertical: true, spacing: 4);
+            if (panel == null) return;
+            _r.SetMargin(panel, 0, 4, 0, 2);
+            _r.SetTag(panel, displayTag);
+
+            // Translated text (13pt, TextWhite, word-wrap)
+            var textTb = _r.CreateTextBlock(translatedText, 13, ContentPages.TextWhite, "Normal");
+            if (textTb != null)
+            {
+                _r.SetTag(textTb, "uprooted-no-recolor");
+                SetTextWrapping(textTb, "Wrap");
+                _r.AddChild(panel, textTb);
+            }
+
+            // Footer row: "Translated from {lang}" (left) + "Dismiss" (right)
+            var footer = _r.CreateGrid();
+            if (footer != null)
+            {
+                _r.SetTag(footer, "uprooted-no-recolor");
+
+                var langLabel = sourceLanguage != null
+                    ? $"Translated from {sourceLanguage}"
+                    : "Translated";
+                var langTb = _r.CreateTextBlock(langLabel, 11, ContentPages.TextMuted, "Normal");
+                if (langTb != null)
+                {
+                    _r.SetHorizontalAlignment(langTb, "Left");
+                    _r.SetVerticalAlignment(langTb, "Center");
+                    _r.SetTag(langTb, "uprooted-no-recolor");
+                    // Set italic via FontStyle
+                    SetFontStyle(langTb, "Italic");
+                    _r.AddChild(footer, langTb);
+                }
+
+                // Dismiss link
+                var dismiss = _r.CreateTextBlock("Dismiss", 11, ContentPages.AccentGreen, "Normal");
+                if (dismiss != null)
+                {
+                    _r.SetHorizontalAlignment(dismiss, "Right");
+                    _r.SetVerticalAlignment(dismiss, "Center");
+                    _r.SetIsHitTestVisible(dismiss, true);
+                    _r.SetTag(dismiss, "uprooted-no-recolor");
+
+                    var capturedPanel = panel;
+                    var capturedContainer = container;
+                    var capturedTrackingId = trackingId;
+                    _r.SubscribeClickReleased(dismiss, () =>
+                    {
+                        try
+                        {
+                            RemoveChild(capturedContainer, capturedPanel);
+                            _translatedDisplays.Remove(RuntimeHelpers.GetHashCode(capturedPanel));
+                            // Allow re-translation by clearing the tag on anchor
+                            _r.SetTag(anchorNode, "");
+                            Logger.Log("Translate", $"Dismissed translation display: {capturedTrackingId}");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Translate", $"Dismiss error: {ex.Message}");
+                        }
+                    });
+
+                    _r.AddChild(footer, dismiss);
+                }
+
+                _r.AddChild(panel, footer);
+            }
+
+            // Tag the anchor so it won't be re-queued
+            _r.SetTag(anchorNode, $"uprooted-translate-display:{trackingId}");
+
+            _r.AddChild(container, panel);
+            _translatedDisplays.Add(RuntimeHelpers.GetHashCode(panel));
         }
         catch (Exception ex)
         {
-            Logger.Log("Translate", $"InjectTranslatedRow error: {ex.Message}");
+            Logger.Log("Translate", $"InjectTranslationDisplay error: {ex.Message}");
+        }
+    }
+
+    private void SetTextWrapping(object textBlock, string mode)
+    {
+        try
+        {
+            var prop = textBlock.GetType().GetProperty("TextWrapping");
+            if (prop != null)
+            {
+                var wrapEnum = Enum.Parse(prop.PropertyType, mode);
+                prop.SetValue(textBlock, wrapEnum);
+            }
+        }
+        catch { }
+    }
+
+    private void SetFontStyle(object textBlock, string style)
+    {
+        try
+        {
+            var prop = textBlock.GetType().GetProperty("FontStyle");
+            if (prop != null)
+            {
+                var styleEnum = Enum.Parse(prop.PropertyType, style);
+                prop.SetValue(textBlock, styleEnum);
+            }
+        }
+        catch { }
+    }
+
+    private void RemoveChild(object parent, object child)
+    {
+        try
+        {
+            foreach (var propName in new[] { "Children", "Items" })
+            {
+                var prop = parent.GetType().GetProperty(propName,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                if (prop == null) continue;
+                var coll = prop.GetValue(parent);
+                if (coll == null) continue;
+                var removeMethod = coll.GetType().GetMethod("Remove",
+                    BindingFlags.Public | BindingFlags.Instance);
+                if (removeMethod != null)
+                {
+                    removeMethod.Invoke(coll, new[] { child });
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"RemoveChild error: {ex.Message}");
         }
     }
 
     // ──────────────────────────────────────────────────────────────────────────
-    // Google Translate (unofficial, no API key required)
+    // Context menu: inject "Translate" into message right-click menus
     // ──────────────────────────────────────────────────────────────────────────
 
-    internal static async Task<string?> TranslateAsync(string text, string from, string to)
+    private bool ResolveContextMenuTypes()
     {
-        if (string.IsNullOrWhiteSpace(text)) return null;
-        if (from == to && from != "auto") return text;
+        if (_contextMenuTypesResolved) return _menuItemType != null;
+        _contextMenuTypesResolved = true;
+        try
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var t in asm.GetTypes())
+                {
+                    if (t.FullName == "Avalonia.Controls.MenuItem") _menuItemType = t;
+                    else if (t.FullName == "Avalonia.Controls.Separator") _separatorType = t;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"ResolveContextMenuTypes error: {ex.Message}");
+        }
+        return _menuItemType != null;
+    }
 
+    private void ScanContextMenus()
+    {
+        if (!ResolveContextMenuTypes()) return;
+
+        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+        {
+            var typeName = node.GetType().Name;
+
+            // Look for message-related controls that might have context menus
+            bool isMessageControl =
+                typeName.Contains("Message", StringComparison.OrdinalIgnoreCase)
+                && (typeName.Contains("Border", StringComparison.OrdinalIgnoreCase)
+                    || typeName.Contains("Background", StringComparison.OrdinalIgnoreCase)
+                    || typeName.Contains("View", StringComparison.OrdinalIgnoreCase)
+                    || typeName.Contains("Item", StringComparison.OrdinalIgnoreCase));
+
+            if (!isMessageControl) continue;
+
+            int id = RuntimeHelpers.GetHashCode(node);
+            if (_hookedContextMenus.Contains(id)) continue;
+
+            // Check for ContextFlyout or ContextMenu
+            object? flyout = null;
+            foreach (var propName in new[] { "ContextFlyout", "ContextMenu" })
+            {
+                var prop = node.GetType().GetProperty(propName,
+                    BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+                flyout = prop?.GetValue(node);
+                if (flyout != null) break;
+            }
+
+            if (flyout == null) continue;
+
+            HookContextMenu(node, flyout);
+            _hookedContextMenus.Add(id);
+        }
+    }
+
+    private void HookContextMenu(object ownerControl, object flyout)
+    {
+        try
+        {
+            // Subscribe to Opened/Opening event
+            var openedEvent = flyout.GetType().GetEvent("Opened")
+                           ?? flyout.GetType().GetEvent("Opening");
+            if (openedEvent == null)
+            {
+                Logger.Log("Translate", $"No Opened/Opening event on {flyout.GetType().Name}");
+                return;
+            }
+
+            var closedEvent = flyout.GetType().GetEvent("Closed")
+                           ?? flyout.GetType().GetEvent("Closing");
+
+            // Track injected items for removal on close
+            var injectedItems = new List<object>();
+            var capturedOwner = ownerControl;
+            var capturedFlyout = flyout;
+
+            // Build Opened handler
+            var openedHandlerType = openedEvent.EventHandlerType!;
+            var openedParamTypes = openedHandlerType.GetMethod("Invoke")!
+                .GetParameters().Select(p => p.ParameterType).ToArray();
+
+            Action<object> onOpened = (_) =>
+            {
+                try
+                {
+                    // Find the Items collection on the flyout
+                    var itemsColl = GetItemsCollection(capturedFlyout);
+                    if (itemsColl == null) return;
+
+                    // Create separator
+                    if (_separatorType != null)
+                    {
+                        var sep = Activator.CreateInstance(_separatorType);
+                        if (sep != null)
+                        {
+                            _r.SetTag(sep, "uprooted-translate-ctx");
+                            AddToCollection(itemsColl, sep);
+                            injectedItems.Add(sep);
+                        }
+                    }
+
+                    // Create "Translate" menu item
+                    if (_menuItemType != null)
+                    {
+                        var menuItem = Activator.CreateInstance(_menuItemType);
+                        if (menuItem != null)
+                        {
+                            _menuItemType.GetProperty("Header")?.SetValue(menuItem, "Translate");
+                            _r.SetTag(menuItem, "uprooted-translate-ctx");
+
+                            // Subscribe to Click
+                            var clickEvent = _menuItemType.GetEvent("Click");
+                            if (clickEvent != null)
+                            {
+                                var clickHandlerType = clickEvent.EventHandlerType!;
+                                var clickParamTypes = clickHandlerType.GetMethod("Invoke")!
+                                    .GetParameters().Select(p => p.ParameterType).ToArray();
+
+                                var capturedOwnerForClick = capturedOwner;
+                                Action<object> onClick = (__) =>
+                                {
+                                    try { TranslateMessageContent(capturedOwnerForClick); }
+                                    catch (Exception ex) { Logger.Log("Translate", $"Context translate error: {ex.Message}"); }
+                                };
+
+                                var cp0 = Expression.Parameter(clickParamTypes[0], "s");
+                                var cp1 = Expression.Parameter(clickParamTypes[1], "e");
+                                var ccb = Expression.Constant(onClick);
+                                var cce = Expression.Convert(cp1, typeof(object));
+                                var cinv = Expression.Invoke(ccb, cce);
+                                var clambda = Expression.Lambda(clickHandlerType, cinv, cp0, cp1);
+                                clickEvent.AddEventHandler(menuItem, clambda.Compile());
+                            }
+
+                            AddToCollection(itemsColl, menuItem);
+                            injectedItems.Add(menuItem);
+                        }
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Translate", $"Context menu Opened handler error: {ex.Message}");
+                }
+            };
+
+            var op0 = Expression.Parameter(openedParamTypes[0], "sender");
+            var op1 = Expression.Parameter(openedParamTypes[1], "e");
+            var ocb = Expression.Constant(onOpened);
+            var oce = Expression.Convert(op1, typeof(object));
+            var oinv = Expression.Invoke(ocb, oce);
+            var olambda = Expression.Lambda(openedHandlerType, oinv, op0, op1);
+            openedEvent.AddEventHandler(flyout, olambda.Compile());
+
+            // Build Closed handler to remove injected items
+            if (closedEvent != null)
+            {
+                var closedHandlerType = closedEvent.EventHandlerType!;
+                var closedParamTypes = closedHandlerType.GetMethod("Invoke")!
+                    .GetParameters().Select(p => p.ParameterType).ToArray();
+
+                Action<object> onClosed = (_) =>
+                {
+                    try
+                    {
+                        var itemsColl = GetItemsCollection(capturedFlyout);
+                        if (itemsColl != null)
+                        {
+                            foreach (var item in injectedItems)
+                                RemoveFromCollection(itemsColl, item);
+                        }
+                        injectedItems.Clear();
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Translate", $"Context menu Closed handler error: {ex.Message}");
+                    }
+                };
+
+                var cp0 = Expression.Parameter(closedParamTypes[0], "sender");
+                var cp1 = Expression.Parameter(closedParamTypes[1], "e");
+                var ccb = Expression.Constant(onClosed);
+                var cce = Expression.Convert(cp1, typeof(object));
+                var cinv = Expression.Invoke(ccb, cce);
+                var clambda = Expression.Lambda(closedHandlerType, cinv, cp0, cp1);
+                closedEvent.AddEventHandler(flyout, clambda.Compile());
+            }
+
+            Logger.Log("Translate", $"Hooked context menu on {ownerControl.GetType().Name}");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"HookContextMenu error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Translate the content of a message view (triggered by context menu click).
+    /// </summary>
+    private void TranslateMessageContent(object messageControl)
+    {
+        try
+        {
+            // Walk descendants to find CTextBlock
+            string? text = null;
+            object? cTextBlock = null;
+            foreach (var node in _walker.DescendantsDepthFirst(messageControl))
+            {
+                var tn = node.GetType().Name;
+                if (tn.IndexOf("CTextBlock", StringComparison.OrdinalIgnoreCase) < 0) continue;
+
+                // Skip already-translated
+                var tag = _r.GetTag(node) as string ?? "";
+                if (tag.StartsWith("uprooted-translate", StringComparison.Ordinal)) continue;
+
+                text = TryGetCTextBlockContent(node);
+                if (!string.IsNullOrWhiteSpace(text) && text.Length >= 3)
+                {
+                    cTextBlock = node;
+                    break;
+                }
+            }
+
+            if (cTextBlock == null || string.IsNullOrWhiteSpace(text)) return;
+
+            string trackingId = GetMessageId(cTextBlock);
+            var capturedNode = cTextBlock;
+            var capturedText = text;
+
+            var settings = UprootedSettings.Load();
+            var fromLang = settings.TranslateFromLang;
+            var toLang = settings.TranslateToLang;
+
+            // Tag to prevent re-processing
+            _r.SetTag(capturedNode, $"uprooted-translate:pending:{trackingId}");
+
+            Task.Run(async () =>
+            {
+                try
+                {
+                    var result = await TranslateServiceAsync(capturedText, fromLang, toLang)
+                        .ConfigureAwait(false);
+                    if (string.IsNullOrEmpty(result.Text) || result.Text == capturedText) return;
+
+                    _r.RunOnUIThread(() =>
+                    {
+                        try
+                        {
+                            InjectTranslationDisplay(capturedNode, result.Text,
+                                result.SourceLanguage, trackingId);
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Log("Translate", $"Context translate display error: {ex.Message}");
+                        }
+                    });
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("Translate", $"Context translate async error: {ex.Message}");
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"TranslateMessageContent error: {ex.Message}");
+        }
+    }
+
+    private object? GetItemsCollection(object flyoutOrMenu)
+    {
+        foreach (var propName in new[] { "Items", "ItemsSource" })
+        {
+            var prop = flyoutOrMenu.GetType().GetProperty(propName,
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            var coll = prop?.GetValue(flyoutOrMenu);
+            if (coll != null) return coll;
+        }
+        return null;
+    }
+
+    private void AddToCollection(object collection, object item)
+    {
+        var addMethod = collection.GetType().GetMethod("Add",
+            BindingFlags.Public | BindingFlags.Instance);
+        addMethod?.Invoke(collection, new[] { item });
+    }
+
+    private void RemoveFromCollection(object collection, object item)
+    {
+        var removeMethod = collection.GetType().GetMethod("Remove",
+            BindingFlags.Public | BindingFlags.Instance);
+        removeMethod?.Invoke(collection, new[] { item });
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Service layer: unified translation dispatcher
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Translate text using the configured service (Google, DeepL Free, DeepL Pro).
+    /// Returns a TranslationResult with translated text and detected source language.
+    /// </summary>
+    internal static async Task<TranslationResult> TranslateServiceAsync(
+        string text, string from, string to)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return new TranslationResult(null, null);
+        if (from == to && from != "auto" && from != "")
+            return new TranslationResult(text, null);
+
+        var settings = UprootedSettings.Load();
+        var service = settings.TranslateService ?? "google";
+
+        if (service == "deepl" || service == "deepl-pro")
+        {
+            var apiKey = settings.TranslateDeeplApiKey;
+            if (!string.IsNullOrEmpty(apiKey))
+            {
+                var result = await DeepLTranslateAsync(text, from, to, apiKey,
+                    isPro: service == "deepl-pro").ConfigureAwait(false);
+                if (result.Text != null) return result;
+                // DeepL returned null but didn't throw 403 — fall through to Google
+            }
+            else
+            {
+                Logger.Log("Translate", "DeepL selected but no API key configured, falling back to Google");
+            }
+        }
+
+        return await GoogleTranslateAsync(text, from, to).ConfigureAwait(false);
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Google Translate
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private static async Task<TranslationResult> GoogleTranslateAsync(
+        string text, string from, string to)
+    {
+        // Try new endpoint first, fall back to old
+        try
+        {
+            var result = await GoogleTranslateNewAsync(text, from, to).ConfigureAwait(false);
+            if (result.Text != null) return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"Google new endpoint failed, trying old: {ex.Message}");
+        }
+
+        return await GoogleTranslateOldAsync(text, from, to).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Google Translate PA endpoint (newer, returns structured response with source language).
+    /// </summary>
+    private static async Task<TranslationResult> GoogleTranslateNewAsync(
+        string text, string from, string to)
+    {
+        var sl = from == "auto" ? "" : from;
+        var url = "https://translate-pa.googleapis.com/v1/translate"
+                + $"?params.client=gtx&dataTypes=TRANSLATION"
+                + $"&key={GoogleApiKey}"
+                + $"&query.sourceLanguage={Uri.EscapeDataString(sl)}"
+                + $"&query.targetLanguage={Uri.EscapeDataString(to)}"
+                + $"&query.text={Uri.EscapeDataString(text)}";
+
+        var resp = await s_httpClient.GetStringAsync(url).ConfigureAwait(false);
+        if (string.IsNullOrEmpty(resp))
+            return new TranslationResult(null, null);
+
+        // Extract translation and source language from response
+        string? translated = null;
+        string? sourceLang = null;
+
+        var translationMatch = Regex.Match(resp, @"""translation""\s*:\s*""((?:[^""\\]|\\.)*)""");
+        if (translationMatch.Success)
+            translated = UnescapeJsonString(translationMatch.Groups[1].Value);
+
+        var langMatch = Regex.Match(resp, @"""sourceLanguage""\s*:\s*""([^""]*)""");
+        if (langMatch.Success)
+            sourceLang = GetLanguageDisplayName(langMatch.Groups[1].Value);
+
+        return new TranslationResult(translated, sourceLang);
+    }
+
+    /// <summary>
+    /// Google Translate old endpoint (client=gtx, battle-tested fallback).
+    /// </summary>
+    private static async Task<TranslationResult> GoogleTranslateOldAsync(
+        string text, string from, string to)
+    {
         try
         {
             var url = "https://translate.googleapis.com/translate_a/single"
@@ -1109,48 +1845,150 @@ internal class TranslateEngine
                     + $"&q={Uri.EscapeDataString(text)}";
 
             var resp = await s_httpClient.GetStringAsync(url).ConfigureAwait(false);
-            return ParseGoogleTranslateResponse(resp);
+            var translated = ParseGoogleOldResponse(resp);
+
+            // Extract detected source language from response (third element at top level)
+            string? sourceLang = null;
+            var langMatch = Regex.Match(resp, @"\],null,""([a-z]{2}(?:-[A-Za-z]{2,5})?)""");
+            if (langMatch.Success)
+                sourceLang = GetLanguageDisplayName(langMatch.Groups[1].Value);
+
+            return new TranslationResult(translated, sourceLang);
         }
         catch (Exception ex)
         {
-            Logger.Log("Translate", $"TranslateAsync error: {ex.Message}");
-            return null;
+            Logger.Log("Translate", $"Google old endpoint error: {ex.Message}");
+            return new TranslationResult(null, null);
         }
     }
 
     /// <summary>
-    /// Parse Google Translate unofficial JSON response.
+    /// Parse Google Translate old endpoint JSON response.
     /// Format: [[[translated, original, ...], ...], ...]
     /// No JSON serializer — uses regex (honors no-System.Text.Json rule).
-    /// Collects all first-position quoted strings in sub-arrays (the translated segments).
     /// </summary>
-    internal static string? ParseGoogleTranslateResponse(string json)
+    internal static string? ParseGoogleOldResponse(string json)
     {
         if (string.IsNullOrEmpty(json)) return null;
         try
         {
             var sb = new System.Text.StringBuilder();
-            // Match first string in each [[" block — these are the translated segments
             var matches = Regex.Matches(json, @"\[\[""((?:[^""\\]|\\.)*)""");
             foreach (Match m in matches)
-            {
-                var seg = m.Groups[1].Value;
-                // Unescape common JSON escape sequences
-                seg = seg.Replace("\\n",  "\n")
-                         .Replace("\\t",  "\t")
-                         .Replace("\\\"", "\"")
-                         .Replace("\\\\", "\\");
-                seg = Regex.Replace(seg, @"\\u([0-9a-fA-F]{4})",
-                    m2 => ((char)Convert.ToInt32(m2.Groups[1].Value, 16)).ToString());
-                sb.Append(seg);
-            }
+                sb.Append(UnescapeJsonString(m.Groups[1].Value));
             var result = sb.ToString().Trim();
             return result.Length > 0 ? result : null;
         }
         catch (Exception ex)
         {
-            Logger.Log("Translate", $"ParseGoogleTranslateResponse error: {ex.Message}");
+            Logger.Log("Translate", $"ParseGoogleOldResponse error: {ex.Message}");
             return null;
         }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // DeepL
+    // ──────────────────────────────────────────────────────────────────────────
+
+    private static async Task<TranslationResult> DeepLTranslateAsync(
+        string text, string from, string to, string apiKey, bool isPro)
+    {
+        try
+        {
+            var host = isPro ? "api.deepl.com" : "api-free.deepl.com";
+            var url = $"https://{host}/v2/translate";
+
+            // Build form body — omit source_lang for auto-detect
+            var body = $"auth_key={Uri.EscapeDataString(apiKey)}"
+                     + $"&text={Uri.EscapeDataString(text)}"
+                     + $"&target_lang={Uri.EscapeDataString(to.ToUpperInvariant())}";
+
+            if (!string.IsNullOrEmpty(from) && from != "auto")
+                body += $"&source_lang={Uri.EscapeDataString(from.ToUpperInvariant())}";
+
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, new System.Net.Http.Headers.MediaTypeHeaderValue("application/x-www-form-urlencoded"))
+            };
+
+            var response = await s_httpClient.SendAsync(request).ConfigureAwait(false);
+            var statusCode = (int)response.StatusCode;
+
+            if (statusCode == 403)
+            {
+                Logger.Log("Translate", "DeepL: invalid API key (403)");
+                return new TranslationResult(null, null); // don't fallback for auth errors
+            }
+
+            if (statusCode == 456)
+            {
+                Logger.Log("Translate", "DeepL: quota exceeded (456), falling back to Google");
+                return new TranslationResult(null, null); // caller will fall back to Google
+            }
+
+            response.EnsureSuccessStatusCode();
+            var resp = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+
+            // Parse response: {"translations":[{"detected_source_language":"EN","text":"..."}]}
+            string? translated = null;
+            string? sourceLang = null;
+
+            var textMatch = Regex.Match(resp, @"""text""\s*:\s*""((?:[^""\\]|\\.)*)""");
+            if (textMatch.Success)
+                translated = UnescapeJsonString(textMatch.Groups[1].Value);
+
+            var langMatch = Regex.Match(resp, @"""detected_source_language""\s*:\s*""([^""]*)""");
+            if (langMatch.Success)
+                sourceLang = GetLanguageDisplayName(langMatch.Groups[1].Value.ToLowerInvariant());
+
+            return new TranslationResult(translated, sourceLang);
+        }
+        catch (HttpRequestException ex) when (ex.Message.Contains("403"))
+        {
+            Logger.Log("Translate", $"DeepL auth error: {ex.Message}");
+            return new TranslationResult(null, null);
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"DeepL error: {ex.Message}");
+            return new TranslationResult(null, null);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────────────────────
+    // Helpers
+    // ──────────────────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Get the display name for a language code, checking both Google and DeepL lists.
+    /// </summary>
+    internal static string GetLanguageDisplayName(string code)
+    {
+        if (string.IsNullOrEmpty(code)) return "Unknown";
+        var lc = code.ToLowerInvariant();
+        foreach (var (c, n) in GoogleLanguages)
+            if (c.Equals(lc, StringComparison.OrdinalIgnoreCase)) return n;
+        foreach (var (c, n) in DeepLLanguages)
+            if (c.Equals(lc, StringComparison.OrdinalIgnoreCase)) return n;
+        return code;
+    }
+
+    /// <summary>
+    /// Get the language list for the current service.
+    /// </summary>
+    internal static (string Code, string Name)[] GetLanguagesForService(string service)
+    {
+        return service == "deepl" || service == "deepl-pro" ? DeepLLanguages : GoogleLanguages;
+    }
+
+    private static string UnescapeJsonString(string s)
+    {
+        s = s.Replace("\\n", "\n")
+             .Replace("\\t", "\t")
+             .Replace("\\\"", "\"")
+             .Replace("\\\\", "\\");
+        s = Regex.Replace(s, @"\\u([0-9a-fA-F]{4})",
+            m => ((char)Convert.ToInt32(m.Groups[1].Value, 16)).ToString());
+        return s;
     }
 }

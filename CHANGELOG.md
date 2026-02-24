@@ -6,6 +6,28 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.1-dev6] - 2026-02-23
+
+### Added
+
+- **Google Translate backend for Translate plugin** — Translate engine now supports Google Translate (free, no API key needed) alongside DeepL. Users pick their service in the config popup. Google language list covers 130+ languages. Settings persist the service choice (`TranslateService`), DeepL API key, and auto-translate alert preference.
+  - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`, `hook/UprootedSettings.cs`
+
+### Fixed
+
+- **Rootcord theme colors stale after theme switch** — `BuildServerIcon`, `BuildHomeButton`, and `BuildActionButton` captured color values into local variables at build time. When the theme changed, hover handler closures still referenced the old colors. All three now read live from instance fields (`_cardBg`, `_accent`, etc.) so hover states update immediately after `NotifyThemeChanged`.
+  - File: `hook/RootcordEngine.cs`
+- **Rootcord profile card popup misaligned and narrow** — Profile card was fixed at 220px width with a vertical center-aligned layout. Now dynamically matches user bar width (strip + channels panel), snapping the right edge to the channel list boundary. Avatar layout restructured from vertical StackPanel to horizontal Grid (48px avatar + text side-by-side).
+  - File: `hook/RootcordEngine.cs`
+- **Rootcord separator and selection pills not refreshed on theme change** — `RefreshAllUiColors` now calls `RefreshSelectedHighlight()` for accent-colored pills and recolors the separator border between the home button and server icons.
+  - File: `hook/RootcordEngine.cs`
+- **Translate settings lost on restart** — `TranslateService`, `TranslateDeeplApiKey`, and `TranslateShowAutoTranslateAlert` were not persisted to the INI settings file. Added read/write for all three fields.
+  - File: `hook/UprootedSettings.cs`
+- **StartupHook crash on trimmed .NET hosts** — `catch (TypeLoadException)` in `AssemblyLoadEventHandler` and `GetDirectories` only caught one specific exception type. Trimmed hosts can throw other types (e.g., `FileNotFoundException`). Broadened to `catch (Exception)`.
+  - File: `hook/StartupHook.cs`
+
+---
+
 ## [0.5.1-dev5] - 2026-02-23
 
 ### Added
@@ -617,6 +639,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev6]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev5...v0.5.1-dev6
 [0.5.1-dev5]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev4...v0.5.1-dev5
 [0.5.1-dev4]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev3...v0.5.1-dev4
 [0.5.1-dev3]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev2...v0.5.1-dev3
