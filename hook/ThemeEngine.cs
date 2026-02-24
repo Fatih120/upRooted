@@ -796,6 +796,9 @@ internal class ThemeEngine
         _walkedBorder = DefaultCardBorder;
         _walkedAccent = DefaultAccentGreen;
 
+        // Linux compositor workaround: reverting theme can also freeze
+        ScheduleLinuxActivateWorkaround();
+
         // Notify plugins (Rootcord, LinkEmbeds) that theme reverted to native.
         // Read Root's live colors first so ContentPages statics are correct before
         // plugins refresh their cached fields.
@@ -1134,6 +1137,9 @@ internal class ThemeEngine
         // Phase 6: Apply custom ping color if set
         if (!string.IsNullOrEmpty(_customPingColor))
             ApplyPingColorToThemeDicts();
+
+        // Phase 7: Linux compositor workaround
+        ScheduleLinuxActivateWorkaround();
 
         ev.Set("theme_dict_keys", _overriddenThemeDictKeys.Count);
         return true;
@@ -2030,6 +2036,49 @@ internal class ThemeEngine
                 }
             });
         }, null, delayMs, System.Threading.Timeout.Infinite); // one-shot
+    }
+
+    /// <summary>
+    /// On Linux, switching between light/dark themes can freeze the UI until user input.
+    /// Force Avalonia to push new frames by calling InvalidateVisual + Activate on the
+    /// main window at staggered intervals. A single nudge at one delay isn't reliable:
+    /// the compositor stall can start at varying points in the render pipeline.
+    /// </summary>
+    private void ScheduleLinuxActivateWorkaround()
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Linux)) return;
+
+        var flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance;
+
+        foreach (var delayMs in new[] { 200, 500, 1000 })
+        {
+            new System.Threading.Timer(_ =>
+            {
+                _r.RunOnUIThread(() =>
+                {
+                    try
+                    {
+                        var mainWindow = _r.GetMainWindow();
+                        if (mainWindow == null) return;
+                        var windowType = mainWindow.GetType();
+
+                        // InvalidateVisual forces Avalonia to schedule a new render pass
+                        windowType.GetMethod("InvalidateVisual", flags, null, Type.EmptyTypes, null)
+                            ?.Invoke(mainWindow, null);
+
+                        // Activate nudges the window manager / compositor
+                        windowType.GetMethod("Activate", flags, null, Type.EmptyTypes, null)
+                            ?.Invoke(mainWindow, null);
+
+                        Logger.Log("Theme", $"Linux compositor nudge fired ({delayMs}ms)");
+                    }
+                    catch (Exception ex)
+                    {
+                        Logger.Log("Theme", "Linux compositor nudge error: " + ex.Message);
+                    }
+                });
+            }, null, delayMs, System.Threading.Timeout.Infinite);
+        }
     }
 
     private int WalkAllWindows()

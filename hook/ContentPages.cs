@@ -64,6 +64,23 @@ internal static class ContentPages
         catch { return bg; }
     }
 
+    /// <summary>
+    /// Direction-aware highlight using a reference color for direction.
+    /// Ensures hover adjustments go the same direction as the resting-state offset.
+    /// Fixes Sakura hover: button bg sits at lum ~0.48 after initial darkening,
+    /// so self-evaluated AdjustForHighlight would lighten (reversing toward card bg).
+    /// </summary>
+    private static string AdjustForHighlight(string bg, double percent, string directionRef)
+    {
+        try
+        {
+            return ColorUtils.Luminance(directionRef) > 0.5
+                ? ColorUtils.Darken(bg, percent)
+                : ColorUtils.Lighten(bg, percent);
+        }
+        catch { return bg; }
+    }
+
     /// Font size presets for different UI contexts.
     /// PageScale matches Root's native settings; LightboxScale is larger for modal readability.
     private readonly record struct FontScale(
@@ -945,6 +962,9 @@ internal static class ContentPages
                         AddDevButton(engContent, "Revert Theme", () =>
                         {
                             themeEngine?.RevertTheme();
+                            settings.ActiveTheme = "default-dark";
+                            try { settings.Save(); }
+                            catch (Exception sx) { Logger.Log("Theme", "Revert save error: " + sx.Message); }
                             onRefreshCurrentPage?.Invoke();
                         });
                     });
@@ -1818,7 +1838,7 @@ internal static class ContentPages
                             ShowPluginSettingsLightbox(r, capturedId, capturedName, settings, font);
                         });
                         r.SubscribeEvent(gearBtn, "PointerEntered", () =>
-                            r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8)));
+                            r.SetBackground(gearBtnRef, AdjustForHighlight(gearBtnBg, 8, CardBg)));
                         r.SubscribeEvent(gearBtn, "PointerExited", () =>
                             r.SetBackground(gearBtnRef, gearBtnBg));
 
@@ -1856,7 +1876,7 @@ internal static class ContentPages
                             ShowPluginInfoLightbox(r, capturedName, capturedDesc, capturedId, font);
                         });
                         r.SubscribeEvent(infoBtn, "PointerEntered", () =>
-                            r.SetBackground(infoBtnRef, AdjustForHighlight(infoBtnBg, 8)));
+                            r.SetBackground(infoBtnRef, AdjustForHighlight(infoBtnBg, 8, CardBg)));
                         r.SubscribeEvent(infoBtn, "PointerExited", () =>
                             r.SetBackground(infoBtnRef, infoBtnBg));
 
@@ -1876,7 +1896,7 @@ internal static class ContentPages
                         r.SetWidth(openBtn, 44);
                         r.SetHeight(openBtn, 28);
                         r.SetVerticalAlignment(openBtn, "Center");
-                        SetBorderStroke(r, openBtn, AdjustForHighlight(openBtnBg, 10), ThickBorder);
+                        SetBorderStroke(r, openBtn, AdjustForHighlight(openBtnBg, 10, CardBg), ThickBorder);
 
                         var openLabel = CreateBoundText(r, "Open", 11, TextWhite, "TextPrimary");
                         r.SetFontWeight(openLabel, "Bold");
@@ -1892,13 +1912,13 @@ internal static class ContentPages
                         });
                         r.SubscribeEvent(openBtn, "PointerEntered", () =>
                         {
-                            r.SetBackground(btnRef, AdjustForHighlight(openBtnBg, 5));
-                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 40), ThickBorder);
+                            r.SetBackground(btnRef, AdjustForHighlight(openBtnBg, 5, CardBg));
+                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 40, CardBg), ThickBorder);
                         });
                         r.SubscribeEvent(openBtn, "PointerExited", () =>
                         {
                             r.SetBackground(btnRef, openBtnBg);
-                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 10), ThickBorder);
+                            SetBorderStroke(r, btnRef, AdjustForHighlight(openBtnBg, 10, CardBg), ThickBorder);
                         });
 
                         r.AddChild(rightIcons, openBtn);
@@ -2090,7 +2110,7 @@ internal static class ContentPages
                 var closeBtnRef = closeBtn;
                 r.SubscribeClickReleased(closeBtn, () => DismissPluginInfoLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
-                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8)));
+                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8, CardBg)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
                     r.SetBackground(closeBtnRef, closeBtnBg));
 
@@ -2378,9 +2398,9 @@ internal static class ContentPages
         {
             var basis = state
                 ? (isHover ? AdjustForHighlight(accentColor, 10) : accentColor)
-                : (isHover ? AdjustForHighlight(dimColor, 8) : dimColor);
+                : (isHover ? AdjustForHighlight(dimColor, 8, CardBg) : dimColor);
             r.SetRenderScale(pill, 0.985);
-            r.SetBackground(pill, AdjustForHighlight(basis, 10));
+            r.SetBackground(pill, AdjustForHighlight(basis, 10, CardBg));
         });
 
         // Click handler
@@ -2390,7 +2410,7 @@ internal static class ContentPages
             state = !state;
             // Update visuals
             var rest = state ? accentColor : dimColor;
-            var hover = state ? AdjustForHighlight(accentColor, 10) : AdjustForHighlight(dimColor, 8);
+            var hover = state ? AdjustForHighlight(accentColor, 10) : AdjustForHighlight(dimColor, 8, CardBg);
             r.SetBackground(pill, isHover ? hover : rest);
             if (thumb != null)
             {
@@ -2407,7 +2427,7 @@ internal static class ContentPages
             isHover = true;
             var hoverColor = state
                 ? AdjustForHighlight(accentColor, 10)
-                : AdjustForHighlight(dimColor, 8);
+                : AdjustForHighlight(dimColor, 8, CardBg);
             r.SetBackground(pill, hoverColor);
         });
         r.SubscribeEvent(pill, "PointerExited", () =>
@@ -3497,7 +3517,7 @@ internal static class ContentPages
                     {
                         gearHovered = true;
                         var baseBg = GetGearBtnBg();
-                        r.SetBackground(gearBtnRef, AdjustForHighlight(baseBg, 8));
+                        r.SetBackground(gearBtnRef, AdjustForHighlight(baseBg, 8, GetInnerBaseBg()));
                         // Remove card hover while over gear
                         if (!isActive)
                         {
@@ -3774,7 +3794,7 @@ internal static class ContentPages
                 var closeBtnRef = closeBtn;
                 r.SubscribeClickReleased(closeBtn, () => DismissPluginSettingsLightbox(r));
                 r.SubscribeEvent(closeBtn, "PointerEntered", () =>
-                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8)));
+                    r.SetBackground(closeBtnRef, AdjustForHighlight(closeBtnBg, 8, CardBg)));
                 r.SubscribeEvent(closeBtn, "PointerExited", () =>
                     r.SetBackground(closeBtnRef, closeBtnBg));
 
