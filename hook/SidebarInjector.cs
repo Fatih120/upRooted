@@ -839,7 +839,7 @@ internal class SidebarInjector
         int itemCount = 0;
         int statusCount = 0;
         int updatedCount = 0;
-        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var visited = new HashSet<object>(RefEqualityComparer.Instance);
 
         void ScanRoot(object root)
         {

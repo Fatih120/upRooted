@@ -1139,7 +1139,7 @@ internal class MessageLogger : IDisposable
     private IEnumerable<object> DescendantsHybrid(object root)
     {
         var stack = new Stack<object>();
-        var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+        var visited = new HashSet<object>(RefEqualityComparer.Instance);
         stack.Push(root);
 
         while (stack.Count > 0)

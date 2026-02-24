@@ -921,7 +921,7 @@ internal class DotNetBrowserReflection
             Logger.Log("DotNetBrowser", $"FindBrowserDirect/ViewModel: DataContext type = {dataContext.GetType().FullName}");
 
             // Search the ViewModel and its fields recursively (depth-limited)
-            var visited = new HashSet<object>(ReferenceEqualityComparer.Instance);
+            var visited = new HashSet<object>(RefEqualityComparer.Instance);
             var result = DeepSearchForBrowser(dataContext, engineType, visited, 0, maxDepth: 4);
             if (result != null) return result;
 

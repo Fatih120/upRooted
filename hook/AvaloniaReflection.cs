@@ -6,6 +6,18 @@ using System.Runtime.CompilerServices;
 namespace Uprooted;
 
 /// <summary>
+/// Reference-equality comparer for object HashSets/Dictionaries.
+/// Replaces System.Collections.Generic.ReferenceEqualityComparer which is trimmed
+/// from Root's AppImage single-file bundle.
+/// </summary>
+internal sealed class RefEqualityComparer : IEqualityComparer<object>
+{
+    public static readonly RefEqualityComparer Instance = new();
+    public new bool Equals(object? x, object? y) => ReferenceEquals(x, y);
+    public int GetHashCode(object obj) => RuntimeHelpers.GetHashCode(obj);
+}
+
+/// <summary>
 /// Cached reflection handles for all Avalonia types, properties, and methods.
 /// Single-file apps can't use Type.GetType("..., Assembly") so we scan loaded assemblies.
 /// </summary>
@@ -186,7 +198,7 @@ internal class AvaloniaReflection
     private bool _loggedBindStrategyB;
     private readonly Dictionary<string, FieldInfo?> _avaloniaPropertyFieldCache = new();
     private readonly ConditionalWeakTable<object, PressFeedbackState> _pressFeedbackStates = new();
-    private readonly HashSet<object> _pressFeedbackSubscribed = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<object> _pressFeedbackSubscribed = new(RefEqualityComparer.Instance);
 
     private sealed class PressFeedbackState
     {
