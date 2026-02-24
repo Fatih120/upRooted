@@ -51,6 +51,7 @@ internal class RootcordEngine
     private object? _selectionHandler;
     private object? _tabsCollection; // INotifyCollectionChanged source
     private object? _previousTabVm; // Previous SelectedTabViewModel for home button toggle-back
+    private int _tabSwitchGeneration; // Monotonic generation for selected-tab reconcile retries
 
     // Hover tooltip state
     private object? _tooltipOverlay;  // OverlayLayer reference
@@ -85,6 +86,7 @@ internal class RootcordEngine
 
     // Community members sidebar rotation
     private object? _communityGrid;
+    private object? _layoutTabVm; // SelectedTabViewModel currently associated with _communityGrid state
     private List<(object child, int originalCol)>? _originalChildColumns;
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
@@ -92,10 +94,14 @@ internal class RootcordEngine
 
     // Members panel collapse (driven by MembersViewModel.MenuIn)
     private bool   _membersPanelCollapsed;  // Current visual collapse state (mirrors !MenuIn)
-    private object? _collapseToggleBtn;     // Our toggle button Border (for icon/color refresh)
+    private object? _collapseToggleBtn;     // Our RootSvgButton in the titlebar
+    private object? _titleBarBtnPanel;      // StackPanel hosting titlebar action buttons
+    private bool _titleBarInjectRetryScheduled; // Prevent duplicate delayed retry loops
     private object? _membersMenuInHandler;  // INPC handler on MembersViewModel.MenuIn
-    private object? _membersViewGrid;       // MembersView's main Grid (for header hide + button inject)
+    private object? _membersMenuInVm;       // MembersViewModel currently wired to _membersMenuInHandler
+    private object? _membersViewGrid;       // MembersView's main Grid (for header hide)
     private List<object>? _hiddenHeaderPanels; // InMenuPanel/OutMenuPanel refs (MaxHeight restore)
+    private List<double>? _originalRowMinHeights; // Original MinHeight values for rows 0-3 (restore on revert)
 
     // Custom community header injected into channels panel
     private object? _injectedHeader;       // The header outer stack we built
@@ -106,9 +112,10 @@ internal class RootcordEngine
     // User bar width tracking (matches channels panel width dynamically)
     private object? _userBarLayoutHandler;     // LayoutUpdated handler on community layoutGrid
     private object? _userBarLayoutTarget;      // The control we subscribed LayoutUpdated on
-    private object? _channelsWidthPanel;       // Channels panel reference for Bounds reading
+    private object? _channelsWidthPanel;       // Channels panel reference for live width tracking
     private const double UserBarHeight = 52;   // Height of user card (for bottom padding)
     private bool _userBarOverPane;  // true when pane is open and user bar snaps to pane instead of channels
+    private double _lastUserBarLeft = double.NaN; // Guards SetMargin: skip if left offset unchanged
     private double _lastUserBarWidth = double.NaN; // Guards SetWidth: skip if value unchanged (prevents layout loop)
     private object? _userBarStatusText;       // TextBlock showing "Online"/"Away" in user bar
     private object? _userBarStatusDot;        // Border (circle) showing status color in user bar
@@ -349,13 +356,8 @@ internal class RootcordEngine
             }
         }
 
-        // Collapse toggle button (on members panel)
-        if (_collapseToggleBtn != null)
-        {
-            _r.SetBackground(_collapseToggleBtn, _bg);
-            SetBorderStroke(_collapseToggleBtn, AdjustForHighlight(_bg, 15), 0.5);
-            UpdateCollapseButtonIcon();
-        }
+        // Titlebar collapse button (SVG path auto-updates via DynamicResource)
+        UpdateCollapseButtonOpacity();
 
         // Selection pills and highlight states (accent color may have changed)
         RefreshSelectedHighlight();
@@ -1191,6 +1193,27 @@ internal class RootcordEngine
             }
             Logger.Log(Tag, $"SwapCommunityMembers: {gridColDefs.Count} colDefs, {nonSplitters.Count} panels, {gridSplitters.Count} splitters");
 
+            // Diagnostic: dump original column widths and child layout
+            for (int di = 0; di < _originalColWidths.Count; di++)
+            {
+                var ow = _originalColWidths[di];
+                Logger.Log(Tag, $"  OrigCol[{ow.colIdx}]: {ow.width} {ow.unit}");
+            }
+            for (int di = 0; di < nonSplitters.Count; di++)
+            {
+                var ns = nonSplitters[di];
+                var bounds = _r.GetBounds(ns.child);
+                Logger.Log(Tag, $"  Panel[{di}] type={ns.child.GetType().Name} col={ns.col} bounds={bounds?.X:F0},{bounds?.Y:F0},{bounds?.W:F0},{bounds?.H:F0}");
+            }
+            for (int di = 0; di < gridSplitters.Count; di++)
+            {
+                var gs = gridSplitters[di];
+                var bounds = _r.GetBounds(gs.child);
+                var hitTest = gs.child.GetType().GetProperty("IsHitTestVisible")?.GetValue(gs.child);
+                var visible = _r.GetIsVisible(gs.child);
+                Logger.Log(Tag, $"  Splitter[{di}] col={gs.col} bounds={bounds?.X:F0},{bounds?.Y:F0},{bounds?.W:F0},{bounds?.H:F0} visible={visible} hitTest={hitTest}");
+            }
+
             // Rotate: move members sidebar (col 0) to rightmost, shift others left.
             // Original: [Members(col A)] [Channels(col B)] [Chat(col C)]
             // Target:   [Channels(col A)] [Chat(col B)]    [Members(col C)]
@@ -1391,99 +1414,75 @@ internal class RootcordEngine
             }
             catch { }
 
-            // Avalonia's Grid layout engine doesn't re-measure columns correctly
-            // when ColumnDefinition.Width is changed via reflection (trimmed binary).
-            // Workaround: instead of changing column definitions, set HorizontalAlignment=Stretch
-            // on the chat panel and remove the layoutGrid's existing column definitions entirely,
-            // replacing them with fresh ones.
+            // Rebuild columns as a clean 4-column layout:
+            //   Col 0: Channels (Pixel, resizable via GridSplitter)
+            //   Col 1: GridSplitter (4px)
+            //   Col 2: Chat (Star, fills remaining space)
+            //   Col 3: Members (Auto)
+            //
+            // The original 3-col grid had the splitter sharing col 1 with a panel.
+            // After rotation the splitter ended up behind the chat panel (both at col 1),
+            // making it unclickable. This rebuild gives the splitter its own column.
             try
             {
-                // Clear ALL column definitions and re-add them with the correct sizing
                 var colDefsList = _r.GetColumnDefinitions(layoutGrid);
                 if (colDefsList != null)
                 {
-                    // Read current count before clearing
-                    int originalCount = colDefsList.Count;
-
-                    // Remove all existing column defs
+                    // Clear existing column definitions
                     var clearMethod = colDefsList.GetType().GetMethod("Clear");
                     clearMethod?.Invoke(colDefsList, null);
 
-                    // Re-add column defs with correct sizing
-                    // Find which columns need what type
-                    for (int ci = 0; ci < originalCount; ci++)
+                    // Find which panel is channels (non-Star, non-members after rotation)
+                    int channelsIdx = -1;
+                    int chatIdx = -1;
+                    for (int pi = 0; pi < n; pi++)
                     {
-                        // Determine what this column should be
-                        bool isChatCol = false;
-                        bool isMembersCol = false;
-                        for (int pi = 0; pi < n; pi++)
-                        {
-                            int assignedCol = _r.GetGridColumn(nonSplitters[pi].child);
-                            if (assignedCol == ci)
-                            {
-                                if (pi == maxAssignedIdx)
-                                    isMembersCol = true;
-                                else
-                                {
-                                    int origCol = nonSplitters[pi].col;
-                                    var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
-                                    if (origW.unit == "Star" || origW.unit == "star")
-                                        isChatCol = true;
-                                }
-                            }
-                        }
-
-                        if (isChatCol)
-                        {
-                            _r.AddGridColumnStar(layoutGrid, 1.0);
-                            // Set MinWidth on the chat column definition so it can't disappear
-                            var chatColDefs = _r.GetColumnDefinitions(layoutGrid);
-                            if (chatColDefs?.Count > ci)
-                                chatColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chatColDefs[ci], 350.0);
-                        }
-                        else if (isMembersCol)
-                            _r.AddGridColumnAuto(layoutGrid);
+                        if (pi == maxAssignedIdx) continue; // members
+                        int origCol = nonSplitters[pi].col;
+                        var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == origCol);
+                        if (origW.unit == "Star" || origW.unit == "star")
+                            chatIdx = pi;
                         else
-                        {
-                            // Check if a visible child occupies this column (skip hidden splitters)
-                            bool hasVisibleChild = false;
-                            foreach (var child in _r.GetVisualChildren(layoutGrid))
-                            {
-                                if (_r.GetGridColumn(child) == ci && _r.GetIsVisible(child))
-                                { hasVisibleChild = true; break; }
-                            }
-
-                            if (!hasVisibleChild)
-                            {
-                                // No visible child: collapse to 0px (hidden splitters, empty columns)
-                                _r.AddGridColumnPixel(layoutGrid, 0);
-                            }
-                            else
-                            {
-                                // Channels or other content column — use original Pixel width
-                                var origW = _originalColWidths.FirstOrDefault(x => x.colIdx == ci);
-                                if (origW.unit == "Pixel" && origW.width > 10)
-                                    _r.AddGridColumnPixel(layoutGrid, origW.width);
-                                else
-                                    _r.AddGridColumnPixel(layoutGrid, 300); // Root's native default ~300px
-
-                                // Set Min/MaxWidth on channels column
-                                var chColDefs = _r.GetColumnDefinitions(layoutGrid);
-                                if (chColDefs?.Count > ci)
-                                {
-                                    chColDefs[ci]?.GetType().GetProperty("MinWidth")?.SetValue(chColDefs[ci], 270.0);
-                                    chColDefs[ci]?.GetType().GetProperty("MaxWidth")?.SetValue(chColDefs[ci], 420.0);
-                                }
-                            }
-                        }
+                            channelsIdx = pi;
                     }
-                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt {originalCount} column definitions");
 
-                    // Reset collapse state for a fresh Apply
+                    // Assign children to new columns
+                    if (channelsIdx >= 0) _r.SetGridColumn(nonSplitters[channelsIdx].child, 0);
+                    foreach (var (splitter, _) in gridSplitters) _r.SetGridColumn(splitter, 1);
+                    if (chatIdx >= 0) _r.SetGridColumn(nonSplitters[chatIdx].child, 2);
+                    _r.SetGridColumn(nonSplitters[maxAssignedIdx].child, 3);
+
+                    // Add 4 column definitions.
+                    // Use the MEMBERS panel original column width (Auto, ~280px natural) for channels,
+                    // since channels is now the left sidebar (same role members had natively).
+                    // The channels panel was originally sharing the 1px splitter col and overflowing.
+                    var membersOrigW = _originalColWidths.FirstOrDefault(x => x.colIdx == nonSplitters[maxAssignedIdx].col);
+                    if (membersOrigW.unit == "Auto" || membersOrigW.width == 0)
+                        _r.AddGridColumnAuto(layoutGrid);       // Col 0: Channels (Auto like native sidebar)
+                    else
+                        _r.AddGridColumnPixel(layoutGrid, membersOrigW.width);
+                    _r.AddGridColumnPixel(layoutGrid, 4);       // Col 1: Splitter
+                    _r.AddGridColumnStar(layoutGrid, 1.0);      // Col 2: Chat
+                    _r.AddGridColumnAuto(layoutGrid);            // Col 3: Members
+
+                    // Set min/max on chat column so it can't disappear
+                    var newColDefs = _r.GetColumnDefinitions(layoutGrid);
+                    if (newColDefs?.Count >= 3)
+                    {
+                        newColDefs[2]?.GetType().GetProperty("MinWidth")?.SetValue(newColDefs[2], 350.0);
+                    }
+
+                    // Ensure splitter is visible and interactive
+                    foreach (var (splitter, _) in gridSplitters)
+                    {
+                        _r.SetIsVisible(splitter, true);
+                        _r.SetIsHitTestVisible(splitter, true);
+                    }
+
+                    Logger.Log(Tag, $"SwapCommunityMembers: rebuilt as 4-col layout [Ch|Spl|Chat|Members] (splitter at own col 1)");
                     _membersPanelCollapsed = false;
                 }
 
-                // Invalidate to trigger fresh layout
                 layoutGrid.GetType().GetMethod("InvalidateMeasure")?.Invoke(layoutGrid, null);
                 layoutGrid.GetType().GetMethod("InvalidateArrange")?.Invoke(layoutGrid, null);
             }
@@ -1572,13 +1571,24 @@ internal class RootcordEngine
             // hide any splitter at the members column (rightmost) to avoid a gap there.
             try
             {
+                int shownSplitters = 0;
                 foreach (var (splitter, splitterOrigCol) in gridSplitters)
                 {
                     if (splitterOrigCol != maxAssignedCol)
                     {
                         _r.SetIsVisible(splitter, true);
+                        _r.SetIsHitTestVisible(splitter, true);
+                        shownSplitters++;
                         Logger.Log(Tag, $"SwapCommunityMembers: un-hid GridSplitter at col {splitterOrigCol}");
                     }
+                }
+                if (shownSplitters == 0 && gridSplitters.Count > 0)
+                {
+                    // Safety fallback: ensure at least one splitter is interactive.
+                    var splitter = gridSplitters[0].child;
+                    _r.SetIsVisible(splitter, true);
+                    _r.SetIsHitTestVisible(splitter, true);
+                    Logger.Log(Tag, "SwapCommunityMembers: fallback un-hid first GridSplitter");
                 }
             }
             catch { }
@@ -1657,6 +1667,20 @@ internal class RootcordEngine
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
 
+            // Inject "Hide Member List" button in the titlebar (next to Support/Minimize buttons)
+            EnsureTitleBarButtonInjected();
+
+            // Ensure MenuIn watcher is active even if native tab-switcher instantiation fails.
+            // Then enforce current state immediately so ghost-header re-hide runs on first apply.
+            EnsureMembersMenuInHandler();
+            if (_headerMembersVm != null)
+            {
+                bool expandedNow = _r.GetPropertyValue(_headerMembersVm, "MenuIn") is true;
+                ApplyMembersCollapseState(expandedNow);
+            }
+
+            _layoutTabVm = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+
             // NOTE: Root already has native Ctrl+U keybinding for ToggleMenuCommand.
             // Our PropertyChanged handler on MenuIn reacts to that natively.
             // Do NOT register a duplicate Ctrl+U handler (causes double-toggle).
@@ -1672,10 +1696,13 @@ internal class RootcordEngine
     /// </summary>
     private void RevertCommunityMembersSwap()
     {
-        // Restore members panel header and remove our collapse button
+        // Remove titlebar button and restore members panel header
+        UnsubscribeMembersMenuInHandler();
+        _headerMembersVm = null;
+        RemoveTitleBarButton();
         RestoreMembersViewHeader();
         _membersPanelCollapsed = false;
-        _collapseToggleBtn = null;
+        _titleBarInjectRetryScheduled = false;
 
         // Revert flyout placements before restoring column positions
         RevertMemberFlyoutPlacements();
@@ -1731,6 +1758,7 @@ internal class RootcordEngine
         }
 
         _communityGrid = null;
+        _layoutTabVm = null;
         _originalChildColumns = null;
         _originalColWidths = null;
         _originalSplitterColumns = null;
@@ -1751,50 +1779,62 @@ internal class RootcordEngine
     /// </summary>
     private void RemoveInjectedHeader(object? channelsPanel = null)
     {
-        // If no specific panel given, use the tracked one
-        var panel = channelsPanel ?? _channelsPanelRef;
-        if (panel == null) return;
+        // Unwrap explicit panel first, then tracked panel (if different). This avoids stale wrappers
+        // when tab-switch retries call RemoveInjectedHeader with a fresh panel reference.
+        bool unwrapped = false;
+        if (channelsPanel != null)
+            unwrapped |= TryUnwrapInjectedHeaderFromPanel(channelsPanel);
+        if (_channelsPanelRef != null && !ReferenceEquals(_channelsPanelRef, channelsPanel))
+            unwrapped |= TryUnwrapInjectedHeaderFromPanel(_channelsPanelRef);
+        if (unwrapped)
+            Logger.Log(Tag, "RemoveInjectedHeader: unwrapped channels panel");
 
-        try
-        {
-            var child = _r.GetBorderChild(panel);
-            if (child == null) return;
-            var tag = _r.GetTag(child) as string;
-            if (tag != "rootcord-channel-wrapper") return;
-
-            // child is our wrapper Grid { Row0: headerStack, Row1: originalContent }
-            // Extract Row1 (the original content) and restore it
-            object? originalContent = null;
-            foreach (var gridChild in _r.GetVisualChildren(child))
-            {
-                int row = _r.GetGridRow(gridChild);
-                if (row == 1)
-                {
-                    originalContent = gridChild;
-                    break;
-                }
-            }
-
-            if (originalContent != null)
-            {
-                _r.RemoveChild(child, originalContent);
-                _r.SetGridRow(originalContent, 0); // reset row assignment
-                _r.SetBorderChild(panel, originalContent);
-                Logger.Log(Tag, "RemoveInjectedHeader: unwrapped channels panel");
-            }
-        }
-        catch (Exception ex) { Logger.Log(Tag, $"RemoveInjectedHeader error: {ex.Message}"); }
-
-        if (_membersMenuInHandler != null && _headerMembersVm != null)
-        {
-            try { _r.UnsubscribePropertyChanged(_headerMembersVm, _membersMenuInHandler); }
-            catch { }
-            _membersMenuInHandler = null;
-        }
-
+        UnsubscribeMembersMenuInHandler();
         _injectedHeader = null;
         _channelsPanelRef = null;
         _headerMembersVm = null;
+    }
+
+    private bool TryUnwrapInjectedHeaderFromPanel(object panel)
+    {
+        try
+        {
+            var child = _r.GetBorderChild(panel);
+            if (child == null) return false;
+            if ((_r.GetTag(child) as string) != "rootcord-channel-wrapper") return false;
+
+            // child is our wrapper Grid { Row0: headerStack, Row1: originalContent }
+            // Extract Row1 (the original content) and restore it.
+            object? originalContent = null;
+            foreach (var gridChild in _r.GetVisualChildren(child))
+            {
+                if (_r.GetGridRow(gridChild) != 1) continue;
+                originalContent = gridChild;
+                break;
+            }
+            if (originalContent == null) return false;
+
+            _r.RemoveChild(child, originalContent);
+            _r.SetGridRow(originalContent, 0);
+            _r.SetBorderChild(panel, originalContent);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"TryUnwrapInjectedHeaderFromPanel error: {ex.Message}");
+            return false;
+        }
+    }
+
+    private void UnsubscribeMembersMenuInHandler()
+    {
+        if (_membersMenuInHandler != null && _membersMenuInVm != null)
+        {
+            try { _r.UnsubscribePropertyChanged(_membersMenuInVm, _membersMenuInHandler); }
+            catch { }
+        }
+        _membersMenuInHandler = null;
+        _membersMenuInVm = null;
     }
 
     /// <summary>
@@ -1811,7 +1851,8 @@ internal class RootcordEngine
         TeardownUserBarWidthTracking();
         _userBarOverPane = false;
 
-        // Find the channels panel (same logic as InjectChannelsHeader)
+        // Find the channels panel: the non-members, non-chat panel
+        // (chat is Star-width in Root's original layout).
         object? channelsPanel = null;
         for (int i = 0; i < nonSplitters.Count; i++)
         {
@@ -1825,7 +1866,7 @@ internal class RootcordEngine
             }
         }
         if (channelsPanel == null) return;
-        _channelsWidthPanel = channelsPanel;
+        _channelsWidthPanel = _channelsPanelRef ?? channelsPanel;
 
         // Initial width update
         UpdateUserBarWidth();
@@ -1860,72 +1901,55 @@ internal class RootcordEngine
     /// When pane is closed: snap to StripWidth + channels panel width (original behavior).
     /// Called on every LayoutUpdated from the community layoutGrid.
     /// </summary>
+    private int _userBarLogCount; // throttle diagnostic logging
     private void UpdateUserBarWidth()
     {
         if (_userBar == null || _channelsWidthPanel == null) return;
         try
         {
-            bool paneOpen = false;
-            double paneWidth = 0;
+            // User bar left edge is always 0 (flush to window left, covering server strip).
+            double targetLeft = 0;
 
-            if (_rootSplitView != null && _homeViewModel != null)
+            var channelsPanel = _channelsPanelRef ?? _channelsWidthPanel;
+            var channelsBounds = _r.GetBounds(channelsPanel);
+            if (channelsBounds == null || channelsBounds.Value.W <= 0)
             {
-                var paneOpenVal = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
-                if (paneOpenVal is true)
-                {
-                    paneOpen = true;
-                    try
-                    {
-                        var pw = _r.GetPropertyValue(_homeViewModel, "PaneWidth");
-                        if (pw is double p && p > 0)
-                            paneWidth = p;
-                    }
-                    catch { }
-                }
+                if (_userBarLogCount++ % 100 == 0)
+                    Logger.Log(Tag, $"UpdateUserBarWidth: bail — channelsBounds null or 0 (panel={channelsPanel?.GetType().Name}, ref={_channelsPanelRef != null}, widget={_channelsWidthPanel != null})");
+                return;
             }
 
-            double targetWidth;
-            if (paneOpen && paneWidth > 0)
+            double targetRight = StripWidth + channelsBounds.Value.W;
+            if (_homeViewGrid != null)
             {
-                // Pane is open: user bar covers strip + pane only, channels go full height
-                targetWidth = StripWidth + paneWidth;
-
-                if (!_userBarOverPane)
-                {
-                    _userBarOverPane = true;
-                    RemoveChannelListBottomPadding();
-                }
+                var channelsRight = _r.TranslatePoint(channelsPanel, channelsBounds.Value.W, 0, _homeViewGrid);
+                if (channelsRight != null)
+                    targetRight = channelsRight.Value.X;
             }
-            else
+
+            // Note: when a utility pane opens (PanePlacement=Left), the SplitView pushes
+            // ContentRoot rightward. The channels panel is inside ContentRoot, so its
+            // TranslatePoint-based right edge automatically shifts right to include the pane.
+            // No explicit pane measurement needed: channelsRight already accounts for it.
+
+            double targetWidth = targetRight - targetLeft;
+            if (targetWidth <= 0) return;
+
+            if (Math.Abs(targetLeft - _lastUserBarLeft) >= 0.5)
             {
-                // Pane is closed: user bar covers strip + channels + splitter (original behavior)
-                var bounds = _r.GetBounds(_channelsWidthPanel);
-                if (bounds == null || bounds.Value.W <= 0) return;
-
-                // Use TranslatePoint for precise alignment (accounts for all SplitView
-                // margins, borders, and offsets between the strip and the channels panel)
-                var pt = _homeViewGrid != null
-                    ? _r.TranslatePoint(_channelsWidthPanel, bounds.Value.W, 0, _homeViewGrid)
-                    : null;
-                if (pt != null && pt.Value.X > StripWidth)
-                    targetWidth = pt.Value.X;
-                else
-                    targetWidth = StripWidth + bounds.Value.W; // fallback
-
-                if (_userBarOverPane)
-                {
-                    _userBarOverPane = false;
-                    AddChannelListBottomPadding();
-                }
+                _lastUserBarLeft = targetLeft;
+                _r.SetMargin(_userBar, targetLeft, 0, 0, 0);
             }
+
+            if (_userBarLogCount++ % 50 == 0)
+                Logger.Log(Tag, $"UpdateUserBarWidth: chBounds={channelsBounds.Value.X:F0},{channelsBounds.Value.W:F0} targetRight={targetRight:F0} targetW={targetWidth:F0} lastW={_lastUserBarWidth:F0}");
 
             // Guard: skip SetWidth if value hasn't changed by more than 0.5px.
             // Without this, SetWidth triggers InvalidateMeasure → LayoutUpdated → UpdateUserBarWidth → loop.
-            // This cascade is especially pronounced with DotNetBrowser (app channels) which causes
-            // continuous layout re-measurement during initialization.
             if (Math.Abs(targetWidth - _lastUserBarWidth) < 0.5) return;
             _lastUserBarWidth = targetWidth;
             _r.SetWidth(_userBar, targetWidth);
+            Logger.Log(Tag, $"UpdateUserBarWidth: SET width={targetWidth:F0}");
         }
         catch { }
     }
@@ -2007,6 +2031,7 @@ internal class RootcordEngine
         _userBarLayoutTarget = null;
         _channelsWidthPanel = null;
         _userBarOverPane = false;
+        _lastUserBarLeft = double.NaN;
         _lastUserBarWidth = double.NaN;
     }
 
@@ -2264,34 +2289,25 @@ internal class RootcordEngine
                 }
             }
 
-            // Zero rows 0-2 (header + separators), keep row 3 Auto for our collapse button
-            for (int ri = 0; ri <= 2 && ri < rowDefs.Count; ri++)
+            // Store original MinHeight values before zeroing (for revert)
+            _originalRowMinHeights = new List<double>();
+            for (int ri = 0; ri <= 3 && ri < rowDefs.Count; ri++)
+            {
+                double origMin = 0;
+                try { origMin = (double)(rowDefs[ri]?.GetType().GetProperty("MinHeight")?.GetValue(rowDefs[ri]) ?? 0d); } catch { }
+                _originalRowMinHeights.Add(origMin);
+            }
+
+            // Zero rows 0-3 (header + separators + tab switcher + visibility switch)
+            // Do NOT use Auto — force to 0 to prevent any ghost header remnants
+            for (int ri = 0; ri <= 3 && ri < rowDefs.Count; ri++)
+            {
                 _r.SetRowDefinitionPixelHeight(rowDefs[ri], 0);
-            // Row 3 was Auto (RootMemberVisibilitySwitch, now hidden): keep Auto for our button
-            if (rowDefs.Count > 3 && _r.GridUnitTypeEnum != null && _r.GridLengthType != null)
-            {
-                try
-                {
-                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
-                    var gl = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
-                    rowDefs[3]?.GetType().GetProperty("Height")?.SetValue(rowDefs[3], gl);
-                }
-                catch { }
+                // Also set MinHeight to 0 to prevent layout from auto-expanding
+                try { rowDefs[ri]?.GetType().GetProperty("MinHeight")?.SetValue(rowDefs[ri], 0d); } catch { }
             }
 
-            // Inject collapse toggle button at row 3 (above the member list at row 4)
-            var toggleBtn = BuildCollapseToggleButton();
-            if (toggleBtn != null)
-            {
-                _r.SetGridRow(toggleBtn, 3);
-                _r.SetHorizontalAlignment(toggleBtn, "Right");
-                _r.SetVerticalAlignment(toggleBtn, "Center");
-                _r.SetMargin(toggleBtn, 0, 4, 8, 4);
-                _r.AddChild(node, toggleBtn);
-                _collapseToggleBtn = toggleBtn;
-            }
-
-            Logger.Log(Tag, "InjectChannelsHeader: hidden native header + added collapse button in members panel");
+            Logger.Log(Tag, "InjectChannelsHeader: hidden native header in members panel (zeroed rows 0-3)");
             break;
         }
 
@@ -2300,66 +2316,310 @@ internal class RootcordEngine
 
     // ===== Members panel collapse =====
 
-    private object? BuildCollapseToggleButton()
+    /// <summary>
+    /// Inject a "Hide Member List" RootSvgButton into the WindowsTitleBarView action buttons.
+    /// Placed before the SupportButton. Uses "CommunityMembersSVG" DynamicResource (exact asset from native members header, auto-flips with theme).
+    /// </summary>
+    private void InjectTitleBarButton()
     {
+        if (_collapseToggleBtn != null || _mainWindow == null) return;
         try
         {
-            var btn = _r.CreateBorder(_bg, 4);
-            if (btn == null) return null;
-            _r.SetWidth(btn, 26);
-            _r.SetHeight(btn, 26);
-            SetBorderStroke(btn, AdjustForHighlight(_bg, 15), 0.5);
+            // Find SupportButton by name in the visual tree (it's inside WindowsTitleBarView)
+            object? supportBtn = null;
+            var walker = new VisualTreeWalker(_r);
+            foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+            {
+                var name = node.GetType().GetProperty("Name")?.GetValue(node) as string;
+                if (name == "SupportButton")
+                {
+                    supportBtn = node;
+                    break;
+                }
+                if (supportBtn == null && !string.IsNullOrWhiteSpace(name) &&
+                    name.IndexOf("support", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    supportBtn = node; // weak fallback if exact name changed
+                }
+            }
+            if (supportBtn == null) { Logger.Log(Tag, "TitleBarButton: SupportButton not found"); return; }
 
-            // People glyph: same as GlyphFriends ("\uE716"), Segoe Fluent/MDL2
-            var icon = _r.CreateTextBlock("\uE716", 13, _muted);
-            if (icon == null) return null;
-            _r.SetVerticalAlignment(icon, "Center");
-            _r.SetHorizontalAlignment(icon, "Center");
+            // Get parent StackPanel (the action buttons container at Grid col 2)
+            var parent = _r.GetParent(supportBtn);
+            if (parent == null) { Logger.Log(Tag, "TitleBarButton: parent StackPanel not found"); return; }
+            _titleBarBtnPanel = parent;
+
+            // Find RootSvgButton type
+            Type? svgBtnType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try { svgBtnType = asm.GetType("RootApp.Client.Avalonia.Controls.RootSvgButton"); }
+                catch { }
+                if (svgBtnType != null) break;
+            }
+            if (svgBtnType == null) { Logger.Log(Tag, "TitleBarButton: RootSvgButton type not found"); return; }
+
+            // Create RootSvgButton instance
+            var btn = Activator.CreateInstance(svgBtnType);
+            if (btn == null) return;
+
+            // Mirror native SupportButton geometry/classes so spacing always matches Root.
+            // Fallback to known-safe defaults only if reflection copy fails.
+            if (!ApplyNativeTitleBarButtonLayout(supportBtn, btn))
+            {
+                svgBtnType.GetProperty("SvgWidth")?.SetValue(btn, 14.0);
+                svgBtnType.GetProperty("SvgHeight")?.SetValue(btn, 14.0);
+                svgBtnType.GetProperty("Width")?.SetValue(btn, 20.0);
+                svgBtnType.GetProperty("Height")?.SetValue(btn, 20.0);
+                svgBtnType.GetProperty("Margin")?.SetValue(btn,
+                    Activator.CreateInstance(_r.ThicknessType!, 0.0, 0.0, 8.0, 0.0));
+            }
+
+            // Bind SvgPath dynamically so the icon flips with Light/Dark themes.
+            // CommunityMembersSVG matches Root's member-list affordance and carries theme-variant assets.
+            _r.BindToDynamicResource(btn, "SvgPath", "CommunityMembersSVG");
+            // Force full icon visibility; collapse state dimming is handled separately via control Opacity.
+            btn.GetType().GetProperty("SvgOpacity")?.SetValue(btn, 1.0);
+
+            // Add tooltip
             try
             {
-                icon.GetType().GetProperty("FontFamily")
-                    ?.SetValue(icon, Activator.CreateInstance(
-                        AppDomain.CurrentDomain.GetAssemblies()
-                            .Select(a => a.GetType("Avalonia.Media.FontFamily"))
-                            .FirstOrDefault(t => t != null)!,
-                        GlyphIconFonts));
-            }
-            catch { }
-            _r.SetBorderChild(btn, icon);
+                var tooltipText = _r.CreateTextBlock("Hide Member List", 14, null);
+                if (tooltipText != null)
+                {
+                    // Create RootToolTip
+                    Type? rootToolTipType = null;
+                    foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                    {
+                        try { rootToolTipType = asm.GetType("RootApp.Client.Avalonia.Controls.RootToolTip"); }
+                        catch { }
+                        if (rootToolTipType != null) break;
+                    }
+                    if (rootToolTipType != null)
+                    {
+                        var tip = Activator.CreateInstance(rootToolTipType);
+                        if (tip != null)
+                        {
+                            tip.GetType().GetProperty("Content")?.SetValue(tip, tooltipText);
 
-            // PointerPressed → toggle (Expression lambda, no compile-time Avalonia refs)
-            var pressedEvent = btn.GetType().GetEvent("PointerPressed");
-            if (pressedEvent != null)
+                            // ToolTip.SetTip(btn, tip)
+                            Type? toolTipType = null;
+                            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                            {
+                                try { toolTipType = asm.GetType("Avalonia.Controls.ToolTip"); }
+                                catch { }
+                                if (toolTipType != null) break;
+                            }
+                            var setTip = toolTipType?.GetMethod("SetTip", BindingFlags.Public | BindingFlags.Static);
+                            setTip?.Invoke(null, new[] { btn, tip });
+
+                            // ToolTip.SetPlacement(btn, PlacementMode.Bottom)
+                            var setPlacement = toolTipType?.GetMethod("SetPlacement", BindingFlags.Public | BindingFlags.Static);
+                            if (setPlacement != null)
+                            {
+                                Type? placementType = null;
+                                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+                                {
+                                    try { placementType = asm.GetType("Avalonia.Controls.PlacementMode"); }
+                                    catch { }
+                                    if (placementType != null) break;
+                                }
+                                if (placementType != null)
+                                    setPlacement.Invoke(null, new[] { btn, Enum.Parse(placementType, "Bottom") });
+                            }
+
+                            var setDelay = toolTipType?.GetMethod("SetShowDelay", BindingFlags.Public | BindingFlags.Static);
+                            setDelay?.Invoke(null, new object[] { btn, 0 });
+                        }
+                    }
+                }
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"TitleBarButton tooltip error: {ex.Message}"); }
+
+            // Wire Click event → ToggleMembersPanelViaCommand
+            var clickEvent = btn.GetType().GetEvent("Click");
+            if (clickEvent != null)
             {
-                var invokeParams = pressedEvent.EventHandlerType!.GetMethod("Invoke")!.GetParameters();
+                var invokeParams = clickEvent.EventHandlerType!.GetMethod("Invoke")!.GetParameters();
                 var p0 = Expression.Parameter(typeof(object), "s");
                 var p1 = Expression.Parameter(invokeParams[1].ParameterType, "e");
                 var capturedThis = Expression.Constant(this);
                 var toggleMeth = typeof(RootcordEngine)
                     .GetMethod("ToggleMembersPanelViaCommand", BindingFlags.NonPublic | BindingFlags.Instance)!;
                 var body = Expression.Call(capturedThis, toggleMeth);
-                var lambda = Expression.Lambda(pressedEvent.EventHandlerType!, body, p0, p1);
-                pressedEvent.AddEventHandler(btn, (Delegate)lambda.Compile());
+                var lambda = Expression.Lambda(clickEvent.EventHandlerType!, body, p0, p1);
+                clickEvent.AddEventHandler(btn, (Delegate)lambda.Compile());
             }
 
-            Logger.Log(Tag, "BuildCollapseToggleButton: built successfully");
-            return btn;
+            // Insert before SupportButton in the StackPanel
+            int supportIdx = -1;
+            int childCount = _r.GetChildCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                if (_r.GetChild(parent, i) == supportBtn) { supportIdx = i; break; }
+            }
+            if (supportIdx >= 0)
+                _r.InsertChild(parent, supportIdx, btn);
+            else
+                _r.AddChild(parent, btn); // fallback: add at end
+
+            _collapseToggleBtn = btn;
+            Logger.Log(Tag, "TitleBarButton: injected 'Hide Member List' before SupportButton");
         }
-        catch (Exception ex)
-        {
-            Logger.Log(Tag, $"BuildCollapseToggleButton error: {ex.Message}");
-            return null;
-        }
+        catch (Exception ex) { Logger.Log(Tag, $"InjectTitleBarButton error: {ex.Message}"); }
     }
 
-    private void UpdateCollapseButtonIcon()
+    /// <summary>
+    /// Inject titlebar button immediately, then retry on short delays while the titlebar visual
+    /// tree is still materializing (common during startup/tab switches).
+    /// </summary>
+    private void EnsureTitleBarButtonInjected()
+    {
+        InjectTitleBarButton();
+        if (_collapseToggleBtn != null || _titleBarInjectRetryScheduled) return;
+
+        var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        _titleBarInjectRetryScheduled = true;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var delayMs in new[] { 120, 350, 700, 1200, 2200, 4000 })
+                {
+                    await Task.Delay(delayMs, token);
+                    if (token.IsCancellationRequested || !IsApplied || _collapseToggleBtn != null) return;
+
+                    var tcs = new TaskCompletionSource<bool>();
+                    _r.RunOnUIThread(() =>
+                    {
+                        try { InjectTitleBarButton(); }
+                        catch { }
+                        tcs.TrySetResult(_collapseToggleBtn != null);
+                    });
+                    if (await tcs.Task) return;
+                }
+            }
+            catch { }
+            finally { _titleBarInjectRetryScheduled = false; }
+        }, token);
+    }
+
+    /// <summary>
+    /// Copy layout/style-relevant properties from Root's native SupportButton so the injected
+    /// titlebar button inherits exact spacing, size, and alignment for the current Root build.
+    /// </summary>
+    private bool ApplyNativeTitleBarButtonLayout(object supportBtn, object injectedBtn)
+    {
+        try
+        {
+            bool copiedAny = false;
+            foreach (var prop in new[]
+            {
+                "SvgWidth",
+                "SvgHeight",
+                "SvgOpacity",
+                "SvgBorderOpacity",
+                "Width",
+                "Height",
+                "MinWidth",
+                "MinHeight",
+                "MaxWidth",
+                "MaxHeight",
+                "Margin",
+                "HorizontalAlignment",
+                "VerticalAlignment"
+            })
+            {
+                copiedAny |= TryCopySharedProperty(supportBtn, injectedBtn, prop);
+            }
+            if (copiedAny)
+                Logger.Log(Tag, "TitleBarButton: mirrored native SupportButton layout properties");
+            return copiedAny;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Best-effort property copy between two controls by shared public instance property name.
+    /// </summary>
+    private static bool TryCopySharedProperty(object source, object target, string propertyName)
+    {
+        try
+        {
+            var srcProp = source.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            var dstProp = target.GetType().GetProperty(propertyName, BindingFlags.Public | BindingFlags.Instance);
+            if (srcProp == null || dstProp == null || !srcProp.CanRead || !dstProp.CanWrite) return false;
+            var value = srcProp.GetValue(source);
+            if (value == null) return false;
+            dstProp.SetValue(target, value);
+            return true;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Copy style classes from source control to target control (without duplicates).
+    /// </summary>
+    private static bool TryCopyControlClasses(object source, object target)
+    {
+        try
+        {
+            var srcClassesObj = source.GetType().GetProperty("Classes", BindingFlags.Public | BindingFlags.Instance)?.GetValue(source);
+            var dstClassesObj = target.GetType().GetProperty("Classes", BindingFlags.Public | BindingFlags.Instance)?.GetValue(target);
+            if (srcClassesObj is not IEnumerable srcClasses || dstClassesObj == null) return false;
+
+            var addMethod = dstClassesObj.GetType().GetMethod("Add", new[] { typeof(string) });
+            var containsMethod = dstClassesObj.GetType().GetMethod("Contains", new[] { typeof(string) });
+            if (addMethod == null) return false;
+
+            bool copied = false;
+            foreach (var clsObj in srcClasses)
+            {
+                var cls = clsObj?.ToString();
+                if (string.IsNullOrWhiteSpace(cls)) continue;
+
+                bool alreadyPresent = false;
+                if (containsMethod != null)
+                {
+                    try { alreadyPresent = containsMethod.Invoke(dstClassesObj, new object[] { cls }) is true; }
+                    catch { }
+                }
+                if (alreadyPresent) continue;
+
+                addMethod.Invoke(dstClassesObj, new object[] { cls });
+                copied = true;
+            }
+
+            return copied;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Remove our "Hide Member List" button from the titlebar.
+    /// </summary>
+    private void RemoveTitleBarButton()
+    {
+        if (_collapseToggleBtn == null || _titleBarBtnPanel == null) return;
+        try
+        {
+            _r.RemoveChild(_titleBarBtnPanel, _collapseToggleBtn);
+            Logger.Log(Tag, "TitleBarButton: removed from titlebar");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"RemoveTitleBarButton error: {ex.Message}"); }
+        _collapseToggleBtn = null;
+        _titleBarBtnPanel = null;
+        _titleBarInjectRetryScheduled = false;
+    }
+
+    private void UpdateCollapseButtonOpacity()
     {
         if (_collapseToggleBtn == null) return;
         try
         {
-            var child = _r.GetBorderChild(_collapseToggleBtn);
-            if (child != null && _r.IsTextBlock(child))
-                _r.SetForeground(child, _membersPanelCollapsed ? _dim : _muted);
+            // Dim the button when members panel is collapsed (matching Root's SVG button opacity pattern)
+            _collapseToggleBtn.GetType().GetProperty("Opacity")?.SetValue(
+                _collapseToggleBtn, _membersPanelCollapsed ? 0.6 : 1.0);
         }
         catch { }
     }
@@ -2382,10 +2642,204 @@ internal class RootcordEngine
     {
         // Root's native MenuIn toggle already handles the MembersView collapse/expand
         // internally (compact bar vs full panel). We only track the state here for
-        // the button icon — no column width overrides needed.
+        // the button opacity — no column width overrides needed.
+        EnsureMembersMenuInHandler();
         _membersPanelCollapsed = !expanded;
-        UpdateCollapseButtonIcon();
+        UpdateCollapseButtonOpacity();
+
+        // Re-hide ghost header on expand (it may have become visible due to layout changes)
+        if (expanded)
+        {
+            ReHideMembersViewHeader();
+            ScheduleReHideMembersViewHeaderRetries();
+        }
+
         Logger.Log(Tag, $"MembersPanel: {(expanded ? "expanded" : "collapsed")}");
+    }
+
+    /// <summary>
+    /// Ensure we have a MenuIn PropertyChanged handler even if native tab-switcher creation failed.
+    /// </summary>
+    private void EnsureMembersMenuInHandler()
+    {
+        object? vm = _headerMembersVm;
+        if (vm == null)
+        {
+            // Fast path: inherited DataContext on MembersView grid.
+            if (_membersViewGrid != null)
+            {
+                var dc = _r.GetDataContext(_membersViewGrid);
+                if (dc != null && dc.GetType().Name.Contains("MembersViewModel"))
+                    vm = dc;
+            }
+
+            // Fallback: search rightmost panel for MembersViewModel DataContext.
+            if (vm == null && _communityGrid != null)
+            {
+                object? membersPanel = null;
+                int maxCol = -1;
+                foreach (var child in _r.GetVisualChildren(_communityGrid))
+                {
+                    if (child.GetType().Name.Contains("GridSplitter")) continue;
+                    int col = _r.GetGridColumn(child);
+                    if (col > maxCol) { maxCol = col; membersPanel = child; }
+                }
+                if (membersPanel != null)
+                {
+                    var walker = new VisualTreeWalker(_r);
+                    foreach (var node in walker.DescendantsDepthFirst(membersPanel))
+                    {
+                        var dc = _r.GetDataContext(node);
+                        if (dc == null) continue;
+                        if (dc.GetType().Name.Contains("MembersViewModel"))
+                        {
+                            vm = dc;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (vm == null) return;
+        BindMembersMenuInHandler(vm);
+    }
+
+    private void BindMembersMenuInHandler(object vm)
+    {
+        _headerMembersVm = vm;
+        if (_membersMenuInHandler != null && ReferenceEquals(_membersMenuInVm, vm)) return;
+
+        UnsubscribeMembersMenuInHandler();
+        try
+        {
+            var capturedVm = vm;
+            _membersMenuInVm = vm;
+            _membersMenuInHandler = _r.SubscribePropertyChanged(vm, propName =>
+            {
+                if (propName == "MenuIn" && IsApplied && _communityGrid != null)
+                {
+                    // Ignore callbacks from stale server view-models after tab switches.
+                    if (_headerMembersVm != null && !ReferenceEquals(_headerMembersVm, capturedVm))
+                        return;
+
+                    bool expanded = _r.GetPropertyValue(capturedVm, "MenuIn") is true;
+                    _r.RunOnUIThread(() =>
+                    {
+                        try { ApplyMembersCollapseState(expanded); }
+                        catch { }
+                    });
+                }
+            });
+            Logger.Log(Tag, "MembersPanel: ensured MenuIn subscription");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"MembersPanel: ensure MenuIn sub error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// MenuIn bindings can re-show header rows after additional layout passes.
+    /// Retry hide on a short cadence after expand.
+    /// </summary>
+    private void ScheduleReHideMembersViewHeaderRetries()
+    {
+        var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        foreach (var delayMs in new[] { 50, 150, 300, 600 })
+        {
+            var d = delayMs;
+            Task.Delay(d, token).ContinueWith(_ =>
+            {
+                if (token.IsCancellationRequested || !IsApplied || _communityGrid == null) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try { ReHideMembersViewHeader(); }
+                    catch { }
+                });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+        }
+    }
+
+    /// <summary>
+    /// Re-hide the ghost header in MembersView after collapse/expand cycle.
+    /// The header rows may become visible again due to layout changes or binding updates.
+    /// </summary>
+    private void ReHideMembersViewHeader()
+    {
+        EnsureMembersViewGridReference();
+        if (_membersViewGrid == null) return;
+        try
+        {
+            var rowDefs = _r.GetRowDefinitions(_membersViewGrid);
+            if (rowDefs == null) return;
+
+            // Re-hide all children in rows 0-3
+            foreach (var child in _r.GetVisualChildren(_membersViewGrid))
+            {
+                int row = _r.GetGridRow(child);
+                if (row <= 3)
+                {
+                    _r.SetIsVisible(child, false);
+                    var name = child.GetType().GetProperty("Name")?.GetValue(child) as string;
+                    if (name == "InMenuPanel" || name == "OutMenuPanel")
+                    {
+                        _r.SetMaxHeight(child, 0);
+                        _hiddenHeaderPanels ??= new List<object>();
+                        if (!_hiddenHeaderPanels.Contains(child))
+                            _hiddenHeaderPanels.Add(child);
+                    }
+                }
+            }
+
+            // Re-zero rows 0-3
+            for (int ri = 0; ri <= 3 && ri < rowDefs.Count; ri++)
+            {
+                _r.SetRowDefinitionPixelHeight(rowDefs[ri], 0);
+                try { rowDefs[ri]?.GetType().GetProperty("MinHeight")?.SetValue(rowDefs[ri], 0d); } catch { }
+            }
+
+            Logger.Log(Tag, "ReHideMembersViewHeader: re-hid ghost header after expand");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"ReHideMembersViewHeader error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Re-discover the MembersView root Grid if the original reference went stale after collapse/expand.
+    /// </summary>
+    private void EnsureMembersViewGridReference()
+    {
+        try
+        {
+            if (_membersViewGrid != null)
+            {
+                var existingRows = _r.GetRowDefinitions(_membersViewGrid);
+                if (existingRows != null && existingRows.Count >= 5) return;
+            }
+        }
+        catch { }
+
+        if (_communityGrid == null) return;
+        try
+        {
+            object? membersPanel = null;
+            int maxCol = -1;
+            foreach (var child in _r.GetVisualChildren(_communityGrid))
+            {
+                if (child.GetType().Name.Contains("GridSplitter")) continue;
+                int col = _r.GetGridColumn(child);
+                if (col > maxCol) { maxCol = col; membersPanel = child; }
+            }
+            if (membersPanel == null) return;
+
+            var walker = new VisualTreeWalker(_r);
+            foreach (var node in walker.DescendantsDepthFirst(membersPanel))
+            {
+                if (!_r.IsGrid(node)) continue;
+                var rowDefs = _r.GetRowDefinitions(node);
+                if (rowDefs == null || rowDefs.Count < 5) continue;
+                _membersViewGrid = node;
+                return;
+            }
+        }
+        catch { }
     }
 
     /// <summary>
@@ -2397,11 +2851,7 @@ internal class RootcordEngine
         if (_membersViewGrid == null) return;
         try
         {
-            // Remove our collapse button
-            if (_collapseToggleBtn != null)
-                _r.RemoveChild(_membersViewGrid, _collapseToggleBtn);
-
-            // Restore MaxHeight on InMenuPanel/OutMenuPanel (clears our 0 override)
+                // Restore MaxHeight on InMenuPanel/OutMenuPanel (clears our 0 override)
             if (_hiddenHeaderPanels != null)
             {
                 foreach (var panel in _hiddenHeaderPanels)
@@ -2422,12 +2872,21 @@ internal class RootcordEngine
                 _r.SetRowDefinitionPixelHeight(rowDefs[1], 1);
                 _r.SetRowDefinitionPixelHeight(rowDefs[2], 1);
                 rowDefs[3]?.GetType().GetProperty("Height")?.SetValue(rowDefs[3], autoGL);
+
+                // Restore MinHeight values that were zeroed during header hiding
+                if (_originalRowMinHeights != null)
+                {
+                    for (int ri = 0; ri < _originalRowMinHeights.Count && ri < rowDefs.Count; ri++)
+                    {
+                        try { rowDefs[ri]?.GetType().GetProperty("MinHeight")?.SetValue(rowDefs[ri], _originalRowMinHeights[ri]); }
+                        catch { }
+                    }
+                }
             }
 
             // Restore visibility of native children in rows 0-3
             foreach (var child in _r.GetVisualChildren(_membersViewGrid))
             {
-                if (child == _collapseToggleBtn) continue; // skip our button (already removed)
                 int row = _r.GetGridRow(child);
                 if (row <= 3) _r.SetIsVisible(child, true);
             }
@@ -2438,6 +2897,7 @@ internal class RootcordEngine
 
         _membersViewGrid = null;
         _hiddenHeaderPanels = null;
+        _originalRowMinHeights = null;
     }
 
     /// <summary>
@@ -2515,28 +2975,9 @@ internal class RootcordEngine
                 }
             });
 
-            // Watch MenuIn to drive column collapse
+            // Watch MenuIn to drive collapse button state (rebinds safely per selected server).
             if (_headerMembersVm != null)
-            {
-                try
-                {
-                    var capturedVm = _headerMembersVm;
-                    _membersMenuInHandler = _r.SubscribePropertyChanged(_headerMembersVm, propName =>
-                    {
-                        if (propName == "MenuIn" && IsApplied && _communityGrid != null)
-                        {
-                            bool expanded = _r.GetPropertyValue(capturedVm, "MenuIn") is true;
-                            _r.RunOnUIThread(() =>
-                            {
-                                try { ApplyMembersCollapseState(expanded); }
-                                catch { }
-                            });
-                        }
-                    });
-                    Logger.Log(Tag, "MembersPanel: subscribed to MenuIn changes");
-                }
-                catch (Exception ex) { Logger.Log(Tag, $"MembersPanel: MenuIn sub error: {ex.Message}"); }
-            }
+                BindMembersMenuInHandler(_headerMembersVm);
 
             Logger.Log(Tag, $"NativeTabSwitcher: RootMemberVisibilitySwitch created (MembersVM={_headerMembersVm != null})");
             return switchControl;
@@ -2726,6 +3167,11 @@ internal class RootcordEngine
                         catch { }
                         try { FlipTooltipsInTree(capturedPanel); }
                         catch { }
+                        if (!_membersPanelCollapsed)
+                        {
+                            try { ReHideMembersViewHeader(); }
+                            catch { }
+                        }
                     };
                     eventInfo.AddEventHandler(membersPanel, handler);
                     _membersLayoutUpdatedHandler = handler;
@@ -3230,8 +3676,9 @@ internal class RootcordEngine
             _r.SetGridColumnSpan(_userBar, allCols);
             _r.SetVerticalAlignment(_userBar, "Bottom");
             _r.SetHorizontalAlignment(_userBar, "Left");
-            _r.SetMargin(_userBar, 0, 0, 0, 0); // flush to window edges
+            _r.SetMargin(_userBar, 0, 0, 0, 0); // flush to left window edge: user bar spans server strip + channels
             _userBar.GetType().GetProperty("ZIndex")?.SetValue(_userBar, 10);
+            _r.SetIsHitTestVisible(_userBar, true);
 
             // 5-column content Grid: [Auto avatar] [8px] [* username] [8px] [Auto buttons]
             var contentGrid = _r.CreateGrid();
@@ -5158,7 +5605,7 @@ internal class RootcordEngine
             // Rapid retry: fire at 50ms, 150ms, 400ms so we catch the visual tree ASAP.
             if (propName == "PaneViewModel" || propName == "PaneOpen" || propName == "ProfileOpen")
             {
-                Logger.Log(Tag, $"PropertyChanged: {propName} — scheduling SignOut rearrangement");
+                Logger.Log(Tag, $"PropertyChanged: {propName} — scheduling SignOut rearrangement + user bar resize");
                 var paneToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
                 foreach (var delayMs in new[] { 50, 150, 400 })
                 {
@@ -5169,6 +5616,9 @@ internal class RootcordEngine
                         _r.RunOnUIThread(() =>
                         {
                             try { RearrangeSignOutButton(); }
+                            catch { }
+                            // Refresh user bar width so it extends under the open pane
+                            try { UpdateUserBarWidth(); }
                             catch { }
                         });
                     }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
@@ -5181,45 +5631,7 @@ internal class RootcordEngine
                 {
                     try
                     {
-                        RefreshSelectedHighlight();
-
-                        // Re-apply community members swap based on current tab type
-                        var sel = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-                        if (sel != null && !IsDmTab(sel))
-                        {
-                            SwapCommunityMembersToRight();
-                            // CommunityView may not be in the visual tree yet — progressive retry
-                            if (_communityGrid == null)
-                            {
-                                var capturedSel = sel;
-                                var capturedToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-                                int[] delays = { 100, 300, 600, 1000 };
-                                foreach (var delay in delays)
-                                {
-                                    var d = delay;
-                                    System.Threading.Tasks.Task.Delay(d, capturedToken).ContinueWith(_ =>
-                                    {
-                                        if (capturedToken.IsCancellationRequested) return;
-                                        _r.RunOnUIThread(() =>
-                                        {
-                                            try
-                                            {
-                                                var current = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
-                                                if (current == capturedSel && _communityGrid == null)
-                                                {
-                                                    SwapCommunityMembersToRight();
-                                                    if (_communityGrid != null)
-                                                        Logger.Log(Tag, $"Tab switch: swap succeeded at {d}ms");
-                                                }
-                                            }
-                                            catch { }
-                                        });
-                                    }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
-                                }
-                            }
-                        }
-                        else
-                            RevertCommunityMembersSwap();
+                        HandleSelectedTabChanged();
                     }
                     catch (Exception ex) { Logger.Log(Tag, $"Selection change handler error: {ex.Message}"); }
                 });
@@ -5254,8 +5666,87 @@ internal class RootcordEngine
         }
     }
 
+    private void HandleSelectedTabChanged()
+    {
+        RefreshSelectedHighlight();
+        if (_homeViewModel == null) return;
+
+        var selectedTab = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+        int generation = ++_tabSwitchGeneration;
+
+        // Reset volatile per-tab references so stale server views cannot drive new-tab behavior.
+        TeardownUserBarWidthTracking();
+        UnsubscribeMembersMenuInHandler();
+        _headerMembersVm = null;
+        _membersViewGrid = null;
+        _hiddenHeaderPanels = null;
+        _originalRowMinHeights = null;
+
+        if (selectedTab == null || IsDmTab(selectedTab) || IsNewTab(selectedTab))
+        {
+            RevertCommunityMembersSwap();
+            return;
+        }
+
+        ScheduleCommunityTabReconcile(selectedTab, generation);
+    }
+
+    private void ScheduleCommunityTabReconcile(object selectedTab, int generation)
+    {
+        TryReconcileCommunityTab(selectedTab, generation, 0);
+
+        var token = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+        foreach (var delayMs in new[] { 16, 40, 80, 130, 200, 320, 500, 800 })
+        {
+            var d = delayMs;
+            Task.Delay(d, token).ContinueWith(_ =>
+            {
+                if (token.IsCancellationRequested) return;
+                _r.RunOnUIThread(() =>
+                {
+                    try { TryReconcileCommunityTab(selectedTab, generation, d); }
+                    catch (Exception ex) { Logger.Log(Tag, $"Tab switch reconcile error ({d}ms): {ex.Message}"); }
+                });
+            }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
+        }
+    }
+
+    private void TryReconcileCommunityTab(object selectedTab, int generation, int delayMs)
+    {
+        if (!IsApplied || _homeViewModel == null) return;
+        if (generation != _tabSwitchGeneration) return;
+
+        var current = _r.GetPropertyValue(_homeViewModel, "SelectedTabViewModel");
+        if (!ReferenceEquals(current, selectedTab)) return;
+        if (current == null || IsDmTab(current) || IsNewTab(current))
+        {
+            RevertCommunityMembersSwap();
+            return;
+        }
+
+        // Already reconciled for this selected tab.
+        if (_communityGrid != null && _channelsPanelRef != null && ReferenceEquals(_layoutTabVm, selectedTab))
+        {
+            UpdateUserBarWidth();
+            return;
+        }
+
+        SwapCommunityMembersToRight();
+        if (_communityGrid != null && _channelsPanelRef != null)
+        {
+            // Explicitly mark this tab as reconciled so subsequent retries early-exit.
+            // SwapCommunityMembersToRight also sets _layoutTabVm, but this ensures
+            // the "already reconciled" guard at the top of this method works immediately
+            // for any in-flight retries that arrive after this one succeeds.
+            _layoutTabVm = selectedTab;
+            Logger.Log(Tag, $"Tab switch: reconcile succeeded at {delayMs}ms");
+        }
+    }
+
     private void UnsubscribeTabChanges()
     {
+        _tabSwitchGeneration++;
+
         if (_selectionHandler != null && _homeViewModel != null)
         {
             _r.UnsubscribePropertyChanged(_homeViewModel, _selectionHandler);
@@ -5268,6 +5759,8 @@ internal class RootcordEngine
             _tabsCollectionHandler = null;
         }
         _tabsCollection = null;
+
+        UnsubscribeMembersMenuInHandler();
     }
 
     // ===== Hover tooltip =====
