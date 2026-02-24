@@ -965,7 +965,6 @@ internal class UserBioEngine
         try
         {
             AutoUpdater.EnsureHttpResolved();
-            UprootedPresenceBeacon.EnsurePostResolved();
 
             if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
                 || AutoUpdater.s_httpRequestMessageType == null)

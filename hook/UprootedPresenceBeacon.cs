@@ -172,21 +172,41 @@ internal class UprootedPresenceBeacon
 
             Logger.Log(Tag, $"Registering presence for UUID {_ownUuidStr[..8]}...");
 
-            var utcDayNumber = (int)((DateTime.UtcNow - DateTime.UnixEpoch).TotalDays);
-            var message = $"{_ownUuidStr}:{utcDayNumber}";
-            var hmacHex = ComputeHmacHex(message, DecryptKey());
+            // Retry registration up to 3 times with 10s gaps. On Linux, the
+            // reflective HTTP layer may not be ready on the first attempt due
+            // to COR_PRF_DISABLE_ALL_NGEN_IMAGES forcing JIT for all methods.
+            const int maxHttpRetries = 3;
+            for (int httpAttempt = 1; httpAttempt <= maxHttpRetries; httpAttempt++)
+            {
+                var utcDayNumber = (int)((DateTime.UtcNow - DateTime.UnixEpoch).TotalDays);
+                var message = $"{_ownUuidStr}:{utcDayNumber}";
+                var hmacHex = ComputeHmacHex(message, DecryptKey());
 
-            // Build JSON manually (no System.Text.Json)
-            var body = $"{{\"uuid\":\"{_ownUuidStr}\",\"token\":\"{hmacHex}\",\"ts\":{utcDayNumber},\"v\":\"{Version}\"}}";
+                // Build JSON manually (no System.Text.Json)
+                var body = $"{{\"uuid\":\"{_ownUuidStr}\",\"token\":\"{hmacHex}\",\"ts\":{utcDayNumber},\"v\":\"{Version}\"}}";
 
-            var statusCode = HttpPost($"{ApiBase}/presence/register", body);
+                var statusCode = HttpPost($"{ApiBase}/presence/register", body);
 
-            if (statusCode is 200 or 204)
-                Logger.Log(Tag, "Registered successfully");
-            else if (statusCode == 429)
-                Logger.Log(Tag, "Registration rate-limited (already registered recently — OK)");
-            else
-                Logger.Log(Tag, $"Registration failed: HTTP {statusCode}");
+                if (statusCode is 200 or 204)
+                {
+                    Logger.Log(Tag, "Registered successfully");
+                    break;
+                }
+                else if (statusCode == 429)
+                {
+                    Logger.Log(Tag, "Registration rate-limited (already registered recently — OK)");
+                    break;
+                }
+                else if (httpAttempt < maxHttpRetries)
+                {
+                    Logger.Log(Tag, $"Registration attempt {httpAttempt}/{maxHttpRetries} failed (HTTP {statusCode}), retrying in 10s...");
+                    Thread.Sleep(10_000);
+                }
+                else
+                {
+                    Logger.Log(Tag, $"Registration failed after {maxHttpRetries} attempts: HTTP {statusCode}");
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -254,6 +274,9 @@ internal class UprootedPresenceBeacon
         {
             var accessor = _r.GetPropertyValue(homeViewModel, accProp);
             if (accessor == null) continue;
+
+            Logger.Log(Tag, $"TryGetOwnUuid: found accessor via {accProp} ({accessor.GetType().Name})");
+
             var session = accProp == "Session" ? accessor : _r.GetPropertyValue(accessor, "Session");
             if (session == null)
             {
@@ -307,10 +330,9 @@ internal class UprootedPresenceBeacon
         try
         {
             AutoUpdater.EnsureHttpResolved();
-            EnsurePostResolved(); // Resolves s_httpMethodPost which we need for GET too
 
             if (AutoUpdater.s_httpClient == null || AutoUpdater.s_sendAsync == null
-                || AutoUpdater.s_httpRequestMessageType == null || s_httpMethodPost == null)
+                || AutoUpdater.s_httpRequestMessageType == null)
             {
                 Logger.Log(Tag, "HttpGetPresence: HTTP not resolved");
                 return null;
@@ -459,8 +481,10 @@ internal class UprootedPresenceBeacon
         lock (s_postLock)
         {
             if (s_postResolved) return;
-            s_postResolved = true;
 
+            // Don't mark resolved until s_httpRequestMessageType is available:
+            // on Linux, EnsureHttpResolved may not have completed yet due to
+            // JIT overhead causing ThreadPool contention. Retry on next call.
             if (AutoUpdater.s_httpRequestMessageType == null) return;
 
             try
@@ -473,6 +497,9 @@ internal class UprootedPresenceBeacon
                 s_stringContentType = httpAsm.GetType("System.Net.Http.StringContent");
 
                 Logger.Log(Tag, $"Post resolved: HttpMethod.Post={s_httpMethodPost != null}, StringContent={s_stringContentType != null}");
+
+                // Mark resolved only after success
+                s_postResolved = true;
             }
             catch (Exception ex)
             {

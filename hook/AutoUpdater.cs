@@ -135,6 +135,7 @@ internal class AutoUpdater
     internal static Type? s_httpRequestMessageType;
     private static object? s_httpMethodGet;
     private static bool s_httpResolved;
+    private static readonly object s_httpResolveLock = new();
 
     // Regex to extract tag_name from GitHub API JSON (no System.Text.Json)
     private static readonly Regex TagNameRegex = new(
@@ -718,104 +719,112 @@ internal class AutoUpdater
     internal static void EnsureHttpResolved()
     {
         if (s_httpResolved) return;
-        s_httpResolved = true;
 
-        using var ev = WideEvent.Begin("AutoUpdate", "http_resolve");
-        try
+        lock (s_httpResolveLock)
         {
-            Type? httpClientType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                if (asm.GetName().Name != "System.Net.Http") continue;
-                httpClientType = asm.GetType("System.Net.Http.HttpClient");
-                break;
-            }
+            if (s_httpResolved) return;
 
-            if (httpClientType == null)
-            {
-                ev.SetError("HttpClient type not found");
-                return;
-            }
-
-            s_httpClient = Activator.CreateInstance(httpClientType);
-            if (s_httpClient == null) return;
-
-            // Set timeout
-            var timeoutProp = httpClientType.GetProperty("Timeout");
-            timeoutProp?.SetValue(s_httpClient, TimeSpan.FromSeconds(HttpTimeoutSeconds));
-
-            // Set headers: identity encoding (avoid trimmed decompression), User-Agent for GitHub API
+            using var ev = WideEvent.Begin("AutoUpdate", "http_resolve");
             try
             {
-                var defaultHeaders = httpClientType.GetProperty("DefaultRequestHeaders")?.GetValue(s_httpClient);
-                if (defaultHeaders != null)
+                Type? httpClientType = null;
+                foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
                 {
-                    var tryAdd = defaultHeaders.GetType().GetMethod("TryAddWithoutValidation",
-                        new[] { typeof(string), typeof(string) });
-                    tryAdd?.Invoke(defaultHeaders, new object[] { "Accept-Encoding", "identity" });
-                    tryAdd?.Invoke(defaultHeaders, new object[] { "User-Agent", "Uprooted-AutoUpdater/1.0" });
-                    // GitHub API requires Accept header
-                    tryAdd?.Invoke(defaultHeaders, new object[] { "Accept", "application/vnd.github+json" });
+                    if (asm.GetName().Name != "System.Net.Http") continue;
+                    httpClientType = asm.GetType("System.Net.Http.HttpClient");
+                    break;
                 }
+
+                if (httpClientType == null)
+                {
+                    ev.SetError("HttpClient type not found — will retry on next call");
+                    return; // leave s_httpResolved false so next call retries
+                }
+
+                s_httpClient = Activator.CreateInstance(httpClientType);
+                if (s_httpClient == null) return;
+
+                // Set timeout
+                var timeoutProp = httpClientType.GetProperty("Timeout");
+                timeoutProp?.SetValue(s_httpClient, TimeSpan.FromSeconds(HttpTimeoutSeconds));
+
+                // Set headers: identity encoding (avoid trimmed decompression), User-Agent for GitHub API
+                try
+                {
+                    var defaultHeaders = httpClientType.GetProperty("DefaultRequestHeaders")?.GetValue(s_httpClient);
+                    if (defaultHeaders != null)
+                    {
+                        var tryAdd = defaultHeaders.GetType().GetMethod("TryAddWithoutValidation",
+                            new[] { typeof(string), typeof(string) });
+                        tryAdd?.Invoke(defaultHeaders, new object[] { "Accept-Encoding", "identity" });
+                        tryAdd?.Invoke(defaultHeaders, new object[] { "User-Agent", "Uprooted-AutoUpdater/1.0" });
+                        // GitHub API requires Accept header
+                        tryAdd?.Invoke(defaultHeaders, new object[] { "Accept", "application/vnd.github+json" });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("AutoUpdate", $"HTTP headers error: {ex.Message}");
+                }
+
+                // Resolve methods
+                s_getStringAsync = httpClientType.GetMethod("GetStringAsync",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, new[] { typeof(string) }, null);
+
+                s_getByteArrayAsync = httpClientType.GetMethod("GetByteArrayAsync",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, new[] { typeof(string) }, null);
+
+                s_getAsync = httpClientType.GetMethod("GetAsync",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, new[] { typeof(string) }, null);
+                s_getAsync ??= httpClientType.GetMethod("GetAsync",
+                    BindingFlags.Public | BindingFlags.Instance,
+                    null, new[] { typeof(Uri) }, null);
+
+                // Resolve SendAsync for deep fallback
+                try
+                {
+                    var httpAsm = httpClientType.Assembly;
+                    s_httpRequestMessageType = httpAsm.GetType("System.Net.Http.HttpRequestMessage");
+                    var httpMethodType = httpAsm.GetType("System.Net.Http.HttpMethod");
+                    s_httpMethodGet = httpMethodType?.GetProperty("Get",
+                        BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+
+                    if (s_httpRequestMessageType != null)
+                    {
+                        s_sendAsync = httpClientType.GetMethod("SendAsync",
+                            BindingFlags.Public | BindingFlags.Instance,
+                            null, new[] { s_httpRequestMessageType }, null);
+                        s_sendAsync ??= httpClientType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                            .Where(m => m.Name == "SendAsync" && !m.IsGenericMethod)
+                            .FirstOrDefault(m =>
+                            {
+                                var p = m.GetParameters();
+                                return p.Length >= 1 && p[0].ParameterType.IsAssignableFrom(s_httpRequestMessageType);
+                            });
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("AutoUpdate", $"SendAsync resolve error: {ex.Message}");
+                }
+
+                ev.Set("client", s_httpClient != null);
+                ev.Set("get_string_async", s_getStringAsync != null);
+                ev.Set("get_byte_array_async", s_getByteArrayAsync != null);
+                ev.Set("get_async", s_getAsync != null);
+                ev.Set("send_async", s_sendAsync != null);
+
+                // Mark resolved only after successful resolution so failed
+                // attempts (e.g. System.Net.Http not loaded yet) can retry
+                s_httpResolved = true;
             }
             catch (Exception ex)
             {
-                Logger.Log("AutoUpdate", $"HTTP headers error: {ex.Message}");
+                ev.SetError(ex);
             }
-
-            // Resolve methods
-            s_getStringAsync = httpClientType.GetMethod("GetStringAsync",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(string) }, null);
-
-            s_getByteArrayAsync = httpClientType.GetMethod("GetByteArrayAsync",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(string) }, null);
-
-            s_getAsync = httpClientType.GetMethod("GetAsync",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(string) }, null);
-            s_getAsync ??= httpClientType.GetMethod("GetAsync",
-                BindingFlags.Public | BindingFlags.Instance,
-                null, new[] { typeof(Uri) }, null);
-
-            // Resolve SendAsync for deep fallback
-            try
-            {
-                var httpAsm = httpClientType.Assembly;
-                s_httpRequestMessageType = httpAsm.GetType("System.Net.Http.HttpRequestMessage");
-                var httpMethodType = httpAsm.GetType("System.Net.Http.HttpMethod");
-                s_httpMethodGet = httpMethodType?.GetProperty("Get",
-                    BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
-
-                if (s_httpRequestMessageType != null)
-                {
-                    s_sendAsync = httpClientType.GetMethod("SendAsync",
-                        BindingFlags.Public | BindingFlags.Instance,
-                        null, new[] { s_httpRequestMessageType }, null);
-                    s_sendAsync ??= httpClientType.GetMethods(BindingFlags.Public | BindingFlags.Instance)
-                        .Where(m => m.Name == "SendAsync" && !m.IsGenericMethod)
-                        .FirstOrDefault(m =>
-                        {
-                            var p = m.GetParameters();
-                            return p.Length >= 1 && p[0].ParameterType.IsAssignableFrom(s_httpRequestMessageType);
-                        });
-                }
-            }
-            catch (Exception ex)
-            {
-                Logger.Log("AutoUpdate", $"SendAsync resolve error: {ex.Message}");
-            }
-
-            ev.Set("client", s_httpClient != null);
-            ev.Set("get_string_async", s_getStringAsync != null);
-            ev.Set("get_byte_array_async", s_getByteArrayAsync != null);
-            ev.Set("get_async", s_getAsync != null);
-            ev.Set("send_async", s_sendAsync != null);
-        }
-        catch (Exception ex)
-        {
-            ev.SetError(ex);
         }
     }
 
