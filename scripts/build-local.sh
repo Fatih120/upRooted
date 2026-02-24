@@ -295,8 +295,18 @@ rm -rf "$UPRPKG_DIR"
 echo ""
 echo "[7/7] Supplementary files + checksums..."
 
-# Linux artifacts tarball (shared artifacts for bash installer --prebuilt)
+# Linux artifacts tarball (for bash installer download)
+# Must include libuprooted_profiler.so: the bash installer extracts this
+# tarball and expects the profiler alongside the hook DLL.
 mkdir -p "$REPO_ROOT/_tarball_staging"
+# Profiler (only available when building on Linux)
+if [[ "$PLATFORM" == "linux" && -f "$ARTS/libuprooted_profiler.so" ]]; then
+    cp "$ARTS/libuprooted_profiler.so" "$REPO_ROOT/_tarball_staging/"
+    echo "  Including libuprooted_profiler.so in tarball"
+else
+    echo "  WARNING: libuprooted_profiler.so not available (not on Linux or profiler not built)"
+    echo "  The bash installer will fail without it. Build on Linux or use CI."
+fi
 # net10.0 as primary
 cp "$HOOK_OUT/UprootedHook.dll" "$REPO_ROOT/_tarball_staging/"
 cp "$HOOK_OUT/UprootedHook.deps.json" "$REPO_ROOT/_tarball_staging/"

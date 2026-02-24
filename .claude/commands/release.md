@@ -23,7 +23,7 @@ Full release preparation, verification, and ship. Combines the work of `/ok` (do
 | Channel | Target Repo | Branch | Pre-release? | Package Managers | Auto-Updater Channel |
 |---------|-------------|--------|--------------|------------------|---------------------|
 | **stable** | `The-Uprooted-Project/uprooted` (public) | `main` | No | Yes (all) | `stable` |
-| **canary** | `The-Uprooted-Project/uprooted-canary` (public) | `main` | Yes | No | `canary` |
+| **canary** | `The-Uprooted-Project/uprooted-canary` (public) | `main` | No (on canary repo) | No | `canary` |
 | **dev** | `The-Uprooted-Project/uprooted-private` (private) | `dev` | Yes | No | `developer` |
 
 ## Argument Parsing
@@ -80,7 +80,11 @@ For each channel in CHANNELS, derive:
   - `canary/dev` → `dev` (dev is the superset — main is behind dev)
   - `canary` alone → `main`
   - `stable` alone → `main`
-- **IS_PRERELEASE** = `false` ONLY if the sole channel is `stable`. Any combo with `canary` or `dev` = `true`.
+- **IS_PRERELEASE** — per-repo, not global:
+  - On the **private repo** (`uprooted-private`): always `true` (all releases are prerelease here)
+  - On the **canary repo** (`uprooted-canary`): always `false` (canary IS the latest for canary users; `/releases/latest` must resolve correctly)
+  - On the **stable repo** (`uprooted`): always `false`
+  - When creating the release on each TARGET_REPO, use the repo-specific prerelease flag. Do NOT use a single global IS_PRERELEASE for all repos.
 - **TARGET_REPOS** (list):
   - `stable` → `The-Uprooted-Project/uprooted`
   - `canary` → `The-Uprooted-Project/uprooted-canary`

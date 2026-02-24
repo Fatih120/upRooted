@@ -329,11 +329,22 @@ jobs:
       - name: Pack auto-update package
         run: python3 scripts/pack-update.py --input-dir _uprpkg --output _artifacts/auto-update.uprpkg --verify
 
-      # Linux artifacts tarball (for bash installer --prebuilt)
+      # Linux artifacts tarball (for bash installer download)
+      # Must include libuprooted_profiler.so: the bash installer extracts this
+      # tarball and expects the profiler alongside the hook DLL.
+
+      - name: Build Linux profiler for tarball
+        run: |
+          gcc -shared -fPIC -O2 -s -fvisibility=hidden \
+              -o libuprooted_profiler.so \
+              tools/uprooted_profiler_linux.c
+          echo "libuprooted_profiler.so ($(wc -c < libuprooted_profiler.so) bytes)"
 
       - name: Package Linux artifacts tarball
         run: |
           mkdir -p _tarball
+          # Profiler (built above on ubuntu-latest)
+          cp libuprooted_profiler.so _tarball/
           # net10.0 as primary
           cp _shared/hook/bin/Release/net10.0/UprootedHook.dll _tarball/
           cp _shared/hook/bin/Release/net10.0/UprootedHook.deps.json _tarball/
