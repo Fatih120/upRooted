@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq.Expressions;
 using System.Reflection;
 
 namespace Uprooted;
@@ -88,6 +89,14 @@ internal class RootcordEngine
     private List<(int colIdx, double width, string unit)>? _originalColWidths;
     private List<(object splitter, int originalCol)>? _originalSplitterColumns;
     private object? _collapsedSplitView;   // SplitView whose pane we collapsed (restore on revert)
+
+    // Members panel collapse (driven by MembersViewModel.MenuIn)
+    private int    _membersColumnIdx = -1;  // Grid column index of members panel after rotation
+    private object? _membersColDef;         // ColumnDefinition for the members column
+    private bool   _membersPanelCollapsed;  // Current visual collapse state (mirrors !MenuIn)
+    private object? _collapseToggleBtn;     // Our toggle button Border (for icon/color refresh)
+    private object? _membersMenuInHandler;  // INPC handler on MembersViewModel.MenuIn
+    private object? _ctrlUKeyHandler;       // KeyDown delegate on _mainWindow for Ctrl+U
 
     // Custom community header injected into channels panel
     private object? _injectedHeader;       // The header outer stack we built
@@ -339,6 +348,14 @@ internal class RootcordEngine
                     break;
                 }
             }
+        }
+
+        // Collapse toggle button
+        if (_collapseToggleBtn != null)
+        {
+            _r.SetBackground(_collapseToggleBtn, _cardBg);
+            SetBorderStroke(_collapseToggleBtn, AdjustForHighlight(_cardBg, 15), 0.5);
+            UpdateCollapseButtonIcon();
         }
 
         // Selection pills and highlight states (accent color may have changed)
@@ -1464,6 +1481,17 @@ internal class RootcordEngine
                         }
                     }
                     Logger.Log(Tag, $"SwapCommunityMembers: rebuilt {originalCount} column definitions");
+
+                    // Reset collapse state for a fresh Apply
+                    _membersPanelCollapsed = false;
+
+                    // Capture the members ColumnDefinition for later collapse/expand
+                    var capturedColDefs = _r.GetColumnDefinitions(layoutGrid);
+                    if (capturedColDefs != null && maxAssignedCol >= 0 && maxAssignedCol < capturedColDefs.Count)
+                    {
+                        _membersColDef = capturedColDefs[maxAssignedCol];
+                        _membersColumnIdx = maxAssignedCol;
+                    }
                 }
 
                 // Invalidate to trigger fresh layout
@@ -1622,6 +1650,8 @@ internal class RootcordEngine
 
             // Flip member profile flyout placements (Right → Left) after rotation
             FlipMemberFlyoutPlacements();
+
+            SetupCtrlUHandler();
         }
         catch (Exception ex)
         {
@@ -1634,6 +1664,16 @@ internal class RootcordEngine
     /// </summary>
     private void RevertCommunityMembersSwap()
     {
+        // Restore member panel visibility if it was collapsed
+        if (_membersPanelCollapsed && _membersPanel != null)
+            _r.SetIsVisible(_membersPanel, true);
+
+        TeardownCtrlUHandler();
+        _membersPanelCollapsed = false;
+        _membersColDef = null;
+        _membersColumnIdx = -1;
+        _collapseToggleBtn = null;
+
         // Revert flyout placements before restoring column positions
         RevertMemberFlyoutPlacements();
 
@@ -1741,6 +1781,13 @@ internal class RootcordEngine
             }
         }
         catch (Exception ex) { Logger.Log(Tag, $"RemoveInjectedHeader error: {ex.Message}"); }
+
+        if (_membersMenuInHandler != null && _headerMembersVm != null)
+        {
+            try { _r.UnsubscribePropertyChanged(_headerMembersVm, _membersMenuInHandler); }
+            catch { }
+            _membersMenuInHandler = null;
+        }
 
         _injectedHeader = null;
         _channelsPanelRef = null;
@@ -2038,6 +2085,10 @@ internal class RootcordEngine
                 cardCols[1]?.GetType().GetProperty("Width")?.SetValue(cardCols[1],
                     Activator.CreateInstance(_r.GridLengthType, 10d, pixelUnit));
                 // Col 2 stays Star
+
+                // Col 3: 8px gap; Col 4: collapse button (Auto)
+                _r.AddGridColumnPixel(cardGrid, 8);
+                _r.AddGridColumnAuto(cardGrid);
             }
             catch { }
         }
@@ -2136,6 +2187,16 @@ internal class RootcordEngine
             _r.AddChild(cardGrid, textPanel);
         }
 
+        // Col 4: members toggle button
+        var toggleBtn = BuildCollapseToggleButton();
+        if (toggleBtn != null)
+        {
+            _r.SetGridColumn(toggleBtn, 4);
+            _r.SetVerticalAlignment(toggleBtn, "Center");
+            _r.AddChild(cardGrid, toggleBtn);
+            _collapseToggleBtn = toggleBtn;
+        }
+
         _r.SetBorderChild(headerBorder, cardGrid);
 
         // ===== COMMUNITY / CHANNEL TAB SWITCHER =====
@@ -2206,6 +2267,214 @@ internal class RootcordEngine
         }
 
         Logger.Log(Tag, $"InjectChannelsHeader: '{communityName}' header injected ({countStr})");
+    }
+
+    // ===== Members panel collapse =====
+
+    private object? BuildCollapseToggleButton()
+    {
+        try
+        {
+            var btn = _r.CreateBorder(_cardBg, 4);
+            if (btn == null) return null;
+            _r.SetWidth(btn, 26);
+            _r.SetHeight(btn, 26);
+            SetBorderStroke(btn, AdjustForHighlight(_cardBg, 15), 0.5);
+
+            // People glyph: same as GlyphFriends ("\uE716"), Segoe Fluent/MDL2
+            var icon = _r.CreateTextBlock("\uE716", 13, _muted);
+            if (icon == null) return null;
+            _r.SetVerticalAlignment(icon, "Center");
+            _r.SetHorizontalAlignment(icon, "Center");
+            try
+            {
+                icon.GetType().GetProperty("FontFamily")
+                    ?.SetValue(icon, Activator.CreateInstance(
+                        AppDomain.CurrentDomain.GetAssemblies()
+                            .Select(a => a.GetType("Avalonia.Media.FontFamily"))
+                            .FirstOrDefault(t => t != null)!,
+                        GlyphIconFonts));
+            }
+            catch { }
+            _r.SetBorderChild(btn, icon);
+
+            // PointerPressed → toggle (Expression lambda, no compile-time Avalonia refs)
+            var pressedEvent = btn.GetType().GetEvent("PointerPressed");
+            if (pressedEvent != null)
+            {
+                var invokeParams = pressedEvent.EventHandlerType!.GetMethod("Invoke")!.GetParameters();
+                var p0 = Expression.Parameter(typeof(object), "s");
+                var p1 = Expression.Parameter(invokeParams[1].ParameterType, "e");
+                var capturedThis = Expression.Constant(this);
+                var toggleMeth = typeof(RootcordEngine)
+                    .GetMethod("ToggleMembersPanelViaCommand", BindingFlags.NonPublic | BindingFlags.Instance)!;
+                var body = Expression.Call(capturedThis, toggleMeth);
+                var lambda = Expression.Lambda(pressedEvent.EventHandlerType!, body, p0, p1);
+                pressedEvent.AddEventHandler(btn, (Delegate)lambda.Compile());
+            }
+
+            return btn;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"BuildCollapseToggleButton error: {ex.Message}");
+            return null;
+        }
+    }
+
+    private void UpdateCollapseButtonIcon()
+    {
+        if (_collapseToggleBtn == null) return;
+        try
+        {
+            var child = _r.GetBorderChild(_collapseToggleBtn);
+            if (child != null && _r.IsTextBlock(child))
+                _r.SetForeground(child, _membersPanelCollapsed ? _dim : _muted);
+        }
+        catch { }
+    }
+
+    private void ToggleMembersPanelViaCommand()
+    {
+        if (_headerMembersVm == null || !IsApplied) return;
+        try
+        {
+            var cmd = _r.GetPropertyValue(_headerMembersVm, "ToggleMenuCommand");
+            if (cmd == null) return;
+            var canExec = cmd.GetType().GetMethod("CanExecute")?.Invoke(cmd, new object?[] { null });
+            if (canExec is true)
+                cmd.GetType().GetMethod("Execute")?.Invoke(cmd, new object?[] { null });
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"ToggleMembersPanel: {ex.Message}"); }
+    }
+
+    private void ApplyMembersCollapseState(bool expanded)
+    {
+        if (_membersColDef == null || _communityGrid == null) return;
+
+        _membersPanelCollapsed = !expanded;
+
+        // Resolve members panel (may have been cleared by flyout unsub on tab switch)
+        var membersPanel = _membersPanel;
+        if (membersPanel == null && _membersColumnIdx >= 0)
+        {
+            foreach (var child in _r.GetVisualChildren(_communityGrid))
+            {
+                if (child.GetType().Name.Contains("GridSplitter")) continue;
+                if (_r.GetGridColumn(child) == _membersColumnIdx) { membersPanel = child; break; }
+            }
+        }
+
+        if (expanded)
+        {
+            // Restore column to Auto
+            if (_r.GridUnitTypeEnum != null && _r.GridLengthType != null)
+            {
+                try
+                {
+                    var autoUnit = Enum.Parse(_r.GridUnitTypeEnum, "Auto");
+                    var gl = Activator.CreateInstance(_r.GridLengthType, 0d, autoUnit);
+                    _membersColDef.GetType().GetProperty("Width")?.SetValue(_membersColDef, gl);
+                }
+                catch { }
+            }
+            if (membersPanel != null) _r.SetIsVisible(membersPanel, true);
+        }
+        else
+        {
+            _r.SetColumnDefinitionPixelWidth(_membersColDef, 0);
+            if (membersPanel != null) _r.SetIsVisible(membersPanel, false);
+        }
+
+        _communityGrid.GetType().GetMethod("InvalidateMeasure")?.Invoke(_communityGrid, null);
+        _communityGrid.GetType().GetMethod("InvalidateArrange")?.Invoke(_communityGrid, null);
+
+        UpdateCollapseButtonIcon();
+        Logger.Log(Tag, $"MembersPanel: {(expanded ? "expanded" : "collapsed")}");
+    }
+
+    private void SetupCtrlUHandler()
+    {
+        if (_ctrlUKeyHandler != null) return;
+        try
+        {
+            Type? keyType = null, keyModType = null, inputElementType = null, routingType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                if (asm.FullName?.StartsWith("Avalonia") != true) continue;
+                keyType         ??= asm.GetType("Avalonia.Input.Key");
+                keyModType      ??= asm.GetType("Avalonia.Input.KeyModifiers");
+                inputElementType ??= asm.GetType("Avalonia.Input.InputElement");
+                routingType     ??= asm.GetType("Avalonia.Interactivity.RoutingStrategies");
+                if (keyType != null && keyModType != null && inputElementType != null && routingType != null) break;
+            }
+            if (keyType == null || inputElementType == null) { Logger.Log(Tag, "Ctrl+U: types not found"); return; }
+
+            var keyDownField = inputElementType.GetField("KeyDownEvent",
+                BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy);
+            var keyDownEvent = keyDownField?.GetValue(null);
+            if (keyDownEvent == null) { Logger.Log(Tag, "Ctrl+U: KeyDownEvent not found"); return; }
+
+            var addHandler = _mainWindow.GetType().GetMethods(BindingFlags.Public | BindingFlags.Instance)
+                .FirstOrDefault(m => m.Name == "AddHandler" && !m.IsGenericMethod && m.GetParameters().Length == 4);
+            if (addHandler == null) { Logger.Log(Tag, "Ctrl+U: AddHandler(4) not found"); return; }
+
+            var routing = Enum.ToObject(routingType!,
+                (int)Enum.Parse(routingType!, "Bubble") |
+                (int)Enum.Parse(routingType!, "Tunnel") |
+                (int)Enum.Parse(routingType!, "Direct"));
+
+            // Build delegate type from CLR event
+            var clrEvent     = inputElementType.GetEvent("KeyDown")!;
+            var delegateType = clrEvent.EventHandlerType!;
+            var invokeParams = delegateType.GetMethod("Invoke")!.GetParameters();
+
+            var p0 = Expression.Parameter(typeof(object),                "sender");
+            var p1 = Expression.Parameter(invokeParams[1].ParameterType, "e"); // KeyEventArgs
+
+            var keyU    = Expression.Constant(Convert.ToInt32(Enum.Parse(keyType, "U")));
+            var ctrlVal = Expression.Constant(Convert.ToInt32(Enum.Parse(keyModType!, "Control")));
+
+            var isU     = Expression.Equal(
+                Expression.Convert(Expression.Property(p1, "Key"), typeof(int)), keyU);
+            var hasCtrl = Expression.NotEqual(
+                Expression.And(
+                    Expression.Convert(Expression.Property(p1, "KeyModifiers"), typeof(int)), ctrlVal),
+                Expression.Constant(0));
+
+            var capturedThis = Expression.Constant(this);
+            var toggleMeth   = typeof(RootcordEngine).GetMethod("ToggleMembersPanelViaCommand",
+                BindingFlags.NonPublic | BindingFlags.Instance)!;
+            var toggleCall   = Expression.Call(capturedThis, toggleMeth);
+
+            var handledProp = p1.Type.GetProperty("Handled");
+            Expression actionBody = handledProp != null
+                ? Expression.Block(toggleCall,
+                    Expression.Assign(Expression.Property(p1, handledProp), Expression.Constant(true)))
+                : toggleCall;
+
+            var body   = Expression.IfThen(Expression.AndAlso(isU, hasCtrl), actionBody);
+            var lambda = Expression.Lambda(delegateType, body, p0, p1);
+            var handler = lambda.Compile();
+
+            addHandler.Invoke(_mainWindow, new[] { keyDownEvent, (object)handler, routing, (object)true });
+            _ctrlUKeyHandler = handler;
+            Logger.Log(Tag, "Ctrl+U: subscribed to main window KeyDown");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"SetupCtrlUHandler error: {ex.Message}"); }
+    }
+
+    private void TeardownCtrlUHandler()
+    {
+        if (_ctrlUKeyHandler == null) return;
+        try
+        {
+            var ev = _mainWindow.GetType().GetEvent("KeyDown");
+            if (ev != null && _ctrlUKeyHandler is Delegate del)
+                ev.RemoveEventHandler(_mainWindow, del);
+        }
+        catch { }
+        _ctrlUKeyHandler = null;
     }
 
     /// <summary>
@@ -2282,6 +2551,29 @@ internal class RootcordEngine
                     catch { }
                 }
             });
+
+            // Watch MenuIn to drive column collapse
+            if (_headerMembersVm != null)
+            {
+                try
+                {
+                    var capturedVm = _headerMembersVm;
+                    _membersMenuInHandler = _r.SubscribePropertyChanged(_headerMembersVm, propName =>
+                    {
+                        if (propName == "MenuIn" && IsApplied && _communityGrid != null)
+                        {
+                            bool expanded = _r.GetPropertyValue(capturedVm, "MenuIn") is true;
+                            _r.RunOnUIThread(() =>
+                            {
+                                try { ApplyMembersCollapseState(expanded); }
+                                catch { }
+                            });
+                        }
+                    });
+                    Logger.Log(Tag, "MembersPanel: subscribed to MenuIn changes");
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"MembersPanel: MenuIn sub error: {ex.Message}"); }
+            }
 
             Logger.Log(Tag, $"NativeTabSwitcher: RootMemberVisibilitySwitch created (MembersVM={_headerMembersVm != null})");
             return switchControl;
