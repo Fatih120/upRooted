@@ -37,7 +37,7 @@ internal class ProfileBadgeInjector
     private const string AlphaBadgeTag = "uprooted-alpha-badge";
     private const string PresenceIconTag = "uprooted-presence-icon";
     private const string PresenceIconColor = "#4ADE80"; // Bright emerald green
-    private const int FallbackPollMs = 200;
+    private const int FallbackPollMs = 50;
     private const string DevBadgeColor = "#8B6914";   // Gold/amber — developer channel
     private const string AlphaBadgeColor = "#1A6EBD"; // Blue — alpha participants
 
@@ -111,6 +111,12 @@ internal class ProfileBadgeInjector
     private bool _alphaCommunityResolved;
     private object? _alphaCommunity;
 
+    // Hover prefetch: track MemberView controls already subscribed to PointerEntered.
+    // Uses reference equality to avoid interfering with Root's control lifecycle.
+    private readonly HashSet<object> _hoverSubscribed = new(ReferenceEqualityComparer.Instance);
+    private Timer? _hoverScanTimer;
+    private object? _membersPanelCache; // Cached MembersView container for faster subtree scans
+
     public ProfileBadgeInjector(AvaloniaReflection resolver, object mainWindow, UprootedPresenceBeacon? beacon = null, UserBioEngine? bioEngine = null)
     {
         _r = resolver;
@@ -183,6 +189,10 @@ internal class ProfileBadgeInjector
         // Fallback: poll TopLevel windows for popups outside the overlay
         Logger.Log("ProfileBadge", $"Starting profile popup monitor (overlay events + {FallbackPollMs}ms fallback poll)");
         _fallbackTimer = new Timer(OnFallbackTick, null, FallbackPollMs, FallbackPollMs);
+
+        // Hover prefetch: subscribe to PointerEntered on MemberView controls
+        // so presence + bio data is cached before the user opens a profile popup.
+        StartMemberHoverPrefetch();
     }
 
     /// <summary>
@@ -225,9 +235,10 @@ internal class ProfileBadgeInjector
     /// Fires immediately when a child is added/removed from the OverlayLayer.
     /// Runs on the UI thread (Avalonia collection events fire on the UI thread).
     ///
-    /// Root sets the popup's DataContext asynchronously after adding it to the overlay,
-    /// so we scan immediately and then retry at 80ms + 200ms to catch the window where
-    /// MemberProfileView.DataContext isn't set yet on the first scan.
+    /// Root sets the popup's DataContext asynchronously after adding it to the overlay.
+    /// On first scan, if DataContext is not yet set on MemberProfileView, we subscribe to
+    /// its DataContextChanged event for instant re-injection (0ms latency). A 200ms fallback
+    /// retry catches edge cases where the event subscription fails.
     /// </summary>
     private void OnOverlayChildrenChanged()
     {
@@ -235,8 +246,7 @@ internal class ProfileBadgeInjector
         {
             Logger.Log("ProfileBadge", ">>> OverlayChanged START");
             ScanOverlayLayer(tagNonProfiles: false);  // First scan: don't tag — popup may still be loading
-            ScheduleOverlayRetry(80,  tagNonProfiles: true);  // 80ms retry: tag confirmed non-profiles so the 200ms retry skips them
-            ScheduleOverlayRetry(200, tagNonProfiles: false); // 200ms final check: don't re-tag (just catch slow-loading profile popups)
+            ScheduleOverlayRetry(200, tagNonProfiles: true); // Safety fallback for slow-loading popups
             Logger.Log("ProfileBadge", "<<< OverlayChanged END");
         }
         catch (Exception ex)
@@ -499,37 +509,7 @@ internal class ProfileBadgeInjector
             devBadgePresent = false;
         }
 
-        // Get DataContext once — used for both UUID lookup and role check
-        var dc = FindProfileDataContext(popup);
-        var userId = TryGetUserIdFromDc(dc);
-
-        // Alpha: static UUID list OR session cache OR live role check (community context only).
-        // When live role check succeeds, UUID is added to session cache so the badge appears
-        // globally on future opens (DMs, other communities) — not just inside the alpha community.
-        bool alphaByRole = HasRoleId(dc, AlphaRoleId);
-        if (alphaByRole && userId != null) _confirmedAlphaIds.Add(userId);
-
-        // Cross-community fallback: if the profile was opened from a different community,
-        // CommunityMember.Roles only has roles for that community — the alpha role won't appear.
-        // Walk Session.CommunityService → alpha community → member list → check Roles directly.
-        // Only fires when all faster checks miss; result is cached in _confirmedAlphaIds.
-        if (!alphaByRole && userId != null
-            && !AlphaUserIds.Contains(userId) && !_confirmedAlphaIds.Contains(userId))
-        {
-            if (HasAlphaRoleViaCrossContextCheck(dc, userId))
-                _confirmedAlphaIds.Add(userId);
-        }
-
-        bool isAlphaUser = (userId != null && (AlphaUserIds.Contains(userId) || _confirmedAlphaIds.Contains(userId)))
-                           || alphaByRole;
-
-        if (alphaBadgePresent && devBadgePresent)
-        {
-            Logger.Log("ProfileBadge", "All badges already present, skipping injection");
-            return;
-        }
-
-        // Find the username: largest-font TextBlock that isn't a label or action text
+        // Find the username first (DC-independent: TextBlock text is set from XAML template)
         object? usernameBlock = null;
         double maxFontSize = 0;
 
@@ -560,8 +540,44 @@ internal class ProfileBadgeInjector
             return;
         }
 
+        // Get DataContext — used for UUID lookup and role check
+        var dc = FindProfileDataContext(popup);
+        var userId = TryGetUserIdFromDc(dc);
+
+        // DataContext not ready yet: subscribe to DataContextChanged for instant re-injection
+        // instead of relying on timer retries. This fires the moment Root sets the DataContext,
+        // typically within 0-10ms (vs. the old 80-200ms timer delays).
+        if (dc == null)
+        {
+            Logger.Log("ProfileBadge", "DataContext not ready — subscribing to DataContextChanged for instant injection");
+            SubscribeProfileViewDataContextChanged(popup);
+            return;
+        }
+
         var username = _r.GetText(usernameBlock) ?? "";
         Logger.Log("ProfileBadge", $"Found username: \"{username}\" (fontSize={maxFontSize}, userId={userId ?? "null"})");
+
+        // Alpha: static UUID list OR session cache OR live role check (community context only).
+        bool alphaByRole = HasRoleId(dc, AlphaRoleId);
+        if (alphaByRole && userId != null) _confirmedAlphaIds.Add(userId);
+
+        // Cross-community fallback: if the profile was opened from a different community,
+        // CommunityMember.Roles only has roles for that community — the alpha role won't appear.
+        if (!alphaByRole && userId != null
+            && !AlphaUserIds.Contains(userId) && !_confirmedAlphaIds.Contains(userId))
+        {
+            if (HasAlphaRoleViaCrossContextCheck(dc, userId))
+                _confirmedAlphaIds.Add(userId);
+        }
+
+        bool isAlphaUser = (userId != null && (AlphaUserIds.Contains(userId) || _confirmedAlphaIds.Contains(userId)))
+                           || alphaByRole;
+
+        if (alphaBadgePresent && devBadgePresent)
+        {
+            Logger.Log("ProfileBadge", "All badges already present, skipping injection");
+            return;
+        }
 
         // Dev: same pattern — live role check populates session cache for global badge display.
         bool devByRole = HasRoleId(dc, DeveloperRoleId);
@@ -572,32 +588,20 @@ internal class ProfileBadgeInjector
         if (isDevUser) isAlphaUser = false; // Dev badge supersedes alpha
 
         // Inject presence icon inline next to username (beacon check — independent of badge logic)
-        if (_beacon != null)
+        if (_beacon != null && userId != null)
         {
-            if (userId != null)
+            bool isSelf = string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
+            if (isSelf)
             {
-                bool isSelf = string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
-                if (isSelf)
-                {
-                    // Self: inject immediately — we know we have Uprooted, no beacon query needed
-                    InjectPresenceIconIntoPopup(popup, usernameBlock);
-                }
-                else
-                {
-                    TryInjectPresenceIcon(popup, usernameBlock, userId);
-                }
+                InjectPresenceIconIntoPopup(popup, usernameBlock);
             }
             else
             {
-                // DataContext not ready yet — schedule presence-only retries after ScannedTag is set.
-                // (The badge retry mechanism cannot help here since ScannedTag skips already-detected popups.)
-                SchedulePresenceRetry(popup, usernameBlock, 300);
-                SchedulePresenceRetry(popup, usernameBlock, 900);
+                TryInjectPresenceIcon(popup, usernameBlock, userId);
             }
         }
 
         // Check if the viewed user has Uprooted (for bio injection — independent of badge eligibility)
-        // Self is always an Uprooted user; for others, check beacon cache
         bool isOwnProfile = userId != null && _beacon != null
             && string.Equals(userId, _beacon.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
         bool isUprootedUser = isOwnProfile || (userId != null && _beacon != null
@@ -622,8 +626,6 @@ internal class ProfileBadgeInjector
         }
 
         // Walk up from the username looking for a VERTICAL panel to insert into.
-        // The username sits in a horizontal row; we need the outer vertical container
-        // so badges appear below the name, not beside it.
         var candidate = usernameBlock;
         for (int up = 0; up < 8; up++)
         {
@@ -640,7 +642,6 @@ internal class ProfileBadgeInjector
                     {
                         int insertOffset = 1;
 
-                        // Inject alpha badge first (appears directly below username)
                         if (isAlphaUser && !alphaBadgePresent)
                         {
                             var alphaBadge = CreateAlphaBadgePill();
@@ -651,7 +652,6 @@ internal class ProfileBadgeInjector
                             }
                         }
 
-                        // Inject dev badge below alpha badge (or directly below username if no alpha)
                         if (isDevUser && !devBadgePresent)
                         {
                             var devBadge = CreateDevBadgePill();
@@ -662,7 +662,6 @@ internal class ProfileBadgeInjector
                             }
                         }
 
-                        // Inject bio below badges (or directly below username if no badges)
                         if (needsBio)
                         {
                             _bioEngine!.TryInjectBio(popup, parent, idx + insertOffset, userId!);
@@ -677,6 +676,54 @@ internal class ProfileBadgeInjector
         }
 
         Logger.Log("ProfileBadge", "Could not find vertical panel above username — badges/bio not injected");
+    }
+
+    /// <summary>
+    /// Subscribe to DataContextChanged on the MemberProfileView inside the popup.
+    /// When the DataContext is set (typically within 0-10ms), re-runs the full injection.
+    /// This replaces the old 80ms/200ms timer retry approach with event-driven instant detection.
+    /// </summary>
+    private void SubscribeProfileViewDataContextChanged(object popup)
+    {
+        try
+        {
+            // Find MemberProfileView in the popup subtree
+            object? profileView = null;
+            foreach (var node in _walker.DescendantsDepthFirst(popup))
+            {
+                if (node.GetType().Name == "MemberProfileView") { profileView = node; break; }
+            }
+            if (profileView == null && popup.GetType().Name == "MemberProfileView")
+                profileView = popup;
+
+            if (profileView == null)
+            {
+                Logger.Log("ProfileBadge", "MemberProfileView not found — cannot subscribe to DataContextChanged");
+                return;
+            }
+
+            bool fired = false; // Guard: only fire once per popup
+            _r.SubscribeEvent(profileView, "DataContextChanged", () =>
+            {
+                if (fired) return;
+                fired = true;
+                try
+                {
+                    if (_r.GetParent(popup) == null) return;
+                    Logger.Log("ProfileBadge", "DataContextChanged fired — injecting immediately");
+                    InjectBadgeUnderUsername(popup);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Log("ProfileBadge", $"DataContextChanged injection error: {ex.Message}");
+                }
+            });
+            Logger.Log("ProfileBadge", "Subscribed to MemberProfileView.DataContextChanged");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("ProfileBadge", $"SubscribeProfileViewDataContextChanged error: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -1108,39 +1155,100 @@ internal class ProfileBadgeInjector
         }
     }
 
+    // ===== Hover prefetch: cache presence + bio data before profile popup opens =====
+
     /// <summary>
-    /// Scheduled retry for presence icon injection when DataContext wasn't ready on first scan.
-    /// Re-reads the DataContext after <paramref name="delayMs"/> and calls TryInjectPresenceIcon
-    /// if userId becomes available. The popup's ScannedTag is already set so the normal scan
-    /// path will not re-enter — this is the only retry path for the presence icon in that case.
+    /// Start periodic scanning for MemberView controls in the members panel.
+    /// Subscribes to PointerEntered on each found control to trigger background
+    /// prefetch of presence + bio data. When the user clicks to open a profile,
+    /// the data is already cached and injection is instant.
     /// </summary>
-    private void SchedulePresenceRetry(object popup, object usernameBlock, int delayMs)
+    private void StartMemberHoverPrefetch()
     {
-        Task.Delay(delayMs).ContinueWith(_ =>
+        if (_beacon == null && _bioEngine == null) return;
+        // First scan after 2s, then every 15s to catch new MemberView controls from scrolling
+        _hoverScanTimer = new Timer(ScanForMemberViews, null, 2000, 15000);
+    }
+
+    private void ScanForMemberViews(object? state)
+    {
+        _r.RunOnUIThread(() =>
         {
-            _r.RunOnUIThread(() =>
+            try
+            {
+                // Use cached members panel if still in tree; otherwise walk from main window
+                object root = _membersPanelCache ?? _mainWindow;
+                if (_membersPanelCache != null && _r.GetParent(_membersPanelCache) == null)
+                {
+                    _membersPanelCache = null;
+                    root = _mainWindow;
+                }
+
+                int subscribed = 0;
+                foreach (var node in _walker.DescendantsDepthFirst(root))
+                {
+                    var typeName = node.GetType().Name;
+
+                    // Cache the members panel container for faster future scans
+                    if (_membersPanelCache == null && typeName == "MembersView")
+                        _membersPanelCache = node;
+
+                    if (typeName != "MemberView") continue;
+                    if (_hoverSubscribed.Contains(node)) continue;
+                    _hoverSubscribed.Add(node);
+
+                    var capturedNode = node;
+                    _r.SubscribeEvent(node, "PointerEntered", () => OnMemberHover(capturedNode));
+                    subscribed++;
+                }
+                if (subscribed > 0)
+                    Logger.Log("ProfileBadge", $"Hover prefetch: subscribed to {subscribed} MemberView controls (total: {_hoverSubscribed.Count})");
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("ProfileBadge", $"ScanForMemberViews error: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>
+    /// Fires when the user hovers over a MemberView in the members panel.
+    /// Extracts the user's UUID from MemberViewModel.Member.GlobalUser.Id and
+    /// triggers background prefetch for presence + bio. The data is cached so
+    /// that when the profile popup opens (typically 100-500ms after hover),
+    /// injection uses cache hits instead of waiting for HTTP round-trips.
+    /// </summary>
+    private void OnMemberHover(object memberView)
+    {
+        try
+        {
+            var dc = _r.GetDataContext(memberView);
+            if (dc == null) return;
+
+            // MemberViewModel.Member.GlobalUser.Id
+            var member = dc.GetType().GetProperty("Member")?.GetValue(dc);
+            var globalUser = member?.GetType().GetProperty("GlobalUser")?.GetValue(member);
+            var id = globalUser?.GetType().GetProperty("Id")?.GetValue(globalUser);
+            var uuid = id?.ToString()?.ToLowerInvariant();
+            if (string.IsNullOrEmpty(uuid)) return;
+
+            // Skip if already fully cached
+            bool presenceCached = _beacon?.TryGetCached(uuid) != null;
+            bool bioCached = _bioEngine?.TryGetCachedBio(uuid) != null;
+            if (presenceCached && bioCached) return;
+
+            // Prefetch in background (non-blocking)
+            ThreadPool.QueueUserWorkItem(_ =>
             {
                 try
                 {
-                    if (_r.GetParent(popup) == null) return; // popup already closed
-
-                    // Check if icon already injected by a previous retry
-                    foreach (var node in _walker.DescendantsDepthFirst(popup))
-                        if (_r.GetTag(node) == PresenceIconTag) return;
-
-                    var dc = FindProfileDataContext(popup);
-                    var uid = TryGetUserIdFromDc(dc);
-                    if (uid == null) return; // DataContext still not ready
-
-                    bool isSelf = string.Equals(uid, _beacon?.OwnUuidStr, StringComparison.OrdinalIgnoreCase);
-                    if (isSelf)
-                        InjectPresenceIconIntoPopup(popup, usernameBlock);
-                    else
-                        TryInjectPresenceIcon(popup, usernameBlock, uid);
+                    if (!presenceCached) _beacon?.QueryAsync(uuid, _ => { });
+                    if (!bioCached) _bioEngine?.PrefetchBio(uuid);
                 }
                 catch { }
             });
-        });
+        }
+        catch { }
     }
 
     /// <summary>
