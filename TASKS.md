@@ -149,6 +149,8 @@ Items not yet committed to but worth tracking.
   - Files: `hook/ContentPages.cs`
 - [ ] Plugin lifecycle error recovery (rollback on `start()` rejection)
   - Files: `src/core/pluginLoader.ts`
+- [ ] Verify TS layer necessity: does sentry-blocker matter (Root telemetry path: browser fetch vs .NET HTTP)? Is browser settings-panel reachable in normal usage? Two of five TS plugins (silent-typing, themes) are confirmed vestigial (C# engines supersede).
+  - Files: `src/plugins/`
 
 ---
 

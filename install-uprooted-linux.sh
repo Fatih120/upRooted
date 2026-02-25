@@ -15,7 +15,7 @@
 # 2. Downloads (or copies local) profiler + hook artifacts
 # 3. Deploys to ~/.local/share/uprooted/
 # 4. Creates a wrapper script with CLR profiler env vars
-# 5. Patches HTML files in Root's profile directory
+# 5. Patches HTML files if present (optional: browser sub-apps only)
 # 6. Adds env vars to ~/.profile as fallback for non-systemd sessions
 
 set -euo pipefail
@@ -300,7 +300,7 @@ run_diagnose() {
         done
 
         if [[ ${#html_files[@]} -eq 0 ]]; then
-            warn "  No HTML files found in profile directory"
+            log "  No HTML files in profile (normal on fresh install)"
         else
             for html in "${html_files[@]}"; do
                 local name
@@ -308,7 +308,7 @@ run_diagnose() {
                 if grep -qE "(uprooted:start|uprooted-preload|<!-- uprooted -->)" "$html" 2>/dev/null; then
                     log "  $name: patched"
                 else
-                    error "  $name: NOT patched"
+                    warn "  $name: not patched (optional)"
                 fi
             done
         fi
@@ -947,13 +947,22 @@ DESKTOP
     log ".desktop file created"
 }
 
-# ── Patch HTML files ──
+# ── Patch HTML files (optional) ──
+#
+# HTML patches inject TypeScript into DotNetBrowser (WebRTC sub-apps).
+# Core Uprooted features (sidebar, settings, themes, all chat plugins) are
+# Avalonia-native and work without these patches.
+#
+# TS layer open questions:
+# - sentry-blocker: unverified whether Root telemetry goes through browser
+#   fetch (patched) or .NET HTTP clients (unpatched)
+# - settings-panel: unverified whether browser settings pages are reachable
+#   in normal usage
+# - silent-typing + themes TS plugins are vestigial (C# engines supersede)
 
 patch_html() {
     if [[ ! -d "$PROFILE_DIR" ]]; then
-        warn "Profile directory not found: $PROFILE_DIR"
-        warn "Launch Root once to generate it, then re-run this script."
-        return
+        return  # Profile dir created on first launch; HTML patches are optional
     fi
 
     local patched=0
@@ -972,9 +981,7 @@ patch_html() {
     done
 
     if [[ ${#html_files[@]} -eq 0 ]]; then
-        warn "No HTML files found to patch."
-        warn "Launch Root once, then re-run this script."
-        return
+        return  # No HTML files yet; core features work without browser patches
     fi
 
     local script_tag="<script src=\"file://$js_path\"></script>"
