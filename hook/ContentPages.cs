@@ -815,22 +815,101 @@ internal static class ContentPages
         }
     afterUpdates:
 
-        // Card 3: Dev Console (developer channel only)
+        // Card 3: Dev Console (developer channel only, hidden by default)
         if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
         {
+            // "Show Dev Console" button (visible by default, hides when card shown)
+            var showDevBtnText = CreateBoundText(r, "Show Dev Console", 12, TextMuted, "TextSecondary");
+            ApplyFont(r, showDevBtnText, font);
+            r.SetFontWeight(showDevBtnText, "Bold");
+            r.SetHorizontalAlignment(showDevBtnText, "Center");
+            var showDevBtnBg = AdjustForHighlight(CardBg, 2);
+            var showDevBtn = r.CreateBorder(showDevBtnBg, 8, showDevBtnText);
+            if (showDevBtn != null)
+            {
+                r.SetPadding(showDevBtn, 24, 8, 24, 8);
+                r.SetHorizontalAlignment(showDevBtn, "Center");
+                r.SetMargin(showDevBtn, 0, 12, 0, 0);
+                r.SetCursorHand(showDevBtn);
+                SetBorderStroke(r, showDevBtn, AdjustForHighlight(showDevBtnBg, 4), ThickBorder);
+                r.SubscribeEvent(showDevBtn, "PointerEntered", () =>
+                {
+                    r.SetBackground(showDevBtn, AdjustForHighlight(showDevBtnBg, 5));
+                    SetBorderStroke(r, showDevBtn, AdjustForHighlight(showDevBtnBg, 36), ThickBorder);
+                });
+                r.SubscribeEvent(showDevBtn, "PointerExited", () =>
+                {
+                    r.SetBackground(showDevBtn, showDevBtnBg);
+                    SetBorderStroke(r, showDevBtn, AdjustForHighlight(showDevBtnBg, 4), ThickBorder);
+                });
+                r.AddChild(page, showDevBtn);
+            }
+
             var devCard = CreateCard(r);
             if (devCard != null)
             {
                 r.SetMargin(devCard, 0, 12, 0, 0);
+                r.SetIsVisible(devCard, false); // hidden by default
+
+                // Wire show/hide: clicking "Show Dev Console" shows card, hides button
+                if (showDevBtn != null)
+                {
+                    r.SubscribeClickReleased(showDevBtn, () =>
+                    {
+                        r.SetIsVisible(devCard, true);
+                        r.SetIsVisible(showDevBtn, false);
+                    });
+                }
+
                 var devContent = r.CreateStackPanel(vertical: true, spacing: 0);
                 if (devContent == null) { r.AddChild(page, devCard); goto afterDevConsole; }
                 r.SetMargin(devContent, 20, 16, 20, 16);
 
-                var devTitle = CreateSectionHeader(r, "DEV CONSOLE", font);
-                if (devTitle != null)
+                // Title row: "DEV CONSOLE" left, "Hide" button right
+                var devTitleRow = r.CreatePanel();
+                if (devTitleRow != null)
                 {
-                    r.SetMargin(devTitle, 0, 0, 0, 12);
-                    r.AddChild(devContent, devTitle);
+                    var devTitle = CreateSectionHeader(r, "DEV CONSOLE", font);
+                    if (devTitle != null)
+                    {
+                        r.SetHorizontalAlignment(devTitle, "Left");
+                        r.SetVerticalAlignment(devTitle, "Center");
+                        r.AddChild(devTitleRow, devTitle);
+                    }
+
+                    var hideDevBtnText = CreateBoundText(r, "Hide", 11, TextMuted, "TextSecondary");
+                    ApplyFont(r, hideDevBtnText, font);
+                    r.SetFontWeight(hideDevBtnText, "Bold");
+                    r.SetHorizontalAlignment(hideDevBtnText, "Center");
+                    var hideDevBtnBg = AdjustForHighlight(CardBg, 2);
+                    var hideDevBtn = r.CreateBorder(hideDevBtnBg, 6, hideDevBtnText);
+                    if (hideDevBtn != null)
+                    {
+                        r.SetPadding(hideDevBtn, 12, 5, 12, 5);
+                        r.SetHorizontalAlignment(hideDevBtn, "Right");
+                        r.SetVerticalAlignment(hideDevBtn, "Center");
+                        r.SetCursorHand(hideDevBtn);
+                        SetBorderStroke(r, hideDevBtn, AdjustForHighlight(hideDevBtnBg, 4), ThickBorder);
+                        r.SubscribeClickReleased(hideDevBtn, () =>
+                        {
+                            r.SetIsVisible(devCard, false);
+                            if (showDevBtn != null) r.SetIsVisible(showDevBtn, true);
+                        });
+                        r.SubscribeEvent(hideDevBtn, "PointerEntered", () =>
+                        {
+                            r.SetBackground(hideDevBtn, AdjustForHighlight(hideDevBtnBg, 5));
+                            SetBorderStroke(r, hideDevBtn, AdjustForHighlight(hideDevBtnBg, 36), ThickBorder);
+                        });
+                        r.SubscribeEvent(hideDevBtn, "PointerExited", () =>
+                        {
+                            r.SetBackground(hideDevBtn, hideDevBtnBg);
+                            SetBorderStroke(r, hideDevBtn, AdjustForHighlight(hideDevBtnBg, 4), ThickBorder);
+                        });
+                        r.AddChild(devTitleRow, hideDevBtn);
+                    }
+
+                    r.SetMargin(devTitleRow, 0, 0, 0, 12);
+                    r.AddChild(devContent, devTitleRow);
                 }
 
                 // Shared inner card styling
