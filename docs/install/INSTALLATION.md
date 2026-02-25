@@ -258,12 +258,16 @@ chmod +x install-uprooted-linux.sh
    exports the CLR profiler environment variables and then executes Root. The env
    vars are scoped to Root's process only: no global env vars are set by default.
 
-5. **Patches HTML files** in Root's profile directory
+5. **Patches HTML files (optional)** in Root's profile directory
    (`~/.local/share/Root Communications/Root/profile/default/`):
    - Looks for `index.html` in `WebRtcBundle/` and `RootApps/*/`
    - Injects `<script>` and `<link>` tags inside `<!-- uprooted:start -->` /
      `<!-- uprooted:end -->` markers before the `</head>` tag
    - Creates `.uprooted.bak` backup of each original file
+   - **Note:** HTML patches only affect DotNetBrowser sub-apps (WebRTC, etc.).
+     All core features (sidebar, settings, themes, chat plugins) are
+     Avalonia-native and work without them. On first install, HTML files may
+     not exist yet: this is normal and does not affect functionality.
 
 6. **Kills and relaunches Root** via the wrapper script so Uprooted loads
    immediately.
@@ -505,8 +509,9 @@ If patched HTML files remain, they contain injected content between
 
 When Root Communications updates, it may overwrite its HTML files, removing the
 Uprooted `<script>` and `<link>` tags. The C# hook itself is unaffected (it lives
-outside Root's install directory), but the TypeScript layer will not load until the
-HTML patches are restored.
+outside Root's install directory). All core features (sidebar, settings, themes,
+chat plugins) are Avalonia-native and continue working. Only the TypeScript browser
+layer (DotNetBrowser sub-apps) is affected until HTML patches are restored.
 
 ### Automatic Repair
 

@@ -467,13 +467,13 @@ Root's Avalonia UI doesn't exist yet when our code runs. The profiler injects us
 
 > For full implementation detail on each phase (code, timeouts, failure modes), see [HOOK_REFERENCE.md §Startup Sequence](framework/HOOK_REFERENCE.md#startup-sequence).
 
-### Phase 0: Verify HTML patches
+### Phase 0: Verify HTML patches (optional)
 
-Before we even think about Avalonia, the hook runs a filesystem-only check. `HtmlPatchVerifier` scans all target HTML files in Root's profile directory to confirm our `<script>` and `<link>` tags are still present. Root's auto-updater can silently overwrite these files, stripping our injections. If any patches are missing, Phase 0 re-applies them in place.
+Before Avalonia startup, the hook runs a filesystem-only check. `HtmlPatchVerifier` scans all target HTML files in Root's profile directory to confirm our `<script>` and `<link>` tags are still present. Root's auto-updater can silently overwrite these files, stripping our injections. If any patches are missing, Phase 0 re-applies them in place.
 
-The verifier then starts a `FileSystemWatcher` on the profile directory, held alive by a static reference for the lifetime of the process. If Root overwrites an HTML file while the app is running, the watcher detects it and re-patches within seconds -- a self-healing mechanism that prevents the TypeScript layer from silently disappearing.
+The verifier then starts a `FileSystemWatcher` on the profile directory, held alive by a static reference for the lifetime of the process. If Root overwrites an HTML file while the app is running, the watcher detects it and re-patches within seconds: a self-healing mechanism that prevents the TypeScript layer from silently disappearing.
 
-Phase 0 is non-fatal: if it fails (missing directories, permission errors), the hook logs the error and continues into the Avalonia phases. The native sidebar will still work; only the browser-side plugins would be affected.
+Phase 0 is non-fatal: if it fails (missing directories, permission errors), the hook logs the error and continues into the Avalonia phases. All core features (sidebar, settings, themes, chat plugins) are Avalonia-native and work without HTML patches. Only the TypeScript browser layer (DotNetBrowser sub-apps) is affected.
 
 ### Version migration: force-disable unstable plugins on upgrade
 

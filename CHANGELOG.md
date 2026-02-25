@@ -28,6 +28,8 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 - **Rootcord original-tabs mode** — Shared Apply/Revert logic with SelectionChanged navigation fix.
   - File: `hook/RootcordEngine.cs`
+- **Linux installer: silenced misleading HTML patch warnings** — First install showed alarming warnings about missing HTML files, implying a broken install. HTML patches are optional: all core features are Avalonia-native. Confirmed on Ubuntu 24 LTS and CachyOS 26.
+  - File: `install-uprooted-linux.sh`
 
 ---
 

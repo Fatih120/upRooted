@@ -57,10 +57,12 @@ Authoritative architecture reference for the Uprooted client modification framew
 
 Uprooted has two independent injection layers that operate in parallel:
 
-1. **C# .NET hook** (`hook/`) -- Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar and applies themes via resource dictionary manipulation.
-2. **TypeScript browser injection** (`src/`) -- Injects into Root's DotNetBrowser Chromium context (WebRTC bundle and sub-apps — NOT the chat UI, which is Avalonia-native) via HTML `<script>` tags. Provides the plugin runtime, theme CSS engine, and bridge proxy system.
+1. **C# .NET hook** (`hook/`) -- Injects into Root's managed .NET 10/Avalonia process via CLR profiler. Adds native Avalonia controls to the settings page sidebar and applies themes via resource dictionary manipulation. This is the primary layer: all core features (sidebar, settings, themes, chat plugins) are Avalonia-native.
+2. **TypeScript browser injection** (`src/`) -- Injects into Root's DotNetBrowser Chromium context (WebRTC bundle and sub-apps: NOT the chat UI, which is Avalonia-native) via HTML `<script>` tags. Provides the plugin runtime, theme CSS engine, and bridge proxy system. This layer is optional: core functionality works without it.
 
 The C# layer handles native UI integration and Avalonia theming. The TypeScript layer handles web content modification and bridge interception. They share no runtime state but target the same application. The only shared state is the settings file on disk and the visual result (both layers inject into the same app).
+
+**Note on TS layer necessity:** Two of five TS plugins are vestigial (silent-typing and themes: C# engines supersede them). The remaining three (sentry-blocker, settings-panel, link-embeds) target DotNetBrowser content. Whether sentry-blocker matters (Root telemetry path) and whether the browser settings-panel is reachable in normal usage are unverified.
 
 ### Repositories
 
