@@ -508,13 +508,14 @@ internal class StartupHook
             if (savedSettings.Plugins.TryGetValue("message-drafts", out var mdE) && mdE) pluginsStarted++;
 
             // Phase 4.5m: Focus Mode (visual clutter suppression, needs chat populated)
+            // Always initialize: titlebar moon button is injected regardless of enabled state.
+            // Initialize() gates scanning on Plugin.focus-mode, but button is always present.
             {
                 var fmEngine = new FocusModeEngine(resolver, mainWindow!);
                 FocusModeEngine.Instance = fmEngine;
 
                 StartPluginPhase("phase4_5m_focus_mode", parentId, resolver, mainWindow!,
-                    savedSettings.Plugins.TryGetValue("focus-mode", out var fmEnabled) && fmEnabled,
-                    5_000, (ev, r, w) =>
+                    true, 5_000, (ev, r, w) =>
                     {
                         fmEngine.Initialize();
                     });

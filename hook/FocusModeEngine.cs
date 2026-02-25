@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Reflection;
 using System.Threading;
 
 namespace Uprooted;
@@ -10,6 +11,10 @@ namespace Uprooted;
 ///
 /// Architecture: timer-based visual tree scan (500ms) with non-destructive suppression.
 /// All changes are reversible via SetIsVisible(true) on disable.
+///
+/// Titlebar moon button: injected before SupportButton, toggles focus mode on/off.
+/// Active state reflected via icon opacity (1.0 active, 0.4 inactive).
+/// Uses Border + Path shape (not RootSvgButton) since no moon SVG exists in Root resources.
 ///
 /// Future enhancements:
 /// - Per-channel presets (v1.1)
@@ -40,6 +45,16 @@ internal sealed class FocusModeEngine : IDisposable
     private readonly List<(object control, string? originalTag, object? placeholder, object? parent)> _hiddenControls = new();
     private readonly object _lock = new();
 
+    // ===== Titlebar Moon Button =====
+    // Moon crescent SVG path (Feather Icons, ~24x24 viewbox)
+    private const string MoonPathData = "M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z";
+    private const string ButtonTag = "uprooted-focus-btn";
+
+    private object? _titleBarButton;   // Border wrapping the moon path icon
+    private object? _moonIcon;         // Path shape (moon crescent)
+    private object? _titleBarPanel;    // Parent StackPanel
+    private bool _buttonRetryScheduled;
+
     internal FocusModeEngine(AvaloniaReflection resolver, object mainWindow)
     {
         _r = resolver;
@@ -48,10 +63,13 @@ internal sealed class FocusModeEngine : IDisposable
 
     internal void Initialize()
     {
+        // Always inject the titlebar moon button (toggle available even when dormant)
+        EnsureTitleBarButtonInjected();
+
         var settings = UprootedSettings.Load();
         if (!settings.Plugins.TryGetValue("focus-mode", out var enabled) || !enabled)
         {
-            Logger.Log(Tag, "Focus Mode initialized (disabled, dormant)");
+            Logger.Log(Tag, "Focus Mode initialized (disabled, dormant, titlebar button injected)");
             return;
         }
 
@@ -85,6 +103,9 @@ internal sealed class FocusModeEngine : IDisposable
             StartScanning();
             Logger.Log(Tag, "Focus Mode settings updated, re-applying");
         }
+
+        // Update titlebar button visual to reflect new state
+        _r.RunOnUIThread(() => UpdateButtonVisual());
     }
 
     /// <summary>
@@ -161,6 +182,9 @@ internal sealed class FocusModeEngine : IDisposable
                 // Skip nodes already processed by Focus Mode
                 var tag = _r.GetTag(node);
                 if (tag != null && tag.StartsWith(TagPrefix)) continue;
+
+                // Skip our own titlebar button
+                if (tag == ButtonTag) continue;
 
                 var typeName = node.GetType().Name;
 
@@ -477,6 +501,229 @@ internal sealed class FocusModeEngine : IDisposable
         if (_r.PanelType != null && _r.PanelType.IsAssignableFrom(control.GetType())) return true;
         if (_r.GridType != null && _r.GridType.IsAssignableFrom(control.GetType())) return true;
         return false;
+    }
+
+    // ===== Titlebar Moon Button =====
+
+    /// <summary>
+    /// Inject the moon toggle button into the titlebar, with retry logic
+    /// for when the SupportButton isn't available yet.
+    /// </summary>
+    private void EnsureTitleBarButtonInjected()
+    {
+        _r.RunOnUIThread(() => InjectTitleBarButton());
+        if (_titleBarButton != null || _buttonRetryScheduled) return;
+
+        _buttonRetryScheduled = true;
+        _ = System.Threading.Tasks.Task.Run(async () =>
+        {
+            try
+            {
+                foreach (var delayMs in new[] { 120, 350, 700, 1200, 2200, 4000 })
+                {
+                    await System.Threading.Tasks.Task.Delay(delayMs);
+                    if (_titleBarButton != null) return;
+
+                    var tcs = new System.Threading.Tasks.TaskCompletionSource<bool>();
+                    _r.RunOnUIThread(() =>
+                    {
+                        try { InjectTitleBarButton(); }
+                        catch { }
+                        tcs.TrySetResult(_titleBarButton != null);
+                    });
+                    if (await tcs.Task) return;
+                }
+            }
+            catch { }
+            finally { _buttonRetryScheduled = false; }
+        });
+    }
+
+    /// <summary>
+    /// Create and inject the moon button into the titlebar StackPanel.
+    /// Uses Border + Path shape (not RootSvgButton) since we need a custom geometry.
+    /// Must run on UI thread.
+    /// </summary>
+    private void InjectTitleBarButton()
+    {
+        if (_titleBarButton != null) return;
+
+        try
+        {
+            // Find SupportButton by name in the visual tree
+            object? supportBtn = null;
+            var walker = new VisualTreeWalker(_r);
+            foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+            {
+                var name = node.GetType().GetProperty("Name")?.GetValue(node) as string;
+                if (name == "SupportButton")
+                {
+                    supportBtn = node;
+                    break;
+                }
+            }
+            if (supportBtn == null) { Logger.Log(Tag, "SupportButton not found"); return; }
+
+            var parent = _r.GetParent(supportBtn);
+            if (parent == null) { Logger.Log(Tag, "Parent StackPanel not found"); return; }
+            _titleBarPanel = parent;
+
+            // Create moon path icon
+            var settings = UprootedSettings.Load();
+            var isActive = settings.Plugins.TryGetValue("focus-mode", out var en) && en;
+
+            _moonIcon = _r.CreatePathIcon(MoonPathData, 16.0, "#B5BAC1");
+            if (_moonIcon == null)
+            {
+                Logger.Log(Tag, "Failed to create moon path icon");
+                return;
+            }
+
+            _r.BindToDynamicResource(_moonIcon, "Fill", "TextSecondary");
+            _moonIcon.GetType().GetProperty("Opacity")?.SetValue(_moonIcon, isActive ? 1.0 : 0.4);
+
+            // Create border container (near-transparent background for hit testing)
+            var btn = _r.CreateBorder("#01000000", 4);
+            if (btn == null) return;
+            _r.SetTag(btn, ButtonTag);
+
+            // Mirror dimensions from SupportButton
+            try
+            {
+                var w = supportBtn.GetType().GetProperty("Width")?.GetValue(supportBtn);
+                var h = supportBtn.GetType().GetProperty("Height")?.GetValue(supportBtn);
+                var m = supportBtn.GetType().GetProperty("Margin")?.GetValue(supportBtn);
+                if (w is double wVal) _r.SetWidth(btn, wVal);
+                if (h is double hVal) _r.SetHeight(btn, hVal);
+                if (m != null) btn.GetType().GetProperty("Margin")?.SetValue(btn, m);
+            }
+            catch
+            {
+                _r.SetWidth(btn, 20.0);
+                _r.SetHeight(btn, 20.0);
+                if (_r.ThicknessType != null)
+                    btn.GetType().GetProperty("Margin")?.SetValue(btn,
+                        Activator.CreateInstance(_r.ThicknessType, 0.0, 0.0, 8.0, 0.0));
+            }
+
+            _r.SetVerticalAlignment(btn, "Center");
+            _r.SetBorderChild(btn, _moonIcon);
+            _r.SetCursorHand(btn);
+
+            // Center the path icon in the border
+            _r.SetHorizontalAlignment(_moonIcon, "Center");
+            _r.SetVerticalAlignment(_moonIcon, "Center");
+
+            // Click handler: toggle focus mode on/off
+            _r.SubscribeClickReleased(btn, () =>
+            {
+                try
+                {
+                    var s = UprootedSettings.Load();
+                    var currentlyEnabled = s.Plugins.TryGetValue("focus-mode", out var e) && e;
+                    s.Plugins["focus-mode"] = !currentlyEnabled;
+                    s.Save();
+
+                    UpdateConfig();
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"Titlebar toggle error: {ex.Message}"); }
+            });
+
+            // Hover effects: brighten on hover
+            _r.SubscribeEvent(btn, "PointerEntered", () =>
+            {
+                if (_moonIcon != null)
+                    _moonIcon.GetType().GetProperty("Opacity")?.SetValue(_moonIcon, 1.0);
+            });
+            _r.SubscribeEvent(btn, "PointerExited", () => UpdateButtonVisual());
+
+            // Tooltip
+            try { AttachTooltip(btn, "Focus Mode"); }
+            catch (Exception ex) { Logger.Log(Tag, $"Tooltip error: {ex.Message}"); }
+
+            // Insert before SupportButton in the StackPanel
+            int supportIdx = -1;
+            int childCount = _r.GetChildCount(parent);
+            for (int i = 0; i < childCount; i++)
+            {
+                if (_r.GetChild(parent, i) == supportBtn) { supportIdx = i; break; }
+            }
+            if (supportIdx >= 0)
+                _r.InsertChild(parent, supportIdx, btn);
+            else
+                _r.AddChild(parent, btn);
+
+            _titleBarButton = btn;
+            Logger.Log(Tag, $"Injected moon button (active={isActive})");
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"InjectTitleBarButton error: {ex.Message}"); }
+    }
+
+    /// <summary>
+    /// Update the moon icon opacity to reflect current focus mode state.
+    /// Must run on UI thread.
+    /// </summary>
+    private void UpdateButtonVisual()
+    {
+        if (_moonIcon == null) return;
+        try
+        {
+            var settings = UprootedSettings.Load();
+            var isActive = settings.Plugins.TryGetValue("focus-mode", out var en) && en;
+            _moonIcon.GetType().GetProperty("Opacity")?.SetValue(_moonIcon, isActive ? 1.0 : 0.4);
+        }
+        catch { }
+    }
+
+    /// <summary>
+    /// Attach a RootToolTip to a control.
+    /// Follows the same pattern as DevConsoleDropdown.AttachTooltip.
+    /// </summary>
+    private void AttachTooltip(object btn, string text)
+    {
+        var tooltipText = _r.CreateTextBlock(text, 14, null);
+        if (tooltipText == null) return;
+
+        Type? rootToolTipType = null;
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try { rootToolTipType = asm.GetType("RootApp.Client.Avalonia.Controls.RootToolTip"); }
+            catch { }
+            if (rootToolTipType != null) break;
+        }
+        if (rootToolTipType == null) return;
+
+        var tip = Activator.CreateInstance(rootToolTipType);
+        if (tip == null) return;
+        tip.GetType().GetProperty("Content")?.SetValue(tip, tooltipText);
+
+        Type? toolTipType = null;
+        foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+        {
+            try { toolTipType = asm.GetType("Avalonia.Controls.ToolTip"); }
+            catch { }
+            if (toolTipType != null) break;
+        }
+
+        toolTipType?.GetMethod("SetTip", BindingFlags.Public | BindingFlags.Static)
+            ?.Invoke(null, new[] { btn, tip });
+
+        var setPlacement = toolTipType?.GetMethod("SetPlacement", BindingFlags.Public | BindingFlags.Static);
+        if (setPlacement != null)
+        {
+            Type? placementType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try { placementType = asm.GetType("Avalonia.Controls.PlacementMode"); }
+                catch { }
+                if (placementType != null) break;
+            }
+            if (placementType != null)
+                setPlacement.Invoke(null, new[] { btn, Enum.Parse(placementType, "Bottom") });
+        }
+
+        toolTipType?.GetMethod("SetShowDelay", BindingFlags.Public | BindingFlags.Static)
+            ?.Invoke(null, new object[] { btn, 0 });
     }
 
     public void Dispose()
