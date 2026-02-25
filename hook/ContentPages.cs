@@ -2293,7 +2293,7 @@ internal static class ContentPages
     /// <summary>
     /// Dismiss the background update notification overlay.
     /// </summary>
-    private static void DismissUpdateNotification(AvaloniaReflection r)
+    internal static void DismissUpdateNotification(AvaloniaReflection r)
     {
         var overlay = _updateNotifyOverlay;
         if (overlay == null) return;
@@ -4845,6 +4845,7 @@ internal static class ContentPages
         bool isDev = settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase);
         if (isDev) return;
 
+        try { DevConsoleDropdown.Remove(); } catch { }
         try { ToggleReconLogger(false); } catch { }
         try { LogConsole.Disable(); } catch { }
         try { ProfileBadgeInjector.ClearDevBadges(r); } catch { }
@@ -4854,7 +4855,7 @@ internal static class ContentPages
     /// Resolve ReconLogger enable/disable at runtime so plugin toggles remain resilient
     /// across mixed-runtime method shape differences.
     /// </summary>
-    private static void ToggleReconLogger(bool enabled)
+    internal static void ToggleReconLogger(bool enabled)
     {
         var methodName = enabled ? "Enable" : "Disable";
         var method = typeof(ReconLogger).GetMethod(methodName,
@@ -5274,7 +5275,7 @@ internal static class ContentPages
     /// Falls back to opening the parent directory when the file does not exist
     /// (e.g. stable channel where the log file is deleted).
     /// </summary>
-    private static void OpenInExplorer(string path)
+    internal static void OpenInExplorer(string path)
     {
         try
         {

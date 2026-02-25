@@ -454,6 +454,26 @@ internal class StartupHook
                 }
             }
 
+            // Phase 4.5i2: Dev Console dropdown (titlebar button, developer channel only)
+            {
+                if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dcResolver = resolver;
+                    var dcWindow = mainWindow!;
+                    var dcTheme = themeEngine;
+                    dcResolver.RunOnUIThread(() =>
+                    {
+                        using var ev = WideEvent.Begin("Startup", "phase4_5i2_dev_console");
+                        try
+                        {
+                            DevConsoleDropdown.Init(dcResolver, dcWindow, dcTheme);
+                            ev.Set("result", "ok");
+                        }
+                        catch (Exception ex) { ev.SetError(ex); ev.Set("result", "error"); }
+                    });
+                }
+            }
+
             // Phase 4.5j: Translate engine (always-on, self-gated, no visual tree dependency)
             StartPluginPhase("phase4_5j_translate", parentId, resolver, mainWindow!,
                 true, 100, (ev, r, w) =>
