@@ -119,21 +119,10 @@ internal class StartupHook
                         }
                     }
 
-                    // 2. Blanket-disable ALL experimental plugins on every upgrade.
-                    // Experimental plugins are unstable and may cause hangs/crashes
-                    // after version changes. Users can re-enable from Settings > Plugins.
-                    foreach (var pluginId in ExperimentalPlugins)
-                    {
-                        if (migrationSettings.Plugins.TryGetValue(pluginId, out var wasEnabled) && wasEnabled)
-                        {
-                            migrationSettings.Plugins[pluginId] = false;
-                            if (pluginId == "content-filter")
-                                migrationSettings.NsfwFilterEnabled = false;
-                            if (!disabled.Contains(pluginId))
-                                disabled.Add(pluginId);
-                        }
-                    }
-                    migrationSettings.ShowExperimentalPlugins = false;
+                    // 2. Experimental plugins: preserve user's toggle state across upgrades.
+                    // Only the per-version targeted disables above (step 1) force-disable
+                    // specific plugins known to break on a given version. Blanket-disable
+                    // was removed: users shouldn't have to re-enable plugins after every update.
 
                     ev.Set("disabled_plugins", string.Join(",", disabled));
                     ev.Set("experimental_reset", true);
