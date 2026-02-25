@@ -496,6 +496,17 @@ internal class StartupHook
             if (savedSettings.ShowExperimentalPlugins
                 && savedSettings.Plugins.TryGetValue("who-reacted", out var wrE) && wrE) pluginsStarted++;
 
+            // Phase 4.5l: MessageDrafts+ (planned stub, dev-toggleable)
+            StartPluginPhase("phase4_5l_message_drafts", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("message-drafts", out var mdEnabled) && mdEnabled,
+                100, (ev, r, w) =>
+                {
+                    var engine = new MessageDraftsEngine(r, w);
+                    MessageDraftsEngine.Instance = engine;
+                    engine.Initialize();
+                });
+            if (savedSettings.Plugins.TryGetValue("message-drafts", out var mdE) && mdE) pluginsStarted++;
+
             // Phase 5: DotNetBrowser discovery
             {
                 var capturedWindow = mainWindow!;

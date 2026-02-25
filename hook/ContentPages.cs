@@ -1096,7 +1096,7 @@ internal static class ContentPages
     }
 
     // Testing status levels: 0=Experimental(red), 1=Alpha(orange), 2=Beta(yellow), 3=Stable(green), 4=Dev(blue), 5=Planned(grey)
-    // Planned (5) is always sorted last and has no toggle — the plugin does not exist yet.
+    // Planned (5) is always sorted last and has no toggle in stable/canary — dev channel shows toggle for testing.
     private static readonly string[] TestingLabels = { "Experimental", "Alpha", "Beta", "Stable", "Dev", "Planned" };
     private static readonly string[] TestingColors = { "#E04040", "#E08030", "#C0A820", "#40A050", "#4080F0", "#7A7A8A" };
     private static string DevChannelBlue => TestingColors[4];
@@ -1145,6 +1145,9 @@ internal static class ContentPages
                 new() { Id = "user-bio", DisplayName = "UserBio", Version = "0.5.1-rc",
                     Description = "Set a short bio visible to other Uprooted users on your profile card. View Only mode lets you see others' bios without sharing your own.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
+                new() { Id = "message-drafts", DisplayName = "MessageDrafts+", Version = "0.5.2-dev1",
+                    Description = "Auto-saves unsent message drafts per channel, DM, and thread. Drafts restore automatically when you return to a conversation.",
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 5 },
             };
             Logger.Log("ContentPages", $"Static init OK: {KnownPlugins.Length} plugins");
         }
@@ -1924,9 +1927,9 @@ internal static class ContentPages
                         r.AddChild(rightIcons, openBtn);
                     }
                 }
-                else if (testingStatus != 5)
+                else if (testingStatus != 5 || settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Toggle switch for all other plugins (Planned plugins have no toggle)
+                    // Toggle switch for all other plugins (Planned plugins show toggle in dev channel only)
                     var togglePill = BuildToggleSwitch(r, isEnabled, font, (enabled) =>
                     {
                         using var ev = WideEvent.Begin("ContentPages", "plugin_toggle");
@@ -3817,6 +3820,8 @@ internal static class ContentPages
             BuildTranslateSettings(r, content, settings, font);
         else if (pluginId == "rootcord")
             BuildRootcordSettings(r, content, settings, font);
+        else if (pluginId == "message-drafts")
+            BuildMessageDraftsSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -4527,6 +4532,20 @@ internal static class ContentPages
     /// When enabled, keeps Root's native horizontal tab bar visible while still applying
     /// other Rootcord layout changes (members sidebar swap).
     /// </summary>
+    private static void BuildMessageDraftsSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // Placeholder: settings not yet implemented
+        var placeholder = CreateBoundText(r, "MessageDrafts+ settings will appear here in a future release.",
+            12, TextMuted, "TextSecondary");
+        if (placeholder != null)
+        {
+            r.SetMargin(placeholder, 0, 16, 0, 0);
+            ApplyFont(r, placeholder, font);
+            r.AddChild(content, placeholder);
+        }
+    }
+
     private static void BuildRootcordSettings(AvaloniaReflection r, object content,
         UprootedSettings settings, object? font)
     {
