@@ -79,6 +79,8 @@ internal class RootcordEngine
     // User bar — PanePlacement guard state
     private string? _originalPanePlacement;  // for Revert of PanePlacement
     private object? _panePlacementGuardHandler; // PropertyChanged guard to re-assert Left
+    private object? _paneRootPanel;             // PART_PaneRoot template part
+    private object? _panePresenter;             // PART_PanePresenter ContentPresenter (margin target for pane bottom offset)
 
     // ToolTip placement flip (member hover name tooltips) — cached via EnsureToolTipMethods()
     private MethodInfo? _toolTipGetTipMethod;
@@ -907,8 +909,35 @@ internal class RootcordEngine
             }
             catch (Exception ex) { Logger.Log(Tag, $"PaneDisplayService set error: {ex.Message}"); }
 
-            // TODO: home pane (DM/Friends) bottom margin — needs ILSpy research on the actual
-            // view tree path before implementing. Current attempts at SplitView margin were ineffective.
+            // Find PART_PaneRoot and PART_PanePresenter inside the SplitView template.
+            // We set Margin.Bottom on the PanePresenter (ContentPresenter) so only the pane
+            // content is pushed up above the user bar, without affecting ContentRoot.
+            try
+            {
+                foreach (var svChild in _r.GetVisualChildren(_rootSplitView))
+                {
+                    foreach (var gc in _r.GetVisualChildren(svChild))
+                    {
+                        var name = gc.GetType().GetProperty("Name")?.GetValue(gc) as string;
+                        if (name == "PART_PaneRoot")
+                        {
+                            _paneRootPanel = gc;
+                            // Find PART_PanePresenter inside PART_PaneRoot
+                            foreach (var paneChild in _r.GetVisualChildren(gc))
+                            {
+                                var pn = paneChild.GetType().GetProperty("Name")?.GetValue(paneChild) as string;
+                                if (pn == "PART_PanePresenter")
+                                {
+                                    _panePresenter = paneChild;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                Logger.Log(Tag, $"SplitView template: PaneRoot={_paneRootPanel?.GetType().Name ?? "null"} PanePresenter={_panePresenter?.GetType().Name ?? "null"}");
+            }
+            catch (Exception ex) { Logger.Log(Tag, $"SplitView template discovery error: {ex.Message}"); }
 
             // Guard: if Root resets PanePlacement to Right, immediately re-assert Left
             var capturedSplitView = _rootSplitView;
@@ -955,6 +984,15 @@ internal class RootcordEngine
             catch { }
             _panePlacementGuardHandler = null;
         }
+
+        // Ensure user bar is visible on revert (may have been hidden during pane-open)
+        if (_userBar != null)
+        {
+            try { _r.SetIsVisible(_userBar, true); }
+            catch { }
+        }
+        _paneRootPanel = null;
+        _panePresenter = null;
 
         if (_rootSplitView == null || _originalPanePlacement == null) return;
         try
@@ -5722,26 +5760,18 @@ internal class RootcordEngine
                             // Refresh user bar width so it extends under the open pane
                             try { UpdateUserBarWidth(); }
                             catch { }
-                            // Toggle SplitView bottom margin: when pane is open, push content
-                            // above the profile card. When closed, reset to 0.
+                            // Hide user bar when pane is open (DMs/Friends/Profile/Notifications occupy
+                            // the same bottom-left area). Show it again when pane closes.
                             try
                             {
-                                if (_rootSplitView != null && _userBar != null)
+                                if (_userBar != null)
                                 {
                                     var paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
+                                    _r.SetIsVisible(_userBar, paneOpen is not true);
                                     if (paneOpen is true)
-                                    {
-                                        var barBounds = _r.GetBounds(_userBar);
-                                        double h = barBounds?.H ?? UserBarHeight;
-                                        double m = Math.Max(h - 4, 0);
-                                        _r.SetMargin(_rootSplitView, 0, 0, 0, m);
-                                        Logger.Log(Tag, $"PaneOpen: SplitView margin bottom={m:F0} (barH={h:F0})");
-                                    }
+                                        Logger.Log(Tag, "PaneOpen: user bar hidden (pane occupies bottom-left area)");
                                     else
-                                    {
-                                        _r.SetMargin(_rootSplitView, 0, 0, 0, 0);
-                                        Logger.Log(Tag, "PaneClosed: SplitView margin bottom=0");
-                                    }
+                                        Logger.Log(Tag, "PaneClosed: user bar visible");
                                 }
                             }
                             catch { }
