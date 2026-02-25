@@ -1135,7 +1135,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
                 new() { Id = "rootcord", DisplayName = "Rootcord", Version = "0.5.1-rc",
                     Description = "Discord-style vertical server sidebar. Replaces Root's horizontal tab bar with a narrow strip of circular community icons on the left side. Click icons to switch between communities and DMs. No restart needed.",
-                    DefaultEnabled = false, HasSettings = false, TestingStatus = 1 },
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 1 },
                 new() { Id = "translate", DisplayName = "Translate", Version = "0.5.1-rc",
                     Description = "Translate messages with Google Translate or DeepL. Right-click messages to translate on demand, or enable auto-translate mode. Supports 130+ languages.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
@@ -3815,6 +3815,8 @@ internal static class ContentPages
             BuildUserBioSettings(r, content, settings, font);
         else if (pluginId == "translate")
             BuildTranslateSettings(r, content, settings, font);
+        else if (pluginId == "rootcord")
+            BuildRootcordSettings(r, content, settings, font);
 
         r.SetBorderChild(_settingsPanel, content);
         r.AddToOverlay(overlay, _settingsPanel);
@@ -4517,6 +4519,37 @@ internal static class ContentPages
                 try { settings.Save(); }
                 catch (Exception sx) { Logger.Log("TranslateSettings", $"Save error: {sx.Message}"); }
                 TranslateEngine.Instance?.RefreshButtonColors(isEnabled);
+            }, scale: LightboxScale);
+    }
+
+    /// <summary>
+    /// Build Rootcord settings: "Original Server Bar" toggle.
+    /// When enabled, keeps Root's native horizontal tab bar visible while still applying
+    /// other Rootcord layout changes (members sidebar swap).
+    /// </summary>
+    private static void BuildRootcordSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        BuildSettingsToggle(r, content, "Original Server Bar",
+            "Keep Root's native horizontal tab bar instead of replacing it with the vertical server strip. " +
+            "Community members sidebar will still be moved to the right side.",
+            settings.RootcordUseOriginalTabs, font, isEnabled =>
+            {
+                settings.RootcordUseOriginalTabs = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("RootcordSettings", $"Save error: {sx.Message}"); }
+
+                // Live re-apply: revert current layout and re-apply with new setting
+                try
+                {
+                    var engine = RootcordEngine.Instance;
+                    if (engine != null && engine.IsApplied)
+                    {
+                        engine.Revert();
+                        engine.Apply();
+                    }
+                }
+                catch (Exception ex) { Logger.Log("RootcordSettings", $"Re-apply error: {ex.Message}"); }
             }, scale: LightboxScale);
     }
 

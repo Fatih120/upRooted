@@ -134,6 +134,7 @@ internal class RootcordEngine
 
     // State
     public bool IsApplied { get; private set; }
+    internal bool UseOriginalTabs { get; private set; }
     // CancellationTokenSource for fire-and-forget Task.Delay calls started during Apply.
     // Cancelled in Revert() so pending callbacks don't run after we've cleaned up state.
     private CancellationTokenSource? _applyCts;
@@ -428,7 +429,9 @@ internal class RootcordEngine
 
         try
         {
-            Logger.Log(Tag, "Applying Discord-style layout...");
+            // Read the "Original Server Bar" setting
+            UseOriginalTabs = UprootedSettings.Load().RootcordUseOriginalTabs;
+            Logger.Log(Tag, $"Applying layout (UseOriginalTabs={UseOriginalTabs})...");
 
             // Fresh token for any fire-and-forget delays started during this Apply session
             _applyCts?.Cancel();
@@ -452,45 +455,51 @@ internal class RootcordEngine
                 return;
             }
 
-            // Step 3: Save original state and modify grid columns
+            // Step 3: Save original state
             SaveOriginalState();
-            ModifyGridColumns();
 
-            // Step 4: Hide tab bar and collapse Row 1
-            _tabsWasVisible = _r.GetIsVisible(_tabsControl);
-            _r.SetIsVisible(_tabsControl, false);
-            Logger.Log(Tag, "TabsControl hidden");
-
-            CollapseTabBarRow();
-
-            // Step 5: Close right-side Profile pane (our strip card replaces it)
-            CloseProfilePane();
-
-            // Step 6: Build and inject server strip + user bar
-            BuildAndInjectServerStrip();
-            BuildAndInjectUserBar();
-
-            // Step 6b: Flip SplitView pane to open on the left (utility pane between strip + channel list)
-            ApplyUtilityPanePlacement();
-
-            // Step 7: Subscribe to tab changes + pane open monitoring
-            SubscribeTabChanges();
-
-            // Step 7b: Periodic check for Profile pane Sign Out button rearrangement.
-            // We can't reliably hook into pane open events (RoutedEvent, not CLR event),
-            // so we poll every 2s when the pane is open.
-            var signOutToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
-            _ = Task.Run(async () =>
+            if (!UseOriginalTabs)
             {
-                while (!signOutToken.IsCancellationRequested)
+                // Full strip mode: modify grid, hide tabs, inject strip + user bar
+                ModifyGridColumns();
+
+                // Step 4: Hide tab bar and collapse Row 1
+                _tabsWasVisible = _r.GetIsVisible(_tabsControl);
+                _r.SetIsVisible(_tabsControl, false);
+                Logger.Log(Tag, "TabsControl hidden");
+
+                CollapseTabBarRow();
+
+                // Step 5: Close right-side Profile pane (our strip card replaces it)
+                CloseProfilePane();
+
+                // Step 6: Build and inject server strip + user bar
+                BuildAndInjectServerStrip();
+                BuildAndInjectUserBar();
+
+                // Step 6b: Flip SplitView pane to open on the left (utility pane between strip + channel list)
+                ApplyUtilityPanePlacement();
+
+                // Step 7: Subscribe to tab changes + pane open monitoring
+                SubscribeTabChanges();
+
+                // Step 7b: Periodic check for Profile pane Sign Out button rearrangement.
+                // We can't reliably hook into pane open events (RoutedEvent, not CLR event),
+                // so we poll every 2s when the pane is open.
+                var signOutToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
+                _ = Task.Run(async () =>
                 {
-                    await Task.Delay(2000, signOutToken);
-                    if (signOutToken.IsCancellationRequested) break;
-                    _r.RunOnUIThread(() => { try { RearrangeSignOutButton(); } catch { } });
-                }
-            }, signOutToken);
+                    while (!signOutToken.IsCancellationRequested)
+                    {
+                        await Task.Delay(2000, signOutToken);
+                        if (signOutToken.IsCancellationRequested) break;
+                        _r.RunOnUIThread(() => { try { RearrangeSignOutButton(); } catch { } });
+                    }
+                }, signOutToken);
+            }
 
             // Step 8: Swap community members sidebar to right (Discord-style)
+            // Always applied regardless of UseOriginalTabs
             SwapCommunityMembersToRight();
 
             IsApplied = true;
@@ -508,7 +517,8 @@ internal class RootcordEngine
     {
         try
         {
-            Logger.Log(Tag, "Reverting to original layout...");
+            var wasOriginalTabs = UseOriginalTabs;
+            Logger.Log(Tag, $"Reverting layout (wasOriginalTabs={wasOriginalTabs})...");
 
             // Cancel any pending fire-and-forget delays (e.g. tab-switch retry)
             _applyCts?.Cancel();
@@ -523,53 +533,56 @@ internal class RootcordEngine
             // Clean up injected header (not done in RevertCommunityMembersSwap to avoid flash)
             RemoveInjectedHeader();
 
-            // Unsubscribe tab monitoring + profile intercept
-            UnsubscribeTabChanges();
-
-            // Restore Profile pane if it was open before Apply
-            if (_wasProfilePaneOpen && _homeViewModel != null)
+            if (!wasOriginalTabs)
             {
-                _r.SetPropertyValue(_homeViewModel, "PaneOpen", true);
-                _r.SetPropertyValue(_homeViewModel, "ProfileOpen", true);
-                Logger.Log(Tag, "Profile pane restored");
-            }
-            _wasProfilePaneOpen = false;
+                // Full strip mode cleanup: unsubscribe tabs, restore pane, remove strip, restore grid
+                UnsubscribeTabChanges();
 
-            // Remove user bar overlay
-            RevertUserBar();
+                // Restore Profile pane if it was open before Apply
+                if (_wasProfilePaneOpen && _homeViewModel != null)
+                {
+                    _r.SetPropertyValue(_homeViewModel, "PaneOpen", true);
+                    _r.SetPropertyValue(_homeViewModel, "ProfileOpen", true);
+                    Logger.Log(Tag, "Profile pane restored");
+                }
+                _wasProfilePaneOpen = false;
 
-            // Restore SplitView PanePlacement
-            RevertUtilityPanePlacement();
+                // Remove user bar overlay
+                RevertUserBar();
 
-            // Remove server strip from grid
-            if (_serverStripBorder != null && _homeViewGrid != null)
-            {
-                _r.RemoveChild(_homeViewGrid, _serverStripBorder);
-                Logger.Log(Tag, "Server strip removed");
-            }
-            _serverStrip = null;
-            _serverStripBorder = null;
-            _homeButton = null;
-            _stripGrid = null;
+                // Restore SplitView PanePlacement
+                RevertUtilityPanePlacement();
 
-            // Restore Row 1 height
-            RestoreTabBarRow();
+                // Remove server strip from grid
+                if (_serverStripBorder != null && _homeViewGrid != null)
+                {
+                    _r.RemoveChild(_homeViewGrid, _serverStripBorder);
+                    Logger.Log(Tag, "Server strip removed");
+                }
+                _serverStrip = null;
+                _serverStripBorder = null;
+                _homeButton = null;
+                _stripGrid = null;
 
-            // Restore column widths
-            RestoreGridColumns();
+                // Restore Row 1 height
+                RestoreTabBarRow();
 
-            // Restore ColSpan values
-            foreach (var (control, originalSpan) in _modifiedColSpans)
-            {
-                _r.SetGridColumnSpan(control, originalSpan);
-            }
-            _modifiedColSpans.Clear();
+                // Restore column widths
+                RestoreGridColumns();
 
-            // Show tab bar
-            if (_tabsControl != null)
-            {
-                _r.SetIsVisible(_tabsControl, _tabsWasVisible);
-                Logger.Log(Tag, "TabsControl restored");
+                // Restore ColSpan values
+                foreach (var (control, originalSpan) in _modifiedColSpans)
+                {
+                    _r.SetGridColumnSpan(control, originalSpan);
+                }
+                _modifiedColSpans.Clear();
+
+                // Show tab bar
+                if (_tabsControl != null)
+                {
+                    _r.SetIsVisible(_tabsControl, _tabsWasVisible);
+                    Logger.Log(Tag, "TabsControl restored");
+                }
             }
 
             IsApplied = false;
