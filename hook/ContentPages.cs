@@ -880,7 +880,7 @@ internal static class ContentPages
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
                 new() { Id = "focus-mode", DisplayName = "FocusMode", Version = "0.5.2-dev1",
                     Description = "Readability-first mode that hides media previews, embeds, reactions, typing indicators, and notification badges. Keeps message text, author names, and timestamps visible for a clean reading experience.",
-                    DefaultEnabled = false, HasSettings = true, TestingStatus = 1 },
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 5 },
                 new() { Id = "message-drafts", DisplayName = "MessageDrafts+", Version = "0.5.2-dev1",
                     Description = "Auto-saves unsent message drafts per channel, DM, and thread. Drafts restore automatically when you return to a conversation.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 5 },
