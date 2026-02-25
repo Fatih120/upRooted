@@ -1,0 +1,3 @@
+curl -fsSL https://github.com/The-Uprooted-Project/uprooted-canary/releases/latest/download/install-uprooted-linux.sh -o install-uprooted-linux.sh
+chmod +x install-uprooted-linux.sh
+./install-uprooted-linux.sh --channel canary
