@@ -2459,10 +2459,14 @@ internal class RootcordEngine
             }
 
             // SvgWidth/SvgHeight are setter-only on RootSvgButton (no getter), so
-            // ApplyNativeTitleBarButtonLayout silently skips them. Always set explicitly
-            // to match SupportButton's native 18×18 SVG dimensions.
+            // ApplyNativeTitleBarButtonLayout silently skips them. Always set explicitly.
+            // CommunityMembersSVG is natively 21:16 (non-square). RootSvgImage renders SVGs
+            // at the top-left after uniform scaling (no centering). Using SvgHeight=18 on a
+            // 21:16 icon leaves ~4px empty at the bottom, making the icon appear ~2px too high.
+            // SvgHeight=14 matches the actual rendered height (18*(16/21)≈13.7) so the template's
+            // VerticalAlignment=Center on the RootSvgImage correctly centers the icon in the button.
             svgBtnType.GetProperty("SvgWidth")?.SetValue(btn, 18.0);
-            svgBtnType.GetProperty("SvgHeight")?.SetValue(btn, 18.0);
+            svgBtnType.GetProperty("SvgHeight")?.SetValue(btn, 14.0);
 
             // Ensure vertical centering within the titlebar StackPanel (Height=22, our btn=20).
             _r.SetVerticalAlignment(btn, "Center");
