@@ -6,6 +6,15 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## v0.5.1-dev8 — 2026-02-24
+
+### Fixes
+
+- Fixed PresenceBeacon registration reliability
+- Fixed Rootcord GridSplitter ResizeDirection and native default width
+
+---
+
 ## [v0.5.0](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.0) — 2026-02-23
 
 This is a big one. Since the last release we shipped new plugins, reworked the entire custom theme system, rebuilt Rootcord's user card, added a presence beacon with community badges, overhauled the settings UI, and made startup meaningfully faster.

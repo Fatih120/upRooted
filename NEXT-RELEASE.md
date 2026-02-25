@@ -1,5 +1,5 @@
 # Next Release
 
-> Changes since v0.5.1-dev7. This file is replaced each release.
+> Changes since v0.5.1-dev8. This file is replaced each release.
 
 (No changes yet)

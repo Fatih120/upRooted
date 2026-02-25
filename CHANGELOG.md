@@ -6,7 +6,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.5.1-dev7] - 2026-02-24
+## [0.5.1-dev8] - 2026-02-24
+
+### Added
+
+- **PresenceBeacon fix** — Resolved presence beacon registration reliability issue.
+- **Rootcord GridSplitter fix** — Fixed GridSplitter `ResizeDirection` and native default width.
 
 ### Changed
 
@@ -676,6 +681,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1-dev8]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev7...v0.5.1-dev8
 [0.5.1-dev7]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev6...v0.5.1-dev7
 [0.5.1-dev6]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev5...v0.5.1-dev6
 [0.5.1-dev5]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev4...v0.5.1-dev5

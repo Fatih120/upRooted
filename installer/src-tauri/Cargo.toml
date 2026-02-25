@@ -1,6 +1,6 @@
 [package]
 name = "uprooted"
-version = "0.5.1-dev7"
+version = "0.5.1-dev8"
 edition = "2024"
 
 [[bin]]
