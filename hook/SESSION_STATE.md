@@ -1,6 +1,6 @@
-# Uprooted Hook - Session State (2026-02-24)
+# Uprooted Hook - Session State (2026-02-25)
 
-## Release: v0.5.1-dev8
+## Release: v0.5.1-rc
 
 ## Current State Summary
 

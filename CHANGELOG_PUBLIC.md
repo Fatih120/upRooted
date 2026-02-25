@@ -6,6 +6,12 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## v0.5.1-rc — 2026-02-25
+
+Release candidate. Same changes as v0.5.1-dev8, promoted after validation.
+
+---
+
 ## v0.5.1-dev8 — 2026-02-25
 
 ### Improvements

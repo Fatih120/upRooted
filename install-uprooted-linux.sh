@@ -27,7 +27,7 @@ trap 'echo ""; error "Script failed (line $LINENO). See error above."; echo ""; 
 INSTALL_DIR="$HOME/.local/share/uprooted"
 PROFILE_DIR="$HOME/.local/share/Root Communications/Root/profile/default"
 PROFILER_GUID="{D1A6F5A0-1234-4567-89AB-CDEF01234567}"
-VERSION="0.5.1-dev8"
+VERSION="0.5.1-rc"
 
 # Default channel: pre-release versions (dev/alpha/beta/rc) use canary channel
 if [[ "$VERSION" == *-dev* || "$VERSION" == *-alpha* || "$VERSION" == *-beta* || "$VERSION" == *-rc* ]]; then
