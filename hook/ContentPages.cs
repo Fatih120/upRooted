@@ -505,16 +505,6 @@ internal static class ContentPages
             var pluginColor = enabledCount > 0 ? AccentText : TextDim;
             AddStatusField(r, cardContent, "Plugins", pluginStatus, pluginColor, false, font);
 
-            // Dev Plugins status (developer channel only)
-            if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
-            {
-                var devPluginCount = 0;
-                if (settings.Plugins.TryGetValue("recon-logger", out var rlOn) && rlOn) devPluginCount++;
-                var devPluginStatus = devPluginCount > 0 ? $"{devPluginCount} active" : "0 loaded";
-                var devPluginColor = devPluginCount > 0 ? AccentText : TextDim;
-                AddStatusField(r, cardContent, "Dev Plugins", devPluginStatus, devPluginColor, false, font);
-            }
-
             var activeTheme = themeEngine?.ActiveThemeName;
             var hasTheme = activeTheme != null && activeTheme != "default-dark";
             var themeStatus = hasTheme ? "Active (" + activeTheme + ")" : "Not active";
@@ -815,263 +805,6 @@ internal static class ContentPages
         }
     afterUpdates:
 
-        // Card 3: Dev Console (developer channel only)
-        if (settings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
-        {
-            var devCard = CreateCard(r);
-            if (devCard != null)
-            {
-                r.SetMargin(devCard, 0, 12, 0, 0);
-                var devContent = r.CreateStackPanel(vertical: true, spacing: 0);
-                if (devContent == null) { r.AddChild(page, devCard); goto afterDevConsole; }
-                r.SetMargin(devContent, 20, 16, 20, 16);
-
-                var devTitle = CreateSectionHeader(r, "DEV CONSOLE", font);
-                if (devTitle != null)
-                {
-                    r.SetMargin(devTitle, 0, 0, 0, 12);
-                    r.AddChild(devContent, devTitle);
-                }
-
-                // Shared inner card styling
-                var innerBg = AdjustForHighlight(CardBg, 4.5);
-                var innerBorderColor = CardBorder;
-                var devBtnBg = AdjustForHighlight(innerBg, 3);
-                const double innerMinHeight = 140.0;
-
-                // Helper: create an inner card with title and vertical button stack
-                object? BuildInnerCard(string title, Action<object> addButtons)
-                {
-                    var card = r.CreateBorder(innerBg, 12);
-                    if (card == null) return null;
-                    SetBorderStroke(r, card, innerBorderColor, ThickBorder);
-                    r.SetTag(card, "dyn-bg:BackgroundElevated,dyn-bb:Border");
-                    r.BindToDynamicResource(card, "Background", "BackgroundElevated");
-                    r.BindToDynamicResource(card, "BorderBrush", "Border");
-                    card.GetType().GetProperty("MinHeight")?.SetValue(card, innerMinHeight);
-
-                    var content = r.CreateStackPanel(vertical: true, spacing: 6);
-                    if (content == null) return card;
-                    r.SetMargin(content, 16, 14, 16, 14);
-
-                    var titleText = CreateBoundText(r, title, 14, TextWhite, "TextPrimary");
-                    r.SetFontWeight(titleText, "SemiBold");
-                    ApplyFont(r, titleText, font);
-                    r.SetMargin(titleText, 0, 0, 0, 4);
-                    r.AddChild(content, titleText);
-
-                    addButtons(content);
-                    r.SetBorderChild(card, content);
-                    return card;
-                }
-
-                // Helper: create a dev console button and add to parent
-                void AddDevButton(object parent, string label, Action onClick)
-                {
-                    var text = CreateBoundText(r, label, 11, TextMuted, "TextSecondary");
-                    ApplyFont(r, text, font);
-                    r.SetFontWeight(text, "Bold");
-                    r.SetHorizontalAlignment(text, "Center");
-                    var border = r.CreateBorder(devBtnBg, 6, text);
-                    if (border == null) return;
-                    r.SetPadding(border, 10, 5, 10, 5);
-                    r.SetCursorHand(border);
-                    SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 4), ThickBorder);
-                    r.SubscribeClickReleased(border, onClick);
-                    r.SubscribeEvent(border, "PointerEntered", () =>
-                    {
-                        r.SetBackground(border, AdjustForHighlight(devBtnBg, 5));
-                        SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 36), ThickBorder);
-                    });
-                    r.SubscribeEvent(border, "PointerExited", () =>
-                    {
-                        r.SetBackground(border, devBtnBg);
-                        SetBorderStroke(r, border, AdjustForHighlight(devBtnBg, 4), ThickBorder);
-                    });
-                    r.AddChild(parent, border);
-                }
-
-                // 3-column, 2-row grid for inner cards
-                var devGrid = r.CreateGrid();
-                if (devGrid != null)
-                {
-                    r.AddGridColumn(devGrid, 1.0);
-                    r.AddGridColumn(devGrid, 1.0);
-                    r.AddGridColumn(devGrid, 1.0);
-                    r.AddGridRowAuto(devGrid);
-                    r.AddGridRowAuto(devGrid);
-
-                    // Row 0, Column 0: Spoofs
-                    var spoofCard = BuildInnerCard("Spoofs", spoofContent =>
-                    {
-                        AddDevButton(spoofContent, "Update Popup", () =>
-                        {
-                            ShowUpdateNotification(r, settings.Version);
-                        });
-                        AddDevButton(spoofContent, "Update Installed", () =>
-                        {
-                            AutoUpdater.Instance?.SpoofUpdateApplied(true);
-                            onRefreshCurrentPage?.Invoke();
-                        });
-                        AddDevButton(spoofContent, "Reset Spoofs", () =>
-                        {
-                            AutoUpdater.Instance?.SpoofUpdateApplied(false);
-                            DismissUpdateNotification(r);
-                            onRefreshCurrentPage?.Invoke();
-                        });
-                    });
-                    if (spoofCard != null)
-                    {
-                        r.SetGridColumn(spoofCard, 0);
-                        r.SetGridRow(spoofCard, 0);
-                        r.SetMargin(spoofCard, 0, 0, 6, 6);
-                        r.AddChild(devGrid, spoofCard);
-                    }
-
-                    // Row 0, Column 1: Diagnostics
-                    var diagCard = BuildInnerCard("Diagnostics", diagContent =>
-                    {
-                        AddDevButton(diagContent, "Dump Visual Tree", () =>
-                        {
-                            themeEngine?.DumpVisualTreeStructure();
-                        });
-                        AddDevButton(diagContent, "Dump Theme Colors", () =>
-                        {
-                            themeEngine?.DumpVisualTreeColors();
-                        });
-                        AddDevButton(diagContent, "Dump Resource Keys", () =>
-                        {
-                            themeEngine?.DumpResourceKeys();
-                        });
-                    });
-                    if (diagCard != null)
-                    {
-                        r.SetGridColumn(diagCard, 1);
-                        r.SetGridRow(diagCard, 0);
-                        r.SetMargin(diagCard, 3, 0, 3, 6);
-                        r.AddChild(devGrid, diagCard);
-                    }
-
-                    // Row 0, Column 2: Engines
-                    var engCard = BuildInnerCard("Engines", engContent =>
-                    {
-                        AddDevButton(engContent, "Force Theme Walk", () =>
-                        {
-                            themeEngine?.ScheduleWalkBurst();
-                        });
-                        AddDevButton(engContent, "Revert Theme", () =>
-                        {
-                            themeEngine?.RevertTheme();
-                            settings.ActiveTheme = "default-dark";
-                            try { settings.Save(); }
-                            catch (Exception sx) { Logger.Log("Theme", "Revert save error: " + sx.Message); }
-                            onRefreshCurrentPage?.Invoke();
-                        });
-                    });
-                    if (engCard != null)
-                    {
-                        r.SetGridColumn(engCard, 2);
-                        r.SetGridRow(engCard, 0);
-                        r.SetMargin(engCard, 6, 0, 0, 6);
-                        r.AddChild(devGrid, engCard);
-                    }
-
-                    // Row 1, Column 0: Recon Logger (plugin card format)
-                    var reconCard = r.CreateBorder(innerBg, 12);
-                    if (reconCard != null)
-                    {
-                        SetBorderStroke(r, reconCard, innerBorderColor, ThickBorder);
-                        r.SetTag(reconCard, "dyn-bg:BackgroundElevated,dyn-bb:Border");
-                        r.BindToDynamicResource(reconCard, "Background", "BackgroundElevated");
-                        r.BindToDynamicResource(reconCard, "BorderBrush", "Border");
-                        reconCard.GetType().GetProperty("MinHeight")?.SetValue(reconCard, innerMinHeight);
-
-                        var reconContent = r.CreateGrid();
-                        if (reconContent != null)
-                        {
-                            r.SetMargin(reconContent, 16, 14, 16, 14);
-                            r.AddGridRowStar(reconContent);
-                            r.AddGridRowAuto(reconContent);
-
-                            var reconInner = r.CreateStackPanel(vertical: true, spacing: 0);
-
-                            // Top row: name (left) + toggle (right)
-                            var reconTopRow = r.CreatePanel();
-                            if (reconTopRow != null)
-                            {
-                                var reconName = CreateBoundText(r, "ReconLogger", 14, TextWhite, "TextPrimary");
-                                r.SetFontWeight(reconName, "Bold");
-                                ApplyFont(r, reconName, font);
-                                r.SetHorizontalAlignment(reconName, "Left");
-                                r.SetVerticalAlignment(reconName, "Center");
-                                r.SetMargin(reconName, 0, 0, 60, 0);
-                                r.AddChild(reconTopRow, reconName);
-
-                                var reconSettings2 = UprootedSettings.Load();
-                                bool reconCurrent = reconSettings2.Plugins.TryGetValue("recon-logger", out var rv) && rv;
-                                var reconToggle = BuildToggleSwitch(r, reconCurrent, font, enabled =>
-                                {
-                                    ToggleReconLogger(enabled);
-                                    var s = UprootedSettings.Load();
-                                    s.Plugins["recon-logger"] = enabled;
-                                    s.Save();
-                                    r.RunOnUIThread(() => onRefreshCurrentPage?.Invoke());
-                                });
-                                if (reconToggle != null)
-                                {
-                                    r.SetHorizontalAlignment(reconToggle, "Right");
-                                    r.SetVerticalAlignment(reconToggle, "Center");
-                                    r.AddChild(reconTopRow, reconToggle);
-                                }
-                                r.AddChild(reconInner, reconTopRow);
-                            }
-
-                            // Description
-                            var reconDesc = CreateBoundText(r, "Record pointer events, bounds, and transforms. Logs to rootcord_recon.log.", 13, TextMuted, "TextSecondary");
-                            if (reconDesc != null)
-                            {
-                                ApplyFont(r, reconDesc, font);
-                                r.SetTextWrapping(reconDesc, "Wrap");
-                                r.SetMargin(reconDesc, 0, 8, 0, 0);
-                            }
-                            r.AddChild(reconInner, reconDesc);
-                            r.AddChild(reconContent, reconInner);
-
-                            // Dev status badge
-                            var devStatusColor = TestingColors[4];
-                            var reconBadge = r.CreateBorder(ColorUtils.WithAlpha(devStatusColor, 0x20), 6);
-                            if (reconBadge != null)
-                            {
-                                r.SetMargin(reconBadge, 0, 8, 0, 0);
-                                r.SetGridRow(reconBadge, 1);
-                                r.SetHorizontalAlignment(reconBadge, "Left");
-                                r.SetPadding(reconBadge, 8, 3, 8, 3);
-                                SetBorderStroke(r, reconBadge, ColorUtils.WithAlpha(devStatusColor, 0x60), 1);
-                                var reconBadgeText = r.CreateTextBlock("Dev", 11, devStatusColor);
-                                r.SetFontWeight(reconBadgeText, "Bold");
-                                ApplyFont(r, reconBadgeText, font);
-                                r.SetBorderChild(reconBadge, reconBadgeText);
-                                r.AddChild(reconContent, reconBadge);
-                            }
-
-                            r.SetBorderChild(reconCard, reconContent);
-                        }
-
-                        r.SetGridColumn(reconCard, 0);
-                        r.SetGridRow(reconCard, 1);
-                        r.SetMargin(reconCard, 0, 0, 6, 0);
-                        r.AddChild(devGrid, reconCard);
-                    }
-
-                    r.AddChild(devContent, devGrid);
-                }
-
-                r.SetBorderChild(devCard, devContent);
-                r.AddChild(page, devCard);
-            }
-        }
-    afterDevConsole:
-
         // Bottom padding
         var spacer = r.CreateStackPanel(vertical: true, spacing: 0);
         if (spacer != null)
@@ -1145,6 +878,9 @@ internal static class ContentPages
                 new() { Id = "user-bio", DisplayName = "UserBio", Version = "0.5.1-rc",
                     Description = "Set a short bio visible to other Uprooted users on your profile card. View Only mode lets you see others' bios without sharing your own.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 0 },
+                new() { Id = "focus-mode", DisplayName = "FocusMode", Version = "0.5.2-dev1",
+                    Description = "Readability-first mode that hides media previews, embeds, reactions, typing indicators, and notification badges. Keeps message text, author names, and timestamps visible for a clean reading experience.",
+                    DefaultEnabled = false, HasSettings = true, TestingStatus = 1 },
                 new() { Id = "message-drafts", DisplayName = "MessageDrafts+", Version = "0.5.2-dev1",
                     Description = "Auto-saves unsent message drafts per channel, DM, and thread. Drafts restore automatically when you return to a conversation.",
                     DefaultEnabled = false, HasSettings = true, TestingStatus = 5 },
@@ -1963,6 +1699,13 @@ internal static class ContentPages
                             catch (Exception rex) { ev.SetError(rex); }
                         }
 
+                        // Focus Mode: apply/revert live without restart
+                        if (pluginId == "focus-mode")
+                        {
+                            try { FocusModeEngine.Instance?.UpdateConfig(); }
+                            catch (Exception fex) { ev.SetError(fex); }
+                        }
+
                         try { settings.Save(); }
                         catch (Exception sx) { ev.SetError(sx); }
 
@@ -1972,7 +1715,7 @@ internal static class ContentPages
                             bool anyDiverged = false;
                             foreach (var kv in initialStates)
                             {
-                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "translate") continue; // live-toggle plugins
+                                if (kv.Key == "themes" || kv.Key == "rootcord" || kv.Key == "translate" || kv.Key == "focus-mode") continue; // live-toggle plugins
                                 bool currentVal = kv.Key == "content-filter"
                                     ? settings.NsfwFilterEnabled
                                     : (settings.Plugins.TryGetValue(kv.Key, out var cv) && cv);
@@ -3820,6 +3563,8 @@ internal static class ContentPages
             BuildTranslateSettings(r, content, settings, font);
         else if (pluginId == "rootcord")
             BuildRootcordSettings(r, content, settings, font);
+        else if (pluginId == "focus-mode")
+            BuildFocusModeSettings(r, content, settings, font);
         else if (pluginId == "message-drafts")
             BuildMessageDraftsSettings(r, content, settings, font);
 
@@ -4544,6 +4289,104 @@ internal static class ContentPages
             ApplyFont(r, placeholder, font);
             r.AddChild(content, placeholder);
         }
+    }
+
+    private static void BuildFocusModeSettings(AvaloniaReflection r, object content,
+        UprootedSettings settings, object? font)
+    {
+        // Status indicator
+        var enabled = settings.Plugins.TryGetValue("focus-mode", out var fmEnabled) && fmEnabled;
+        var statusText = CreateBoundText(r,
+            enabled ? "Focus Mode is active" : "Focus Mode is inactive",
+            12, enabled ? AccentGreen : TextMuted, enabled ? "BrandPrimary" : "TextSecondary");
+        if (statusText != null)
+        {
+            ApplyFont(r, statusText, font);
+            r.SetMargin(statusText, 0, 12, 0, 4);
+            r.AddChild(content, statusText);
+        }
+
+        // Section header
+        var sectionTitle = CreateSectionHeader(r, "SUPPRESSION CATEGORIES", font, scale: LightboxScale);
+        if (sectionTitle != null)
+        {
+            r.SetMargin(sectionTitle, 0, 16, 0, 0);
+            r.AddChild(content, sectionTitle);
+        }
+
+        BuildSettingsToggle(r, content, "Hide Media Previews",
+            "Hide inline images, videos, GIFs, and attachment preview cards",
+            settings.FocusModeHideMedia, font, isEnabled =>
+            {
+                settings.FocusModeHideMedia = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
+
+        BuildSettingsToggle(r, content, "Hide Embeds",
+            "Hide link preview cards, rich embeds, and Uprooted LinkEmbeds output",
+            settings.FocusModeHideEmbeds, font, isEnabled =>
+            {
+                settings.FocusModeHideEmbeds = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
+
+        BuildSettingsToggle(r, content, "Hide Reactions",
+            "Hide reaction bars, reaction count pills, and add-reaction buttons",
+            settings.FocusModeHideReactions, font, isEnabled =>
+            {
+                settings.FocusModeHideReactions = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
+
+        BuildSettingsToggle(r, content, "Hide Typing Indicators",
+            "Hide the typing indicator at the bottom of channels",
+            settings.FocusModeHideTyping, font, isEnabled =>
+            {
+                settings.FocusModeHideTyping = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
+
+        BuildSettingsToggle(r, content, "Hide Notification Badges",
+            "Visually suppress unread dots and count badges in the sidebar (does not affect actual notification state)",
+            settings.FocusModeHideBadges, font, isEnabled =>
+            {
+                settings.FocusModeHideBadges = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
+
+        // Placeholder section
+        var placeholderTitle = CreateSectionHeader(r, "DISPLAY", font, scale: LightboxScale);
+        if (placeholderTitle != null)
+        {
+            r.SetMargin(placeholderTitle, 0, 20, 0, 0);
+            r.AddChild(content, placeholderTitle);
+        }
+
+        BuildSettingsToggle(r, content, "Show Placeholders",
+            "Show compact placeholder text where hidden content was (e.g., \"[Media hidden by Focus Mode]\"). When off, hidden content is fully collapsed.",
+            settings.FocusModeShowPlaceholders, font, isEnabled =>
+            {
+                settings.FocusModeShowPlaceholders = isEnabled;
+                try { settings.Save(); }
+                catch (Exception sx) { Logger.Log("FocusModeSettings", $"Save error: {sx.Message}"); }
+                try { FocusModeEngine.Instance?.UpdateConfig(); }
+                catch (Exception ex) { Logger.Log("FocusModeSettings", $"UpdateConfig error: {ex.Message}"); }
+            }, scale: LightboxScale);
     }
 
     private static void BuildRootcordSettings(AvaloniaReflection r, object content,
