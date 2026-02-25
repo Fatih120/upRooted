@@ -6,6 +6,25 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
+## v0.5.2-dev2 — 2026-02-25
+
+### New
+
+- **Focus Mode** — Readability-first mode that hides media, embeds, reactions, typing indicators, and badges. Quick-toggle via moon icon in the titlebar. Alpha.
+- **Dev Console dropdown** — Developer-only titlebar button for diagnostics, theme engine controls, and spoofs
+- **"Original Server Bar" option** for Rootcord: keep Root's native horizontal tabs instead of the vertical sidebar
+
+### Improvements
+
+- SentryBlocker promoted to Stable, SilentTyping to Beta, FocusMode and UserBio to Alpha
+- MessageLogger and WhoReacted moved to Planned while they undergo rework
+
+### Fixes
+
+- Fixed Rootcord original-tabs mode: shared Apply/Revert and SelectionChanged navigation
+
+---
+
 ## [v0.5.1](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.1) — 2026-02-25
 
 ### Improvements

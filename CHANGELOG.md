@@ -6,6 +6,31 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
+## [0.5.2-dev2] - 2026-02-25
+
+### Added
+
+- **Focus Mode plugin** — Readability-first mode that hides media previews, embeds, reactions, typing indicators, and notification badges. Moon icon toggle in titlebar for quick access. Alpha.
+  - Files: `hook/FocusModeEngine.cs`, `hook/StartupHook.cs`, `hook/ContentPages.cs`
+- **Dev Console dropdown** — Developer-channel titlebar button with theme engine controls, diagnostic dumps, spoofs, and ReconLogger toggle. Replaces the About page Dev Console card.
+  - File: `hook/DevConsoleDropdown.cs`
+- **MessageDrafts+ plugin** — Planned plugin stub registered with dev-mode toggle.
+  - File: `hook/MessageDraftsEngine.cs`
+- **"Original Server Bar" setting for Rootcord** — Toggle to keep Root's native horizontal tab bar instead of the vertical server sidebar.
+  - File: `hook/RootcordEngine.cs`
+
+### Changed
+
+- **Plugin status promotions** — SentryBlocker: Stable, SilentTyping: Beta, FocusMode: Alpha, UserBio: Alpha. MessageLogger and WhoReacted demoted to Planned.
+  - File: `hook/ContentPages.cs`
+
+### Fixed
+
+- **Rootcord original-tabs mode** — Shared Apply/Revert logic with SelectionChanged navigation fix.
+  - File: `hook/RootcordEngine.cs`
+
+---
+
 ## [0.5.1] - 2026-02-25
 
 Promoted from 0.5.1-rc. Same codebase, version references bumped to final across all source, scripts, and documentation. First public stable + canary release of the 0.5.1 cycle.
@@ -701,6 +726,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.2-dev2]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1...v0.5.2-dev2
 [0.5.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-rc...v0.5.1
 [0.5.1-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev8...v0.5.1-rc
 [0.5.1-dev8]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev7...v0.5.1-dev8
