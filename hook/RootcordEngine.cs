@@ -5702,6 +5702,29 @@ internal class RootcordEngine
                             // Refresh user bar width so it extends under the open pane
                             try { UpdateUserBarWidth(); }
                             catch { }
+                            // Toggle SplitView bottom margin: when pane is open, push content
+                            // above the profile card. When closed, reset to 0.
+                            try
+                            {
+                                if (_rootSplitView != null && _userBar != null)
+                                {
+                                    var paneOpen = _r.GetPropertyValue(_homeViewModel, "PaneOpen");
+                                    if (paneOpen is true)
+                                    {
+                                        var barBounds = _r.GetBounds(_userBar);
+                                        double h = barBounds?.H ?? UserBarHeight;
+                                        double m = Math.Max(h - 4, 0);
+                                        _r.SetMargin(_rootSplitView, 0, 0, 0, m);
+                                        Logger.Log(Tag, $"PaneOpen: SplitView margin bottom={m:F0} (barH={h:F0})");
+                                    }
+                                    else
+                                    {
+                                        _r.SetMargin(_rootSplitView, 0, 0, 0, 0);
+                                        Logger.Log(Tag, "PaneClosed: SplitView margin bottom=0");
+                                    }
+                                }
+                            }
+                            catch { }
                         });
                     }, System.Threading.Tasks.TaskContinuationOptions.NotOnCanceled);
                 }
