@@ -6,9 +6,9 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.5.1-rc] - 2026-02-25
+## [0.5.1] - 2026-02-25
 
-Release candidate. Same codebase as 0.5.1-dev8 promoted to RC after validation. Version references bumped across all source, scripts, and documentation.
+Promoted from 0.5.1-rc. Same codebase, version references bumped to final across all source, scripts, and documentation. First public stable + canary release of the 0.5.1 cycle.
 
 ---
 
@@ -701,6 +701,7 @@ First stable baseline. Consolidates all prior development (v0.1.x series) into a
 
 ---
 
+[0.5.1]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-rc...v0.5.1
 [0.5.1-rc]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev8...v0.5.1-rc
 [0.5.1-dev8]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev7...v0.5.1-dev8
 [0.5.1-dev7]: https://github.com/The-Uprooted-Project/uprooted-private/compare/v0.5.1-dev6...v0.5.1-dev7
