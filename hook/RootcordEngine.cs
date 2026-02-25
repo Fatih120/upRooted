@@ -49,6 +49,7 @@ internal class RootcordEngine
     // Tab monitoring
     private object? _tabsCollectionHandler;
     private object? _selectionHandler;
+    private Delegate? _tabsSelectionChangedHandler; // TabsControl.SelectionChanged (original-tabs mode)
     private object? _tabsCollection; // INotifyCollectionChanged source
     private object? _previousTabVm; // Previous SelectedTabViewModel for home button toggle-back
     private int _tabSwitchGeneration; // Monotonic generation for selected-tab reconcile retries
@@ -134,6 +135,7 @@ internal class RootcordEngine
 
     // State
     public bool IsApplied { get; private set; }
+    internal bool UseOriginalTabs { get; private set; }
     // CancellationTokenSource for fire-and-forget Task.Delay calls started during Apply.
     // Cancelled in Revert() so pending callbacks don't run after we've cleaned up state.
     private CancellationTokenSource? _applyCts;
@@ -428,7 +430,9 @@ internal class RootcordEngine
 
         try
         {
-            Logger.Log(Tag, "Applying Discord-style layout...");
+            // Read the "Original Server Bar" setting
+            UseOriginalTabs = UprootedSettings.Load().RootcordUseOriginalTabs;
+            Logger.Log(Tag, $"Applying layout (UseOriginalTabs={UseOriginalTabs})...");
 
             // Fresh token for any fire-and-forget delays started during this Apply session
             _applyCts?.Cancel();
@@ -452,33 +456,30 @@ internal class RootcordEngine
                 return;
             }
 
-            // Step 3: Save original state and modify grid columns
+            // Step 3: Save original state
             SaveOriginalState();
-            ModifyGridColumns();
 
-            // Step 4: Hide tab bar and collapse Row 1
-            _tabsWasVisible = _r.GetIsVisible(_tabsControl);
-            _r.SetIsVisible(_tabsControl, false);
-            Logger.Log(Tag, "TabsControl hidden");
+            if (!UseOriginalTabs)
+            {
+                // Full strip mode only: modify outer grid, hide tabs, build server strip
+                ModifyGridColumns();
 
-            CollapseTabBarRow();
+                _tabsWasVisible = _r.GetIsVisible(_tabsControl);
+                _r.SetIsVisible(_tabsControl, false);
+                Logger.Log(Tag, "TabsControl hidden");
 
-            // Step 5: Close right-side Profile pane (our strip card replaces it)
+                CollapseTabBarRow();
+                BuildAndInjectServerStrip();
+            }
+
+            // Steps shared by both modes:
+            // Close profile pane (our user bar replaces it), build user bar,
+            // flip SplitView pane to left, subscribe tab changes, sign-out poll
             CloseProfilePane();
-
-            // Step 6: Build and inject server strip + user bar
-            BuildAndInjectServerStrip();
             BuildAndInjectUserBar();
-
-            // Step 6b: Flip SplitView pane to open on the left (utility pane between strip + channel list)
             ApplyUtilityPanePlacement();
-
-            // Step 7: Subscribe to tab changes + pane open monitoring
             SubscribeTabChanges();
 
-            // Step 7b: Periodic check for Profile pane Sign Out button rearrangement.
-            // We can't reliably hook into pane open events (RoutedEvent, not CLR event),
-            // so we poll every 2s when the pane is open.
             var signOutToken = _applyCts?.Token ?? System.Threading.CancellationToken.None;
             _ = Task.Run(async () =>
             {
@@ -490,7 +491,27 @@ internal class RootcordEngine
                 }
             }, signOutToken);
 
-            // Step 8: Swap community members sidebar to right (Discord-style)
+            // Original-tabs mode: native TabsControl doesn't fire INPC on the VM.
+            // Subscribe to SelectionChanged CLR event for tab navigation detection.
+            if (UseOriginalTabs && _tabsControl != null)
+            {
+                _tabsSelectionChangedHandler = _r.SubscribeEvent(_tabsControl, "SelectionChanged", () =>
+                {
+                    _r.RunOnUIThread(() =>
+                    {
+                        try
+                        {
+                            Logger.Log(Tag, "OriginalTabs: SelectionChanged on TabsControl");
+                            HandleSelectedTabChanged();
+                        }
+                        catch (Exception ex) { Logger.Log(Tag, $"TabsControl selection handler error: {ex.Message}"); }
+                    });
+                });
+                if (_tabsSelectionChangedHandler != null)
+                    Logger.Log(Tag, "OriginalTabs: subscribed to TabsControl.SelectionChanged");
+            }
+
+            // Swap community members sidebar to right (both modes)
             SwapCommunityMembersToRight();
 
             IsApplied = true;
@@ -508,7 +529,8 @@ internal class RootcordEngine
     {
         try
         {
-            Logger.Log(Tag, "Reverting to original layout...");
+            var wasOriginalTabs = UseOriginalTabs;
+            Logger.Log(Tag, $"Reverting layout (wasOriginalTabs={wasOriginalTabs})...");
 
             // Cancel any pending fire-and-forget delays (e.g. tab-switch retry)
             _applyCts?.Cancel();
@@ -523,10 +545,9 @@ internal class RootcordEngine
             // Clean up injected header (not done in RevertCommunityMembersSwap to avoid flash)
             RemoveInjectedHeader();
 
-            // Unsubscribe tab monitoring + profile intercept
+            // Shared cleanup (both modes)
             UnsubscribeTabChanges();
 
-            // Restore Profile pane if it was open before Apply
             if (_wasProfilePaneOpen && _homeViewModel != null)
             {
                 _r.SetPropertyValue(_homeViewModel, "PaneOpen", true);
@@ -535,41 +556,36 @@ internal class RootcordEngine
             }
             _wasProfilePaneOpen = false;
 
-            // Remove user bar overlay
             RevertUserBar();
-
-            // Restore SplitView PanePlacement
             RevertUtilityPanePlacement();
 
-            // Remove server strip from grid
-            if (_serverStripBorder != null && _homeViewGrid != null)
+            if (!wasOriginalTabs)
             {
-                _r.RemoveChild(_homeViewGrid, _serverStripBorder);
-                Logger.Log(Tag, "Server strip removed");
-            }
-            _serverStrip = null;
-            _serverStripBorder = null;
-            _homeButton = null;
-            _stripGrid = null;
+                // Full strip mode only: remove strip, restore outer grid, show tab bar
+                if (_serverStripBorder != null && _homeViewGrid != null)
+                {
+                    _r.RemoveChild(_homeViewGrid, _serverStripBorder);
+                    Logger.Log(Tag, "Server strip removed");
+                }
+                _serverStrip = null;
+                _serverStripBorder = null;
+                _homeButton = null;
+                _stripGrid = null;
 
-            // Restore Row 1 height
-            RestoreTabBarRow();
+                RestoreTabBarRow();
+                RestoreGridColumns();
 
-            // Restore column widths
-            RestoreGridColumns();
+                foreach (var (control, originalSpan) in _modifiedColSpans)
+                {
+                    _r.SetGridColumnSpan(control, originalSpan);
+                }
+                _modifiedColSpans.Clear();
 
-            // Restore ColSpan values
-            foreach (var (control, originalSpan) in _modifiedColSpans)
-            {
-                _r.SetGridColumnSpan(control, originalSpan);
-            }
-            _modifiedColSpans.Clear();
-
-            // Show tab bar
-            if (_tabsControl != null)
-            {
-                _r.SetIsVisible(_tabsControl, _tabsWasVisible);
-                Logger.Log(Tag, "TabsControl restored");
+                if (_tabsControl != null)
+                {
+                    _r.SetIsVisible(_tabsControl, _tabsWasVisible);
+                    Logger.Log(Tag, "TabsControl restored");
+                }
             }
 
             IsApplied = false;
@@ -5864,6 +5880,12 @@ internal class RootcordEngine
             _tabsCollectionHandler = null;
         }
         _tabsCollection = null;
+
+        if (_tabsSelectionChangedHandler != null && _tabsControl != null)
+        {
+            _r.UnsubscribeEvent(_tabsControl, "SelectionChanged", _tabsSelectionChangedHandler);
+            _tabsSelectionChangedHandler = null;
+        }
 
         UnsubscribeMembersMenuInHandler();
     }

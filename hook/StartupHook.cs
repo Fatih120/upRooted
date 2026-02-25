@@ -25,7 +25,7 @@ internal class StartupHook
     private static readonly string[] ExperimentalPlugins = new[]
     {
         "rootcord", "who-reacted", "message-logger", "content-filter",
-        "translate", "user-bio", "recon-logger",
+        "translate", "user-bio", "recon-logger", "focus-mode",
     };
 
     // Static reference keeps FileSystemWatcher alive for process lifetime
@@ -454,6 +454,26 @@ internal class StartupHook
                 }
             }
 
+            // Phase 4.5i2: Dev Console dropdown (titlebar button, developer channel only)
+            {
+                if (savedSettings.AutoUpdateChannel.Equals("developer", StringComparison.OrdinalIgnoreCase))
+                {
+                    var dcResolver = resolver;
+                    var dcWindow = mainWindow!;
+                    var dcTheme = themeEngine;
+                    dcResolver.RunOnUIThread(() =>
+                    {
+                        using var ev = WideEvent.Begin("Startup", "phase4_5i2_dev_console");
+                        try
+                        {
+                            DevConsoleDropdown.Init(dcResolver, dcWindow, dcTheme);
+                            ev.Set("result", "ok");
+                        }
+                        catch (Exception ex) { ev.SetError(ex); ev.Set("result", "error"); }
+                    });
+                }
+            }
+
             // Phase 4.5j: Translate engine (always-on, self-gated, no visual tree dependency)
             StartPluginPhase("phase4_5j_translate", parentId, resolver, mainWindow!,
                 true, 100, (ev, r, w) =>
@@ -475,6 +495,31 @@ internal class StartupHook
                 });
             if (savedSettings.ShowExperimentalPlugins
                 && savedSettings.Plugins.TryGetValue("who-reacted", out var wrE) && wrE) pluginsStarted++;
+
+            // Phase 4.5l: MessageDrafts+ (planned stub, dev-toggleable)
+            StartPluginPhase("phase4_5l_message_drafts", parentId, resolver, mainWindow!,
+                savedSettings.Plugins.TryGetValue("message-drafts", out var mdEnabled) && mdEnabled,
+                100, (ev, r, w) =>
+                {
+                    var engine = new MessageDraftsEngine(r, w);
+                    MessageDraftsEngine.Instance = engine;
+                    engine.Initialize();
+                });
+            if (savedSettings.Plugins.TryGetValue("message-drafts", out var mdE) && mdE) pluginsStarted++;
+
+            // Phase 4.5m: Focus Mode (visual clutter suppression, needs chat populated)
+            {
+                var fmEngine = new FocusModeEngine(resolver, mainWindow!);
+                FocusModeEngine.Instance = fmEngine;
+
+                StartPluginPhase("phase4_5m_focus_mode", parentId, resolver, mainWindow!,
+                    savedSettings.Plugins.TryGetValue("focus-mode", out var fmEnabled) && fmEnabled,
+                    5_000, (ev, r, w) =>
+                    {
+                        fmEngine.Initialize();
+                    });
+                if (savedSettings.Plugins.TryGetValue("focus-mode", out var fmE) && fmE) pluginsStarted++;
+            }
 
             // Phase 5: DotNetBrowser discovery
             {

@@ -53,6 +53,17 @@ internal class UprootedSettings
     public string TranslateDeeplApiKey             { get; set; } = "";
     public bool   TranslateShowAutoTranslateAlert  { get; set; } = true;
 
+    // Focus Mode settings
+    public bool FocusModeHideMedia { get; set; } = true;
+    public bool FocusModeHideEmbeds { get; set; } = true;
+    public bool FocusModeHideReactions { get; set; } = true;
+    public bool FocusModeHideTyping { get; set; } = true;
+    public bool FocusModeHideBadges { get; set; } = true;
+    public bool FocusModeShowPlaceholders { get; set; } = true;
+
+    // Rootcord settings
+    public bool RootcordUseOriginalTabs { get; set; } = false;
+
     // User Bio settings
     public bool   UserBioViewOnly { get; set; } = false;
     public string UserBioText     { get; set; } = "";
@@ -153,6 +164,13 @@ internal class UprootedSettings
                     case "Translate.Service":        settings.TranslateService       = val; break;
                     case "Translate.DeeplApiKey":    settings.TranslateDeeplApiKey   = Uri.UnescapeDataString(val); break;
                     case "Translate.ShowAutoTranslateAlert": settings.TranslateShowAutoTranslateAlert = val == "true"; break;
+                    case "FocusMode.HideMedia": settings.FocusModeHideMedia = val == "true"; break;
+                    case "FocusMode.HideEmbeds": settings.FocusModeHideEmbeds = val == "true"; break;
+                    case "FocusMode.HideReactions": settings.FocusModeHideReactions = val == "true"; break;
+                    case "FocusMode.HideTyping": settings.FocusModeHideTyping = val == "true"; break;
+                    case "FocusMode.HideBadges": settings.FocusModeHideBadges = val == "true"; break;
+                    case "FocusMode.ShowPlaceholders": settings.FocusModeShowPlaceholders = val == "true"; break;
+                    case "Rootcord.UseOriginalTabs": settings.RootcordUseOriginalTabs = val == "true"; break;
                     case "UserBio.ViewOnly": settings.UserBioViewOnly = val == "true"; break;
                     case "UserBio.Text":    settings.UserBioText = Uri.UnescapeDataString(val); break;
                     case var k when k.StartsWith("Plugin."):
@@ -253,6 +271,13 @@ internal class UprootedSettings
                     "Translate.Service="       + TranslateService,
                     "Translate.DeeplApiKey="   + Uri.EscapeDataString(TranslateDeeplApiKey),
                     "Translate.ShowAutoTranslateAlert=" + (TranslateShowAutoTranslateAlert ? "true" : "false"),
+                    "FocusMode.HideMedia=" + (FocusModeHideMedia ? "true" : "false"),
+                    "FocusMode.HideEmbeds=" + (FocusModeHideEmbeds ? "true" : "false"),
+                    "FocusMode.HideReactions=" + (FocusModeHideReactions ? "true" : "false"),
+                    "FocusMode.HideTyping=" + (FocusModeHideTyping ? "true" : "false"),
+                    "FocusMode.HideBadges=" + (FocusModeHideBadges ? "true" : "false"),
+                    "FocusMode.ShowPlaceholders=" + (FocusModeShowPlaceholders ? "true" : "false"),
+                    "Rootcord.UseOriginalTabs=" + (RootcordUseOriginalTabs ? "true" : "false"),
                     "UserBio.ViewOnly=" + (UserBioViewOnly ? "true" : "false"),
                     "UserBio.Text=" + Uri.EscapeDataString(UserBioText)
                 };

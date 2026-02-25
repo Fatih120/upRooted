@@ -8,7 +8,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ## [0.5.1] - 2026-02-25
 
-Promoted from 0.5.1-rc. Same codebase, version references bumped to final. First public stable + canary release of the 0.5.1 cycle.
+Promoted from 0.5.1-rc. Same codebase, version references bumped to final across all source, scripts, and documentation. First public stable + canary release of the 0.5.1 cycle.
 
 ---
 
