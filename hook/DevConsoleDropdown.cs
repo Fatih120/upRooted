@@ -48,16 +48,16 @@ internal static class DevConsoleDropdown
     // Popup dimensions
     private const double POPUP_W = 260;
 
-    // Discord-dark popup colors (match TranslateConfigPopup / ColorPickerPopup)
-    private const string POPUP_BG       = "#2B2D31";
-    private const string POPUP_BORDER   = "#3F4147";
-    private const string TEXT_BRIGHT    = "#F2F3F5";
-    private const string TEXT_MUTED     = "#B5BAC1";
-    private const string SECTION_HEADER = "#949BA4";
-    private const string SEPARATOR_CLR  = "#3F4147";
-    private const string ROW_HOVER_BG   = "#36373D";
-    private const string TOGGLE_ON_BG   = "#248046";
-    private const string TOGGLE_OFF_BG  = "#80848E";
+    // Fallback colors (rendered before theme applies, overridden by DynamicResource bindings)
+    private const string POPUP_BG       = "#2B2D31";  // → BackgroundSecondary
+    private const string POPUP_BORDER   = "#3F4147";  // → Border
+    private const string TEXT_BRIGHT    = "#F2F3F5";  // → TextPrimary
+    private const string TEXT_MUTED     = "#B5BAC1";  // → TextSecondary
+    private const string SECTION_HEADER = "#949BA4";  // → TextTertiary
+    private const string SEPARATOR_CLR  = "#3F4147";  // → Border
+    private const string ROW_HOVER_BG   = "#36373D";  // → HighlightLight
+    private const string TOGGLE_ON_BG   = "#248046";  // semantic green, not themed
+    private const string TOGGLE_OFF_BG  = "#80848E";  // → Muted
 
     /// <summary>Initialize the dev console dropdown: inject titlebar button and store refs.</summary>
     public static void Init(AvaloniaReflection r, object mainWindow, ThemeEngine? themeEngine)
@@ -336,7 +336,9 @@ internal static class DevConsoleDropdown
         _currentPopup = r.CreateBorder(POPUP_BG, 10);
         if (_currentPopup == null) return;
 
-        r.SetTag(_currentPopup, "uprooted-no-recolor");
+        r.SetTag(_currentPopup, "dyn-bg:BackgroundSecondary,dyn-bb:Border");
+        r.BindToDynamicResource(_currentPopup, "Background", "BackgroundSecondary");
+        r.BindToDynamicResource(_currentPopup, "BorderBrush", "Border");
         SetBorderStroke(r, _currentPopup, POPUP_BORDER, 1.0);
         r.SetCanvasPosition(_currentPopup, popupX, popupY);
         r.SetWidth(_currentPopup, POPUP_W);
@@ -345,7 +347,6 @@ internal static class DevConsoleDropdown
         // ── Content ──
         var stack = r.CreateStackPanel(true, 2);
         if (stack == null) return;
-        r.SetTag(stack, "uprooted-no-recolor");
 
         _currentPopup.GetType().GetProperty("Child")?.SetValue(_currentPopup, stack);
         r.SetPadding(_currentPopup, 12, 10, 12, 10);
@@ -428,6 +429,9 @@ internal static class DevConsoleDropdown
             catch { }
         });
 
+        // Kick a theme walk so DynamicResource bindings get resolved for current theme
+        _themeEngine?.ScheduleWalkBurst();
+
         Logger.Log(Tag, "Dropdown opened");
     }
 
@@ -471,7 +475,8 @@ internal static class DevConsoleDropdown
         var title = r.CreateTextBlock("Dev Console", 14, TEXT_BRIGHT, "SemiBold");
         if (title != null)
         {
-            r.SetTag(title, "uprooted-no-recolor");
+            r.SetTag(title, "dyn-fg:TextPrimary");
+            r.BindToDynamicResource(title, "Foreground", "TextPrimary");
             r.SetVerticalAlignment(title, "Center");
             r.SetGridColumn(title, 0);
             r.AddChild(headerGrid, title);
@@ -481,16 +486,21 @@ internal static class DevConsoleDropdown
         var dismissText = r.CreateTextBlock("\u2715", 14, TEXT_MUTED);
         if (dismissText != null)
         {
-            r.SetTag(dismissText, "uprooted-no-recolor");
+            r.SetTag(dismissText, "dyn-fg:TextSecondary");
+            r.BindToDynamicResource(dismissText, "Foreground", "TextSecondary");
             var dismissBtn = r.CreateBorder(null, 4, dismissText);
             if (dismissBtn != null)
             {
-                r.SetTag(dismissBtn, "uprooted-no-recolor");
+                r.SetTag(dismissBtn, "dyn-bg:HighlightLight");
                 r.SetPadding(dismissBtn, 6, 2, 6, 2);
                 r.SetCursorHand(dismissBtn);
                 r.SetGridColumn(dismissBtn, 1);
                 r.SubscribeClickReleased(dismissBtn, () => Dismiss());
-                r.SubscribeEvent(dismissBtn, "PointerEntered", () => r.SetBackground(dismissBtn, ROW_HOVER_BG));
+                r.SubscribeEvent(dismissBtn, "PointerEntered", () =>
+                {
+                    r.SetBackground(dismissBtn, ROW_HOVER_BG);
+                    r.BindToDynamicResource(dismissBtn, "Background", "HighlightLight");
+                });
                 r.SubscribeEvent(dismissBtn, "PointerExited", () => r.SetBackground(dismissBtn, (string?)null));
                 r.AddChild(headerGrid, dismissBtn);
             }
@@ -503,7 +513,8 @@ internal static class DevConsoleDropdown
     {
         var sep = r.CreateBorder(SEPARATOR_CLR, 0);
         if (sep == null) return;
-        r.SetTag(sep, "uprooted-no-recolor");
+        r.SetTag(sep, "dyn-bg:Border");
+        r.BindToDynamicResource(sep, "Background", "Border");
         r.SetHeight(sep, 1);
         r.SetMargin(sep, 0, 4, 0, 4);
         r.AddChild(parent, sep);
@@ -513,7 +524,8 @@ internal static class DevConsoleDropdown
     {
         var text = r.CreateTextBlock(title, 11, SECTION_HEADER, "Bold");
         if (text == null) return;
-        r.SetTag(text, "uprooted-no-recolor");
+        r.SetTag(text, "dyn-fg:TextTertiary");
+        r.BindToDynamicResource(text, "Foreground", "TextTertiary");
         r.SetMargin(text, 4, 4, 0, 2);
         r.AddChild(parent, text);
     }
@@ -522,11 +534,11 @@ internal static class DevConsoleDropdown
     {
         var text = r.CreateTextBlock(label, 13, TEXT_BRIGHT);
         if (text == null) return;
-        r.SetTag(text, "uprooted-no-recolor");
+        r.SetTag(text, "dyn-fg:TextPrimary");
+        r.BindToDynamicResource(text, "Foreground", "TextPrimary");
 
         var row = r.CreateBorder(null, 4, text);
         if (row == null) return;
-        r.SetTag(row, "uprooted-no-recolor");
         r.SetPadding(row, 8, 5, 8, 5);
         r.SetCursorHand(row);
 
@@ -537,7 +549,11 @@ internal static class DevConsoleDropdown
             catch (Exception ex) { Logger.Log(Tag, $"Action '{label}' error: {ex.Message}"); }
         });
 
-        r.SubscribeEvent(row, "PointerEntered", () => r.SetBackground(row, ROW_HOVER_BG));
+        r.SubscribeEvent(row, "PointerEntered", () =>
+        {
+            r.SetBackground(row, ROW_HOVER_BG);
+            r.BindToDynamicResource(row, "Background", "HighlightLight");
+        });
         r.SubscribeEvent(row, "PointerExited", () => r.SetBackground(row, (string?)null));
 
         r.AddChild(parent, row);
@@ -556,7 +572,8 @@ internal static class DevConsoleDropdown
         var text = r.CreateTextBlock(label, 13, TEXT_BRIGHT);
         if (text != null)
         {
-            r.SetTag(text, "uprooted-no-recolor");
+            r.SetTag(text, "dyn-fg:TextPrimary");
+            r.BindToDynamicResource(text, "Foreground", "TextPrimary");
             r.SetVerticalAlignment(text, "Center");
             r.SetGridColumn(text, 0);
             r.AddChild(grid, text);
@@ -569,6 +586,7 @@ internal static class DevConsoleDropdown
         var togglePill = r.CreateBorder(toggleBg, 8, toggleText);
         if (togglePill != null && toggleText != null)
         {
+            // Toggle pill keeps hardcoded colors (semantic green/grey, not theme-dependent)
             r.SetTag(togglePill, "uprooted-no-recolor");
             r.SetTag(toggleText, "uprooted-no-recolor");
             r.SetPadding(togglePill, 8, 2, 8, 2);
@@ -580,7 +598,6 @@ internal static class DevConsoleDropdown
         // Wrap in clickable row
         var row = r.CreateBorder(null, 4, grid);
         if (row == null) return;
-        r.SetTag(row, "uprooted-no-recolor");
         r.SetPadding(row, 8, 5, 8, 5);
         r.SetCursorHand(row);
 
@@ -600,7 +617,11 @@ internal static class DevConsoleDropdown
             catch { }
         });
 
-        r.SubscribeEvent(row, "PointerEntered", () => r.SetBackground(row, ROW_HOVER_BG));
+        r.SubscribeEvent(row, "PointerEntered", () =>
+        {
+            r.SetBackground(row, ROW_HOVER_BG);
+            r.BindToDynamicResource(row, "Background", "HighlightLight");
+        });
         r.SubscribeEvent(row, "PointerExited", () => r.SetBackground(row, (string?)null));
 
         r.AddChild(parent, row);
