@@ -6,12 +6,7 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ---
 
-## [0.5.1-dev8] - 2026-02-24
-
-### Added
-
-- **PresenceBeacon fix** — Resolved presence beacon registration reliability issue.
-- **Rootcord GridSplitter fix** — Fixed GridSplitter `ResizeDirection` and native default width.
+## [0.5.1-dev8] - 2026-02-25
 
 ### Changed
 
@@ -22,16 +17,35 @@ Format follows [Keep a Changelog](https://keepachangelog.com/). Versions follow 
 
 ### Fixed
 
-- **Live Console on Linux** — .NET `NamedPipeServerStream` on Linux creates Unix domain sockets with a validation handshake that raw clients can't perform. Replaced with `mkfifo` FIFO on Linux so `cat` reads natively. Windows path unchanged.
-  - File: `hook/LogConsole.cs`
+- **Experimental plugins no longer blanket-disabled on every upgrade** — `ForceDisableOnUpgrade` was running against all experimental plugins on every launch, not just on version transitions. Now correctly gated to version changes only.
+  - File: `hook/StartupHook.cs`
+- **Rootcord auto-applies on startup without toggle** — Rootcord was activating on startup even when disabled in settings, requiring a manual toggle off/on cycle. Fixed dormant-mode initialization.
+  - File: `hook/RootcordEngine.cs`
 - **Rootcord 3-column grid layout matching Root's native CommunityView** — Previous 4-column grid rebuild gave the GridSplitter its own dedicated 4px column, causing whitespace on drag and a gap between channels and chat. Rebuilt as 3-column layout (Channels+Splitter | Chat | Members) matching Root's native `CommunityView.axaml`. Set `ResizeDirection=Columns` explicitly (was missing, causing drag to do nothing). Default channels width 280px matching `CommunityChannelsWidth`, Min/Max 107/450 matching native constraints.
   - File: `hook/RootcordEngine.cs`
 - **Rootcord user bar deferred width tracking** — User bar now tracks channel width dynamically via chat panel left-edge snapping. Pane-open/close correctly shrinks/grows user bar. Username and status text truncate with ellipsis when channels narrowed.
   - File: `hook/RootcordEngine.cs`
+- **Rootcord SVG button, ghost header, column bounds, home pane margin** — Fixed SVG button rendering, ghost header on tab switch, column boundary calculation, and bottom margin on PaneOpen property change.
+  - File: `hook/RootcordEngine.cs`
 - **Rootcord native tooltip with notch arrow** — Server icon tooltips now use Avalonia-native `RootToolTip` with a triangular notch pointing to the icon. Tooltip colors follow the live theme.
   - File: `hook/RootcordEngine.cs`
+- **Live Console on Linux** — .NET `NamedPipeServerStream` on Linux creates Unix domain sockets with a validation handshake that raw clients can't perform. Replaced with `mkfifo` FIFO on Linux so `cat` reads natively. Windows path unchanged.
+  - File: `hook/LogConsole.cs`
+- **PresenceBeacon + UserBio broken on Linux** — HTTP resolution race condition caused both engines to fail on Linux. Fixed initialization ordering.
+  - Files: `hook/UprootedPresenceBeacon.cs`, `hook/UserBioEngine.cs`
 - **Theme engine bugs: Sakura hover direction, revert settings desync, Linux freeze** — Fixed Sakura theme hover going wrong direction on light backgrounds. Fixed theme revert causing settings page desync. Fixed Linux freeze during theme application.
   - File: `hook/ThemeEngine.cs`
+- **Translate plugin settings page + toolbar button injection** — Fixed config popup not loading and translate button not appearing in compose bar.
+  - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
+- **Instant profile popup injection** — Profile badge injection now uses `DataContextChanged` event with hover prefetch instead of polling, making badge appearance instant.
+  - File: `hook/ProfileBadgeInjector.cs`
+- **ConditionalWeakTable replaced with Dictionary for trimmed-host safety** — Trimmed .NET hosts can throw on `ConditionalWeakTable`; switched to standard `Dictionary`.
+  - File: `hook/AvaloniaReflection.cs`
+
+### Infrastructure
+
+- Included `libuprooted_profiler.so` in Linux artifacts tarball (was missing from previous builds).
+- Fixed bash installer flash-and-vanish when launched via Linux file manager double-click.
 
 ---
 

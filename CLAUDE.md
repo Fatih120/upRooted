@@ -40,9 +40,9 @@ uprooted-private/
 ├── hook/                              # C# .NET hook (CLR profiler injection): 37 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
-│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3446 lines)
+│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3487 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
-│   ├── ContentPages.cs                # Settings page builders (5193 lines)
+│   ├── ContentPages.cs                # Settings page builders (5320 lines)
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (in-place switching, bind-once walker, WeakRef live preview, custom ping color)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB/OKLCH color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
@@ -60,11 +60,11 @@ uprooted-private/
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
-│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1288 lines)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1396 lines)
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)
-│   ├── TranslateEngine.cs            # Translate plugin: DeepL-powered message translation (1156 lines)
+│   ├── TranslateEngine.cs            # Translate plugin: DeepL-powered message translation (2007 lines)
 │   ├── TranslateConfigPopup.cs       # Translate config popup UI (language picker, API key)
 │   ├── WhoReactedEngine.cs           # Who Reacted: shows reaction authors on messages
 │   ├── UserBioEngine.cs              # User Bio: injects bio text + own-profile editor into profile popups

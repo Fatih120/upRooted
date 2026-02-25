@@ -6,12 +6,25 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## v0.5.1-dev8 — 2026-02-24
+## v0.5.1-dev8 — 2026-02-25
+
+### Improvements
+
+- Theme Engine promoted to Stable after extensive validation
 
 ### Fixes
 
-- Fixed PresenceBeacon registration reliability
-- Fixed Rootcord GridSplitter ResizeDirection and native default width
+- Fixed experimental plugins being blanket-disabled on every app launch instead of only on version upgrades
+- Fixed Rootcord activating on startup even when disabled in settings
+- Fixed Rootcord grid layout: rebuilt as 3-column layout matching Root's native CommunityView, proper GridSplitter drag, default 280px channel width
+- Fixed Rootcord user bar width tracking, SVG button rendering, ghost header, column bounds, tooltip positioning
+- Fixed Live Console on Linux: replaced Unix domain socket with FIFO so `cat` can read log output natively
+- Fixed PresenceBeacon and UserBio failing on Linux due to HTTP resolution race condition
+- Fixed theme engine: Sakura hover direction on light backgrounds, revert settings desync, Linux freeze
+- Fixed Translate plugin settings page and toolbar button injection
+- Fixed profile popup badge injection: now instant via DataContextChanged event instead of polling
+- Included Linux profiler shared object in artifacts tarball (was missing from previous builds)
+- Fixed bash installer flash-and-vanish when launched via Linux file manager
 
 ---
 
