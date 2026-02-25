@@ -8,7 +8,7 @@ using Uprooted;
 [System.Reflection.Obfuscation(Exclude = true)]
 internal class StartupHook
 {
-    private const string CurrentVersion = "0.5.1-dev7";
+    private const string CurrentVersion = "0.5.1-dev8";
 
     // Version migration: plugins to force-disable when upgrading to (or through) a given version.
     // Users who skip versions get all intermediate entries applied cumulatively.
@@ -396,8 +396,9 @@ internal class StartupHook
             }
 
             // Phase 4.5h: Rootcord
-            var wantRootcord = savedSettings.ShowExperimentalPlugins
-                && savedSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
+            // Respect Plugin.rootcord toggle directly: ShowExperimentalPlugins only gates UI visibility,
+            // not runtime behavior. Version migration may reset ShowExperimental while leaving the plugin enabled.
+            var wantRootcord = savedSettings.Plugins.TryGetValue("rootcord", out var rcEnabled) && rcEnabled;
             {
                 var rcEngine = new RootcordEngine(resolver, mainWindow!, themeEngine);
                 RootcordEngine.Instance = rcEngine;
