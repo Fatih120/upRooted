@@ -40,6 +40,9 @@ internal class MessageLogger : IDisposable
     private object? _currentContentVM;
     private bool _usingDynamicData;
 
+    // Per-message PropertyChanged subscriptions (deletion + placeholder confirmation)
+    private readonly Dictionary<object, Delegate> _messagePropertyChangedHandlers = new(RefEqualityComparer.Instance);
+
     // Fallback: ObservableCollection subscription
     private object? _chatItemsControl;
     private object? _currentItemsSource;
@@ -240,6 +243,8 @@ internal class MessageLogger : IDisposable
                     ev.Set("cache", _messageCache.Count);
                     ev.Set("snapshots", _contentSnapshot.Count);
 
+                    // Removed verbose per-tick logging
+
                     _channelCheckCounter++;
                     CheckForChannelSwitch();
                     InjectDeletedMessageCards(settings, ev);
@@ -430,6 +435,7 @@ internal class MessageLogger : IDisposable
         _changeSetSub = null;
         _currentContentVM = null;
         _usingDynamicData = false;
+        UnsubscribeAllMessagePropertyChanged();
     }
 
     // ===== DynamicData Change Handlers =====
@@ -445,26 +451,48 @@ internal class MessageLogger : IDisposable
                 foreach (var change in enumerable)
                 {
                     var changeType = change.GetType();
-                    var reason = changeType.GetProperty("Reason")?.GetValue(change);
+                    var reason = changeType.GetProperty("Reason")?.GetValue(change)?.ToString();
                     if (reason == null) continue;
 
-                    // Navigate Change<T>.Item.Current to get the Message object
-                    var itemChange = changeType.GetProperty("Item")?.GetValue(change);
-                    var current = itemChange?.GetType().GetProperty("Current")?.GetValue(itemChange);
-                    if (current == null) continue;
-
-                    switch (reason.ToString())
+                    switch (reason)
                     {
                         case "Add":
-                            HandleMessageAdded(current);
+                        {
+                            var itemChange = changeType.GetProperty("Item")?.GetValue(change);
+                            var current = itemChange?.GetType().GetProperty("Current")?.GetValue(itemChange);
+                            if (current != null) HandleMessageAdded(current);
                             break;
+                        }
+                        case "AddRange":
+                        {
+                            // AddRange stores items in Change<T>.Range (IEnumerable<T>), not Item.Current
+                            var range = changeType.GetProperty("Range")?.GetValue(change);
+                            if (range is System.Collections.IEnumerable rangeItems)
+                            {
+                                int count = 0;
+                                foreach (var msg in rangeItems)
+                                {
+                                    if (msg != null) { HandleMessageAdded(msg); count++; }
+                                }
+                                Logger.Log(Tag, $"[dd] AddRange: {count} messages cached");
+                            }
+                            break;
+                        }
                         case "Remove":
-                            HandleMessageRemoved(current);
+                        {
+                            var itemChange = changeType.GetProperty("Item")?.GetValue(change);
+                            var current = itemChange?.GetType().GetProperty("Current")?.GetValue(itemChange);
+                            if (current != null) HandleMessageRemoved(current);
                             break;
+                        }
                         case "Replace":
                         case "Refresh":
-                            HandleMessageRefreshed(current);
+                        {
+                            var itemChange = changeType.GetProperty("Item")?.GetValue(change);
+                            var current = itemChange?.GetType().GetProperty("Current")?.GetValue(itemChange);
+                            if (current != null) HandleMessageRefreshed(current);
                             break;
+                        }
                     }
                 }
             }
@@ -475,13 +503,27 @@ internal class MessageLogger : IDisposable
     private void HandleMessageAdded(object message)
     {
         var msgId = ReadMessageId(message);
-        if (msgId == null) return;
+        var content = ReadContent(message) ?? "";
 
-        _contentSnapshot[msgId] = ReadContent(message) ?? "";
-        CacheMessage(message, msgId);
+        // Snapshot content and cache — use msgId if real, defer if placeholder
+        if (msgId != null && msgId != "00000000-0000-0000-0000-000000000000")
+        {
+            _contentSnapshot[msgId] = content;
+            CacheMessage(message, msgId);
+            Logger.Log(Tag, $"[dd] Add: {msgId[..Math.Min(8, msgId.Length)]}… \"{Truncate(content, 40)}\"");
+        }
+        else
+        {
+            Logger.Log(Tag, $"[dd] Add (placeholder): \"{Truncate(content, 40)}\"");
+        }
+
+        // Subscribe to PropertyChanged on the Message object.
+        // Root mutates Message in-place: ConvertPlaceholderToRealMessage (assigns real ID),
+        // SetAsDeleted (sets DeletedAt, wipes content). DynamicData won't fire events for these.
+        SubscribeMessagePropertyChanged(message, content);
 
         // Apply pending audit log deletion
-        if (_pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
+        if (msgId != null && _pendingAuditDeletes.TryGetValue(msgId, out var pendingAudit))
         {
             _pendingAuditDeletes.Remove(msgId);
             if (_messageCache.TryGetValue(msgId, out var cached))
@@ -498,12 +540,180 @@ internal class MessageLogger : IDisposable
     }
 
     /// <summary>
-    /// ConnectMessages Remove = genuine deletion. No disambiguation needed.
+    /// Subscribe to INotifyPropertyChanged on a Message object.
+    /// Detects: placeholder → real ID confirmation, deletion (DeletedAt set), edits.
+    /// Content is pre-snapshotted because SetAsDeleted wipes it before PropertyChanged fires.
+    /// </summary>
+    private void SubscribeMessagePropertyChanged(object message, string snapshotContent)
+    {
+        if (_messagePropertyChangedHandlers.ContainsKey(message)) return;
+
+        var pcEvent = message.GetType().GetEvent("PropertyChanged");
+        if (pcEvent == null) return;
+
+        try
+        {
+            // Use PropertyChanging (fires BEFORE the value changes) for content preservation.
+            // Use PropertyChanged (fires AFTER) for DeletedAt and MessageId transitions.
+            var pcChangingEvent = message.GetType().GetEvent("PropertyChanging");
+
+            // Mutable captures: content snapshot updates as edits arrive
+            string lastContent = snapshotContent;
+            var capturedMessage = message;
+
+            // PropertyChanging: capture content BEFORE SetAsDeleted wipes it
+            if (pcChangingEvent != null)
+            {
+                var changingCallback = new System.ComponentModel.PropertyChangingEventHandler((sender, args) =>
+                {
+                    try
+                    {
+                        if (args.PropertyName == "MessageContent")
+                        {
+                            var currentContent = ReadContent(capturedMessage);
+                            if (!string.IsNullOrEmpty(currentContent))
+                                lastContent = currentContent;
+                        }
+                    }
+                    catch { }
+                });
+                pcChangingEvent.AddEventHandler(message, changingCallback);
+            }
+
+            // PropertyChanged: detect deletion, placeholder confirmation, edits
+            var changedCallback = new System.ComponentModel.PropertyChangedEventHandler((sender, args) =>
+            {
+                try
+                {
+                    switch (args.PropertyName)
+                    {
+                        case "DeletedAt":
+                        {
+                            // Message was deleted — DeletedAt transitioned from null to non-null
+                            var msgId = ReadMessageId(capturedMessage);
+                            if (msgId == null) break;
+                            Logger.Log(Tag, $"[dd] PropertyChanged DeletedAt: {msgId} content=\"{Truncate(lastContent, 60)}\"");
+
+                            if (_messageCache.TryGetValue(msgId, out var cached))
+                            {
+                                if (!cached.IsDeleted)
+                                {
+                                    using var ev = WideEvent.Begin(Tag, "msg_deleted");
+                                    cached.IsDeleted = true;
+                                    cached.DeletedAt = DateTime.UtcNow;
+                                    _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
+                                    ev.Set("msg_id", msgId);
+                                    ev.Set("content", Truncate(lastContent, 80));
+                                    ev.Set("source", "property_changed");
+                                }
+                            }
+                            else if (!string.IsNullOrEmpty(lastContent))
+                            {
+                                // Not in cache (AddRange message we snapshotted) — create entry
+                                using var ev = WideEvent.Begin(Tag, "msg_deleted");
+                                // Read the real message timestamp from the object
+                                DateTime msgTimestamp = DateTime.UtcNow;
+                                try
+                                {
+                                    var tp = GetTypeProps(capturedMessage);
+                                    var target = tp != null ? GetMessageTarget(capturedMessage, tp) : null;
+                                    if (tp?.Timestamp != null && target != null)
+                                    {
+                                        var v = tp.Timestamp.GetValue(target);
+                                        if (v is DateTimeOffset dto) msgTimestamp = dto.UtcDateTime;
+                                        else if (v is DateTime dt) msgTimestamp = dt;
+                                    }
+                                }
+                                catch { }
+                                var newCached = new CachedMessage
+                                {
+                                    MessageId = msgId,
+                                    ChannelId = _currentChannelId,
+                                    AuthorName = ReadAuthorName(capturedMessage, GetTypeProps(capturedMessage)) ?? "Unknown",
+                                    Timestamp = msgTimestamp,
+                                    Content = lastContent,
+                                    IsDeleted = true,
+                                    DeletedAt = DateTime.UtcNow
+                                };
+                                _messageCache[msgId] = newCached;
+                                _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
+                                    "", "Unknown", newCached.Timestamp, lastContent);
+                                _store.RecordDeletion(msgId, newCached.ChannelId, DateTime.UtcNow);
+                                ev.Set("msg_id", msgId);
+                                ev.Set("content", Truncate(lastContent, 80));
+                                ev.Set("source", "property_changed_uncached");
+                            }
+                            break;
+                        }
+                        case "MessageId":
+                        {
+                            // Placeholder confirmed — real ID assigned
+                            var newId = ReadMessageId(capturedMessage);
+                            if (newId == null || newId == "00000000-0000-0000-0000-000000000000") break;
+                            var currentContent = ReadContent(capturedMessage) ?? lastContent;
+                            lastContent = currentContent;
+                            _contentSnapshot[newId] = currentContent;
+                            CacheMessage(capturedMessage, newId);
+                            Logger.Log(Tag, $"[dd] Placeholder confirmed: {newId[..Math.Min(8, newId.Length)]}… \"{Truncate(currentContent, 40)}\"");
+                            break;
+                        }
+                        case "MessageContent":
+                        {
+                            // Content changed — could be edit or SetAsDeleted wipe
+                            var msgId = ReadMessageId(capturedMessage);
+                            if (msgId == null) break;
+                            var newContent = ReadContent(capturedMessage) ?? "";
+                            if (!string.IsNullOrEmpty(newContent))
+                            {
+                                _contentSnapshot[msgId] = newContent;
+                                if (_messageCache.TryGetValue(msgId, out var cached))
+                                    cached.Content = newContent;
+                                lastContent = newContent;
+                            }
+                            break;
+                        }
+                    }
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"[dd] PropertyChanged error: {ex.Message}"); }
+            });
+
+            pcEvent.AddEventHandler(message, changedCallback);
+            _messagePropertyChangedHandlers[message] = changedCallback;
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"[dd] Subscribe PropertyChanged error: {ex.Message}"); }
+    }
+
+    private void UnsubscribeAllMessagePropertyChanged()
+    {
+        foreach (var (message, handler) in _messagePropertyChangedHandlers)
+        {
+            try
+            {
+                message.GetType().GetEvent("PropertyChanged")?.RemoveEventHandler(message, handler);
+            }
+            catch { }
+        }
+        _messagePropertyChangedHandlers.Clear();
+    }
+
+    /// <summary>
+    /// ConnectMessages Remove = cache trim (150-msg buffer eviction), NOT deletion.
+    /// Deletions are detected via PropertyChanged on DeletedAt.
     /// </summary>
     private void HandleMessageRemoved(object message)
     {
+        // Clean up PropertyChanged subscription for evicted message
+        if (_messagePropertyChangedHandlers.TryGetValue(message, out var pcHandler))
+        {
+            try { message.GetType().GetEvent("PropertyChanged")?.RemoveEventHandler(message, pcHandler); }
+            catch { }
+            _messagePropertyChangedHandlers.Remove(message);
+        }
+
         var msgId = ReadMessageId(message);
         if (msgId == null) return;
+
+        Logger.Log(Tag, $"[dd] Remove (cache trim): {msgId}");
 
         if (_messageCache.TryGetValue(msgId, out var cached))
         {
@@ -516,12 +726,18 @@ internal class MessageLogger : IDisposable
                 ev.Set("msg_id", msgId);
                 ev.Set("content", Truncate(cached.Content, 80));
                 ev.Set("source", "connect_messages");
+                Logger.Log(Tag, $"HandleRemoved: DELETED cached msg={msgId} channel={cached.ChannelId} content=\"{Truncate(cached.Content, 60)}\"");
+            }
+            else
+            {
+                Logger.Log(Tag, $"HandleRemoved: already deleted msg={msgId}");
             }
         }
         else
         {
             // Not in cache — create entry from the message being removed
             var content = ReadContent(message) ?? "";
+            Logger.Log(Tag, $"HandleRemoved: NOT IN CACHE msg={msgId} content=\"{Truncate(content, 60)}\"");
             if (!string.IsNullOrEmpty(content))
             {
                 using var ev = WideEvent.Begin(Tag, "msg_deleted");
@@ -542,6 +758,7 @@ internal class MessageLogger : IDisposable
                 ev.Set("msg_id", msgId);
                 ev.Set("content", Truncate(content, 80));
                 ev.Set("source", "connect_messages_uncached");
+                Logger.Log(Tag, $"HandleRemoved: created new cache entry for uncached msg={msgId}");
             }
         }
 
@@ -1014,31 +1231,34 @@ internal class MessageLogger : IDisposable
         if (_chatItemsControl == null)
         {
             FindChatItemsControl();
-            if (_chatItemsControl == null) return;
+            if (_chatItemsControl == null) { Logger.Log(Tag, "inject: no chatItemsControl"); return; }
         }
 
         object? vsp = FindMessagePanel();
-        if (vsp == null) return;
+        if (vsp == null) { Logger.Log(Tag, "inject: no VSP found"); return; }
 
-        // Build list of visible messages with their containers
-        var visibleMessages = new List<(string msgId, object container)>();
+        // Build list of visible messages with their containers and VSP indices
+        var visibleMessages = new List<(string msgId, object container, int vspIndex)>();
         int childCount = _r.GetChildCount(vsp);
+        int skippedNoDc = 0, skippedNoCache = 0;
         for (int i = 0; i < childCount; i++)
         {
             var child = _r.GetChild(vsp, i);
             if (child == null) continue;
             var dc = ReadDC(child);
             var msgId = dc != null ? ReadMessageId(dc) : null;
-            if (dc == null || msgId == null) continue;
-            if (!_messageCache.ContainsKey(msgId)) continue;
-            visibleMessages.Add((msgId, child));
+            if (dc == null || msgId == null) { skippedNoDc++; continue; }
+            if (!_messageCache.ContainsKey(msgId)) { skippedNoCache++; continue; }
+            visibleMessages.Add((msgId, child, i));
         }
 
         if (visibleMessages.Count == 0) return;
 
         int deletedInChannel = 0;
         foreach (var c in _messageCache.Values)
-            if (c.IsDeleted && c.ChannelId == _currentChannelId) deletedInChannel++;
+            if (c.IsDeleted && c.ChannelId == _currentChannelId && !string.IsNullOrEmpty(c.Content))
+                deletedInChannel++;
+        if (deletedInChannel == 0) return;
 
         int injected = 0, skipped = 0;
 
@@ -1046,56 +1266,90 @@ internal class MessageLogger : IDisposable
         {
             if (!cached.IsDeleted || cached.ChannelId != _currentChannelId) continue;
             if (cached.DeletedAt == null) continue;
-            if ((DateTime.UtcNow - cached.DeletedAt.Value).TotalHours > 24) continue;
+            if (string.IsNullOrEmpty(cached.Content)) continue; // Skip empty-content phantom deletions
+            var ageHours = (DateTime.UtcNow - cached.DeletedAt.Value).TotalHours;
+            if (ageHours > 24) continue;
 
             var cardTag = $"uprooted-del:{cached.MessageId}";
 
+            // Dedup: already injected?
+            if (_injectedCards.ContainsKey(cardTag)) { skipped++; continue; }
+
             // Timestamp-based positioning: find the visible message just before the deleted one
-            object? targetContainer = null;
+            int targetIdx = -1;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
                 if (_messageCache.TryGetValue(visibleMessages[i].msgId, out var visCached) &&
                     visCached.Timestamp <= cached.Timestamp)
-                { targetContainer = visibleMessages[i].container; break; }
+                { targetIdx = i; break; }
             }
-            if (targetContainer == null)
-                targetContainer = visibleMessages[0].container;
-            if (targetContainer == null) { skipped++; continue; }
+            if (targetIdx < 0) targetIdx = 0;
 
-            var (grid, col) = FindMessageGridInContainer(targetContainer);
-            if (grid == null) { skipped++; continue; }
+            var targetContainer = visibleMessages[targetIdx].container;
 
-            // Dedup: check if card already exists
-            bool exists = false;
-            var gridChildren = _r.GetChildren(grid);
-            if (gridChildren != null)
-                foreach (var c in gridChildren)
-                    if (c != null && _r.GetTag(c) == cardTag) { exists = true; break; }
-            if (exists) { skipped++; continue; }
+            // Try primary container, then fallback to nearest text-message container
+            if (TryInjectCardAtContainer(targetContainer, cached, cardTag, ref injected, ref skipped))
+                continue;
 
-            var card = BuildDeletedMessageCard(cached, cardTag);
-            if (card == null) { skipped++; continue; }
-
-            var (newRow, rowDef) = AddAutoRowToGrid(grid);
-            if (newRow < 0) { skipped++; continue; }
-
-            _r.SetGridRow(card, newRow);
-            _r.SetGridColumn(card, col);
-            SetGridColumnSpan(card, 99);
-
-            _r.AddChild(grid, card);
-            _injectedCards[cardTag] = card;
-            SubscribeContainerDataContextChanged(cardTag, targetContainer, grid, rowDef!);
-            injected++;
+            // Primary container has no Grid (non-text message). Search outward for nearest text-message.
+            for (int offset = 1; offset < visibleMessages.Count; offset++)
+            {
+                int fwd = targetIdx + offset;
+                if (fwd < visibleMessages.Count &&
+                    TryInjectCardAtContainer(visibleMessages[fwd].container, cached, cardTag, ref injected, ref skipped))
+                    break;
+                int bwd = targetIdx - offset;
+                if (bwd >= 0 &&
+                    TryInjectCardAtContainer(visibleMessages[bwd].container, cached, cardTag, ref injected, ref skipped))
+                    break;
+            }
         }
 
         if (injected > 0 || skipped > 0)
         {
+            Logger.Log(Tag, $"inject SUMMARY: injected={injected} skipped={skipped} deletedInChannel={deletedInChannel}");
             scanEv?.Set("del_injected", injected);
             scanEv?.Set("del_skipped", skipped);
             scanEv?.Set("del_in_channel", deletedInChannel);
             if (injected > 0) scanEv?.MarkNotable();
         }
+    }
+
+    /// <summary>
+    /// Attempt to find a Grid in the container and inject the deleted-message card.
+    /// Returns true if injection succeeded or was already present (dedup), false if no Grid found.
+    /// </summary>
+    private bool TryInjectCardAtContainer(
+        object container, CachedMessage cached, string cardTag,
+        ref int injected, ref int skipped)
+    {
+        object? grid; int col;
+        try { (grid, col) = FindMessageGridInContainer(container); }
+        catch { return false; }
+        if (grid == null) return false;
+
+        // Dedup: check if card already exists in grid
+        var gridChildren = _r.GetChildren(grid);
+        if (gridChildren != null)
+            foreach (var c in gridChildren)
+                if (c != null && _r.GetTag(c) == cardTag) { skipped++; return true; }
+
+        var card = BuildDeletedMessageCard(cached, cardTag);
+        if (card == null) { skipped++; return true; }
+
+        var (newRow, rowDef) = AddAutoRowToGrid(grid);
+        if (newRow < 0) { skipped++; return true; }
+
+        _r.SetGridRow(card, newRow);
+        _r.SetGridColumn(card, col);
+        SetGridColumnSpan(card, 99);
+
+        _r.AddChild(grid, card);
+        _injectedCards[cardTag] = card;
+        SubscribeContainerDataContextChanged(cardTag, container, grid, rowDef!);
+        injected++;
+        Logger.Log(Tag, $"Injected deleted-message card: \"{Truncate(cached.Content, 40)}\" row={newRow}");
+        return true;
     }
 
     /// <summary>
@@ -1149,35 +1403,43 @@ internal class MessageLogger : IDisposable
             yield return node;
 
             bool hadVisualKids = false;
-            foreach (var kid in _r.GetVisualChildren(node))
-            { stack.Push(kid); hadVisualKids = true; }
+            try
+            {
+                foreach (var kid in _r.GetVisualChildren(node))
+                { stack.Push(kid); hadVisualKids = true; }
+            }
+            catch { /* TargetException: type mismatch in visual tree (e.g. Decorator vs Rectangle) */ }
 
             if (!hadVisualKids)
             {
-                var panelKids = _r.GetChildren(node);
-                if (panelKids != null && panelKids.Count > 0)
+                try
                 {
-                    for (int i = panelKids.Count - 1; i >= 0; i--)
-                        if (panelKids[i] != null) stack.Push(panelKids[i]!);
-                }
-                else
-                {
-                    try
+                    var panelKids = _r.GetChildren(node);
+                    if (panelKids != null && panelKids.Count > 0)
                     {
-                        var cp = node.GetType()
-                            .GetProperty("Content", BindingFlags.Public | BindingFlags.Instance);
-                        if (cp != null)
-                        {
-                            var c = cp.GetValue(node);
-                            if (c != null && c.GetType().IsClass && c is not string)
-                                stack.Push(c);
-                        }
+                        for (int i = panelKids.Count - 1; i >= 0; i--)
+                            if (panelKids[i] != null) stack.Push(panelKids[i]!);
                     }
-                    catch { }
+                    else
+                    {
+                        try
+                        {
+                            var cp = node.GetType()
+                                .GetProperty("Content", BindingFlags.Public | BindingFlags.Instance);
+                            if (cp != null)
+                            {
+                                var c = cp.GetValue(node);
+                                if (c != null && c.GetType().IsClass && c is not string)
+                                    stack.Push(c);
+                            }
+                        }
+                        catch { }
 
-                    var borderChild = _r.GetBorderChild(node);
-                    if (borderChild != null) stack.Push(borderChild);
+                        var borderChild = _r.GetBorderChild(node);
+                        if (borderChild != null) stack.Push(borderChild);
+                    }
                 }
+                catch { /* TargetException from _r calls on mismatched types */ }
             }
         }
     }
@@ -1243,6 +1505,7 @@ internal class MessageLogger : IDisposable
                 if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
                 _r.SetTag(wrapper, tag);
                 _r.SetPadding(card, 8, 4, 8, 4);
+                _r.SetMargin(wrapper, 0, 6, 0, 2); // Visual separation from host message
                 AttachContextMenu(wrapper, cached);
                 return wrapper;
             }
@@ -1402,13 +1665,15 @@ internal class MessageLogger : IDisposable
 
     private void CleanupInjectedRow(string cardTag)
     {
-        if (!_injectedRowDefs.TryGetValue(cardTag, out var entry)) return;
+        Logger.Log(Tag, $"CleanupInjectedRow: {cardTag}");
+        if (!_injectedRowDefs.TryGetValue(cardTag, out var entry)) { Logger.Log(Tag, $"CleanupInjectedRow: no entry for {cardTag}"); return; }
         _injectedRowDefs.Remove(cardTag);
 
         if (_injectedCards.TryGetValue(cardTag, out var card))
         {
             _r.GetChildren(entry.grid)?.Remove(card);
             _injectedCards.Remove(cardTag);
+            Logger.Log(Tag, $"CleanupInjectedRow: removed card from grid for {cardTag}");
         }
 
         RemoveRowDefinition(entry.grid, entry.rowDef);
