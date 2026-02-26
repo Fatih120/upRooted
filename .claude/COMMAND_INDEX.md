@@ -21,14 +21,15 @@ Project-specific Claude Code customizations for the Uprooted repository. These l
 │   ├── session-state.md        # /session-state — update SESSION_STATE.md + NEW-SESSION.md
 │   ├── nose.md                 # /nose <ver> — bump all version references
 │   ├── release.md              # /release <ver> — full release pipeline (doc sweep + version bump + build + ship)
-│   └── decomp.md               # /decomp — search ILSpy dumps for info relevant to current issue
+│   ├── decomp.md               # /decomp — search ILSpy dumps for info relevant to current issue
+│   ├── didyounose.md           # /didyounose — deep-load context + targeted ILSpy dumps for the task
+│   └── what.md                 # /what — fresh ILSpy decompilation for debugging
 ├── agents/                     # Specialized subagents
 │   └── uprooted-reviewer.md   # Code reviewer (critical rules, conventions)
 └── skills/                     # Knowledge skills (auto-loaded on relevant queries)
     ├── uprooted-architecture/  # Architecture, injection lifecycle, coding patterns
     │   ├── SKILL.md
     │   └── references/
-    │       ├── critical-rules.md
     │       ├── csharp-patterns.md
     │       └── typescript-patterns.md
     └── uprooted-builder/       # Templates and registration steps for new components
@@ -84,6 +85,8 @@ A prompt hook on `*` that fires when Claude is about to stop. If source files in
 | `/nose <ver>`      | Bump all version refs (with content freshness audit)                                                             | Release prep                                      |
 | `/release <ver>`   | Full release pipeline: doc sweep + version bump + build + changelog audit + commit + tag + push (two user gates) | Major/minor releases                              |
 | `/decomp`          | Search ILSpy decompilation dumps for classes/controls/styles relevant to the current issue                       | Investigating Root internals for a feature or fix |
+| `/didyounose`      | Deep-load session context + targeted ILSpy dumps for the exact task                                              | Before deep work: loads orientation + exact ILSpy sources needed |
+| `/what`            | Fresh ILSpy decompilation for debugging: dump types, organize into session folder, analyze                       | Debugging Root internals: decompile fresh types for the task |
 
 **Typical workflows:**
 

@@ -55,14 +55,18 @@ Live Console Linux fix is the most recent work. LogConsole now uses FIFO (`mkfif
 | 4.5 | BrowserDiscovery | Dump visual tree + assembly scan (diagnostic) |
 | 4.5a | ClearUrlsEngine | Strip tracking params from compose editor on Enter (14s delay) |
 | 4.5b | LinkEmbedEngine | Avalonia-native link embeds (OG + oEmbed + animated images) |
-| 4.5c | MessageLogger | Message logger: discovery + collection subscription + visual indicators |
+| 4.5c | MessageLogger + AuditLogEngine | Message logger + audit log viewer |
 | 4.5d | AutoUpdater | Background update check (every 1 minute), encrypted .uprpkg |
-| 4.5e | ProfileBadgeInjector | Dev badge on profile popup (5s delay, event-driven + 500ms fallback) |
+| 4.5e | PresenceBeacon + ProfileBadge + UserBio | Uprooted user detection, dev badge, bio injection |
 | 4.5f | SilentTypingEngine | DiagnosticListener interception (12s delay) |
 | 4.5g | NsfwFilter | NSFW content filter (Avalonia-native visual tree scan, 20s delay) |
 | 4.5h | RootcordEngine | Rootcord sidebar plugin (8s delay, dormant if disabled) |
-| 4.5i | TranslateEngine | DeepL-powered message translation |
-| 4.5j | UprootedPresenceBeacon | Uprooted user detection via gRPC metadata |
+| 4.5i | ReconLogger | Visual tree diagnostic dumper (dev only) |
+| 4.5i2 | DevConsoleDropdown | Titlebar gear button + dev popup (dev only) |
+| 4.5j | TranslateEngine | Google Translate + DeepL translation |
+| 4.5k | WhoReactedEngine | Shows reaction authors on messages |
+| 4.5l | MessageDraftsEngine | Per-channel draft persistence (stub) |
+| 4.5m | FocusModeEngine | Focus Mode: hide visual clutter |
 | 5 | StartupHook | DotNetBrowser: event-driven assembly detection |
 
 ## Critical Finding: Root's Chat is Avalonia-Native

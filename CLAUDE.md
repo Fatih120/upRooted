@@ -37,12 +37,12 @@ This is an **active collaborative repo** between `watchthelight` and `agomusio` 
 
 ```
 uprooted-private/
-├── hook/                              # C# .NET hook (CLR profiler injection): 37 .cs files
+├── hook/                              # C# .NET hook (CLR profiler injection): 40 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
 │   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3487 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
-│   ├── ContentPages.cs                # Settings page builders (5320 lines)
+│   ├── ContentPages.cs                # Settings page builders (5562 lines)
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (in-place switching, bind-once walker, WeakRef live preview, custom ping color)
 │   ├── ColorUtils.cs                  # HSL/HSV/RGB/OKLCH color conversion
 │   ├── ColorPickerPopup.cs            # HSV color picker UI
@@ -60,21 +60,24 @@ uprooted-private/
 │   ├── AuditLogEngine.cs             # Audit log viewer (community mod actions)
 │   ├── AutoUpdater.cs                # In-process auto-updater (encrypted .uprpkg download, stable + dev channels)
 │   ├── DesktopNotification.cs        # OS-level notifications (WinRT toast on Windows, notify-send on Linux)
-│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups (1396 lines)
+│   ├── ProfileBadgeInjector.cs       # Injects "Uprooted Dev" badge into profile popups
 │   ├── SilentTypingEngine.cs         # Blocks SetTypingIndicator gRPC calls via DiagnosticListener interception
 │   ├── NsfwFilter.cs                  # NSFW content filter (Avalonia-native visual tree scan)
 │   ├── RootcordEngine.cs             # Rootcord plugin: Discord-style vertical server sidebar (experimental, live toggle)
-│   ├── TranslateEngine.cs            # Translate plugin: DeepL-powered message translation (2007 lines)
+│   ├── TranslateEngine.cs            # Translate plugin: Google Translate + DeepL message translation
 │   ├── TranslateConfigPopup.cs       # Translate config popup UI (language picker, API key)
 │   ├── WhoReactedEngine.cs           # Who Reacted: shows reaction authors on messages
 │   ├── UserBioEngine.cs              # User Bio: injects bio text + own-profile editor into profile popups
 │   ├── UprootedPresenceBeacon.cs     # Presence beacon: Uprooted user detection via gRPC metadata
+│   ├── DevConsoleDropdown.cs         # Dev Console titlebar gear button + overlay popup (dev only)
+│   ├── FocusModeEngine.cs            # Focus Mode: hides visual clutter for clean reading
+│   ├── MessageDraftsEngine.cs        # Message Drafts: per-channel draft persistence (stub)
 │   ├── ReconLogger.cs                # Recon logger: visual tree + style property diagnostic dumper
 │   ├── Entry.cs                       # Profiler injection entry point
-│   ├── LogConsole.cs                  # Dev-only live log terminal via named pipe / FIFO (~351 lines)
-│   ├── Logger.cs                      # File-based logging + wide event emission (~183 lines)
-│   ├── TailSampler.cs                # Tail sampling for high-frequency scan ticks (~71 lines)
-│   ├── WideEvent.cs                  # Structured wide event builder (IDisposable, key=value, dur_ms) (~150 lines)
+│   ├── LogConsole.cs                  # Dev-only live log terminal via named pipe / FIFO
+│   ├── Logger.cs                      # File-based logging + wide event emission
+│   ├── TailSampler.cs                # Tail sampling for high-frequency scan ticks
+│   ├── WideEvent.cs                  # Structured wide event builder (IDisposable, key=value, dur_ms)
 │   └── SESSION_STATE.md               # Session state/context handoff
 ├── installer/src-tauri/src/           # Console TUI installer (Rust)
 │   ├── main.rs                        # Console TUI entry point (ratatui)
@@ -98,7 +101,7 @@ uprooted-private/
 │   ├── build-local.sh                 # Local build script (hook + profiler + installer)
 │   └── (additional build/test/analysis scripts)
 ├── tests/                             # Test suites
-│   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush)
+│   └── UprootedTests/                 # C# unit tests (ColorUtils, GradientBrush, ClearUrls, Settings, MessageStore)
 ├── docs/                              # Documentation
 │   ├── INDEX.md                       # Documentation navigation hub (start here)
 │   ├── HOW_IT_WORKS.md                # Complete technical walkthrough
