@@ -128,11 +128,8 @@ internal class TranslateEngine
     private Timer? _receiveTimer;
     private int _discovering;   // Interlocked reentrancy guard
     private int _receiving;     // Interlocked reentrancy guard
-
-    // Track injected toolbars by RuntimeHelpers.GetHashCode identity
-    // Key = RuntimeHelpers.GetHashCode(RootMessageTextboxView)
-    // Value = RuntimeHelpers.GetHashCode(button strip child panel) — prevents double-inject
-    private readonly HashSet<int> _injectedToolbars = new();
+    private readonly TailSampler _discoverSampler = new(heartbeatTicks: 15, slowThresholdMs: 50);
+    private readonly TailSampler _receiveSampler = new(heartbeatTicks: 15, slowThresholdMs: 50);
 
     // Send-side: keyed by hooked TextArea identity hash
     private readonly HashSet<int> _hookedEditors = new();
@@ -192,15 +189,21 @@ internal class TranslateEngine
 
     internal void Initialize()
     {
-        Logger.Log("Translate", "Starting translate engine");
+        using var ev = WideEvent.Begin("Translate", "init");
 
         if (!ResolveTypes())
-            Logger.Log("Translate", "Failed to resolve AvaloniaEdit types — send-side disabled");
+        {
+            ev.Set("types", "resolve_failed");
+            Logger.Log("Translate", "Failed to resolve AvaloniaEdit types: send-side disabled");
+        }
+        else
+        {
+            ev.Set("types", "ok");
+        }
 
         _discoverTimer = new Timer(OnDiscoverTick, null, 0, ScanIntervalMs);
         _receiveTimer  = new Timer(OnReceiveTick, null, 2_000, ReceiveScanIntervalMs);
-
-        Logger.Log("Translate", "Discovery + receive timers started");
+        ev.Set("result", "timers_started");
     }
 
     // ──────────────────────────────────────────────────────────────────────────
@@ -302,16 +305,23 @@ internal class TranslateEngine
 
             _r.RunOnUIThread(() =>
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     DiscoverToolbars();
                     ScanContextMenus();
                 }
                 catch (Exception ex) { Logger.Log("Translate", $"Discover error: {ex.Message}"); }
-                finally { Interlocked.Exchange(ref _discovering, 0); }
+                finally
+                {
+                    sw.Stop();
+                    _discoverSampler.RecordTick((int)sw.ElapsedMilliseconds,
+                        (msg, ms) => Logger.Log("Translate", msg));
+                    Interlocked.Exchange(ref _discovering, 0);
+                }
             });
 
-            // Fallback release of the guard
+            // Safety release: if RunOnUIThread never fires, release after 2x interval
             Task.Delay(ScanIntervalMs * 2).ContinueWith(_ =>
                 Interlocked.CompareExchange(ref _discovering, 0, 1));
         }
@@ -331,92 +341,72 @@ internal class TranslateEngine
                 continue;
 
             int id = RuntimeHelpers.GetHashCode(node);
-            if (_injectedToolbars.Contains(id)) continue;
 
-            LogChildrenDebug(node);
+            // Liveness check: if we already injected a button, verify it's still in the tree.
+            // View recycling (channel switch) can destroy our button while the hash stays tracked.
+            if (_buttons.TryGetValue(id, out var existingBtn))
+            {
+                if (IsStillAttached(existingBtn))
+                    continue; // Button still present, nothing to do
+
+                // Button was detached (view recycled): clean up and allow re-injection
+                _buttons.Remove(id);
+            }
 
             if (TryInjectButton(node))
             {
-                _injectedToolbars.Add(id);
                 Logger.Log("Translate", $"Injected translate button into toolbar id={id}");
-
                 if (_typesValid)
                     HookTextArea(node);
-            }
-            else
-            {
-                Logger.Log("Translate", $"Toolbar injection failed for id={id}, will retry");
             }
         }
     }
 
-    private void LogChildrenDebug(object view)
+    /// <summary>
+    /// Check if a control still has a visual parent (i.e. is still in the visual tree).
+    /// Returns false if the control was removed (e.g. view recycled on channel switch).
+    /// </summary>
+    private bool IsStillAttached(object control)
     {
-        try
-        {
-            var childrenProp = view.GetType().GetProperty("Children",
-                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
-            if (childrenProp == null) return;
-            var children = childrenProp.GetValue(view) as System.Collections.IEnumerable;
-            if (children == null) return;
-            var names = new List<string>();
-            foreach (var child in children)
-                names.Add(child.GetType().Name);
-            Logger.Log("Translate", $"  Children of RootMessageTextboxView: [{string.Join(", ", names)}]");
-        }
-        catch { }
+        try { return _r.GetParent(control) != null; }
+        catch { return false; }
     }
 
     private bool TryInjectButton(object textboxView)
     {
         try
         {
-            // From visual tree analysis, the toolbar button container is:
+            // The toolbar button container in RootMessageTextboxView is an ItemsControl
+            // with bound ItemsSource. Its Items collection is read-only, so we inject into
+            // the presenter panel (ItemsPanelRoot) which holds the actual visual children.
+            //
+            // Visual tree path:
             //   RootMessageTextboxView > Panel > RootBorder > Grid > RootBorder > Grid > ItemsControl
+            //
             // There are two ItemsControls inside the view:
-            //   1. TextEditor > Border > ScrollViewer > TextArea > DockPanel > ItemsControl  (editor text lines)
-            //   2. RootBorder > Grid > ItemsControl  ← THE BUTTON STRIP we want
-            // We find the button strip by looking for an ItemsControl that is NOT inside
-            // TextEditor/TextArea/ScrollViewer.
+            //   1. TextEditor-internal (text lines): inside TextEditor/TextArea/ScrollViewer
+            //   2. Toolbar button strip: NOT inside TextEditor, has >0 children
+            // We want #2.
 
             object? buttonStrip = null;
             foreach (var node in _walker.DescendantsDepthFirst(textboxView))
             {
-                var nodeName = node.GetType().Name;
-                if (nodeName != "ItemsControl") continue;
-
-                // Skip if this ItemsControl is inside the TextEditor (text line container)
+                if (node.GetType().Name != "ItemsControl") continue;
                 if (IsInsideTextEditor(node, textboxView)) continue;
 
                 int childCount = GetChildCount(node);
-                Logger.Log("Translate", $"  Candidate ItemsControl: children={childCount}");
-
-                // The real button strip always has existing buttons (e.g. emoji, GIF, attach).
-                // An ItemsControl with 0 children is likely a template/placeholder — skip it.
-                if (childCount == 0)
-                {
-                    Logger.Log("Translate", "  Skipping empty ItemsControl (0 children)");
-                    continue;
-                }
+                if (childCount == 0) continue;
 
                 buttonStrip = node;
-                Logger.Log("Translate", $"  Found button strip ItemsControl (children={childCount})");
                 break;
             }
 
             if (buttonStrip == null)
             {
-                // Fallback: look for any Grid/StackPanel that's a sibling of TextEditor
+                // Fallback: find Grid containing TextEditor + other children
                 buttonStrip = FindButtonStripFallback(textboxView);
-                if (buttonStrip == null)
-                {
-                    Logger.Log("Translate", "  No button strip found, will retry");
-                    return false;
-                }
+                if (buttonStrip == null) return false;
             }
-
-            int stripId = RuntimeHelpers.GetHashCode(buttonStrip);
-            if (_injectedToolbars.Contains(stripId)) return true;
 
             var settings = UprootedSettings.Load();
             string color = settings.TranslateAutoTranslate ? ContentPages.AccentGreen : ButtonDimColor;
@@ -424,15 +414,26 @@ internal class TranslateEngine
             var btn = BuildTranslateButton(color);
             if (btn == null) return false;
 
-            if (!InsertChildBeforeLast(buttonStrip, btn))
+            // Strategy 1: ItemsControl presenter panel (works with bound ItemsSource)
+            bool inserted = TryInsertIntoPresenterPanel(buttonStrip, btn);
+
+            // Strategy 2: Add to the parent panel as a sibling
+            if (!inserted)
+                inserted = TryInsertAsParentSibling(buttonStrip, btn);
+
+            // Strategy 3: Direct child insert (works for non-bound panels like Grid)
+            if (!inserted)
+                inserted = InsertChildBeforeLast(buttonStrip, btn);
+
+            if (!inserted)
             {
-                Logger.Log("Translate", "  Insert failed, will retry");
+                Logger.Log("Translate", "All injection strategies failed, will retry");
                 return false;
             }
-            _injectedToolbars.Add(stripId);
+
             _buttons[RuntimeHelpers.GetHashCode(textboxView)] = btn;
 
-            // Wire pointer events — left-click opens popup, right-click toggles AutoTranslate
+            // Wire pointer events: left-click opens popup, right-click toggles AutoTranslate
             var capturedBtn = btn;
             SubscribePointerPressed(capturedBtn, (isRight) =>
             {
@@ -459,6 +460,106 @@ internal class TranslateEngine
         catch (Exception ex)
         {
             Logger.Log("Translate", $"TryInjectButton error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Insert a button into the ItemsControl's presenter panel (ItemsPanelRoot).
+    /// This is the correct approach when ItemsSource is bound: the Items collection
+    /// is read-only, but the presenter panel's Children is always writable.
+    /// </summary>
+    private bool TryInsertIntoPresenterPanel(object itemsControl, object btn)
+    {
+        try
+        {
+            // Try ItemsPanelRoot directly (Avalonia 11+)
+            var presenterPanel = itemsControl.GetType()
+                .GetProperty("ItemsPanelRoot", BindingFlags.Public | BindingFlags.Instance)?
+                .GetValue(itemsControl);
+
+            if (presenterPanel == null)
+            {
+                // Fallback: go through Presenter.Panel
+                var presenter = itemsControl.GetType()
+                    .GetProperty("Presenter", BindingFlags.Public | BindingFlags.Instance)?
+                    .GetValue(itemsControl);
+                if (presenter != null)
+                    presenterPanel = presenter.GetType()
+                        .GetProperty("Panel", BindingFlags.Public | BindingFlags.Instance)?
+                        .GetValue(presenter);
+            }
+
+            if (presenterPanel == null) return false;
+
+            var childrenProp = presenterPanel.GetType().GetProperty("Children",
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            var children = childrenProp?.GetValue(presenterPanel);
+            if (children == null) return false;
+
+            var ct = children.GetType();
+            var countProp = ct.GetProperty("Count", BindingFlags.Public | BindingFlags.Instance);
+            var insertMethod = ct.GetMethod("Insert", BindingFlags.Public | BindingFlags.Instance);
+
+            if (countProp != null && insertMethod != null)
+            {
+                int count = (int)(countProp.GetValue(children) ?? 0);
+                // Insert before the last item (last is usually the "+" overflow button)
+                int insertAt = Math.Max(0, count - 1);
+                insertMethod.Invoke(children, new object[] { insertAt, btn });
+                Logger.Log("Translate", $"Inserted via presenter panel at index {insertAt} (count was {count})");
+                return true;
+            }
+
+            // Fallback: try Add
+            var addMethod = ct.GetMethod("Add", BindingFlags.Public | BindingFlags.Instance);
+            if (addMethod != null)
+            {
+                addMethod.Invoke(children, new[] { btn });
+                Logger.Log("Translate", "Appended via presenter panel");
+                return true;
+            }
+
+            return false;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"TryInsertIntoPresenterPanel error: {ex.Message}");
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Insert a button as a sibling of the target control in its parent panel.
+    /// Used as fallback when presenter panel injection fails.
+    /// </summary>
+    private bool TryInsertAsParentSibling(object target, object btn)
+    {
+        try
+        {
+            var parent = _r.GetParent(target);
+            if (parent == null) return false;
+
+            var pn = parent.GetType().Name;
+            if (pn != "Grid" && pn != "StackPanel" && pn != "DockPanel"
+                && pn != "WrapPanel") return false;
+
+            var childrenProp = parent.GetType().GetProperty("Children",
+                BindingFlags.Public | BindingFlags.Instance | BindingFlags.FlattenHierarchy);
+            var children = childrenProp?.GetValue(parent);
+            if (children == null) return false;
+
+            var addMethod = children.GetType().GetMethod("Add",
+                BindingFlags.Public | BindingFlags.Instance);
+            if (addMethod == null) return false;
+
+            addMethod.Invoke(children, new[] { btn });
+            Logger.Log("Translate", $"Inserted as sibling in parent {pn}");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"TryInsertAsParentSibling error: {ex.Message}");
             return false;
         }
     }
@@ -696,27 +797,33 @@ internal class TranslateEngine
     {
         try
         {
-            // 32×32 rounded Border container
+            // 30×30 rounded Border container matching Root's toolbar button sizing
             var btn = _r.CreateBorder(null, 6);
             if (btn == null) return null;
-            _r.SetWidth(btn, 32);
-            _r.SetHeight(btn, 32);
+            _r.SetWidth(btn, 30);
+            _r.SetHeight(btn, 30);
             _r.SetTag(btn, "uprooted-translate-btn");
             _r.SetIsHitTestVisible(btn, true);
+            _r.SetCursorHand(btn);
+            _r.SetVerticalAlignment(btn, "Center");
+            _r.SetMargin(btn, 2, 0, 2, 0);
 
-            // Canvas holding the path
+            // Canvas holding the SVG path
             var canvas = _r.CreateCanvas();
             if (canvas == null) return btn;
-            _r.SetWidth(canvas, 24);
-            _r.SetHeight(canvas, 24);
+            _r.SetWidth(canvas, 20);
+            _r.SetHeight(canvas, 20);
 
             var path = BuildSvgPath(TranslateIconPath, iconColor);
             if (path != null)
                 _r.AddChild(canvas, path);
 
-            // Center the 24×24 canvas in the 32×32 border
-            _r.SetMargin(canvas, 4, 4, 4, 4);
+            // Center the 20×20 canvas in the 30×30 border
+            _r.SetMargin(canvas, 5, 5, 5, 5);
             _r.SetBorderChild(btn, canvas);
+
+            // Hover feedback: subtle background highlight on pointer enter/leave
+            SetupHoverEffect(btn);
 
             return btn;
         }
@@ -724,6 +831,61 @@ internal class TranslateEngine
         {
             Logger.Log("Translate", $"BuildTranslateButton error: {ex.Message}");
             return null;
+        }
+    }
+
+    /// <summary>
+    /// Add pointer enter/leave hover feedback to a button: subtle background highlight.
+    /// Matches the hover behavior of Root's native toolbar buttons.
+    /// </summary>
+    private void SetupHoverEffect(object btn)
+    {
+        try
+        {
+            // PointerEntered: set background to subtle highlight
+            var enteredEvent = btn.GetType().GetEvent("PointerEntered");
+            var exitedEvent  = btn.GetType().GetEvent("PointerExited");
+            if (enteredEvent == null || exitedEvent == null) return;
+
+            Action<object, object> onEnter = (_, __) =>
+            {
+                try { _r.SetBackground(btn, "#20FFFFFF"); }
+                catch { }
+            };
+            Action<object, object> onExit = (_, __) =>
+            {
+                try { _r.SetBackground(btn, "Transparent"); }
+                catch { }
+            };
+
+            // Build typed delegates via Expression
+            var enterType = enteredEvent.EventHandlerType!;
+            var enterParams = enterType.GetMethod("Invoke")!.GetParameters()
+                .Select(p => p.ParameterType).ToArray();
+            var ep0 = Expression.Parameter(enterParams[0], "s");
+            var ep1 = Expression.Parameter(enterParams[1], "e");
+            var enterCb = Expression.Constant(onEnter);
+            var enterInv = Expression.Invoke(enterCb,
+                Expression.Convert(ep0, typeof(object)),
+                Expression.Convert(ep1, typeof(object)));
+            var enterLambda = Expression.Lambda(enterType, enterInv, ep0, ep1);
+            enteredEvent.AddEventHandler(btn, enterLambda.Compile());
+
+            var exitType = exitedEvent.EventHandlerType!;
+            var exitParams = exitType.GetMethod("Invoke")!.GetParameters()
+                .Select(p => p.ParameterType).ToArray();
+            var xp0 = Expression.Parameter(exitParams[0], "s");
+            var xp1 = Expression.Parameter(exitParams[1], "e");
+            var exitCb = Expression.Constant(onExit);
+            var exitInv = Expression.Invoke(exitCb,
+                Expression.Convert(xp0, typeof(object)),
+                Expression.Convert(xp1, typeof(object)));
+            var exitLambda = Expression.Lambda(exitType, exitInv, xp0, xp1);
+            exitedEvent.AddEventHandler(btn, exitLambda.Compile());
+        }
+        catch (Exception ex)
+        {
+            Logger.Log("Translate", $"SetupHoverEffect error: {ex.Message}");
         }
     }
 
@@ -762,8 +924,8 @@ internal class TranslateEngine
 
             pathType.GetProperty("Data")?.SetValue(pathControl, geometry);
             pathType.GetProperty("Fill")?.SetValue(pathControl, _r.CreateBrush(color));
-            pathType.GetProperty("Width")?.SetValue(pathControl, 24.0);
-            pathType.GetProperty("Height")?.SetValue(pathControl, 24.0);
+            pathType.GetProperty("Width")?.SetValue(pathControl, 20.0);
+            pathType.GetProperty("Height")?.SetValue(pathControl, 20.0);
 
             if (stretchType != null)
             {
@@ -1005,27 +1167,31 @@ internal class TranslateEngine
                         return;
                     }
 
-                    // Cache miss — synchronous translate (blocks ~200-500ms, rare after debounce)
+                    // Cache miss: fire an async translation + cache so the NEXT send is instant.
+                    // Do NOT block the UI thread with .GetAwaiter().GetResult(): the debounce
+                    // pre-translate should have cached this in most cases. If it didn't, let
+                    // the message send in the original language and log a warning.
                     var fromLang = settings.TranslateSendFromLang;
                     var toLang   = settings.TranslateSendToLang;
-                    try
+                    Logger.Log("Translate", $"Send-side: cache miss ({text.Length} chars), message sent untranslated (async pre-cache)");
+                    var capturedText = text;
+                    Task.Run(async () =>
                     {
-                        var result = TranslateServiceAsync(text, fromLang, toLang)
-                            .GetAwaiter().GetResult();
-                        if (!string.IsNullOrEmpty(result.Text))
+                        try
                         {
-                            _isSettingText = true;
-                            try { _textProperty?.SetValue(capturedEditor, result.Text); }
-                            finally { _isSettingText = false; }
-                            if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
-                            _translationCache[text] = result.Text;
-                            Logger.Log("Translate", $"Send-side: sync translate ({text.Length}→{result.Text.Length})");
+                            var result = await TranslateServiceAsync(capturedText, fromLang, toLang)
+                                .ConfigureAwait(false);
+                            if (!string.IsNullOrEmpty(result.Text))
+                            {
+                                if (_translationCache.Count >= MaxCacheSize) _translationCache.Clear();
+                                _translationCache[capturedText] = result.Text;
+                            }
                         }
-                    }
-                    catch (Exception ex2)
-                    {
-                        Logger.Log("Translate", $"Send-side sync translate error: {ex2.Message}");
-                    }
+                        catch (Exception ex2)
+                        {
+                            Logger.Log("Translate", $"Send-side async pre-cache error: {ex2.Message}");
+                        }
+                    });
                 }
                 catch (Exception ex)
                 {
@@ -1105,11 +1271,19 @@ internal class TranslateEngine
 
             _r.RunOnUIThread(() =>
             {
+                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try   { ScanReceivedMessages(); }
                 catch (Exception ex) { Logger.Log("Translate", $"Receive scan error: {ex.Message}"); }
-                finally { Interlocked.Exchange(ref _receiving, 0); }
+                finally
+                {
+                    sw.Stop();
+                    _receiveSampler.RecordTick((int)sw.ElapsedMilliseconds,
+                        (msg, ms) => Logger.Log("Translate", msg));
+                    Interlocked.Exchange(ref _receiving, 0);
+                }
             });
 
+            // Safety release
             Task.Delay(ReceiveScanIntervalMs * 4).ContinueWith(_ =>
                 Interlocked.CompareExchange(ref _receiving, 0, 1));
         }
@@ -1124,7 +1298,13 @@ internal class TranslateEngine
     {
         var settings = UprootedSettings.Load();
 
-        foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+        // Walk only from message list containers (TextChannelContentView, DirectMessageContentView)
+        // instead of the entire window tree. This narrows the scan scope significantly.
+        var scanRoots = FindMessageListContainers();
+        if (scanRoots.Count == 0) return;
+
+        foreach (var root in scanRoots)
+        foreach (var node in _walker.DescendantsDepthFirst(root))
         {
             var typeName = node.GetType().Name;
             if (typeName.IndexOf("CTextBlock", StringComparison.OrdinalIgnoreCase) < 0) continue;
@@ -1176,6 +1356,34 @@ internal class TranslateEngine
                 }
             });
         }
+    }
+
+    /// <summary>
+    /// Find message list containers in the visual tree.
+    /// Looks for TextChannelContentView and DirectMessageContentView to narrow scan scope.
+    /// Falls back to mainWindow if none found.
+    /// </summary>
+    private List<object> FindMessageListContainers()
+    {
+        var containers = new List<object>();
+        try
+        {
+            foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
+            {
+                var tn = node.GetType().Name;
+                if (tn.Contains("TextChannelContentView", StringComparison.OrdinalIgnoreCase)
+                    || tn.Contains("DirectMessageContentView", StringComparison.OrdinalIgnoreCase))
+                {
+                    containers.Add(node);
+                    if (containers.Count >= 3) break; // cap at 3 to prevent over-scanning
+                }
+            }
+        }
+        catch { }
+        // Fallback: if no containers found, scan from window (slower but correct)
+        if (containers.Count == 0)
+            containers.Add(_mainWindow);
+        return containers;
     }
 
     private string? TryGetCTextBlockContent(object cTextBlock)
@@ -1482,15 +1690,11 @@ internal class TranslateEngine
         {
             var typeName = node.GetType().Name;
 
-            // Look for message-related controls that might have context menus
-            bool isMessageControl =
-                typeName.Contains("Message", StringComparison.OrdinalIgnoreCase)
-                && (typeName.Contains("Border", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Contains("Background", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Contains("View", StringComparison.OrdinalIgnoreCase)
-                    || typeName.Contains("Item", StringComparison.OrdinalIgnoreCase));
-
-            if (!isMessageControl) continue;
+            // Target MessageView specifically: Root's message rows are MessageView UserControls.
+            // Also accept MessageBackgroundView which wraps the message content area and carries
+            // the ContextFlyout in some Root versions. Avoid the old overly broad heuristic
+            // (any control with "Message" + "Border|View|Item") which caused false positives.
+            if (typeName != "MessageView" && typeName != "MessageBackgroundView") continue;
 
             int id = RuntimeHelpers.GetHashCode(node);
             if (_hookedContextMenus.Contains(id)) continue;
