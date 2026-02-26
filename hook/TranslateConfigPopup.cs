@@ -41,6 +41,34 @@ internal static class TranslateConfigPopup
     // DeepL API key TextBox reference (saved on dismiss)
     private static object? _apiKeyTextBox;
 
+    // Cached Avalonia types (resolved once, reused across popup rebuilds)
+    private static Type? _comboBoxType;
+    private static Type? _comboBoxItemType;
+    private static Type? _textBoxType;
+    private static bool _typesResolved;
+
+    private static void ResolveControlTypes()
+    {
+        if (_typesResolved) return;
+        _typesResolved = true;
+        try
+        {
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                var asmName = asm.GetName().Name ?? "";
+                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var t in asm.GetTypes())
+                {
+                    if (t.FullName == "Avalonia.Controls.ComboBox") _comboBoxType = t;
+                    else if (t.FullName == "Avalonia.Controls.ComboBoxItem") _comboBoxItemType = t;
+                    else if (t.FullName == "Avalonia.Controls.TextBox") _textBoxType = t;
+                }
+                if (_comboBoxType != null && _textBoxType != null) break;
+            }
+        }
+        catch { }
+    }
+
     // Popup dimensions
     private const double POPUP_W       = 340;
     private const double POPUP_PADDING = 20;
@@ -337,18 +365,8 @@ internal static class TranslateConfigPopup
     {
         try
         {
-            Type? comboType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var asmName = asm.GetName().Name ?? "";
-                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
-                foreach (var t in asm.GetTypes())
-                {
-                    if (t.FullName == "Avalonia.Controls.ComboBox")
-                    { comboType = t; break; }
-                }
-                if (comboType != null) break;
-            }
+            ResolveControlTypes();
+            var comboType = _comboBoxType;
             if (comboType == null) return null;
 
             var combo = Activator.CreateInstance(comboType);
@@ -436,18 +454,8 @@ internal static class TranslateConfigPopup
     {
         try
         {
-            Type? textBoxType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var asmName = asm.GetName().Name ?? "";
-                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
-                foreach (var t in asm.GetTypes())
-                {
-                    if (t.FullName == "Avalonia.Controls.TextBox")
-                    { textBoxType = t; break; }
-                }
-                if (textBoxType != null) break;
-            }
+            ResolveControlTypes();
+            var textBoxType = _textBoxType;
             if (textBoxType == null) return null;
 
             var textBox = Activator.CreateInstance(textBoxType);
@@ -490,18 +498,8 @@ internal static class TranslateConfigPopup
     {
         try
         {
-            Type? comboType = null;
-            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
-            {
-                var asmName = asm.GetName().Name ?? "";
-                if (!asmName.StartsWith("Avalonia", StringComparison.OrdinalIgnoreCase)) continue;
-                foreach (var t in asm.GetTypes())
-                {
-                    if (t.FullName == "Avalonia.Controls.ComboBox")
-                    { comboType = t; break; }
-                }
-                if (comboType != null) break;
-            }
+            ResolveControlTypes();
+            var comboType = _comboBoxType;
 
             if (comboType != null)
                 return BuildAvaloniaCombBox(r, comboType, languages, currentCode, onChange);
