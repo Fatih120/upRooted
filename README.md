@@ -8,12 +8,15 @@
 
 <p align="center">
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
-  <a href="https://github.com/The-Uprooted-Project/uprooted/releases/latest"><img src="https://img.shields.io/badge/download-latest-2D7D46?style=flat" alt="download" /></a>
-  <a href="https://github.com/The-Uprooted-Project/uprooted/releases"><img src="https://img.shields.io/github/downloads/The-Uprooted-Project/uprooted/total?style=flat&color=2D7D46&label=downloads" alt="downloads" /></a>
+  <a href="https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw"><img src="https://img.shields.io/badge/server-join%20to%20download-2D7D46?style=flat" alt="join server" /></a>
   <img src="https://img.shields.io/badge/version-0.5.2--dev2-2D7D46?style=flat" alt="version" />
   <img src="https://img.shields.io/badge/license-custom-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>
+
+---
+
+> **downloads are server-gated.** you must join the [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on root to get the installer. there are no public download links. if someone sent you a copy of uprooted outside of the server, it is unauthorized and may be outdated or tampered with.
 
 ---
 
@@ -215,11 +218,12 @@ Every time Root.exe launches after installation:
 
 **by using uprooted, you agree to the following:**
 
-1. **do not distribute uprooted or its artifacts** (installers, DLLs, modified binaries) outside of this repository.
-2. **do not discuss uprooted in Root's public channels** (official Root servers, Root support, Root social media).
-3. violations will result in your UUID being **permanently blacklisted** from uprooted.
+1. **you must be a member of the [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw)** to download and use uprooted. downloads are only distributed through the server.
+2. **do not distribute uprooted or its artifacts** (installers, DLLs, modified binaries) outside of the server.
+3. **do not discuss uprooted in Root's public channels** (official Root servers, Root support, Root social media).
+4. violations will result in your UUID being **permanently blacklisted** from uprooted.
 
-these rules exist to protect the project and its users. if you want to share uprooted with someone, send them a link to this repository.
+these rules exist to protect the project and its users. if you want to share uprooted with someone, send them an invite to the server.
 
 ## policy
 
@@ -228,8 +232,7 @@ these rules exist to protect the project and its users. if you want to share upr
 ## links
 
 - [uprooted.sh](https://uprooted.sh)
-- [download latest release](https://github.com/The-Uprooted-Project/uprooted/releases/latest)
-- [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw)
+- [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) (join here to download)
 - admin@watchthelight.org
 
 ## license

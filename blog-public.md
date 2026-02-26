@@ -42,19 +42,9 @@ The auto-updater checks your channel every 60 seconds and applies updates in the
 
 ## Install
 
-**Windows:**
-```
-iex (irm https://raw.githubusercontent.com/The-Uprooted-Project/uprooted/main/Install-Uprooted.ps1)
-```
-
-**Linux:**
-```
-curl -sSL https://raw.githubusercontent.com/The-Uprooted-Project/uprooted/main/install-uprooted-linux.sh | bash
-```
-
-Or download the installer directly from [GitHub Releases](https://github.com/The-Uprooted-Project/uprooted/releases/tag/v0.5.0).
+Downloads are server-gated. Join the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on Root to get the installer. There are no public download links.
 
 ## Links
+- [Server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) (join here to download)
 - [Source](https://github.com/The-Uprooted-Project/uprooted)
-- [Server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw)
 - [Website](https://uprooted.sh)

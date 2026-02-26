@@ -1,10 +1,13 @@
 # Installation
 
+!!! warning "Server-gated downloads"
+    You must join the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on Root to get the installer. Downloads are only distributed through the server. There are no public download links.
+
 ## Windows
 
 === "Installer (recommended)"
 
-    Download the latest installer from [GitHub Releases](https://github.com/The-Uprooted-Project/uprooted/releases/latest).
+    Download the latest installer from the **#downloads** channel in the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw).
 
 === "PowerShell one-liner"
 
@@ -35,7 +38,7 @@
 
 === "Installer (recommended)"
 
-    Download the latest installer from [GitHub Releases](https://github.com/The-Uprooted-Project/uprooted/releases/latest).
+    Download the latest installer from the **#downloads** channel in the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw).
 
 === "curl one-liner"
 

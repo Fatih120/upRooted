@@ -7,6 +7,8 @@
 
 Step-by-step instructions for installing, verifying, repairing, and uninstalling Uprooted on Windows and Linux.
 
+> **Downloads are server-gated.** You must join the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on Root to get the installer. There are no public download links.
+
 > **Related docs:** [Index](../INDEX.md) | [Build Guide](BUILD.md) | [Installer Reference](../framework/INSTALLER.md) | [Architecture](../framework/ARCHITECTURE.md)
 
 ---
@@ -53,7 +55,7 @@ with no external dependencies.
 ### Steps
 
 1. **Download the installer** from the
-   [latest release](https://github.com/The-Uprooted-Project/uprooted/releases/latest).
+   [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on Root (pinned in the downloads channel).
    - Windows: `Uprooted-<version>-Setup.exe`
    - Linux: use the [bash installer](#linux-install) instead (see below)
 
@@ -206,11 +208,12 @@ The bash installer is the recommended method for Linux. It downloads pre-built
 artifacts from GitHub: no build tools, compilers, or SDKs are required. The only
 dependency is `curl` or `wget`.
 
+Download the bash installer from the [Uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on Root (pinned in the downloads channel).
+
 ### Usage
 
 ```bash
-# Download and run (auto-detects Root.AppImage)
-curl -LO https://raw.githubusercontent.com/The-Uprooted-Project/uprooted/main/install-uprooted-linux.sh
+# Run the downloaded installer (auto-detects Root.AppImage)
 chmod +x install-uprooted-linux.sh
 ./install-uprooted-linux.sh
 
