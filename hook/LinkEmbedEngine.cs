@@ -31,6 +31,7 @@ internal class LinkEmbedEngine : IDisposable
 
     private Timer? _scanTimer;
     private int _scanning; // Interlocked reentrancy guard
+    private long _scanStartTick; // Timestamp-based staleness guard (replaces Task.Delay fallback)
     private readonly TailSampler _sampler = new(heartbeatTicks: 60, slowThresholdMs: 50);
 
     // Chat area discovery — no caching, always scan from mainWindow on each tick
@@ -46,7 +47,17 @@ internal class LinkEmbedEngine : IDisposable
     private readonly Dictionary<string, EmbedData?> _metadataCache = new();
     private readonly Dictionary<string, byte[]> _imageBytesCache = new();
     private readonly List<object> _injectedCards = new();
+    private readonly Dictionary<string, object> _injectedCardsByTag = new(); // O(1) lookup by embed tag
     private readonly Dictionary<string, Action> _animatedDisposables = new(); // dispose timers on card removal
+
+    // Cached PropertyInfo for hot-path reflection (ScanForUrls runs every 500ms on every CTextBlock)
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, PropertyInfo?> s_tagPropCache = new();
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<Type, PropertyInfo?> s_textPropCache = new();
+
+    // Limit concurrent HTTP fetches to avoid ThreadPool starvation.
+    // Max 4 concurrent fetches: OG metadata + up to 3 image downloads in parallel.
+    private static readonly SemaphoreSlim s_httpFetchSemaphore = new(4, 4);
+    private const int HttpFetchSemaphoreTimeoutMs = 15_000;
 
     // Video thumbnail extraction via DotNetBrowser Chromium (JS → <video> → <canvas> → base64)
     private static readonly SemaphoreSlim s_videoThumbSemaphore = new(1, 1);
@@ -208,6 +219,66 @@ internal class LinkEmbedEngine : IDisposable
         @"^https?://(?:media\.tenor\.com|rootapp\.gg)/",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // SSRF protection: block fetches to private/loopback/link-local IPs.
+    // Prevents malicious chat links from probing internal networks.
+    private static readonly Regex PrivateHostRegex = new(
+        @"^(?:localhost|127\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|192\.168\.\d+\.\d+|169\.254\.\d+\.\d+|0\.0\.0\.0|\[::1?\])$",
+        RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>
+    /// Returns true if the URL targets a private, loopback, or link-local address.
+    /// Resolves the hostname to check numeric IPs that map to private ranges.
+    /// </summary>
+    private static bool IsPrivateUrl(string url)
+    {
+        try
+        {
+            var uri = new Uri(url);
+            var host = uri.Host;
+
+            // Fast regex check against known private patterns
+            if (PrivateHostRegex.IsMatch(host)) return true;
+
+            // Reject non-default ports on well-known private hosts (defense in depth)
+            // Also catch numeric IPs like [::ffff:127.0.0.1] or 0x7f000001
+            if (System.Net.IPAddress.TryParse(host, out var ip))
+            {
+                // IPv4-mapped IPv6, loopback, link-local, private ranges
+                if (ip.IsIPv6SiteLocal || ip.IsIPv6LinkLocal) return true;
+                var bytes = ip.GetAddressBytes();
+                if (bytes.Length == 4)
+                {
+                    if (bytes[0] == 127) return true;                             // 127.0.0.0/8
+                    if (bytes[0] == 10) return true;                              // 10.0.0.0/8
+                    if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return true; // 172.16.0.0/12
+                    if (bytes[0] == 192 && bytes[1] == 168) return true;          // 192.168.0.0/16
+                    if (bytes[0] == 169 && bytes[1] == 254) return true;          // 169.254.0.0/16
+                    if (bytes[0] == 0) return true;                               // 0.0.0.0/8
+                }
+                else if (bytes.Length == 16)
+                {
+                    // IPv4-mapped IPv6: ::ffff:x.x.x.x — check the embedded IPv4 bytes
+                    if (ip.IsIPv4MappedToIPv6)
+                    {
+                        var v4 = bytes[12..];
+                        if (v4[0] == 127 || v4[0] == 10 || v4[0] == 0) return true;
+                        if (v4[0] == 172 && v4[1] >= 16 && v4[1] <= 31) return true;
+                        if (v4[0] == 192 && v4[1] == 168) return true;
+                        if (v4[0] == 169 && v4[1] == 254) return true;
+                    }
+                    // ::1 (loopback)
+                    if (System.Net.IPAddress.IsLoopback(ip)) return true;
+                }
+            }
+        }
+        catch
+        {
+            // Malformed URL — block it to be safe
+            return true;
+        }
+        return false;
+    }
+
     internal static LinkEmbedEngine? Instance { get; set; }
 
     private readonly ThemeEngine? _themeEngine;
@@ -235,7 +306,7 @@ internal class LinkEmbedEngine : IDisposable
             {
                 _r.SetBackground(card, newCardBg);
                 var embedTag = _r.GetTag(card) as string;
-                const string prefix = "uprooted-embed-";
+                const string prefix = "uprooted-link-embed:";
                 if (embedTag?.StartsWith(prefix) == true &&
                     _metadataCache.TryGetValue(embedTag.Substring(prefix.Length), out var cached) &&
                     cached?.Color != null)
@@ -249,6 +320,37 @@ internal class LinkEmbedEngine : IDisposable
                 }
             }
             catch { }
+        }
+    }
+
+    /// <summary>
+    /// Evict the oldest half of injected cards when the list is full.
+    /// Rebuilds the tag dictionary and disposes orphaned animated image timers.
+    /// </summary>
+    private void EvictOldCards()
+    {
+        // Collect URLs of cards being evicted so we can dispose their animated timers
+        var evictCount = _injectedCards.Count / 2;
+        for (int i = 0; i < evictCount; i++)
+        {
+            var tag = _r.GetTag(_injectedCards[i]) as string;
+            if (tag != null && tag.StartsWith("uprooted-link-embed:"))
+            {
+                var evictUrl = tag.Substring("uprooted-link-embed:".Length);
+                if (_animatedDisposables.TryGetValue(evictUrl, out var dispose))
+                {
+                    try { dispose(); } catch { }
+                    _animatedDisposables.Remove(evictUrl);
+                }
+            }
+        }
+
+        _injectedCards.RemoveRange(0, evictCount);
+        _injectedCardsByTag.Clear();
+        foreach (var c in _injectedCards)
+        {
+            var t = _r.GetTag(c) as string;
+            if (t != null) _injectedCardsByTag[t] = c;
         }
     }
 
@@ -270,14 +372,32 @@ internal class LinkEmbedEngine : IDisposable
         var t = _scanTimer;
         _scanTimer = null;
         t?.Dispose();
+
+        // Dispose all animated image timers
+        foreach (var (_, dispose) in _animatedDisposables)
+        {
+            try { dispose(); } catch { }
+        }
+        _animatedDisposables.Clear();
     }
 
     // ===== Timer callback =====
 
     private void OnScanTick(object? state)
     {
-        // Reentrancy guard (same pattern as SidebarInjector)
-        if (Interlocked.CompareExchange(ref _scanning, 1, 0) != 0) return;
+        // Reentrancy guard (same pattern as SidebarInjector).
+        // Timestamp-based staleness check: if the previous scan started >5s ago and the
+        // guard is still held, the UI thread is stuck. Release the guard to prevent deadlock.
+        // This replaces the previous Task.Delay fallback that created allocations every tick.
+        if (Interlocked.CompareExchange(ref _scanning, 1, 0) != 0)
+        {
+            var staleMs = Environment.TickCount64 - Interlocked.Read(ref _scanStartTick);
+            if (staleMs > 5000)
+                Interlocked.CompareExchange(ref _scanning, 0, 1);
+            return;
+        }
+        Interlocked.Exchange(ref _scanStartTick, Environment.TickCount64);
+
         var ev = WideEvent.BeginSampled("LinkEmbed", "scan_tick", _sampler);
         try
         {
@@ -306,12 +426,6 @@ internal class LinkEmbedEngine : IDisposable
                     ev.Dispose();
                     Interlocked.Exchange(ref _scanning, 0);
                 }
-            });
-
-            // Fallback release in case UI thread doesn't run
-            Task.Delay(ScanIntervalMs * 2).ContinueWith(_ =>
-            {
-                Interlocked.CompareExchange(ref _scanning, 0, 1);
             });
         }
         catch (Exception ex)
@@ -359,18 +473,32 @@ internal class LinkEmbedEngine : IDisposable
             if (!s_messageTextTypes.Contains(typeName)) continue;
 
             // Dedup via Tag on the control (CTextBlock extends Control, has Tag property)
+            // PropertyInfo is cached per type to avoid repeated reflection on every scan tick.
+            var nodeType = node.GetType();
             string? tag = null;
-            try { tag = node.GetType().GetProperty("Tag")?.GetValue(node) as string; }
+            try
+            {
+                if (!s_tagPropCache.TryGetValue(nodeType, out var tagProp))
+                {
+                    tagProp = nodeType.GetProperty("Tag");
+                    s_tagPropCache[nodeType] = tagProp;
+                }
+                tag = tagProp?.GetValue(node) as string;
+            }
             catch { }
             if (tag == "uprooted-embed-scanned") continue;
 
-            // Read Text property
+            // Read Text property (cached PropertyInfo per type)
             string? text = null;
             try
             {
-                text = node.GetType().GetProperty("Text",
-                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance)
-                    ?.GetValue(node) as string;
+                if (!s_textPropCache.TryGetValue(nodeType, out var textProp))
+                {
+                    textProp = nodeType.GetProperty("Text",
+                        System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Instance);
+                    s_textPropCache[nodeType] = textProp;
+                }
+                text = textProp?.GetValue(node) as string;
             }
             catch { }
             if (text == null) continue;
@@ -378,8 +506,12 @@ internal class LinkEmbedEngine : IDisposable
             var matches = UrlRegex.Matches(text);
             if (matches.Count == 0) continue;
 
-            // Tag as scanned
-            try { node.GetType().GetProperty("Tag")?.SetValue(node, "uprooted-embed-scanned"); }
+            // Tag as scanned (using cached PropertyInfo)
+            try
+            {
+                s_tagPropCache.TryGetValue(nodeType, out var cachedTagProp);
+                cachedTagProp?.SetValue(node, "uprooted-embed-scanned");
+            }
             catch { }
 
             foreach (Match m in matches)
@@ -403,6 +535,9 @@ internal class LinkEmbedEngine : IDisposable
 
     private void FetchAndInject(string url, object textBlock)
     {
+        // Throttle concurrent HTTP fetches to prevent ThreadPool starvation
+        if (!s_httpFetchSemaphore.Wait(HttpFetchSemaphoreTimeoutMs)) return;
+
         using var ev = WideEvent.Begin("LinkEmbed", "fetch_and_inject");
         ev.Set("url", url);
         try
@@ -411,6 +546,13 @@ internal class LinkEmbedEngine : IDisposable
             if (NativeEmbedDomainRegex.IsMatch(url))
             {
                 ev.Set("skipped", "native_embed_domain");
+                return;
+            }
+
+            // SSRF protection: block private/loopback/link-local IPs
+            if (IsPrivateUrl(url))
+            {
+                ev.Set("skipped", "private_ip");
                 return;
             }
 
@@ -542,6 +684,10 @@ internal class LinkEmbedEngine : IDisposable
         {
             ev.SetError(ex);
         }
+        finally
+        {
+            s_httpFetchSemaphore.Release();
+        }
     }
 
     /// <summary>
@@ -586,8 +732,9 @@ internal class LinkEmbedEngine : IDisposable
                 SetGridColumnSpan(card, colSpan);
 
                 _r.AddChild(grid, card);
-                if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
+                if (_injectedCards.Count >= MaxInjectedCards) EvictOldCards();
                 _injectedCards.Add(card);
+                _injectedCardsByTag[embedTag] = card;
             }
             catch (Exception ex)
             {
@@ -608,17 +755,8 @@ internal class LinkEmbedEngine : IDisposable
             {
                 var embedTag = "uprooted-link-embed:" + data.Url;
 
-                // Find the existing card in our injected list
-                object? card = null;
-                foreach (var c in _injectedCards)
-                {
-                    if (_r.GetTag(c) == embedTag)
-                    {
-                        card = c;
-                        break;
-                    }
-                }
-                if (card == null) return;
+                // O(1) lookup via tag dictionary
+                if (!_injectedCardsByTag.TryGetValue(embedTag, out var card)) return;
 
                 // Get the StackPanel (child of the Border card)
                 var content = _r.GetBorderChild(card);
@@ -893,17 +1031,8 @@ internal class LinkEmbedEngine : IDisposable
             {
                 var embedTag = "uprooted-link-embed:" + data.Url;
 
-                // Find the existing card
-                object? card = null;
-                foreach (var c in _injectedCards)
-                {
-                    if (_r.GetTag(c) == embedTag)
-                    {
-                        card = c;
-                        break;
-                    }
-                }
-                if (card == null) return;
+                // O(1) lookup via tag dictionary
+                if (!_injectedCardsByTag.TryGetValue(embedTag, out var card)) return;
 
                 // Get the StackPanel content
                 var content = _r.GetBorderChild(card);
@@ -973,26 +1102,34 @@ internal class LinkEmbedEngine : IDisposable
     /// <summary>
     /// Resolve relative image URLs against the page URL.
     /// Handles protocol-relative (//), root-relative (/path), and absolute URLs.
+    /// Rejects private/loopback targets (SSRF protection).
     /// </summary>
     private static string? ResolveImageUrl(string imageUrl, string pageUrl)
     {
+        string? resolved;
         if (imageUrl.StartsWith("http://") || imageUrl.StartsWith("https://"))
-            return imageUrl;
+            resolved = imageUrl;
+        else
+        {
+            try
+            {
+                var baseUri = new Uri(pageUrl);
+                if (imageUrl.StartsWith("//"))
+                    resolved = baseUri.Scheme + ":" + imageUrl;
+                else if (imageUrl.StartsWith("/"))
+                    resolved = baseUri.Scheme + "://" + baseUri.Host + imageUrl;
+                else
+                    resolved = new Uri(baseUri, imageUrl).ToString();
+            }
+            catch
+            {
+                return null;
+            }
+        }
 
-        try
-        {
-            var baseUri = new Uri(pageUrl);
-            if (imageUrl.StartsWith("//"))
-                return baseUri.Scheme + ":" + imageUrl;
-            if (imageUrl.StartsWith("/"))
-                return baseUri.Scheme + "://" + baseUri.Host + imageUrl;
-            // Relative path
-            return new Uri(baseUri, imageUrl).ToString();
-        }
-        catch
-        {
-            return null;
-        }
+        // SSRF guard on resolved image URL
+        if (resolved != null && IsPrivateUrl(resolved)) return null;
+        return resolved;
     }
 
     // ===== Reflection-based HTTP =====
@@ -1171,12 +1308,13 @@ internal class LinkEmbedEngine : IDisposable
         if (s_httpClient == null) return null;
 
         object? response = null;
+        object? request = null;
         try
         {
             // Use SendAsync as primary path — always survives trimming
             if (s_sendAsync != null && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
-                var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
+                request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
                 var sendParams = s_sendAsync.GetParameters();
                 object?[] args;
                 if (sendParams.Length == 1)
@@ -1221,7 +1359,8 @@ internal class LinkEmbedEngine : IDisposable
             }
             catch { } // StatusCode reflection failed — proceed anyway
 
-            // Check Content-Type — reject non-image responses (catches Cloudflare 200-with-HTML-challenge)
+            // Check Content-Type and Content-Length before reading the body.
+            // Rejects non-image responses (Cloudflare challenges) and oversized images (DoS protection).
             try
             {
                 var content = response.GetType().GetProperty("Content")?.GetValue(response);
@@ -1242,12 +1381,26 @@ internal class LinkEmbedEngine : IDisposable
                             }
                         }
                         // Content-Type absent — proceed (some CDNs omit it)
+
+                        // Pre-flight Content-Length check: reject before downloading
+                        try
+                        {
+                            var clProp = headers.GetType().GetProperty("ContentLength");
+                            var clValue = clProp?.GetValue(headers);
+                            if (clValue is long cl && cl > MaxImageBytes)
+                            {
+                                Logger.Log("LinkEmbed", $"HTTP GET bytes: Content-Length {cl} exceeds {MaxImageBytes} for {url}");
+                                return null;
+                            }
+                        }
+                        catch { } // Content-Length not available — proceed with capped read
                     }
                 }
             }
             catch { } // Content-Type check failed — proceed anyway
 
-            // Read response body as bytes
+            // Read response body as bytes with a hard cap at MaxImageBytes + 1.
+            // Prevents OOM from malicious servers that lie about Content-Length or omit it.
             var responseContent = response.GetType().GetProperty("Content")?.GetValue(response);
             if (responseContent == null) return null;
 
@@ -1260,7 +1413,21 @@ internal class LinkEmbedEngine : IDisposable
             if (stream == null) return null;
 
             using var ms = new System.IO.MemoryStream();
-            using (stream) { stream.CopyTo(ms); }
+            using (stream)
+            {
+                var buf = new byte[8192];
+                int totalRead = 0, bytesRead;
+                while ((bytesRead = stream.Read(buf, 0, buf.Length)) > 0)
+                {
+                    totalRead += bytesRead;
+                    if (totalRead > MaxImageBytes)
+                    {
+                        Logger.Log("LinkEmbed", $"HTTP GET bytes: stream exceeded {MaxImageBytes} bytes for {url}");
+                        return null;
+                    }
+                    ms.Write(buf, 0, bytesRead);
+                }
+            }
             return ms.ToArray();
         }
         catch (Exception ex)
@@ -1275,6 +1442,7 @@ internal class LinkEmbedEngine : IDisposable
         }
         finally
         {
+            (request as IDisposable)?.Dispose();
             (response as IDisposable)?.Dispose();
         }
     }
@@ -1292,12 +1460,13 @@ internal class LinkEmbedEngine : IDisposable
         if (s_httpClient == null) return (null, null);
 
         object? response = null;
+        object? request = null;
         try
         {
             if ((s_sendAsync != null || s_sendAsyncHeadersRead != null) && s_httpRequestMessageType != null && s_httpMethodGet != null)
             {
                 if (Verbose) Logger.Log("LinkEmbed", $"HGWCT[1] creating request for {url}");
-                var request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
+                request = Activator.CreateInstance(s_httpRequestMessageType, s_httpMethodGet, new Uri(url));
 
                 // Set per-request User-Agent if provided (overrides default header)
                 if (userAgent != null && request != null)
@@ -1437,6 +1606,7 @@ internal class LinkEmbedEngine : IDisposable
         }
         finally
         {
+            (request as IDisposable)?.Dispose();
             (response as IDisposable)?.Dispose();
         }
     }
@@ -1931,15 +2101,27 @@ internal class LinkEmbedEngine : IDisposable
     }
 
     /// <summary>
-    /// Decode JSON string escapes: \", \\, \/, \uXXXX
+    /// Decode JSON string escapes: \\, \", \/, \n, \r, \t, \b, \f, \uXXXX.
+    /// Handles escaped backslashes first via placeholder to prevent double-decoding
+    /// (e.g., JSON \\n must become literal \n, not a newline character).
     /// </summary>
     private static string DecodeJsonString(string raw)
     {
-        var decoded = raw
-            .Replace("\\\"", "\"")
-            .Replace("\\/", "/");
+        // Phase 1: Replace \\ with a placeholder that can't appear in regex-captured content.
+        // This prevents \\n from being decoded as newline (it should be literal \n).
+        var decoded = raw.Replace("\\\\", "\x00");
 
-        // Decode \uXXXX sequences without Regex.Replace + lambda (trimmed in Root)
+        // Phase 2: Decode single-char escape sequences
+        decoded = decoded
+            .Replace("\\\"", "\"")
+            .Replace("\\/", "/")
+            .Replace("\\n", "\n")
+            .Replace("\\r", "\r")
+            .Replace("\\t", "\t")
+            .Replace("\\b", "\b")
+            .Replace("\\f", "\f");
+
+        // Phase 3: Decode \uXXXX sequences without Regex.Replace + lambda (trimmed in Root)
         int idx = 0;
         while ((idx = decoded.IndexOf("\\u", idx)) >= 0 && idx + 5 < decoded.Length)
         {
@@ -1954,7 +2136,8 @@ internal class LinkEmbedEngine : IDisposable
             }
         }
 
-        return decoded.Replace("\\\\", "\\");
+        // Phase 4: Restore placeholder to literal backslash
+        return decoded.Replace("\x00", "\\");
     }
 
     // ===== Component 4: Embed Card Builder =====
@@ -2384,8 +2567,9 @@ internal class LinkEmbedEngine : IDisposable
                 SetGridColumnSpan(card, colSpan);
 
                 _r.AddChild(grid, card);
-                if (_injectedCards.Count >= MaxInjectedCards) _injectedCards.RemoveRange(0, _injectedCards.Count / 2);
+                if (_injectedCards.Count >= MaxInjectedCards) EvictOldCards();
                 _injectedCards.Add(card);
+                _injectedCardsByTag[embedTag] = card;
             }
             catch (Exception ex)
             {
