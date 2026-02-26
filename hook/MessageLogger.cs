@@ -749,15 +749,15 @@ internal class MessageLogger : IDisposable
 
                 string authorName = "Unknown";
                 string authorId = "";
-                var tp2 = GetTypeProps(message);
-                if (tp2 != null)
+                var tp = GetTypeProps(message);
+                if (tp != null)
                 {
-                    var target = GetMessageTarget(message, tp2);
+                    var target = GetMessageTarget(message, tp);
                     if (target != null)
                     {
-                        authorName = ReadAuthorName(target, tp2) ?? "Unknown";
-                        if (tp2.AuthorId != null)
-                            authorId = tp2.AuthorId.GetValue(target)?.ToString() ?? "";
+                        authorName = ReadAuthorName(target, tp) ?? "Unknown";
+                        if (tp.AuthorId != null)
+                            authorId = tp.AuthorId.GetValue(target)?.ToString() ?? "";
                     }
                 }
 
@@ -1509,13 +1509,13 @@ internal class MessageLogger : IDisposable
             var contentStack = _r.CreateStackPanel(vertical: true, spacing: 2);
             if (contentStack != null)
             {
-                // Header line: "AuthorName · Deleted"
+                // Header line: "AuthorName · Deleted" or just "Deleted message"
                 var authorName = !string.IsNullOrEmpty(cached.AuthorName) && cached.AuthorName != "Unknown"
                     ? cached.AuthorName : null;
-                if (authorName != null)
+                var headerStack = _r.CreateStackPanel(vertical: false, spacing: 0);
+                if (headerStack != null)
                 {
-                    var headerStack = _r.CreateStackPanel(vertical: false, spacing: 0);
-                    if (headerStack != null)
+                    if (authorName != null)
                     {
                         var authorText = _r.CreateTextBlock(authorName, 12, "#FFAAAAAA");
                         if (authorText != null)
@@ -1525,8 +1525,13 @@ internal class MessageLogger : IDisposable
                         }
                         var label = _r.CreateTextBlock(" \u00B7 Deleted", 11, "#88FF6666");
                         if (label != null) _r.AddChild(headerStack, label);
-                        _r.AddChild(contentStack, headerStack);
                     }
+                    else
+                    {
+                        var label = _r.CreateTextBlock("Deleted message", 11, "#88FF6666");
+                        if (label != null) _r.AddChild(headerStack, label);
+                    }
+                    _r.AddChild(contentStack, headerStack);
                 }
 
                 _r.AddChild(contentStack, body);
@@ -1679,6 +1684,8 @@ internal class MessageLogger : IDisposable
         if (controlsAsm == null) return;
         _contextMenuType = controlsAsm.GetType("Avalonia.Controls.ContextMenu");
         _menuItemType = controlsAsm.GetType("Avalonia.Controls.MenuItem");
+        if (_contextMenuType == null || _menuItemType == null)
+            Logger.Log(Tag, $"ContextMenu types: menu={_contextMenuType != null}, item={_menuItemType != null}");
     }
 
     // ===== Grid Helpers =====
@@ -1963,7 +1970,7 @@ internal class MessageLogger : IDisposable
                 if (dtProp?.GetValue(v) is DateTime dt2) return dt2;
             }
         }
-        catch { }
+        catch (Exception ex) { Logger.Log(Tag, $"ReadTimestamp error: {ex.Message}"); }
         return DateTime.MinValue;
     }
 
