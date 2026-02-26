@@ -9,23 +9,44 @@ namespace Uprooted;
 /// Scans the visual tree every 500ms for Image controls, classifies them via the
 /// Google Vision SAFE_SEARCH_DETECTION API in C#, and injects a native Avalonia
 /// overlay to block NSFW content. No DotNetBrowser dependency.
+///
+/// ILSpy-informed improvements (v0.5.2-dev2):
+///   - Timer management: stopped when disabled, restarted on config change
+///   - API key: Uri.EscapeDataString instead of misapplied JSON escaping
+///   - Error backoff: exponential cooldown after consecutive API failures
+///   - Cancellation: CTS for clean disposal of in-flight API calls
+///   - WideEvent + TailSampler: sampled logging for scan ticks
+///   - Max dimension check: skips images above 2048px
+///   - Cached VisualTreeWalker: avoid allocation per scan tick
+///
+/// Root uses RootImageLoader (TemplatedControl wrapping PART_Image). The filter
+/// finds the inner Image control; the overlay injects into the template panel
+/// at the same level, which is correct since both Image and Placeholder are
+/// hidden when an image is loaded.
 /// </summary>
 internal class NsfwFilter : IDisposable
 {
     private const int ScanIntervalMs = 500;
     private const int MinImagePixels = 100;       // skip avatars below 100×100
+    private const int MaxImagePixels = 2048;      // skip enormous bitmaps (unlikely message content)
     private const int MaxConcurrentApiCalls = 3;
+    private const int MaxSeenCacheSize = 2000;
+    private const int MaxConsecutiveErrors = 5;
+    private const int ErrorCooldownMs = 30_000;   // 30s pause after MaxConsecutiveErrors
 
     private readonly AvaloniaReflection _r;
     private readonly UprootedSettings _settings;
     private readonly object _mainWindow;
+    private readonly VisualTreeWalker _walker;
+    private readonly TailSampler _scanSampler = new(heartbeatTicks: 120, slowThresholdMs: 50);
 
     private readonly SemaphoreSlim _apiSemaphore = new(MaxConcurrentApiCalls, MaxConcurrentApiCalls);
+    private readonly CancellationTokenSource _cts = new();
 
-    // imageId (object identity) → bitmapId — deduplicates per-bitmap API calls
+    // imageId (object identity) → bitmapId: deduplicates per-bitmap API calls
     private readonly Dictionary<int, int> _seenImages = new();
 
-    // overlay control → (parent panel, hidden image) — for reveal-all cleanup
+    // overlay control → (parent panel, hidden image): for reveal-all cleanup
     private readonly Dictionary<object, (object panel, object imageControl)> _overlayControls = new();
 
     private readonly object _lock = new();
@@ -33,20 +54,42 @@ internal class NsfwFilter : IDisposable
     private int _scanPosted;  // Interlocked: 1 if a scan is already queued on the UI thread
     private bool _disposed;
 
+    // Error backoff state (accessed from multiple ThreadPool threads)
+    private int _consecutiveErrors;
+    private long _errorCooldownUntil;
+
     internal NsfwFilter(AvaloniaReflection r, UprootedSettings settings, object mainWindow)
     {
         _r = r;
         _settings = settings;
         _mainWindow = mainWindow;
+        _walker = new VisualTreeWalker(r);
     }
 
     /// <summary>
-    /// Start the scan timer. Call from a background thread.
+    /// Start the scan timer if enabled with a valid API key.
+    /// Call from a background thread.
     /// </summary>
     internal void Initialize()
     {
+        if (_settings.NsfwFilterEnabled && !string.IsNullOrEmpty(_settings.NsfwApiKey))
+            StartTimer();
+        Logger.Log("NsfwFilter", "Initialized");
+    }
+
+    private void StartTimer()
+    {
+        if (_scanTimer != null || _disposed) return;
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
         Logger.Log("NsfwFilter", "Scan timer started (500ms interval)");
+    }
+
+    private void StopTimer()
+    {
+        var timer = _scanTimer;
+        if (timer == null) return;
+        _scanTimer = null;
+        timer.Dispose();
     }
 
     private void OnScanTick(object? state)
@@ -54,7 +97,12 @@ internal class NsfwFilter : IDisposable
         if (_disposed) return;
         if (!_settings.NsfwFilterEnabled || string.IsNullOrEmpty(_settings.NsfwApiKey)) return;
 
-        // Only queue one scan at a time — avoids UI thread backlog if scan is slow
+        // Error cooldown: skip scans until cooldown expires
+        if (_consecutiveErrors >= MaxConsecutiveErrors
+            && Environment.TickCount64 < Interlocked.Read(ref _errorCooldownUntil))
+            return;
+
+        // Only queue one scan at a time: avoids UI thread backlog if scan is slow
         if (Interlocked.CompareExchange(ref _scanPosted, 1, 0) != 0) return;
 
         try
@@ -78,12 +126,15 @@ internal class NsfwFilter : IDisposable
     /// </summary>
     private void ScanForImages()
     {
+        using var ev = WideEvent.BeginSampled("NsfwFilter", "scan_tick", _scanSampler);
         try
         {
             if (_r.ImageType == null) return;
-            var walker = new VisualTreeWalker(_r);
 
-            foreach (var node in walker.DescendantsDepthFirst(_mainWindow))
+            int imagesChecked = 0;
+            int queued = 0;
+
+            foreach (var node in _walker.DescendantsDepthFirst(_mainWindow))
             {
                 if (node.GetType() != _r.ImageType) continue;
 
@@ -95,8 +146,10 @@ internal class NsfwFilter : IDisposable
                 var source = node.GetType().GetProperty("Source")?.GetValue(node);
                 if (source == null) continue;
 
-                // Skip tiny images (avatars, icons)
-                if (!IsLargeEnough(source)) continue;
+                // Skip images outside min/max pixel bounds
+                if (!MeetsSize(source)) continue;
+
+                imagesChecked++;
 
                 int imageId  = RuntimeHelpers.GetHashCode(node);
                 int bitmapId = RuntimeHelpers.GetHashCode(source);
@@ -104,13 +157,12 @@ internal class NsfwFilter : IDisposable
                 // Skip if we already processed this exact bitmap on this control
                 lock (_lock)
                 {
-                    // Prevent unbounded growth — image controls cycle in/out of the visual tree
-                    // during scroll virtualization, leaving stale entries. Reset when the dict
-                    // exceeds a reasonable bound so we eventually re-check recycled controls.
-                    if (_seenImages.Count > 2000)
+                    // Prevent unbounded growth: image controls cycle in/out of the visual
+                    // tree during scroll virtualization, leaving stale entries.
+                    if (_seenImages.Count > MaxSeenCacheSize)
                     {
                         _seenImages.Clear();
-                        Logger.Log("NsfwFilter", "Cleared _seenImages cache (size limit reached)");
+                        ev.Set("cache_cleared", "true");
                     }
 
                     if (_seenImages.TryGetValue(imageId, out int lastBitmapId) && lastBitmapId == bitmapId)
@@ -123,20 +175,25 @@ internal class NsfwFilter : IDisposable
 
                 var capturedNode   = node;
                 var capturedSource = source;
+                queued++;
                 ThreadPool.QueueUserWorkItem(_ => ClassifyAndAct(capturedNode, capturedSource));
             }
+
+            ev.Set("checked", imagesChecked.ToString());
+            ev.Set("queued", queued.ToString());
+            if (queued > 0) ev.MarkNotable();
         }
         catch (Exception ex)
         {
-            Logger.Log("NsfwFilter", $"ScanForImages error: {ex.Message}");
+            ev.SetError(ex.Message);
         }
     }
 
     /// <summary>
-    /// Returns true if the bitmap's PixelSize is at least MinImagePixels × MinImagePixels.
-    /// Defaults to true if PixelSize cannot be read (conservative — classify unknown sizes).
+    /// Returns true if the bitmap's PixelSize is within [MinImagePixels, MaxImagePixels] on both axes.
+    /// Returns true (conservative: classify) if PixelSize cannot be read.
     /// </summary>
-    private static bool IsLargeEnough(object bitmap)
+    private static bool MeetsSize(object bitmap)
     {
         try
         {
@@ -144,7 +201,8 @@ internal class NsfwFilter : IDisposable
             if (psVal == null) return true;
             var w = psVal.GetType().GetProperty("Width")?.GetValue(psVal)  as int? ?? 0;
             var h = psVal.GetType().GetProperty("Height")?.GetValue(psVal) as int? ?? 0;
-            return w >= MinImagePixels && h >= MinImagePixels;
+            return w >= MinImagePixels && h >= MinImagePixels
+                && w <= MaxImagePixels && h <= MaxImagePixels;
         }
         catch { return true; }
     }
@@ -154,15 +212,24 @@ internal class NsfwFilter : IDisposable
     /// </summary>
     private void ClassifyAndAct(object imageControl, object bitmap)
     {
-        _apiSemaphore.Wait();
+        bool acquired = false;
+        try
+        {
+            acquired = _apiSemaphore.Wait(30_000, _cts.Token);
+            if (!acquired)
+            {
+                ResetForRetry(imageControl);
+                return;
+            }
+        }
+        catch (OperationCanceledException) { return; }
+
         try
         {
             byte[]? png = GetBitmapBytes(bitmap);
             if (png == null || png.Length == 0)
             {
-                // Encoding failed — untag so it can be retried
-                _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
-                lock (_lock) { _seenImages.Remove(RuntimeHelpers.GetHashCode(imageControl)); }
+                ResetForRetry(imageControl);
                 return;
             }
 
@@ -171,32 +238,57 @@ internal class NsfwFilter : IDisposable
 
             if (response == null)
             {
-                // API error — untag and remove from seen so it's retried next scan
-                _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
-                lock (_lock) { _seenImages.Remove(RuntimeHelpers.GetHashCode(imageControl)); }
+                // Track consecutive errors for backoff
+                var count = Interlocked.Increment(ref _consecutiveErrors);
+                if (count >= MaxConsecutiveErrors)
+                {
+                    Interlocked.Exchange(ref _errorCooldownUntil,
+                        Environment.TickCount64 + ErrorCooldownMs);
+                    Logger.Log("NsfwFilter",
+                        $"API error backoff: {count} consecutive errors, pausing {ErrorCooldownMs / 1000}s");
+                }
+                ResetForRetry(imageControl);
                 return;
             }
 
+            // Successful call: reset error counter
+            Interlocked.Exchange(ref _consecutiveErrors, 0);
+
             bool nsfw = IsNsfw(response, _settings.NsfwThreshold);
-            Logger.Log("NsfwFilter", $"Classified image (id={RuntimeHelpers.GetHashCode(imageControl)}): nsfw={nsfw}");
+
+            using var ev = WideEvent.Begin("NsfwFilter", "classify");
+            ev.Set("image_id", RuntimeHelpers.GetHashCode(imageControl).ToString());
+            ev.Set("nsfw", nsfw.ToString());
 
             _r.RunOnUIThread(() =>
             {
+                if (_disposed) return;
                 if (nsfw)
                     InjectOverlay(imageControl);
                 else
                     _r.SetTag(imageControl, "uprooted-nsfw-clean");
             });
         }
+        catch (OperationCanceledException) { }
         catch (Exception ex)
         {
             Logger.Log("NsfwFilter", $"ClassifyAndAct error: {ex.Message}");
-            _r.RunOnUIThread(() => _r.SetTag(imageControl, ""));
+            ResetForRetry(imageControl);
         }
         finally
         {
-            _apiSemaphore.Release();
+            if (acquired) _apiSemaphore.Release();
         }
+    }
+
+    /// <summary>
+    /// Reset tag and seen state so the image can be retried on the next scan.
+    /// </summary>
+    private void ResetForRetry(object imageControl)
+    {
+        try { _r.RunOnUIThread(() => _r.SetTag(imageControl, "")); }
+        catch { }
+        lock (_lock) { _seenImages.Remove(RuntimeHelpers.GetHashCode(imageControl)); }
     }
 
     /// <summary>
@@ -225,7 +317,8 @@ internal class NsfwFilter : IDisposable
 
     /// <summary>
     /// Build the Google Vision API SAFE_SEARCH_DETECTION request JSON.
-    /// Manual construction — no System.Text.Json.
+    /// Manual construction: no System.Text.Json allowed in profiler context.
+    /// Base64 alphabet (A-Z, a-z, 0-9, +, /, =) is JSON-safe, no escaping needed.
     /// </summary>
     private static string BuildVisionRequest(byte[] png)
     {
@@ -240,11 +333,13 @@ internal class NsfwFilter : IDisposable
     {
         try
         {
-            // Strip quotes from EscapeJsonString output to get the raw key
-            var rawKey = EscapeJsonString(_settings.NsfwApiKey).Trim('"');
-            var url    = $"https://vision.googleapis.com/v1/images:annotate?key={rawKey}";
+            var apiKey = _settings.NsfwApiKey?.Trim();
+            if (string.IsNullOrEmpty(apiKey)) return null;
 
-            #pragma warning disable SYSLIB0014 // WebRequest is obsolete — reflection-based HttpClient is overkill for this single call
+            // URI-encode the key for safe query parameter use
+            var url = $"https://vision.googleapis.com/v1/images:annotate?key={Uri.EscapeDataString(apiKey)}";
+
+            #pragma warning disable SYSLIB0014 // WebRequest is obsolete but reflection-based HttpClient is overkill here
             var req = (HttpWebRequest)WebRequest.Create(url);
             #pragma warning restore SYSLIB0014
             req.Method      = "POST";
@@ -329,10 +424,10 @@ internal class NsfwFilter : IDisposable
     /// </summary>
     private void InjectOverlay(object imageControl)
     {
-        // Walk up max 5 levels to find a Panel ancestor we can inject into
+        // Walk up max 8 levels to find a Panel ancestor we can inject into
         object? panel   = null;
         var     current = _r.GetParent(imageControl);
-        for (int i = 0; i < 5 && current != null; i++)
+        for (int i = 0; i < 8 && current != null; i++)
         {
             if (_r.IsPanel(current))
             {
@@ -394,7 +489,6 @@ internal class NsfwFilter : IDisposable
             _r.SetTag(capturedImage, "uprooted-nsfw-revealed");
             _r.RemoveChild(capturedPanel, capturedOverlay);
             lock (_lock) { _overlayControls.Remove(capturedOverlay); }
-            Logger.Log("NsfwFilter", "NSFW overlay dismissed by user click");
         });
 
         lock (_lock)
@@ -407,13 +501,22 @@ internal class NsfwFilter : IDisposable
 
     /// <summary>
     /// Called by ContentPages when NSFW settings change.
-    /// If the filter has been disabled, all current overlays are removed immediately.
-    /// If re-enabled, the scan timer auto-resumes on the next tick.
+    /// If the filter has been disabled, all current overlays are removed and the timer stops.
+    /// If re-enabled with a valid API key, the timer restarts and errors are reset.
     /// </summary>
     internal void UpdateConfig()
     {
-        if (!_settings.NsfwFilterEnabled)
+        if (_settings.NsfwFilterEnabled && !string.IsNullOrEmpty(_settings.NsfwApiKey))
+        {
+            // Re-enable: reset error backoff (user may have changed API key)
+            Interlocked.Exchange(ref _consecutiveErrors, 0);
+            StartTimer();
+        }
+        else
+        {
+            StopTimer();
             _r.RunOnUIThread(RevealAllBlocked);
+        }
     }
 
     /// <summary>
@@ -447,38 +550,16 @@ internal class NsfwFilter : IDisposable
             }
         }
 
-        Logger.Log("NsfwFilter", $"Revealed {toReveal.Count} blocked image(s)");
-    }
-
-    /// <summary>
-    /// Escape a string for inclusion in a JSON string literal.
-    /// No System.Text.Json allowed in profiler context.
-    /// </summary>
-    private static string EscapeJsonString(string s)
-    {
-        if (string.IsNullOrEmpty(s)) return "\"\"";
-        var sb = new StringBuilder("\"", s.Length + 2);
-        foreach (var c in s)
-        {
-            switch (c)
-            {
-                case '"':  sb.Append("\\\""); break;
-                case '\\': sb.Append("\\\\"); break;
-                case '\n': sb.Append("\\n");  break;
-                case '\r': sb.Append("\\r");  break;
-                case '\t': sb.Append("\\t");  break;
-                default:   sb.Append(c);      break;
-            }
-        }
-        sb.Append('"');
-        return sb.ToString();
+        if (toReveal.Count > 0)
+            Logger.Log("NsfwFilter", $"Revealed {toReveal.Count} blocked image(s)");
     }
 
     public void Dispose()
     {
         _disposed = true;
-        _scanTimer?.Dispose();
-        _scanTimer = null;
+        _cts.Cancel();
+        StopTimer();
         _apiSemaphore.Dispose();
+        _cts.Dispose();
     }
 }
