@@ -23,9 +23,6 @@ Current focus areas (in order):
 ### Bugfixes
 
 
-- [ ] **MessageLogger card positioning** — `FindMessageGridInContainer` returns null. Container structure may have changed; needs investigation.
-  - Files: `hook/MessageLogger.cs`
-
 - [ ] **ProfileBadgeInjector false-positive refinement** — `IsProfilePopup` heuristic may match non-profile popups. Needs tree dump log analysis.
   - Files: `hook/ProfileBadgeInjector.cs`
 
@@ -76,7 +73,7 @@ Current focus areas (in order):
 - [ ] **NsfwFilter production validation** — Phase 4.5g Avalonia-native redesign deployed. Verify image classification, blur, overlay + click-to-reveal.
   - Files: `hook/NsfwFilter.cs`
 
-- [ ] **Translate plugin validation** — DeepL-powered translation deployed. Verify language detection, translation quality, config popup.
+- [ ] **Translate plugin validation** — Google Translate + DeepL translation deployed. Verify language detection, translation quality, config popup.
   - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
 
 - [ ] **Presence Beacon validation** — Uprooted user detection via gRPC metadata deployed. Verify detection, badge display.
@@ -158,6 +155,8 @@ Items not yet committed to but worth tracking.
 
 Move completed items here with the date.
 
+- [x] **MessageLogger card positioning fix** (2026-02-26) — `FindMessageGridInContainer` null-return fixed: removed `_messageCache.ContainsKey` filter that excluded uncached messages. Visual independence + correct card injection.
+  - File: `hook/MessageLogger.cs`
 - [x] **Rootcord: 3-col grid layout + GridSplitter fix** (2026-02-24) — Rebuilt as 3-column layout matching Root's native CommunityView. Set ResizeDirection=Columns, default 280px, Min/Max 107/450.
   - File: `hook/RootcordEngine.cs`
 - [x] **Rootcord: user card + button cluster validated** (2026-02-24) — Profile card width tracks user bar, 4-button cluster working.
@@ -192,7 +191,7 @@ Move completed items here with the date.
 - [x] **Version copy intercept race condition fixed** (2026-02-21) — Root's async `SetTextAsync` no longer races with our clipboard write.
 - [x] **Native theme card settings button** (2026-02-21) — Gear button on "Native" preset card opens Root's native Change Theme page via ViewModel-driven ListBox.SelectedItem binding. SelectRootTab helper for programmatic Root settings navigation.
 - [x] **Structured logging overhaul** (2026-02-21) — WideEvent + TailSampler infrastructure, ~1200 Logger.Log calls migrated to ~100 wide events, 4 scan engines tail-sampled, LogConsole dev terminal.
-- [x] **TranslateEngine shipped** (2026-02-21) — DeepL-powered message translation with language picker, API key config, context menu integration.
+- [x] **TranslateEngine shipped** (2026-02-21) — Google Translate + DeepL message translation with language picker, API key config, context menu integration.
 - [x] **UprootedPresenceBeacon shipped** (2026-02-21) — Uprooted user detection via gRPC metadata injection.
 - [x] **ReconLogger shipped** (2026-02-21) — Visual tree + style property diagnostic dumper for development.
 - [x] **Settings UI overhaul** (2026-02-20) — DPI borders, vector icons, cycling pill, radio indicators, toggle thumb.

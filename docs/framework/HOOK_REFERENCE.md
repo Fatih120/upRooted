@@ -1,6 +1,6 @@
 ﻿# Hook Reference
 
-> **What this is:** Implementation-level reference for all 31 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
+> **What this is:** Implementation-level reference for all 40 C# hook classes — startup phases, sidebar injection, content pages, theme engine, settings, and every feature engine.
 > **Read when:** Modifying or extending any C# hook feature; understanding startup sequence detail; debugging hook behavior.
 > **Skip if:** You need the architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md). You need Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md).
 > **Does NOT cover:** Architecture overview or critical rules → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection specifics → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | TypeScript layer → [TYPESCRIPT_REFERENCE.md](TYPESCRIPT_REFERENCE.md)
@@ -48,40 +48,49 @@ discovers every Avalonia type, property, and method through runtime reflection, 
 constructs and manipulates the native Avalonia visual tree to add settings pages,
 sidebar navigation, theme overrides, and more.
 
-The hook layer consists of 31 source files in the `hook/` directory:
+The hook layer consists of 40 source files in the `hook/` directory:
 
 | File | Lines | Purpose |
 |------|------:|---------|
-| `Entry.cs` | 37 | `[ModuleInitializer]` profiler injection entry point |
-| `NativeEntry.cs` | 66 | Native `hostfxr` entry point for DLL proxy injection |
-| `StartupHook.cs` | 637 | Multi-phase startup orchestrator (Phase 0-5), version migration |
-| `AvaloniaReflection.cs` | ~3320 | Reflection cache for ~80 Avalonia types, ~55 members |
+| `Entry.cs` | 38 | `[ModuleInitializer]` profiler injection entry point |
+| `NativeEntry.cs` | 67 | Native `hostfxr` entry point for DLL proxy injection |
+| `StartupHook.cs` | 738 | Multi-phase startup orchestrator (Phase 0-5), version migration |
+| `AvaloniaReflection.cs` | 3487 | Reflection cache for ~80 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal, settings layout discovery |
-| `SidebarInjector.cs` | ~2034 | Event + timer-based sidebar injection and content management |
-| `ContentPages.cs` | ~4718 | Page builders for Uprooted/Plugins/Themes settings |
-| `ThemeEngine.cs` | ~2624 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, in-place switching, bind-once walker, WeakRef live preview, custom ping color |
-| `ColorUtils.cs` | ~414 | HSL/HSV/RGB/OKLCH conversion and manipulation |
-| `ColorPickerPopup.cs` | 533 | HSV color picker overlay (Discord-style) |
-| `HtmlPatchVerifier.cs` | 442 | Self-healing HTML patch system with FileSystemWatcher |
-| `DotNetBrowserReflection.cs` | 1933 | Reflection cache for DotNetBrowser types, IBrowser discovery |
+| `SidebarInjector.cs` | 2048 | Event + timer-based sidebar injection and content management |
+| `ContentPages.cs` | 5562 | Page builders for Uprooted/Plugins/Themes settings + Dev Console |
+| `ThemeEngine.cs` | 3080 | Resource-first theme engine v2: ThemeDictionaries override (Root's 32 keys), OKLCH palette generation, in-place switching, bind-once walker, WeakRef live preview, custom ping color |
+| `ColorUtils.cs` | 414 | HSL/HSV/RGB/OKLCH conversion and manipulation |
+| `ColorPickerPopup.cs` | 536 | HSV color picker overlay (Discord-style) |
+| `HtmlPatchVerifier.cs` | 460 | Self-healing HTML patch system with FileSystemWatcher |
+| `DotNetBrowserReflection.cs` | 1926 | Reflection cache for DotNetBrowser types, IBrowser discovery |
 | `BrowserDiscovery.cs` | 496 | Phase 4.5 diagnostic scanner (visual tree + assembly dump) |
 | `ClearUrlsEngine.cs` | 486 | Strips tracking params (utm_*, fbclid, gclid, etc.) from URLs in compose editor on Enter. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
-| `LinkEmbedEngine.cs` | 2493 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection) |
+| `LinkEmbedEngine.cs` | 2677 | Avalonia-native link embed engine (OG/oEmbed fetch, visual tree injection, animated images, video embeds) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder and timer-based playback via SkiaSharp SKCodec reflection. Frame extraction, disposal method handling, per-frame delay timers |
-| `MessageLogger.cs` | ~1707 | Message logger plugin: per-item async deletion pollers (`HasBeenDeleted` probe, 300ms/3s, epoch-based channel switch cancellation), event-driven edit detection (`HandleReplaced`, `_addedViaEvent` + 5s grace period), Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
-| `MessageStore.cs` | 232 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
-| `AutoUpdater.cs` | 1039 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
-| `ProfileBadgeInjector.cs` | 1208 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. Dev channel only. |
-| `SilentTypingEngine.cs` | ~90 | Blocks `SetTypingIndicator` gRPC calls via .NET `DiagnosticListener` interception. Subscribes to HTTP diagnostic events, intercepts `HttpRequestOut.Start`, redirects matching requests to `localhost:0`. Phase 4.5f, 12s startup delay. Original DiagnosticListener approach by Kurumi Nanase. |
-| `NsfwFilter.cs` | 473 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
-| `RootcordEngine.cs` | ~4945 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `MessageLogger.cs` | 2238 | Message logger plugin: per-item async deletion pollers, event-driven edit detection, Discord-style red deleted-message cards + amber edit indicator cards, tag-based dedup, insertion-order tracking |
+| `MessageStore.cs` | 282 | Flat-file persistence for message log data. Pipe-delimited format with URI-encoded fields, append-only writes via buffered flush timer, startup truncation for retention limits |
+| `AuditLogEngine.cs` | 680 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
+| `AutoUpdater.cs` | 1096 | In-process auto-updater: checks GitHub releases API (stable/dev channel), downloads encrypted `.uprpkg`, multi-layer XOR decryption, staging + verify + overwrite in-place. HTTP via reflection. |
 | `DesktopNotification.cs` | 86 | OS-level toast notifications (PowerShell WinRT on Windows, notify-send on Linux); fires on background auto-update |
-| `AuditLogEngine.cs` | ~680 | Audit log viewer: intercepts CommunityLogGrpcService/List HTTP responses, decodes gRPC-web frames + protobuf fields, exposes parsed entries via OnEntry event |
-| `UprootedSettings.cs` | 268 | INI-based settings persistence |
-| `Logger.cs` | ~170 | Thread-safe file logging + wide event emission + OnLine callback |
-| `WideEvent.cs` | ~150 | Structured wide event builder (IDisposable, key=value fields, dur_ms, parent-child linking, tail sampling) |
-| `TailSampler.cs` | ~72 | Tail sampling for high-frequency scan ticks (error/slow/notable/heartbeat emission rules) |
-| `LogConsole.cs` | ~200 | Dev-only live log terminal via named pipe (`\\.\pipe\uprooted-log-console`), spawns PowerShell/bash console window, backfill + live stream |
+| `ProfileBadgeInjector.cs` | 1396 | Injects "Uprooted Dev" badge below username in profile popups. 500ms timer polls TopLevel windows + OverlayLayer. Heuristic popup detection, username found by largest font size, vertical panel walk-up for correct insertion point. |
+| `SilentTypingEngine.cs` | 91 | Blocks `SetTypingIndicator` gRPC calls via .NET `DiagnosticListener` interception. Subscribes to HTTP diagnostic events, intercepts `HttpRequestOut.Start`, redirects matching requests to `localhost:0`. Phase 4.5f, 12s startup delay. Original DiagnosticListener approach by Kurumi Nanase. |
+| `NsfwFilter.cs` | 565 | NSFW content filter (Phase 4.5g, Avalonia-native visual tree scan) |
+| `RootcordEngine.cs` | 6082 | Rootcord plugin: Discord-style vertical server sidebar replacing Root's horizontal tab bar (experimental, live toggle, Apply/Revert lifecycle, tab monitoring, user card popup, community members sidebar swap) |
+| `TranslateEngine.cs` | 2201 | Google Translate + DeepL message translation: globe button injection, send-side blocking translate, receive-side inline translate, language picker, auto-translate debounce |
+| `TranslateConfigPopup.cs` | 897 | Translate config popup UI: language picker, API key management, provider toggle |
+| `WhoReactedEngine.cs` | 577 | Who Reacted: shows reactor avatars next to reaction pills, circular rendering, VSP recycling dedup |
+| `UserBioEngine.cs` | 1207 | User Bio: injects bio text + own-profile editor into profile popups, Twemoji emoji rendering |
+| `UprootedPresenceBeacon.cs` | 527 | Presence beacon: Uprooted user detection via gRPC metadata injection |
+| `DevConsoleDropdown.cs` | 680 | Dev Console: titlebar gear button + overlay popup with spoofs, diagnostics, engine controls (dev only) |
+| `FocusModeEngine.cs` | 734 | Focus Mode: hides visual clutter (timestamps, avatars, reactions) for clean reading |
+| `MessageDraftsEngine.cs` | 37 | Message Drafts: per-channel draft persistence (stub) |
+| `ReconLogger.cs` | 788 | Visual tree + style property diagnostic dumper (dev only) |
+| `UprootedSettings.cs` | 302 | INI-based settings persistence + 10s TTL cache |
+| `Logger.cs` | 183 | Thread-safe file logging + wide event emission + OnLine callback |
+| `WideEvent.cs` | 150 | Structured wide event builder (IDisposable, key=value fields, dur_ms, parent-child linking, tail sampling) |
+| `TailSampler.cs` | 71 | Tail sampling for high-frequency scan ticks (error/slow/notable/heartbeat emission rules) |
+| `LogConsole.cs` | 351 | Dev-only live log terminal via named pipe (Windows) / FIFO (Linux), backfill + live stream |
 | `PlatformPaths.cs` | 29 | Cross-platform path resolution |
 
 ---

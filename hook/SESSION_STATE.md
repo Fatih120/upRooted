@@ -1,4 +1,4 @@
-# Uprooted Hook - Session State (2026-02-25)
+# Uprooted Hook - Session State (2026-02-26)
 
 ## Release: v0.5.2-dev2
 
@@ -36,9 +36,9 @@ Live Console Linux fix is the most recent work. LogConsole now uses FIFO (`mkfif
 ### Known Issues / TODOs
 
 - **Version copy intercept** — fixed (2026-02-21): Root's async `SetTextAsync` race no longer races with our clipboard write
-- **MessageLogger card positioning** — `FindMessageGridInContainer` returns null; container structure needs investigation
+- **MessageLogger card positioning** — RESOLVED (2026-02-26): removed `_messageCache.ContainsKey` filter; visual independence + correct card injection
 - **Experimental plugin validation** — Rootcord, MessageLogger, NsfwFilter, Translate, PresenceBeacon all deployed but need real-world testing
-- **AppImage v0.5.0 detection failure** — Linux user reports v0.5.0 fails to detect/patch AppImage while v0.4.2 works. Needs `--diagnose` output from the user to investigate further.
+- **AppImage v0.5.0 detection failure** — RESOLVED (2026-02-23): fixed via `net9.0` target for Linux AppImage compatibility.
 - **Native theme card desync** — RESOLVED. Variant is no longer switched; Root's native theme page always shows the user's real preference.
 
 ## Startup Phases

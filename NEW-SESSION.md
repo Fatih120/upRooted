@@ -61,8 +61,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `ClearUrlsEngine.cs` | 486 | Strip tracking params from URLs on send |
 | `LinkEmbedEngine.cs` | 2677 | Avalonia-native link embeds (OG/oEmbed/video) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder (SkiaSharp) |
-| `MessageLogger.cs` | 2105 | Edit/delete detection + visual indicators |
-| `MessageStore.cs` | 278 | Flat-file message persistence |
+| `MessageLogger.cs` | 2238 | Edit/delete detection + visual indicators |
+| `MessageStore.cs` | 282 | Flat-file message persistence |
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
 | `AutoUpdater.cs` | 1096 | Encrypted .uprpkg auto-updater |
 | `DesktopNotification.cs` | 86 | OS-level toast notifications |
@@ -70,8 +70,8 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `SilentTypingEngine.cs` | 91 | DiagnosticListener typing block |
 | `NsfwFilter.cs` | 565 | Avalonia-native NSFW filter |
 | `RootcordEngine.cs` | 6082 | Discord-style vertical sidebar (experimental) |
-| `TranslateEngine.cs` | 2007 | Google Translate + DeepL message translation |
-| `TranslateConfigPopup.cs` | 899 | Translate config UI |
+| `TranslateEngine.cs` | 2201 | Google Translate + DeepL message translation |
+| `TranslateConfigPopup.cs` | 897 | Translate config UI |
 | `UprootedPresenceBeacon.cs` | 527 | Uprooted user detection via gRPC |
 | `WhoReactedEngine.cs` | 577 | Who Reacted: shows reaction authors on messages |
 | `UserBioEngine.cs` | 1207 | User Bio: injects bio text + own-profile editor into profile popups |

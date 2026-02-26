@@ -117,22 +117,27 @@ uprooted-private/
 │   │   ├── INSTALLER.md              # Console TUI installer reference
 │   │   ├── THEME_ENGINE_DEEP_DIVE.md  # Theme engine algorithm deep dive
 │   │   ├── AVALONIA_PATTERNS.md       # Avalonia UI patterns via reflection
+│   │   ├── ROOT_CONTROL_REFERENCE.md  # Root UI control internals (decompiled)
+│   │   ├── OBFUSCATION.md            # Hook DLL obfuscation pipeline (private)
 │   │   └── DOTNET_RUNTIME.md          # .NET runtime constraints
 │   ├── plugins/                       # Plugin author documentation
 │   │   ├── GETTING_STARTED.md         # Plugin quickstart tutorial
 │   │   ├── API_REFERENCE.md           # Plugin API surface
 │   │   ├── BRIDGE_REFERENCE.md        # Root bridge IPC reference
 │   │   ├── ROOT_ENVIRONMENT.md        # Root app internals (DOM, CSS, Chromium)
-│   │   └── EXAMPLES.md               # Annotated example plugins
+│   │   ├── EXAMPLES.md               # Annotated example plugins
+│   │   └── builtin/                   # Built-in plugin documentation
 │   ├── research/                      # Security research and reverse engineering
 │   │   ├── SECURITY_RESEARCH.md       # Security findings
 │   │   ├── REVERSE_ENGINEERING.md     # RE methodology
 │   │   ├── GRPC_PROTOCOL.md           # gRPC-web protocol reference
 │   │   ├── GRPC_LIB_REFERENCE.md      # gRPC library reference
+│   │   ├── MITIGATION_COUNTERMEASURES.md # Anti-detection countermeasures
 │   │   ├── RESEARCH_INDEX.md          # Research file navigation
 │   │   └── ROOT_INTERNALS.md          # Root's native architecture
 │   ├── dev/                           # Developer environment
 │   │   ├── CONTRIBUTING_TECHNICAL.md   # Technical onboarding
+│   │   ├── TESTING.md                 # Test suite reference
 │   │   └── PLANNING_REFERENCE.md      # Planning analysis index
 │   └── archives/                      # Miscellaneous notes, one-off fixes, historical context
 ├── dist/                              # Prebuilt TypeScript bundle (from public repo)
