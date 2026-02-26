@@ -520,27 +520,50 @@ internal class MessageLogger : IDisposable
         }
         else
         {
-            // Not in cache — create entry from the message being removed
+            // Not in cache: create entry from the message being removed.
+            // Read real timestamp + author from the message object (not DateTime.UtcNow).
             var content = ReadContent(message) ?? "";
             if (!string.IsNullOrEmpty(content))
             {
                 using var ev = WideEvent.Begin(Tag, "msg_deleted");
+
+                var ts = ReadTimestamp(message);
+                bool tsFromMessage = ts != DateTime.MinValue;
+                if (!tsFromMessage) ts = DateTime.UtcNow;
+
+                string authorName = "Unknown";
+                string authorId = "";
+                var tp2 = GetTypeProps(message);
+                if (tp2 != null)
+                {
+                    var target = GetMessageTarget(message, tp2);
+                    if (target != null)
+                    {
+                        authorName = ReadAuthorName(target, tp2) ?? "Unknown";
+                        if (tp2.AuthorId != null)
+                            authorId = tp2.AuthorId.GetValue(target)?.ToString() ?? "";
+                    }
+                }
+
                 var newCached = new CachedMessage
                 {
                     MessageId = msgId,
                     ChannelId = _currentChannelId,
-                    AuthorName = "Unknown",
-                    Timestamp = DateTime.UtcNow,
+                    AuthorId = authorId,
+                    AuthorName = authorName,
+                    Timestamp = ts,
                     Content = content,
                     IsDeleted = true,
                     DeletedAt = DateTime.UtcNow
                 };
                 _messageCache[msgId] = newCached;
                 _store.RecordMessage(newCached.MessageId, newCached.ChannelId,
-                    "", "Unknown", newCached.Timestamp, content);
+                    authorId, authorName, ts, content);
                 _store.RecordDeletion(msgId, newCached.ChannelId, DateTime.UtcNow);
                 ev.Set("msg_id", msgId);
                 ev.Set("content", Truncate(content, 80));
+                ev.Set("author", authorName);
+                ev.Set("ts_source", tsFromMessage ? "message" : "fallback");
                 ev.Set("source", "connect_messages_uncached");
             }
         }
@@ -1020,18 +1043,27 @@ internal class MessageLogger : IDisposable
         object? vsp = FindMessagePanel();
         if (vsp == null) return;
 
-        // Build list of visible messages with their containers
-        var visibleMessages = new List<(string msgId, object container)>();
+        // Build list of ALL visible messages with timestamps (not filtered by cache).
+        // Reading timestamps directly ensures correct positioning even for uncached messages.
+        var visibleMessages = new List<(string msgId, object container, DateTime timestamp)>();
         int childCount = _r.GetChildCount(vsp);
         for (int i = 0; i < childCount; i++)
         {
             var child = _r.GetChild(vsp, i);
             if (child == null) continue;
             var dc = ReadDC(child);
-            var msgId = dc != null ? ReadMessageId(dc) : null;
-            if (dc == null || msgId == null) continue;
-            if (!_messageCache.ContainsKey(msgId)) continue;
-            visibleMessages.Add((msgId, child));
+            if (dc == null) continue;
+            var msgId = ReadMessageId(dc);
+            if (msgId == null) continue;
+
+            // Prefer cached timestamp, fall back to reading directly from DataContext
+            DateTime ts;
+            if (_messageCache.TryGetValue(msgId, out var visCached))
+                ts = visCached.Timestamp;
+            else
+                ts = ReadTimestamp(dc);
+
+            visibleMessages.Add((msgId, child, ts));
         }
 
         if (visibleMessages.Count == 0) return;
@@ -1054,8 +1086,8 @@ internal class MessageLogger : IDisposable
             object? targetContainer = null;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
-                if (_messageCache.TryGetValue(visibleMessages[i].msgId, out var visCached) &&
-                    visCached.Timestamp <= cached.Timestamp)
+                if (visibleMessages[i].timestamp != DateTime.MinValue &&
+                    visibleMessages[i].timestamp <= cached.Timestamp)
                 { targetContainer = visibleMessages[i].container; break; }
             }
             if (targetContainer == null)
@@ -1198,21 +1230,68 @@ internal class MessageLogger : IDisposable
 
     // ===== Card Building =====
 
+    /// <summary>
+    /// Build a deleted-message card with opaque background to mask the host message's hover highlight.
+    /// Structure: outer wrapper (BackgroundPrimary, masks hover) → inner card (opaque dark red) → content.
+    /// </summary>
     private object? BuildDeletedMessageCard(CachedMessage cached, string tag)
     {
         try
         {
-            var body = _r.CreateTextBlock(cached.Content, 13, "#DDDDDD");
+            var body = _r.CreateTextBlock(cached.Content, 13, "#FFDDDDDD");
             if (body == null) return null;
             _r.SetTextWrapping(body, "Wrap");
 
-            object? cardContent = body;
-            if (!string.IsNullOrEmpty(cached.DeletedByName) || !string.IsNullOrEmpty(cached.DeletedBy))
+            // Build content: optional header + body + optional actor line
+            object cardContent = body;
+            var contentStack = _r.CreateStackPanel(vertical: true, spacing: 2);
+            if (contentStack != null)
             {
+                // Header line: "AuthorName · Deleted"
+                var authorName = !string.IsNullOrEmpty(cached.AuthorName) && cached.AuthorName != "Unknown"
+                    ? cached.AuthorName : null;
+                if (authorName != null)
+                {
+                    var headerStack = _r.CreateStackPanel(vertical: false, spacing: 0);
+                    if (headerStack != null)
+                    {
+                        var authorText = _r.CreateTextBlock(authorName, 12, "#FFAAAAAA");
+                        if (authorText != null)
+                        {
+                            _r.SetFontWeight(authorText, "SemiBold");
+                            _r.AddChild(headerStack, authorText);
+                        }
+                        var label = _r.CreateTextBlock(" \u00B7 Deleted", 11, "#88FF6666");
+                        if (label != null) _r.AddChild(headerStack, label);
+                        _r.AddChild(contentStack, headerStack);
+                    }
+                }
+
+                _r.AddChild(contentStack, body);
+
+                // "Deleted by" actor line
+                if (!string.IsNullOrEmpty(cached.DeletedByName) || !string.IsNullOrEmpty(cached.DeletedBy))
+                {
+                    var actorDisplay = !string.IsNullOrEmpty(cached.DeletedByName)
+                        ? $"Deleted by @{cached.DeletedByName}"
+                        : $"Deleted by {cached.DeletedBy[..Math.Min(8, cached.DeletedBy.Length)]}…";
+                    var actorLabel = _r.CreateTextBlock(actorDisplay, 10, "#88FF6666");
+                    if (actorLabel != null)
+                    {
+                        _r.SetMargin(actorLabel, 0, 2, 0, 0);
+                        _r.AddChild(contentStack, actorLabel);
+                    }
+                }
+
+                cardContent = contentStack;
+            }
+            else if (!string.IsNullOrEmpty(cached.DeletedByName) || !string.IsNullOrEmpty(cached.DeletedBy))
+            {
+                // Fallback: body + actor without header
                 var actorDisplay = !string.IsNullOrEmpty(cached.DeletedByName)
                     ? $"Deleted by @{cached.DeletedByName}"
                     : $"Deleted by {cached.DeletedBy[..Math.Min(8, cached.DeletedBy.Length)]}…";
-                var actorLabel = _r.CreateTextBlock(actorDisplay, 10, "#99FF6666");
+                var actorLabel = _r.CreateTextBlock(actorDisplay, 10, "#88FF6666");
                 if (actorLabel != null)
                 {
                     _r.SetMargin(actorLabel, 0, 2, 0, 0);
@@ -1226,31 +1305,50 @@ internal class MessageLogger : IDisposable
                 }
             }
 
-            var card = _r.CreateBorder("#28FF4444", cornerRadius: 0, child: cardContent);
+            // Inner card: fully opaque dark red (no transparency = hover highlight can't bleed through)
+            var card = _r.CreateBorder("#FF3A2020", cornerRadius: 0, child: cardContent);
             if (card == null) return null;
+            _r.SetPadding(card, 12, 4, 8, 4);
 
-            var leftAccent = _r.CreateBorder("#60FF4444", cornerRadius: 0, child: null);
+            var leftAccent = _r.CreateBorder("#CCFF4444", cornerRadius: 0, child: null);
             if (leftAccent != null)
             {
                 leftAccent.GetType().GetProperty("Width")?.SetValue(leftAccent, 3.0);
                 _r.SetHorizontalAlignment(leftAccent, "Left");
             }
 
-            var wrapper = _r.CreatePanel();
+            // Panel layers: card background + accent bar overlay
+            var cardPanel = _r.CreatePanel();
+            object cardElement;
+            if (cardPanel != null)
+            {
+                _r.AddChild(cardPanel, card);
+                if (leftAccent != null) _r.AddChild(cardPanel, leftAccent);
+                cardElement = cardPanel;
+            }
+            else
+            {
+                cardElement = card;
+            }
+
+            // Outer wrapper: opaque background matching chat bg to mask parent message's hover highlight.
+            // Top padding creates visual separation inside the opaque area (gap is also masked).
+            var wrapper = _r.CreateBorder(null, cornerRadius: 0, child: cardElement);
             if (wrapper != null)
             {
-                _r.AddChild(wrapper, card);
-                if (leftAccent != null) _r.AddChild(wrapper, leftAccent);
+                _r.SetPadding(wrapper, 0, 8, 0, 0);
                 _r.SetTag(wrapper, tag);
-                _r.SetPadding(card, 8, 4, 8, 4);
+                if (!_r.BindToDynamicResource(wrapper, "Background", "BackgroundPrimary"))
+                    _r.SetBackground(wrapper, "#FF1E1E1E");
                 AttachContextMenu(wrapper, cached);
                 return wrapper;
             }
 
-            _r.SetTag(card, tag);
-            _r.SetPadding(card, 8, 4, 8, 4);
-            AttachContextMenu(card, cached);
-            return card;
+            // Fallback: no outer wrapper
+            _r.SetTag(cardElement, tag);
+            _r.SetMargin(cardElement, 0, 8, 0, 0);
+            AttachContextMenu(cardElement, cached);
+            return cardElement;
         }
         catch (Exception ex)
         {
@@ -1574,6 +1672,34 @@ internal class MessageLogger : IDisposable
             return null;
         }
         catch { return null; }
+    }
+
+    /// <summary>
+    /// Read the send timestamp from a message or ViewModel object.
+    /// Returns DateTime.MinValue if the timestamp can't be read.
+    /// </summary>
+    private DateTime ReadTimestamp(object item)
+    {
+        var tp = GetTypeProps(item);
+        if (tp?.Timestamp == null) return DateTime.MinValue;
+        var t = GetMessageTarget(item, tp);
+        if (t == null) return DateTime.MinValue;
+        try
+        {
+            var v = tp.Timestamp.GetValue(t);
+            if (v is DateTimeOffset dto) return dto.UtcDateTime;
+            if (v is DateTime dt) return dt;
+            if (v != null)
+            {
+                // Handle non-standard timestamp types (e.g., MessageGuid with DateTime property)
+                var utcDtProp = v.GetType().GetProperty("UtcDateTime");
+                if (utcDtProp?.GetValue(v) is DateTime utcDt) return utcDt;
+                var dtProp = v.GetType().GetProperty("DateTime");
+                if (dtProp?.GetValue(v) is DateTime dt2) return dt2;
+            }
+        }
+        catch { }
+        return DateTime.MinValue;
     }
 
     private static string? ReadAuthorName(object messageTarget, TypeProps tp)
