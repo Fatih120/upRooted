@@ -55,7 +55,7 @@ The hook layer consists of 40 source files in the `hook/` directory:
 | `Entry.cs` | 38 | `[ModuleInitializer]` profiler injection entry point |
 | `NativeEntry.cs` | 67 | Native `hostfxr` entry point for DLL proxy injection |
 | `StartupHook.cs` | 738 | Multi-phase startup orchestrator (Phase 0-5), version migration |
-| `AvaloniaReflection.cs` | 3487 | Reflection cache for ~80 Avalonia types, ~55 members |
+| `AvaloniaReflection.cs` | 3487 | Reflection cache for ~54 Avalonia types, ~55 members |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal, settings layout discovery |
 | `SidebarInjector.cs` | 2048 | Event + timer-based sidebar injection and content management |
 | `ContentPages.cs` | 5562 | Page builders for Uprooted/Plugins/Themes settings + Dev Console |
@@ -2497,6 +2497,6 @@ Returns:
 
 ---
 
-**Canonical for:** all 31 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, LinkEmbedEngine, ClearUrlsEngine, AutoUpdater, MessageLogger, ProfileBadgeInjector, SilentTypingEngine, NsfwFilter, RootcordEngine, DesktopNotification, AuditLogEngine, WideEvent, TailSampler, LogConsole
+**Canonical for:** all 40 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, all feature engines
 **Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-*Hook reference for Uprooted v0.5.0. Last updated 2026-02-23.*
+*Hook reference for Uprooted v0.5.2-dev2. Last updated 2026-02-26.*

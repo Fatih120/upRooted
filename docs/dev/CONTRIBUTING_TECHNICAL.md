@@ -152,7 +152,7 @@ The `scripts/build-installer.ps1` script locates MSVC automatically via
 uprooted-private/
   hook/                         # C# .NET hook (the core injection layer)
     StartupHook.cs              #   Multi-phase startup (Phase 0-5)
-    AvaloniaReflection.cs       #   Reflection cache for ~80 Avalonia types
+    AvaloniaReflection.cs       #   Reflection cache for ~54 Avalonia types
     SidebarInjector.cs          #   Timer-based sidebar injection (200ms poll)
     ContentPages.cs             #   Settings page UI builders
     HtmlPatchVerifier.cs        #   Self-healing HTML patches + FileSystemWatcher

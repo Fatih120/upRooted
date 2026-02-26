@@ -3,7 +3,7 @@
 > **What this is:** Built-in plugin overview — what ships with Uprooted, load order, C# vs TypeScript runtime differences.
 > **Read when:** Understanding what plugins are included; checking load order; understanding the two plugin runtimes.
 
-Uprooted ships eight built-in plugins across two runtime layers. All are registered automatically at startup and appear in the Plugin Settings page.
+Uprooted ships built-in plugins across two runtime layers. All are registered automatically at startup and appear in the Plugin Settings page.
 
 > **Related docs:** [Plugin API Reference](../API_REFERENCE.md) | [Root Environment](../ROOT_ENVIRONMENT.md) | [TypeScript Reference](../../framework/TYPESCRIPT_REFERENCE.md)
 
@@ -30,6 +30,11 @@ These plugins run inside Root's .NET process via the CLR profiler hook and modif
 | [Message Logger](message-logger.md) | Logs deleted messages with visual indicators | Delete/edit toggles, retention limit, ignore own messages | `hook/MessageLogger.cs`, `hook/MessageStore.cs` |
 | ContentFilter | Blurs images flagged as NSFW using Google Cloud Vision | API key, threshold | `hook/NsfwFilter.cs` |
 | [Rootcord](rootcord.md) | Experimental Discord-style vertical server sidebar replacing Root's horizontal tab bar | Enable toggle | `hook/RootcordEngine.cs` |
+| Translate | Google Translate + DeepL message translation (globe button, send-side, receive-side) | Language, API key, provider | `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs` |
+| Who Reacted | Shows reactor avatars next to reaction pills | None | `hook/WhoReactedEngine.cs` |
+| User Bio | Injects bio text + own-profile editor into profile popups | None | `hook/UserBioEngine.cs` |
+| Focus Mode | Hides visual clutter (timestamps, avatars, reactions) for clean reading | Enable toggle | `hook/FocusModeEngine.cs` |
+| Message Drafts | Per-channel draft persistence (stub) | None | `hook/MessageDraftsEngine.cs` |
 
 ### Core Framework (not toggleable)
 
@@ -55,11 +60,18 @@ Initialized after Avalonia is ready, with delays to ensure chat is populated:
 
 - **ClearUrlsEngine** -- Phase 4.5a (14s delay), hooks AvaloniaEdit TextArea
 - **LinkEmbedEngine** -- Phase 4.5b (14s delay), visual tree watching for chat links
-- **MessageLogger** -- Phase 4.5c (20s delay), subscribes to chat ObservableCollection
+- **MessageLogger + AuditLogEngine** -- Phase 4.5c (20s delay), subscribes to chat ObservableCollection + audit log viewer
 - **AutoUpdater** -- Phase 4.5d, background update check (1-minute interval)
-- **ProfileBadgeInjector** -- Phase 4.5e (500ms poller), dev channel only; injects "Uprooted Dev" badge into profile popups
+- **PresenceBeacon + ProfileBadgeInjector + UserBio** -- Phase 4.5e, Uprooted user detection, dev badge, bio injection
 - **SilentTypingEngine** -- Phase 4.5f (12s delay), DiagnosticListener-based gRPC interception
-- **NsfwFilter** -- Phase 4.5g, Avalonia-native visual tree scan for NSFW images
+- **NsfwFilter** -- Phase 4.5g (20s delay), Avalonia-native visual tree scan for NSFW images
+- **RootcordEngine** -- Phase 4.5h (8s delay), Discord-style sidebar (dormant if disabled)
+- **ReconLogger** -- Phase 4.5i (dev only), visual tree diagnostic dumper
+- **DevConsoleDropdown** -- Phase 4.5i2 (dev only), titlebar gear button + overlay popup
+- **TranslateEngine** -- Phase 4.5j, Google Translate + DeepL translation
+- **WhoReactedEngine** -- Phase 4.5k, reactor avatars on messages
+- **MessageDraftsEngine** -- Phase 4.5l, per-channel draft persistence (stub)
+- **FocusModeEngine** -- Phase 4.5m, hides visual clutter for clean reading
 
 ## Runtime Context
 
@@ -92,4 +104,4 @@ These run inside Root's .NET process via the CLR profiler. Key characteristics:
 ---
 
 **Canonical for:** built-in plugin inventory, load order, C# vs TypeScript runtime layer differences
-*Built-in plugins index. Last updated 2026-02-23.*
+*Built-in plugins index. Last updated 2026-02-26.*

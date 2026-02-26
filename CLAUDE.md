@@ -40,7 +40,7 @@ uprooted-private/
 ├── hook/                              # C# .NET hook (CLR profiler injection): 40 .cs files
 │   ├── StartupHook.cs                 # Multi-phase startup orchestrator (Phase 0-5)
 │   ├── HtmlPatchVerifier.cs           # Self-healing HTML patches (Phase 0 + FileSystemWatcher)
-│   ├── AvaloniaReflection.cs          # Reflection cache for ~80 Avalonia types (3487 lines)
+│   ├── AvaloniaReflection.cs          # Reflection cache for ~54 Avalonia types (3487 lines)
 │   ├── SidebarInjector.cs             # Sidebar injection (LayoutUpdated event + safety poll)
 │   ├── ContentPages.cs                # Settings page builders (5562 lines)
 │   ├── ThemeEngine.cs                 # Native Avalonia theme engine (in-place switching, bind-once walker, WeakRef live preview, custom ping color)

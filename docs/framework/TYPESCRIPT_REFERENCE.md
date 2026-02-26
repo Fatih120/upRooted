@@ -69,6 +69,8 @@ src/
     sentry-blocker/     Blocks Sentry telemetry
     themes/             CSS variable theme engine
     settings-panel/     In-app settings sidebar injection
+    link-embeds/        Discord-style rich link previews
+    silent-typing/      Typing indicator suppression (stub: C# engine handles gRPC)
   types/
     bridge.ts           INativeToWebRtc / IWebRtcToNative interfaces
     plugin.ts           UprootedPlugin, Patch, SettingField interfaces

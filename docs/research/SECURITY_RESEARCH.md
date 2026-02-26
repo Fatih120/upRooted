@@ -152,7 +152,7 @@ Token refresh race condition testing confirmed proper server-side locking (L20).
 ### Testing Environment
 
 - **OS**: Windows 11 Home 10.0.26200
-- **Target**: Root Communications v0.9.86 (Windows x64, 617 MB self-contained .NET 10)
+- **Target**: Root Communications v0.9.86 (Windows x64, 576 MB self-contained .NET 10)
 - **API endpoint**: `api.rootapp.com` (production, behind Cloudflare)
 - **Test accounts**: `watchthelight` (primary), `electromutt` (alt)
 - **Approach**: Black-box with client-side source access (shipped source maps + JS analysis)

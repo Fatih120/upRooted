@@ -48,7 +48,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `NativeEntry.cs` | 67 | Alternative entry via hostfxr |
 | `StartupHook.cs` | 738 | Multi-phase startup orchestrator (Phase 0-5) |
 | `HtmlPatchVerifier.cs` | 460 | Phase 0: self-healing HTML patches |
-| `AvaloniaReflection.cs` | 3487 | Reflection cache for ~80 Avalonia types |
+| `AvaloniaReflection.cs` | 3487 | Reflection cache for ~54 Avalonia types |
 | `VisualTreeWalker.cs` | 573 | DFS visual tree traversal |
 | `SidebarInjector.cs` | 2048 | Settings page monitor + sidebar injection |
 | `ContentPages.cs` | 5562 | Settings page builders (Uprooted, Plugins, Themes) + Dev Console |

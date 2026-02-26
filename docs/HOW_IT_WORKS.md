@@ -39,7 +39,7 @@ A complete walkthrough of how we reverse-engineered Root Communications desktop 
 
 ## 1. What We're Looking At
 
-Root Communications is a desktop chat/community app. Think Discord, but smaller. The desktop client is a single 617 MB executable:
+Root Communications is a desktop chat/community app. Think Discord, but smaller. The desktop client is a single 576 MB executable:
 
 ```
 C:\Users\<user>\AppData\Local\Root\current\Root.exe
@@ -61,7 +61,7 @@ Our goal: inject custom UI (settings pages, sidebar sections, plugin system) int
 
 ### What Root.exe actually is
 
-Root.exe is a **self-contained .NET 10 application** using **Avalonia UI 11.3.10** (a cross-platform WPF-like framework). "Self-contained" means the entire .NET runtime, all managed assemblies, and all native dependencies are bundled into that single 617 MB file. At launch, the runtime extracts assemblies to memory rather than to disk.
+Root.exe is a **self-contained .NET 10 application** using **Avalonia UI 11.3.10** (a cross-platform WPF-like framework). "Self-contained" means the entire .NET runtime, all managed assemblies, and all native dependencies are bundled into that single 576 MB file. At launch, the runtime extracts assemblies to memory rather than to disk.
 
 We confirmed this by:
 
@@ -800,7 +800,7 @@ Uninstall reverses everything: remove environment variables, restore HTML files 
 
 ## Summary
 
-We went from a closed 617 MB binary to a fully injected mod framework by:
+We went from a closed 576 MB binary to a fully injected mod framework by:
 
 1. **Analyzing the binary** -- discovered .NET 10 / Avalonia / DotNetBrowser
 2. **Finding the source map** -- 802 original TypeScript files with full gRPC schemas

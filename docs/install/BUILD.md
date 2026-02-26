@@ -47,9 +47,9 @@ pnpm install
 
 ### .NET 10 SDK
 
-The C# hook targets `net9.0`. Install the .NET 10 SDK (which includes the
-net9.0 targeting pack) from the official dotnet site or via
-`actions/setup-dotnet` in CI.
+The C# hook targets `net9.0;net10.0` (dual-targeting). Install the .NET 10
+SDK (which includes the net9.0 targeting pack) from the official dotnet site
+or via `actions/setup-dotnet` in CI.
 
 ```bash
 dotnet --version   # Should report 10.x.x

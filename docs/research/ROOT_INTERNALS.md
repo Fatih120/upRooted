@@ -59,7 +59,7 @@ This is the **native/.NET/system-level view** aimed at Uprooted framework contri
 
 ### The .NET 10 Host
 
-Root.exe is a **self-contained .NET 10 application**. "Self-contained" means the entire .NET runtime, all managed assemblies, and all native dependencies are bundled into a single 617 MB executable. At launch, the runtime extracts assemblies to memory rather than to disk. There is no separate `dotnet` runtime installation required.
+Root.exe is a **self-contained .NET 10 application**. "Self-contained" means the entire .NET runtime, all managed assemblies, and all native dependencies are bundled into a single 576 MB executable. At launch, the runtime extracts assemblies to memory rather than to disk. There is no separate `dotnet` runtime installation required.
 
 We confirmed the .NET 10 target via PE headers, assembly manifest strings (`Avalonia.Controls`, `Avalonia.Base`), and the embedded `.runtimeconfig.json` specifying `Microsoft.NETCore.App` version `10.0.0`.
 
@@ -486,7 +486,7 @@ The install directory structure:
 ```
 Root\
   current\
-    Root.exe                      617 MB   Self-contained .NET 10 + Avalonia
+    Root.exe                      576 MB   Self-contained .NET 10 + Avalonia
     uiohook.dll                   709 KB   UI input hooks (keyboard/mouse)
     av_libglesv2.dll              5.4 MB   OpenGL ES rendering
     libSkiaSharp.dll              9.4 MB   Skia 2D graphics (Avalonia renderer)

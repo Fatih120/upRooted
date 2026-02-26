@@ -29,7 +29,7 @@ CLR profiler environment variables (`DOTNET_ENABLE_PROFILING`, `DOTNET_PROFILER`
 ### High
 
 **AvaloniaReflection brittleness**
-The reflection cache (`hook/AvaloniaReflection.cs`, ~2383 lines) assumes specific Avalonia type names, property names, and method signatures. Any Avalonia version update that renames or removes types will break all UI injection. The entire C# layer becomes non-functional if the reflection cache cannot resolve its targets.
+The reflection cache (`hook/AvaloniaReflection.cs`, 3487 lines) assumes specific Avalonia type names, property names, and method signatures. Any Avalonia version update that renames or removes types will break all UI injection. The entire C# layer becomes non-functional if the reflection cache cannot resolve its targets.
 - Files: `hook/AvaloniaReflection.cs`
 - Recommendation: Add Avalonia version detection and per-feature graceful degradation
 
@@ -63,11 +63,11 @@ Runtime changes made via the browser-side settings panel only update the in-memo
 Next release. Focused on completing core functionality that is currently stubbed or broken.
 
 ### Validate MessageLogger plugin
-MessageLogger (shipped WIP in v0.4.2) has working deletion detection (INPC-driven + self-delete fallback), edit detection (dual-strategy EditedAt + grace period), author name resolution, and visual indicators. Card injection positioning (`FindMessageGridInContainer` returns null) is the main open issue.
+MessageLogger (shipped WIP in v0.4.2) has working deletion detection (INPC-driven + self-delete fallback), edit detection (dual-strategy EditedAt + grace period), author name resolution, and visual indicators. Card injection positioning was fixed (2026-02-26). Still needs real-world validation of delete/edit detection and card rendering.
 - Files: `hook/MessageLogger.cs`
 
 ### Validate Translate plugin
-TranslateEngine (shipped post-v0.4.2) provides DeepL-powered message translation via context menu integration. Deployed but needs real-world validation of language detection, translation quality, and config popup.
+TranslateEngine (shipped post-v0.4.2) provides Google Translate + DeepL message translation via context menu and globe button integration. Deployed but needs real-world validation of language detection, translation quality, and config popup.
 - Files: `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
 
 ### Validate Presence Beacon

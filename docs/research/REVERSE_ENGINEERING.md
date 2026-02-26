@@ -5,7 +5,7 @@
 > **Skip if:** You just need the findings → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) or [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md). You need the current token format → [ROOT_INTERNALS.md §5](ROOT_INTERNALS.md#5-authentication-and-tokens).
 > **Does NOT cover:** Current Root architecture (reference format) → [ROOT_INTERNALS.md](ROOT_INTERNALS.md) | Security findings summary → [SECURITY_RESEARCH.md](SECURITY_RESEARCH.md)
 
-How we went from an unknown 617 MB .NET executable to a fully documented application architecture,
+How we went from an unknown 576 MB .NET executable to a fully documented application architecture,
 complete with protocol definitions, bridge interfaces, theme specifications, and injection points.
 
 > **Related docs:** [Root Internals](ROOT_INTERNALS.md) | [gRPC Protocol](GRPC_PROTOCOL.md) | [Security Research](SECURITY_RESEARCH.md) | [Research Index](RESEARCH_INDEX.md)
@@ -34,7 +34,7 @@ complete with protocol definitions, bridge interfaces, theme specifications, and
 ### The target
 
 Root Communications is a desktop community platform built on .NET 10 with Avalonia UI 11.3.10.
-The client ships as a single self-contained executable (`Root.exe`, 617 MB) that bundles the
+The client ships as a single self-contained executable (`Root.exe`, 576 MB) that bundles the
 entire .NET runtime, all managed assemblies, and native dependencies into one file. It uses
 DotNetBrowser (a commercial Chromium wrapper for .NET) to host seven React/Vite sub-applications
 and a WebRTC voice/video engine inside embedded browser frames.
@@ -652,7 +652,7 @@ The extraction process:
 
 1. Read 100,000 bytes starting at the known CSS offset (line 33)
 2. Track brace depth to find the CSS block boundary (lines 37-60)
-3. Scan the entire 617 MB binary for `--rootsdk-` in both UTF-8 and UTF-16LE to confirm
+3. Scan the entire 576 MB binary for `--rootsdk-` in both UTF-8 and UTF-16LE to confirm
    no CSS variables exist outside the identified block (lines 97-145)
 4. Search specifically for `rootsdk-background-primary` to verify theme variable locations
    (lines 149-196)
@@ -882,7 +882,7 @@ apps (like connecting to the DevTools WebSocket) do not apply.
 
 **4. Self-contained .NET apps bundle everything but protect nothing.**
 
-Root.exe is a 617 MB self-contained deployment -- the entire runtime, all assemblies, and all
+Root.exe is a 576 MB self-contained deployment -- the entire runtime, all assemblies, and all
 resources in one file. But .NET provides no built-in mechanism to prevent CLR profiler
 injection or to verify that loaded assemblies are unmodified. The `DOTNET_STARTUP_HOOKS` and
 `COR_PROFILER` environment variables are features of the runtime itself.

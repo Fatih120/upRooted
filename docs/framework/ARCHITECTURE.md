@@ -45,7 +45,7 @@ Authoritative architecture reference for the Uprooted client modification framew
 - Provides a theme engine that overrides Root's Avalonia resource dictionaries and CSS variable system.
 - Ships a lightweight console TUI installer (~600KB) that deploys all artifacts and configures CLR profiler injection.
 - Self-heals HTML patches when Root auto-updates overwrite them (via `FileSystemWatcher`).
-- Maintains a large ILSpy corpus for Root internals (`research/ilspy-dumps/`): 273 decompiled files, with findings distilled into `ROOT_CONTROL_REFERENCE.md` and related docs.
+- Maintains a large ILSpy corpus for Root internals (`research/ilspy-dumps/`): 1886 decompiled files, with findings distilled into `ROOT_CONTROL_REFERENCE.md` and related docs.
 
 ### What it is not
 
@@ -161,7 +161,7 @@ This section describes the key classes and modules that form the framework's bac
 | `Entry` | `hook/Entry.cs` | Profiler injection entry point. `[ModuleInitializer]` and constructor both guarded by `Interlocked.CompareExchange` for one-time initialization. Calls `StartupHook.Initialize()`. |
 | `StartupHook` | `hook/StartupHook.cs` | Initialization orchestrator. Process name guard, background thread, multi-phase startup (Phase 0-5). Coordinates Avalonia injection and DotNetBrowser feature loading. |
 | `HtmlPatchVerifier` | `hook/HtmlPatchVerifier.cs` | Self-healing HTML patches. Runs at Phase 0 (no Avalonia needed). Verifies injection markers exist in profile HTML files. Sets up `FileSystemWatcher` to re-patch when Root auto-updates overwrite files. |
-| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (3320 lines). |
+| `AvaloniaReflection` | `hook/AvaloniaReflection.cs` | Reflection cache for Avalonia types. Scans loaded assemblies filtered by `"Avalonia"` prefix, builds type dictionary, caches `PropertyInfo`/`MethodInfo` handles. All control creation and property manipulation flows through this class. The most critical file in the codebase (3487 lines). |
 | `VisualTreeWalker` | `hook/VisualTreeWalker.cs` | Settings page layout discovery. Walks the Avalonia visual tree to find the "APP SETTINGS" anchor text, then discovers the nav container, layout grid, content area, ListBox, and back button by structural analysis. |
 | `SidebarInjector` | `hook/SidebarInjector.cs` | Settings page monitor. 200ms timer polls the visual tree, detects settings page open/close, injects the UPROOTED sidebar section, manages content page overlays, handles click events and cleanup. |
 | `ContentPages` | `hook/ContentPages.cs` | Page builders for the Uprooted, Plugins, and Themes settings pages. Creates native Avalonia controls via reflection, matching Root's exact card styling (background, corner radius, border, padding, typography). |
@@ -180,7 +180,7 @@ This section describes the key classes and modules that form the framework's bac
 | `ClearUrlsEngine` | `hook/ClearUrlsEngine.cs` | Strips tracking parameters (utm_*, fbclid, gclid, etc.) from URLs in the compose editor on send. Hooks AvaloniaEdit TextArea via routed events with `handledEventsToo: true`. |
 | `ProfileBadgeInjector` | `hook/ProfileBadgeInjector.cs` | Injects "Uprooted Dev" badge into profile popups when update channel is Developer. Event-driven OverlayLayer detection + 500ms fallback poll (1130 lines). |
 | `NsfwFilter` | `hook/NsfwFilter.cs` | Avalonia-native NSFW content filter. 500ms scan timer DFS-walks visual tree for `Image` controls, classifies via Vision API with `SemaphoreSlim(3)` concurrency cap, hides NSFW images with overlay (click-to-reveal). Phase 4.5g, no DotNetBrowser dependency. |
-| `TranslateEngine` | `hook/TranslateEngine.cs` | DeepL-powered message translation (Phase 4.5i). Scans visual tree for CTextBlock nodes, adds translate context menu items, fetches translations via DeepL API (1145 lines). |
+| `TranslateEngine` | `hook/TranslateEngine.cs` | Google Translate + DeepL message translation (Phase 4.5j). Globe button injection, send-side blocking translate, receive-side inline translate (2201 lines). |
 | `TranslateConfigPopup` | `hook/TranslateConfigPopup.cs` | Translate configuration popup UI — language picker, API key input, test connection button (511 lines). |
 | `UprootedPresenceBeacon` | `hook/UprootedPresenceBeacon.cs` | Presence beacon for Uprooted user detection via gRPC metadata injection (Phase 4.5j, 470 lines). |
 | `ReconLogger` | `hook/ReconLogger.cs` | Visual tree + style property diagnostic dumper for development/debugging (786 lines). |
@@ -352,7 +352,7 @@ For the full implementation walkthrough, see [Hook Reference](HOOK_REFERENCE.md)
 
 ### Phase 4.5i: Translate Engine
 
-**Purpose:** Start the DeepL-powered message translation engine.
+**Purpose:** Start the Google Translate + DeepL message translation engine.
 
 - **File:** `hook/TranslateEngine.cs`, `hook/TranslateConfigPopup.cs`
 - **Thread:** Background (deferred startup), UI dispatch for context menu injection

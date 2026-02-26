@@ -25,7 +25,7 @@ If the conversation has no prior context (user invoked `/decomp` cold), ask what
 
 ### Step 2: Read the dump index
 
-Read `research/ILSPY_DUMP_INDEX.md`. This is the master inventory of 273 decompiled files from Root v0.9.92. Use it to find:
+Read `research/ILSPY_DUMP_INDEX.md`. This is the master inventory of decompiled files from Root v0.9.93. Use it to find:
 - Files whose **name** or **description** match the current issue
 - Files in the same **namespace** as related classes
 - Files tagged as **Analyzed: Y** (already distilled into docs) vs **N** (raw only)

@@ -58,6 +58,14 @@ Summary: **v{version}** | **Recent**: 2 bullets from Done | **Pending**: top 3 R
 | `dev console` | `DevConsoleDropdown.cs` |
 | `focus mode` | `FocusModeEngine.cs` |
 | `message drafts` | `MessageDraftsEngine.cs` |
+| `reflection`, `avalonia types` | `AvaloniaReflection.cs` |
+| `visual tree`, `walker` | `VisualTreeWalker.cs` |
+| `settings`, `ini` | `UprootedSettings.cs` |
+| `entry`, `profiler entry` | `Entry.cs`, `NativeEntry.cs` |
+| `logger`, `logging` | `Logger.cs`, `WideEvent.cs`, `TailSampler.cs` |
+| `log console`, `pipe` | `LogConsole.cs` |
+| `recon` | `ReconLogger.cs` |
+| `paths`, `platform` | `PlatformPaths.cs` |
 
 All files in `hook/`. If no match: Glob for closest `.cs` in `hook/`, or ask.
 
