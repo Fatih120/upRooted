@@ -118,6 +118,8 @@ internal class MessageStore : IDisposable
     {
         if (!File.Exists(_filePath)) return;
 
+        var cutoff = DateTime.UtcNow.AddHours(-2);
+
         try
         {
             foreach (var line in File.ReadAllLines(_filePath))
@@ -138,6 +140,8 @@ internal class MessageStore : IDisposable
                             Logger.Log(Tag, $"Skipping MSG with bad timestamp: {parts[5]}");
                             break;
                         }
+                        // Skip messages older than 2h: fresh session starts with a clean slate
+                        if (ts < cutoff) break;
                         var msg = new CachedMessage
                         {
                             MessageId = Dec(parts[1]),

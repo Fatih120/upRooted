@@ -128,8 +128,6 @@ internal class TranslateEngine
     private Timer? _receiveTimer;
     private int _discovering;   // Interlocked reentrancy guard
     private int _receiving;     // Interlocked reentrancy guard
-    private readonly TailSampler _discoverSampler = new(heartbeatTicks: 15, slowThresholdMs: 50);
-    private readonly TailSampler _receiveSampler = new(heartbeatTicks: 15, slowThresholdMs: 50);
 
     // Send-side: keyed by hooked TextArea identity hash
     private readonly HashSet<int> _hookedEditors = new();
@@ -305,7 +303,6 @@ internal class TranslateEngine
 
             _r.RunOnUIThread(() =>
             {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try
                 {
                     DiscoverToolbars();
@@ -314,9 +311,6 @@ internal class TranslateEngine
                 catch (Exception ex) { Logger.Log("Translate", $"Discover error: {ex.Message}"); }
                 finally
                 {
-                    sw.Stop();
-                    _discoverSampler.RecordTick((int)sw.ElapsedMilliseconds,
-                        (msg, ms) => Logger.Log("Translate", msg));
                     Interlocked.Exchange(ref _discovering, 0);
                 }
             });
@@ -1271,14 +1265,10 @@ internal class TranslateEngine
 
             _r.RunOnUIThread(() =>
             {
-                var sw = System.Diagnostics.Stopwatch.StartNew();
                 try   { ScanReceivedMessages(); }
                 catch (Exception ex) { Logger.Log("Translate", $"Receive scan error: {ex.Message}"); }
                 finally
                 {
-                    sw.Stop();
-                    _receiveSampler.RecordTick((int)sw.ElapsedMilliseconds,
-                        (msg, ms) => Logger.Log("Translate", msg));
                     Interlocked.Exchange(ref _receiving, 0);
                 }
             });

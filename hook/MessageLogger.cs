@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Linq.Expressions;
+using System.Net.Http;
 using System.Reflection;
 
 namespace Uprooted;
@@ -6,10 +8,15 @@ namespace Uprooted;
 /// <summary>
 /// Message logger plugin — preserves deleted messages and tracks edits.
 ///
-/// Deletion detection: subscribes to Channel.Messages.ConnectMessages() (DynamicData
-/// IObservable&lt;IChangeSet&lt;Message&gt;&gt;) which fires Remove events only for genuine
-/// deletions (not virtualization buffer management). Falls back to ObservableCollection
-/// subscription if ConnectMessages() is unavailable.
+/// Deletion detection (outgoing): DiagnosticListener intercepts HTTP requests to
+/// /root.v2.MessageGrpcService/Delete before they reach the server. Parses the
+/// protobuf body via Root's own MessageDeleteRequest.Parser to extract the message ID.
+/// Content is captured before SetAsDeleted() wipes it.
+///
+/// Deletion detection (incoming): PropertyChanged subscriptions on Message objects
+/// fire when DeletedAt transitions from null to non-null (triggered by WebSocket
+/// PacketContainer.MessageDeleted → MessageService.processMessageDeleted → SetAsDeleted).
+/// EnsureVisibleMessagesSubscribed() fills subscription gaps for scroll-loaded messages.
 ///
 /// Edit detection: content snapshot comparison on Replace/Refresh change events.
 /// Root shows "(edited)" natively — we only persist edit history, no visual indicators.
@@ -72,7 +79,12 @@ internal class MessageLogger : IDisposable
 
     // Visual indicator tracking — tag → injected control
     private readonly Dictionary<string, object> _injectedCards = new();
+    // Messages that were already deleted when loaded from disk: don't show cards for these
+    private readonly HashSet<string> _loadedAsDeleted = new();
     private readonly Dictionary<string, (object grid, object rowDef, object? container, Delegate? dcHandler)> _injectedRowDefs = new();
+
+    // DiagnosticListener interception (outgoing deletes)
+    private IDisposable? _diagnosticSubscription;
 
     // Audit log integration
     private readonly Dictionary<string, AuditLogEntry> _pendingAuditDeletes = new();
@@ -95,7 +107,13 @@ internal class MessageLogger : IDisposable
         using var ev = WideEvent.Begin(Tag, "initialize");
 
         _store.LoadAll(_messageCache);
+        // Track which messages were already deleted on disk so we don't show stale cards.
+        // Only live deletions (detected via PropertyChanged) should produce visual cards.
+        foreach (var kv in _messageCache)
+            if (kv.Value.IsDeleted)
+                _loadedAsDeleted.Add(kv.Key);
         ev.Set("cached_loaded", _messageCache.Count);
+        ev.Set("loaded_deleted", _loadedAsDeleted.Count);
 
         var settings = UprootedSettings.Load();
         if (_messageCache.Count > settings.MessageLoggerMaxMessages)
@@ -143,6 +161,8 @@ internal class MessageLogger : IDisposable
 
         _scanTimer = new Timer(OnScanTick, null, ScanIntervalMs, ScanIntervalMs);
         ev.Set("scan_interval_ms", ScanIntervalMs);
+
+        InitializeDeleteInterceptor();
     }
 
     public void Dispose()
@@ -150,6 +170,7 @@ internal class MessageLogger : IDisposable
         var t = _scanTimer;
         _scanTimer = null;
         t?.Dispose();
+        try { _diagnosticSubscription?.Dispose(); } catch { }
         UnsubscribeConnectMessages();
         UnsubscribeCollection();
         _store.Dispose();
@@ -243,10 +264,9 @@ internal class MessageLogger : IDisposable
                     ev.Set("cache", _messageCache.Count);
                     ev.Set("snapshots", _contentSnapshot.Count);
 
-                    // Removed verbose per-tick logging
-
                     _channelCheckCounter++;
                     CheckForChannelSwitch();
+                    EnsureVisibleMessagesSubscribed();
                     InjectDeletedMessageCards(settings, ev);
                 }
                 catch (Exception ex) { ev.SetError(ex); }
@@ -1110,6 +1130,349 @@ internal class MessageLogger : IDisposable
         catch (Exception ex) { Logger.Log(Tag, $"CollectionChanged error: {ex.Message}"); }
     }
 
+    // ===== DiagnosticListener Interception (Outgoing Deletes) =====
+
+    private void InitializeDeleteInterceptor()
+    {
+        try
+        {
+            _diagnosticSubscription = DiagnosticListener.AllListeners
+                .Subscribe(new DeleteListenerObserver(OnOutgoingDeleteDetected));
+            Logger.Log(Tag, "Delete interceptor active (DiagnosticListener)");
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"Delete interceptor init error: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Called from DiagnosticListener on a thread pool thread when an outgoing
+    /// /root.v2.MessageGrpcService/Delete HTTP request is detected.
+    /// </summary>
+    private void OnOutgoingDeleteDetected(byte[]? requestBody)
+    {
+        try
+        {
+            string? messageId = null;
+            if (requestBody != null && requestBody.Length > 5)
+            {
+                // Skip 5-byte gRPC frame header (1 byte compress flag + 4 bytes length)
+                messageId = TryParseDeleteRequestMessageId(requestBody);
+            }
+
+            _r.RunOnUIThread(() =>
+            {
+                try
+                {
+                    // Ensure subscriptions are in place BEFORE the response triggers SetAsDeleted
+                    EnsureVisibleMessagesSubscribed();
+
+                    if (!string.IsNullOrEmpty(messageId))
+                    {
+                        HandleOutgoingDelete(messageId!);
+                    }
+                    else
+                    {
+                        // Can't parse ID: scan visible messages for the one being deleted.
+                        // The HTTP request hasn't been sent yet, so SetAsDeleted hasn't fired.
+                        // Snapshot ALL visible message content now as a safety net.
+                        Logger.Log(Tag, $"[intercept] Delete detected, body={requestBody?.Length ?? -1}b — snapshotting visible messages");
+                        ScanAndSnapshotVisibleMessages();
+                    }
+                }
+                catch (Exception ex) { Logger.Log(Tag, $"[intercept] UI callback error: {ex.Message}"); }
+            });
+        }
+        catch (Exception ex) { Logger.Log(Tag, $"[intercept] Delete callback error: {ex.Message}"); }
+    }
+
+    private void HandleOutgoingDelete(string messageId)
+    {
+        using var ev = WideEvent.Begin(Tag, "intercept_delete");
+        ev.Set("msg_id", messageId);
+
+        if (_messageCache.TryGetValue(messageId, out var cached))
+        {
+            if (!cached.IsDeleted)
+            {
+                cached.IsDeleted = true;
+                cached.DeletedAt = DateTime.UtcNow;
+                _store.RecordDeletion(cached.MessageId, cached.ChannelId, DateTime.UtcNow);
+                ev.Set("content", Truncate(cached.Content, 80));
+                ev.Set("source", "intercept_outgoing");
+                Logger.Log(Tag, $"[intercept] Outgoing delete: {messageId[..Math.Min(8, messageId.Length)]}… \"{Truncate(cached.Content, 40)}\"");
+            }
+            else
+            {
+                ev.Set("result", "already_deleted");
+            }
+        }
+        else
+        {
+            // Not in cache: try to find it in visible messages and snapshot before wipe
+            var vsp = FindMessagePanel();
+            if (vsp != null)
+            {
+                int childCount = _r.GetChildCount(vsp);
+                for (int i = 0; i < childCount; i++)
+                {
+                    try
+                    {
+                        var child = _r.GetChild(vsp, i);
+                        if (child == null) continue;
+                        var dc = ReadDC(child);
+                        if (dc == null) continue;
+                        if (ReadMessageId(dc) != messageId) continue;
+
+                        var content = ReadContent(dc) ?? "";
+                        if (string.IsNullOrEmpty(content)) break;
+
+                        var tp = GetTypeProps(dc);
+                        var target = tp != null ? GetMessageTarget(dc, tp) : null;
+                        string authorName = target != null ? ReadAuthorName(target, tp) ?? "Unknown" : "Unknown";
+                        DateTime ts = ReadTimestamp(dc);
+                        if (ts == DateTime.MinValue) ts = DateTime.UtcNow;
+
+                        var newCached = new CachedMessage
+                        {
+                            MessageId = messageId,
+                            ChannelId = _currentChannelId,
+                            AuthorName = authorName,
+                            Timestamp = ts,
+                            Content = content,
+                            IsDeleted = true,
+                            DeletedAt = DateTime.UtcNow
+                        };
+                        _messageCache[messageId] = newCached;
+                        _store.RecordMessage(messageId, _currentChannelId, "", authorName, ts, content);
+                        _store.RecordDeletion(messageId, _currentChannelId, DateTime.UtcNow);
+                        ev.Set("content", Truncate(content, 80));
+                        ev.Set("source", "intercept_outgoing_uncached");
+                        Logger.Log(Tag, $"[intercept] Outgoing delete (uncached): {messageId[..Math.Min(8, messageId.Length)]}…");
+                        break;
+                    }
+                    catch { }
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Snapshot all visible messages' content into cache.
+    /// Called when an outgoing delete is detected but message ID can't be extracted.
+    /// Ensures content is preserved before SetAsDeleted() wipes it.
+    /// </summary>
+    private void ScanAndSnapshotVisibleMessages()
+    {
+        if (_chatItemsControl == null) return;
+        var vsp = FindMessagePanel();
+        if (vsp == null) return;
+
+        int childCount = _r.GetChildCount(vsp);
+        int snapshotted = 0;
+        for (int i = 0; i < childCount; i++)
+        {
+            try
+            {
+                var child = _r.GetChild(vsp, i);
+                if (child == null) continue;
+                var dc = ReadDC(child);
+                if (dc == null) continue;
+                var msgId = ReadMessageId(dc);
+                if (msgId == null) continue;
+
+                var content = ReadContent(dc) ?? "";
+                if (!string.IsNullOrEmpty(content))
+                {
+                    _contentSnapshot[msgId] = content;
+                    if (!_messageCache.ContainsKey(msgId))
+                    {
+                        CacheMessage(dc, msgId);
+                        snapshotted++;
+                    }
+                }
+            }
+            catch { }
+        }
+        if (snapshotted > 0)
+            Logger.Log(Tag, $"[intercept] Snapshotted {snapshotted} new visible messages");
+    }
+
+    /// <summary>
+    /// Parse a gRPC request body to extract the MessageId from a MessageDeleteRequest.
+    /// Uses Root's own protobuf MessageParser via reflection.
+    /// </summary>
+    private string? TryParseDeleteRequestMessageId(byte[] data)
+    {
+        try
+        {
+            // Skip 5-byte gRPC frame header
+            if (data.Length <= 5) { Logger.Log(Tag, $"[intercept] Body too small: {data.Length}b"); return null; }
+            var protobufBytes = new byte[data.Length - 5];
+            Array.Copy(data, 5, protobufBytes, 0, protobufBytes.Length);
+
+            // Find MessageDeleteRequest type in loaded assemblies
+            Type? reqType = null;
+            foreach (var asm in AppDomain.CurrentDomain.GetAssemblies())
+            {
+                try
+                {
+                    reqType = asm.GetType("RootApp.WebApi.Shared.Grpc.Requests.MessageDeleteRequest");
+                    if (reqType != null) break;
+                }
+                catch { }
+            }
+            if (reqType == null) { Logger.Log(Tag, "[intercept] MessageDeleteRequest type not found"); return null; }
+
+            // Get Parser.ParseFrom(byte[])
+            var parser = reqType.GetProperty("Parser", BindingFlags.Public | BindingFlags.Static)?.GetValue(null);
+            if (parser == null) { Logger.Log(Tag, "[intercept] Parser property null"); return null; }
+
+            var parseMethod = parser.GetType().GetMethod("ParseFrom", new[] { typeof(byte[]) });
+            if (parseMethod == null) { Logger.Log(Tag, "[intercept] ParseFrom method not found"); return null; }
+
+            var parsed = parseMethod.Invoke(parser, new object[] { protobufBytes });
+            if (parsed == null) { Logger.Log(Tag, "[intercept] ParseFrom returned null"); return null; }
+
+            // Read Id property (MessageUuid)
+            var idValue = parsed.GetType().GetProperty("Id")?.GetValue(parsed);
+            var result = idValue?.ToString();
+            Logger.Log(Tag, $"[intercept] Parsed ID: {result ?? "null"} from {data.Length}b body");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"[intercept] Protobuf parse error: {ex.Message}");
+            return null;
+        }
+    }
+
+    private sealed class DeleteListenerObserver : IObserver<DiagnosticListener>
+    {
+        private readonly Action<byte[]?> _onDeleteDetected;
+
+        internal DeleteListenerObserver(Action<byte[]?> onDeleteDetected)
+            => _onDeleteDetected = onDeleteDetected;
+
+        public void OnNext(DiagnosticListener listener)
+        {
+            if (listener.Name is "HttpHandlerDiagnosticListener" or "System.Net.Http")
+                listener.Subscribe(new DeleteRequestObserver(_onDeleteDetected));
+        }
+
+        public void OnError(Exception ex) { }
+        public void OnCompleted() { }
+    }
+
+    private sealed class DeleteRequestObserver : IObserver<KeyValuePair<string, object?>>
+    {
+        private const string TargetPath = "/root.v2.MessageGrpcService/Delete";
+        private readonly Action<byte[]?> _onDeleteDetected;
+
+        internal DeleteRequestObserver(Action<byte[]?> onDeleteDetected)
+            => _onDeleteDetected = onDeleteDetected;
+
+        public void OnNext(KeyValuePair<string, object?> kv)
+        {
+            if (kv.Key != "System.Net.Http.HttpRequestOut.Start") return;
+
+            var request =
+                kv.Value?.GetType().GetProperty("Request")?.GetValue(kv.Value)
+                as HttpRequestMessage;
+            if (request?.RequestUri?.AbsolutePath != TargetPath) return;
+
+            // Read gRPC request body (protobuf) before the request is sent
+            byte[]? body = null;
+            try
+            {
+                var content = request.Content;
+                if (content != null)
+                {
+                    // Buffer the content so it's still available for the actual HTTP send
+                    content.LoadIntoBufferAsync().GetAwaiter().GetResult();
+                    body = content.ReadAsByteArrayAsync().GetAwaiter().GetResult();
+                }
+                else
+                {
+                    Logger.Log("MsgLogger", "[intercept] request.Content is null");
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Log("MsgLogger", $"[intercept] Body read error: {ex.GetType().Name}: {ex.Message}");
+            }
+
+            _onDeleteDetected(body);
+        }
+
+        public void OnError(Exception ex) { }
+        public void OnCompleted() { }
+    }
+
+    // ===== Subscription Gap Fix =====
+
+    /// <summary>
+    /// Ensure all visible messages have PropertyChanged subscriptions.
+    /// Catches messages loaded via virtualization window expansion that didn't come
+    /// through DynamicData Add/AddRange events.
+    /// </summary>
+    private void EnsureVisibleMessagesSubscribed()
+    {
+        if (_chatItemsControl == null) return;
+        var vsp = FindMessagePanel();
+        if (vsp == null) return;
+
+        int childCount = _r.GetChildCount(vsp);
+        int newSubs = 0;
+
+        for (int i = 0; i < childCount; i++)
+        {
+            try
+            {
+                var child = _r.GetChild(vsp, i);
+                if (child == null) continue;
+                var dc = ReadDC(child);
+                if (dc == null) continue;
+
+                var tp = GetTypeProps(dc);
+                if (tp == null) continue;
+                var target = GetMessageTarget(dc, tp);
+                if (target == null) continue;
+
+                // The subscription key is the underlying Message object (navigated via bridge)
+                object subscriptionKey = tp.Bridge != null ? target : dc;
+                if (_messagePropertyChangedHandlers.ContainsKey(subscriptionKey)) continue;
+
+                // Skip already-deleted messages (no point subscribing)
+                if (tp.DeletedAt != null)
+                {
+                    try
+                    {
+                        if (tp.DeletedAt.GetValue(target) != null) continue;
+                    }
+                    catch { }
+                }
+
+                var content = ReadContent(dc) ?? "";
+                var msgId = ReadMessageId(dc);
+                if (msgId != null)
+                {
+                    if (!_messageCache.ContainsKey(msgId))
+                        CacheMessage(dc, msgId);
+                    _contentSnapshot[msgId] = content;
+                }
+
+                SubscribeMessagePropertyChanged(subscriptionKey, content);
+                newSubs++;
+            }
+            catch { }
+        }
+
+        if (newSubs > 0)
+            Logger.Log(Tag, $"[sub-gap] Subscribed {newSubs} visible messages to PropertyChanged");
+    }
+
     // ===== Channel Switch Detection =====
 
     private void CheckForChannelSwitch()
@@ -1287,10 +1650,22 @@ internal class MessageLogger : IDisposable
         if (visibleMessages.Count == 0) return;
 
         int deletedInChannel = 0;
+        int deletedTotal = 0, deletedWrongChannel = 0, deletedLoadedAsDeleted = 0, deletedNoContent = 0;
         foreach (var c in _messageCache.Values)
-            if (c.IsDeleted && c.ChannelId == _currentChannelId && !string.IsNullOrEmpty(c.Content))
-                deletedInChannel++;
-        if (deletedInChannel == 0) return;
+        {
+            if (!c.IsDeleted) continue;
+            deletedTotal++;
+            if (c.ChannelId != _currentChannelId) { deletedWrongChannel++; continue; }
+            if (string.IsNullOrEmpty(c.Content)) { deletedNoContent++; continue; }
+            if (_loadedAsDeleted.Contains(c.MessageId)) { deletedLoadedAsDeleted++; continue; }
+            deletedInChannel++;
+        }
+        if (deletedInChannel == 0)
+        {
+            if (deletedTotal > 0)
+                Logger.Log(Tag, $"inject: 0 eligible (total={deletedTotal} wrongCh={deletedWrongChannel} loadedAsDel={deletedLoadedAsDeleted} noCont={deletedNoContent} currentCh={_currentChannelId[..Math.Min(12, _currentChannelId.Length)]})");
+            return;
+        }
 
         int injected = 0, skipped = 0;
 
@@ -1298,43 +1673,55 @@ internal class MessageLogger : IDisposable
         {
             if (!cached.IsDeleted || cached.ChannelId != _currentChannelId) continue;
             if (cached.DeletedAt == null) continue;
-            if (string.IsNullOrEmpty(cached.Content)) continue; // Skip empty-content phantom deletions
+            if (string.IsNullOrEmpty(cached.Content)) continue;
+            if (_loadedAsDeleted.Contains(cached.MessageId)) continue; // Only show live deletions
             var ageHours = (DateTime.UtcNow - cached.DeletedAt.Value).TotalHours;
-            if (ageHours > 24) continue;
+            if (ageHours > 2) continue;
 
             var cardTag = $"uprooted-del:{cached.MessageId}";
 
-            // Dedup: already injected?
-            if (_injectedCards.ContainsKey(cardTag)) { skipped++; continue; }
+            // Dedup: already injected and still in the visual tree?
+            if (_injectedCards.TryGetValue(cardTag, out var existingCard))
+            {
+                // Verify the card is still parented (Root may have rebuilt the Grid)
+                if (_r.GetParent(existingCard) != null) { skipped++; continue; }
+                // Card was orphaned: remove stale entry and re-inject
+                _injectedCards.Remove(cardTag);
+                if (_injectedRowDefs.TryGetValue(cardTag, out var staleRow))
+                    _injectedRowDefs.Remove(cardTag);
+            }
 
-            // Timestamp-based positioning: find the visible message just before the deleted one
+            // Inject into the nearest visible message's Grid (timestamp-based)
             int targetIdx = -1;
             for (int i = visibleMessages.Count - 1; i >= 0; i--)
             {
                 if (visibleMessages[i].timestamp != DateTime.MinValue &&
-                    visibleMessages[i].timestamp <= cached.Timestamp)
+                    visibleMessages[i].timestamp <= cached.Timestamp &&
+                    visibleMessages[i].msgId != cached.MessageId)
                 { targetIdx = i; break; }
             }
             if (targetIdx < 0) targetIdx = 0;
 
             var targetContainer = visibleMessages[targetIdx].container;
 
-            // Try primary container, then fallback to nearest text-message container
             if (TryInjectCardAtContainer(targetContainer, cached, cardTag, ref injected, ref skipped))
                 continue;
 
-            // Primary container has no Grid (non-text message). Search outward for nearest text-message.
+            // Fallback: search outward for nearest text-message container
+            bool fallbackFound = false;
             for (int offset = 1; offset < visibleMessages.Count; offset++)
             {
                 int fwd = targetIdx + offset;
                 if (fwd < visibleMessages.Count &&
                     TryInjectCardAtContainer(visibleMessages[fwd].container, cached, cardTag, ref injected, ref skipped))
-                    break;
+                    { fallbackFound = true; break; }
                 int bwd = targetIdx - offset;
                 if (bwd >= 0 &&
                     TryInjectCardAtContainer(visibleMessages[bwd].container, cached, cardTag, ref injected, ref skipped))
-                    break;
+                    { fallbackFound = true; break; }
             }
+            if (!fallbackFound)
+                Logger.Log(Tag, $"inject: no Grid in any of {visibleMessages.Count} containers for \"{Truncate(cached.Content, 30)}\"");
         }
 
         if (injected > 0 || skipped > 0)
@@ -1366,11 +1753,11 @@ internal class MessageLogger : IDisposable
             foreach (var c in gridChildren)
                 if (c != null && _r.GetTag(c) == cardTag) { skipped++; return true; }
 
-        var card = BuildDeletedMessageCard(cached, cardTag);
-        if (card == null) { skipped++; return true; }
+        var card = BuildDeletedMessageView(cached, cardTag);
+        if (card == null) { Logger.Log(Tag, $"skip: BuildDeletedMessageView returned null for \"{Truncate(cached.Content, 30)}\""); skipped++; return true; }
 
         var (newRow, rowDef) = AddAutoRowToGrid(grid);
-        if (newRow < 0) { skipped++; return true; }
+        if (newRow < 0) { Logger.Log(Tag, $"skip: AddAutoRowToGrid returned -1 for \"{Truncate(cached.Content, 30)}\""); skipped++; return true; }
 
         _r.SetGridRow(card, newRow);
         _r.SetGridColumn(card, col);
@@ -1380,8 +1767,146 @@ internal class MessageLogger : IDisposable
         _injectedCards[cardTag] = card;
         SubscribeContainerDataContextChanged(cardTag, container, grid, rowDef!);
         injected++;
-        Logger.Log(Tag, $"Injected deleted-message card: \"{Truncate(cached.Content, 40)}\" row={newRow}");
+        var gridRowDefs = grid.GetType().GetProperty("RowDefinitions")?.GetValue(grid);
+        var rowCount = gridRowDefs?.GetType().GetProperty("Count")?.GetValue(gridRowDefs) ?? "?";
+        Logger.Log(Tag, $"Injected deleted-message card: \"{Truncate(cached.Content, 40)}\" row={newRow} gridRows={rowCount} grid={grid.GetType().Name}");
         return true;
+    }
+
+    /// <summary>
+    /// Build a full message-replica view for a deleted message.
+    /// Matches Root's message layout: avatar column + content column with username, timestamp, and body.
+    /// </summary>
+    private object? BuildDeletedMessageView(CachedMessage cached, string tag)
+    {
+        try
+        {
+            // Outer grid: replicates Root's message layout
+            var grid = _r.CreateGrid();
+            if (grid == null) return null;
+
+            // Columns: avatar (56px) | content (*)
+            _r.AddGridColumnPixel(grid, 56);
+            _r.AddGridColumn(grid, 1);
+
+            // Two rows: header (username + timestamp) | content
+            _r.AddGridRowAuto(grid);
+            _r.AddGridRowAuto(grid);
+
+            // Avatar: colored circle with first letter
+            var authorName = !string.IsNullOrEmpty(cached.AuthorName) && cached.AuthorName != "Unknown"
+                ? cached.AuthorName : "?";
+            var initial = authorName[..1].ToUpper();
+            var avatarBg = _r.CreateBorder("#CC884444", cornerRadius: 16, child: null);
+            if (avatarBg != null)
+            {
+                _r.SetHeight(avatarBg, 32);
+                avatarBg.GetType().GetProperty("Width")?.SetValue(avatarBg, 32.0);
+                _r.SetMargin(avatarBg, 12, 8, 0, 0);
+                _r.SetVerticalAlignment(avatarBg, "Top");
+                var initialText = _r.CreateTextBlock(initial, 14, "#FFDDDDDD");
+                if (initialText != null)
+                {
+                    _r.SetHorizontalAlignment(initialText, "Center");
+                    _r.SetVerticalAlignment(initialText, "Center");
+                    _r.SetFontWeight(initialText, "SemiBold");
+                    // Need to set as child of the border
+                    avatarBg.GetType().GetProperty("Child")?.SetValue(avatarBg, initialText);
+                }
+                _r.SetGridRow(avatarBg, 0);
+                _r.SetGridColumn(avatarBg, 0);
+                _r.AddChild(grid, avatarBg);
+            }
+
+            // Header: username + " · Deleted" + timestamp
+            var header = _r.CreateStackPanel(vertical: false, spacing: 0);
+            if (header != null)
+            {
+                var nameText = _r.CreateTextBlock(authorName != "?" ? authorName : "Unknown", 13, "#FFCC6666");
+                if (nameText != null)
+                {
+                    _r.SetFontWeight(nameText, "SemiBold");
+                    _r.AddChild(header, nameText);
+                }
+                var delLabel = _r.CreateTextBlock("  Deleted", 11, "#88FF6666");
+                if (delLabel != null) _r.AddChild(header, delLabel);
+
+                // Timestamp
+                var tsStr = cached.Timestamp != DateTime.MinValue
+                    ? cached.Timestamp.ToLocalTime().ToString("HH:mm") : "";
+                if (!string.IsNullOrEmpty(tsStr))
+                {
+                    var tsText = _r.CreateTextBlock($"  {tsStr}", 11, "#66AAAAAA");
+                    if (tsText != null) _r.AddChild(header, tsText);
+                }
+
+                _r.SetMargin(header, 0, 8, 0, 0);
+                _r.SetVerticalAlignment(header, "Top");
+                _r.SetGridRow(header, 0);
+                _r.SetGridColumn(header, 1);
+                _r.AddChild(grid, header);
+            }
+
+            // Body: message content
+            var body = _r.CreateTextBlock(cached.Content, 13, "#FFDDDDDD");
+            if (body != null)
+            {
+                _r.SetTextWrapping(body, "Wrap");
+                _r.SetMargin(body, 0, 2, 8, 8);
+                _r.SetGridRow(body, 1);
+                _r.SetGridColumn(body, 1);
+                _r.AddChild(grid, body);
+            }
+
+            // Wrap in a Border with red background
+            var wrapper = _r.CreateBorder("#FF3A2020", cornerRadius: 0, child: grid);
+            if (wrapper == null) return grid;
+            _r.SetTag(wrapper, tag);
+
+            // Left accent bar
+            var accent = _r.CreateBorder("#CCFF4444", cornerRadius: 0, child: null);
+            if (accent != null)
+            {
+                accent.GetType().GetProperty("Width")?.SetValue(accent, 3.0);
+                _r.SetHorizontalAlignment(accent, "Left");
+            }
+
+            var panel = _r.CreatePanel();
+            if (panel != null)
+            {
+                _r.AddChild(panel, wrapper);
+                if (accent != null) _r.AddChild(panel, accent);
+
+                // Wrap in an opaque border matching chat background to mask the host
+                // message's hover highlight. Top GAP is padding (inside opaque area),
+                // not margin (transparent). This prevents hover bleed-through.
+                var hoverMask = _r.CreateBorder(null, cornerRadius: 0, child: panel);
+                if (hoverMask != null)
+                {
+                    if (!_r.BindToDynamicResource(hoverMask, "Background", "BackgroundPrimary"))
+                        _r.SetBackground(hoverMask, "#FF1E1E1E");
+                    _r.SetPadding(hoverMask, 0, 8, 0, 0);
+                    _r.SetMargin(hoverMask, -56, 0, 0, 0);
+                    _r.SetTag(hoverMask, tag);
+                    AttachContextMenu(hoverMask, cached);
+                    return hoverMask;
+                }
+
+                // Fallback: panel with margin
+                _r.SetMargin(panel, -56, 8, 0, 0);
+                _r.SetTag(panel, tag);
+                AttachContextMenu(panel, cached);
+                return panel;
+            }
+
+            AttachContextMenu(wrapper, cached);
+            return wrapper;
+        }
+        catch (Exception ex)
+        {
+            Logger.Log(Tag, $"BuildDeletedMessageView error: {ex.Message}");
+            return null;
+        }
     }
 
     /// <summary>
@@ -1827,6 +2352,7 @@ internal class MessageLogger : IDisposable
         }
         _injectedRowDefs.Clear();
         _injectedCards.Clear();
+
     }
 
     // ===== Property Resolution =====
