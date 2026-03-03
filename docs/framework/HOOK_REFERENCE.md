@@ -2499,4 +2499,4 @@ Returns:
 
 **Canonical for:** all 40 C# class implementations, startup phase detail (Phase 0–5), entry points, version migration, sidebar injection, content pages, theme engine overview, settings INI format, dependency map, all feature engines
 **Not canonical for:** architecture overview → [ARCHITECTURE.md](ARCHITECTURE.md) | Avalonia reflection patterns → [AVALONIA_PATTERNS.md](AVALONIA_PATTERNS.md) | theme algorithm deep dive → [THEME_ENGINE_DEEP_DIVE.md](THEME_ENGINE_DEEP_DIVE.md)
-*Hook reference for Uprooted v0.5.2-dev2. Last updated 2026-02-26.*
+*Hook reference for Uprooted v0.5.2. Last updated 2026-03-03.*

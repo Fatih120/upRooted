@@ -31,6 +31,9 @@ public class MessageStoreTests : IDisposable
 
     private string LogFilePath => Path.Combine(_tempDir, "uprooted-message-log.dat");
 
+    // Recent timestamp for file-level tests (LoadAll has a 2h cutoff)
+    private static string RecentTimestamp => DateTime.UtcNow.AddMinutes(-5).ToString("O");
+
     private void Flush() => FlushMethod.Invoke(_store, new object?[] { null });
 
     private Dictionary<string, CachedMessage> LoadAll()
@@ -45,7 +48,7 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void RecordMessage_FlushThenLoad_ReturnsCorrectFields()
     {
-        var ts = new DateTime(2026, 2, 18, 12, 0, 0, DateTimeKind.Utc);
+        var ts = DateTime.UtcNow.AddMinutes(-5);
         _store.RecordMessage("msg1", "ch1", "user1", "Alice", ts, "Hello world");
         Flush();
 
@@ -215,7 +218,7 @@ public class MessageStoreTests : IDisposable
         File.WriteAllText(LogFilePath,
             "# uprooted-message-log v1\n" +
             "# This is a comment\n" +
-            "MSG|msg1|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Hello\n");
+            $"MSG|msg1|ch1|u1|Alice|{RecentTimestamp}|Hello\n");
 
         var cache = LoadAll();
         Assert.Single(cache); // only the valid MSG line
@@ -228,7 +231,7 @@ public class MessageStoreTests : IDisposable
             "# uprooted-message-log v1\n" +
             "\n" +
             "   \n" +
-            "MSG|msg1|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Hello\n");
+            $"MSG|msg1|ch1|u1|Alice|{RecentTimestamp}|Hello\n");
 
         var cache = LoadAll();
         Assert.Single(cache);
@@ -239,8 +242,8 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void DateTime_RoundtripWithRoundtripFormat()
     {
-        // Use a specific timestamp with sub-second precision
-        var ts = new DateTime(2026, 2, 18, 14, 30, 45, 123, DateTimeKind.Utc);
+        // Use a recent timestamp with sub-second precision (LoadAll has a 2h cutoff)
+        var ts = DateTime.UtcNow.AddMinutes(-5);
         _store.RecordMessage("msg1", "ch1", "u1", "Alice", ts, "Precise time");
         Flush();
 
@@ -256,10 +259,11 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void Truncate_WhenMoreThanMax_KeepsNewestLines()
     {
-        // Write 5 MSG lines directly to the file
+        // Write 5 MSG lines directly to the file (recent timestamps for 2h cutoff)
+        var ts = RecentTimestamp;
         var lines = new List<string> { "# uprooted-message-log v1" };
         for (int i = 1; i <= 5; i++)
-            lines.Add($"MSG|msg{i}|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Message {i}");
+            lines.Add($"MSG|msg{i}|ch1|u1|Alice|{ts}|Message {i}");
         File.WriteAllText(LogFilePath, string.Join("\n", lines) + "\n");
 
         _store.Truncate(3);
@@ -277,9 +281,10 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void Truncate_WhenAtOrBelowMax_NoOp()
     {
+        var ts = RecentTimestamp;
         var lines = new List<string> { "# uprooted-message-log v1" };
         for (int i = 1; i <= 3; i++)
-            lines.Add($"MSG|msg{i}|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Message {i}");
+            lines.Add($"MSG|msg{i}|ch1|u1|Alice|{ts}|Message {i}");
         var originalContent = string.Join("\n", lines) + "\n";
         File.WriteAllText(LogFilePath, originalContent);
 
@@ -292,9 +297,10 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void Truncate_WhenBelowMax_NoOp()
     {
+        var ts = RecentTimestamp;
         var lines = new List<string> { "# uprooted-message-log v1" };
         for (int i = 1; i <= 2; i++)
-            lines.Add($"MSG|msg{i}|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Message {i}");
+            lines.Add($"MSG|msg{i}|ch1|u1|Alice|{ts}|Message {i}");
         var originalContent = string.Join("\n", lines) + "\n";
         File.WriteAllText(LogFilePath, originalContent);
 
@@ -307,9 +313,10 @@ public class MessageStoreTests : IDisposable
     [Fact]
     public void Truncate_HeaderPreservedAfterTruncation()
     {
+        var ts = RecentTimestamp;
         var lines = new List<string> { "# uprooted-message-log v1" };
         for (int i = 1; i <= 5; i++)
-            lines.Add($"MSG|msg{i}|ch1|u1|Alice|2026-01-01T00:00:00.0000000Z|Message {i}");
+            lines.Add($"MSG|msg{i}|ch1|u1|Alice|{ts}|Message {i}");
         File.WriteAllText(LogFilePath, string.Join("\n", lines) + "\n");
 
         _store.Truncate(2);

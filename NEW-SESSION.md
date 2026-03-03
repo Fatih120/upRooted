@@ -4,7 +4,7 @@
 
 ## 1. Identity
 
-**Uprooted** v0.5.2-dev2 — client mod framework for Root Communications desktop (v0.9.93+).
+**Uprooted** v0.5.2 — client mod framework for Root Communications desktop (v0.9.93+).
 Private repo (`The-Uprooted-Project/uprooted-private`). Contributors: `watchthelight` + `agomusio`.
 
 ## 2. Architecture
@@ -61,7 +61,7 @@ Given your task, read **only** these docs (in order). Don't load everything.
 | `ClearUrlsEngine.cs` | 486 | Strip tracking params from URLs on send |
 | `LinkEmbedEngine.cs` | 2677 | Avalonia-native link embeds (OG/oEmbed/video) |
 | `AnimatedImage.cs` | 761 | Animated GIF/WebP decoder (SkiaSharp) |
-| `MessageLogger.cs` | 2238 | Edit/delete detection + visual indicators |
+| `MessageLogger.cs` | 2631 | Edit/delete detection + visual indicators |
 | `MessageStore.cs` | 282 | Flat-file message persistence |
 | `AuditLogEngine.cs` | 680 | Audit log viewer (gRPC-web decode) |
 | `AutoUpdater.cs` | 1096 | Encrypted .uprpkg auto-updater |
@@ -142,4 +142,4 @@ Given your task, read **only** these docs (in order). Don't load everything.
 
 ---
 
-*Quick-start reference for Uprooted v0.5.2-dev2. Last updated 2026-02-26.*
+*Quick-start reference for Uprooted v0.5.2. Last updated 2026-03-03.*

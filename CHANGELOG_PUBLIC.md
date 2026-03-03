@@ -6,22 +6,30 @@ All public-facing notable changes to Uprooted are documented here. This file mir
 
 ---
 
-## v0.5.2-dev2 — 2026-02-25
+## v0.5.2 — 2026-03-03
 
 ### New
 
 - **Focus Mode** — Readability-first mode that hides media, embeds, reactions, typing indicators, and badges. Quick-toggle via moon icon in the titlebar. Alpha.
-- **Dev Console dropdown** — Developer-only titlebar button for diagnostics, theme engine controls, and spoofs
+- **Dev Console dropdown** — Developer-only titlebar button for diagnostics, theme engine controls, and spoofs. Collapsible card on the About page.
 - **"Original Server Bar" option** for Rootcord: keep Root's native horizontal tabs instead of the vertical sidebar
+- **Message Logger: outgoing deletion detection** — Captures deleted message content before it's wiped, using network-level interception
 
 ### Improvements
 
 - SentryBlocker promoted to Stable, SilentTyping to Beta, FocusMode and UserBio to Alpha
 - MessageLogger and WhoReacted moved to Planned while they undergo rework
+- Message Logger completely rewritten: more reliable deletion and edit detection
 
 ### Fixes
 
 - Fixed Rootcord original-tabs mode: shared Apply/Revert and SelectionChanged navigation
+- Fixed Rootcord titlebar button vertical alignment
+- Fixed Translate plugin: button injection, send-side blocking, and visual appearance
+- Hardened NsfwFilter: performance, security, and robustness improvements
+- Hardened LinkEmbedEngine: security and performance improvements
+- Fixed MessageLogger card injection: visual independence and correct positioning
+- Linux installer: silenced misleading HTML patch warnings on first install
 
 ---
 

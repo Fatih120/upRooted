@@ -9,7 +9,7 @@
 <p align="center">
   <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
   <a href="https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw"><img src="https://img.shields.io/badge/server-join%20to%20download-2D7D46?style=flat" alt="join server" /></a>
-  <img src="https://img.shields.io/badge/version-0.5.2--dev2-2D7D46?style=flat" alt="version" />
+  <img src="https://img.shields.io/badge/version-0.5.2-2D7D46?style=flat" alt="version" />
   <img src="https://img.shields.io/badge/license-custom-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>

@@ -10,7 +10,7 @@ namespace Uprooted;
 /// Google Vision SAFE_SEARCH_DETECTION API in C#, and injects a native Avalonia
 /// overlay to block NSFW content. No DotNetBrowser dependency.
 ///
-/// ILSpy-informed improvements (v0.5.2-dev2):
+/// ILSpy-informed improvements (v0.5.2):
 ///   - Timer management: stopped when disabled, restarted on config change
 ///   - API key: Uri.EscapeDataString instead of misapplied JSON escaping
 ///   - Error backoff: exponential cooldown after consecutive API failures
