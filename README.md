@@ -7,16 +7,9 @@
 </p>
 
 <p align="center">
-  <a href="https://uprooted.sh"><img src="https://img.shields.io/badge/web-uprooted.sh-2D7D46?style=flat" alt="website" /></a>
-  <a href="https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw"><img src="https://img.shields.io/badge/server-join%20to%20download-2D7D46?style=flat" alt="join server" /></a>
   <img src="https://img.shields.io/badge/version-0.5.2-2D7D46?style=flat" alt="version" />
-  <img src="https://img.shields.io/badge/license-custom-blue?style=flat" alt="license" />
   <img src="https://img.shields.io/badge/platform-windows | linux-lightgrey?style=flat" alt="platform" />
 </p>
-
----
-
-> **downloads are server-gated.** you must join the [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) on root to get the installer. there are no public download links. if someone sent you a copy of uprooted outside of the server, it is unauthorized and may be outdated or tampered with.
 
 ---
 
@@ -214,33 +207,11 @@ Every time Root.exe launches after installation:
 | Switches away from DotNetBrowser | Bridge globals don't exist |
 | Uses Object.freeze on bridges | Proxy wrapping fails |
 
-## terms of use
-
-**by using uprooted, you agree to the following:**
-
-1. **you must be a member of the [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw)** to download and use uprooted. downloads are only distributed through the server.
-2. **do not distribute uprooted or its artifacts** (installers, DLLs, modified binaries) outside of the server.
-3. **do not discuss uprooted in Root's public channels** (official Root servers, Root support, Root social media).
-4. violations will result in your UUID being **permanently blacklisted** from uprooted.
-
-these rules exist to protect the project and its users. if you want to share uprooted with someone, send them an invite to the server.
-
 ## policy
 
 **uprooted is not affiliated with root communications.** this is an independent community project. all modifications are cosmetic-only and do not interact with root's backend services.
-
-## links
-
-- [uprooted.sh](https://uprooted.sh)
-- [uprooted server](https://rootapp.gg/AC0ILwUxgQqJ2MOSMXdGjw) (join here to download)
-- admin@watchthelight.org
-
-## license
-
-[uprooted license v1.0](LICENSE) - use pieces with credit, don't redistribute the whole thing
 
 ---
 
 **Canonical for:** repository landing page, project overview, feature list, quick-start install
 **Not canonical for:** architecture detail → [ARCHITECTURE.md](docs/framework/ARCHITECTURE.md) | implementation → [HOOK_REFERENCE.md](docs/framework/HOOK_REFERENCE.md) | full install guide → [INSTALLATION.md](docs/install/INSTALLATION.md)
-*Repository landing page for Uprooted v0.5.0. Last updated 2026-02-23.*
